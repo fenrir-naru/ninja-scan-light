@@ -12,6 +12,8 @@
 /   personal, non-profit or commercial products UNDER YOUR RESPONSIBILITY.
 / * Redistributions of source code must retain the above copyright notice.
 /
+/ M.Naruoka was modified the original code with the above licence retained, 2013.
+/
 /-----------------------------------------------------------------------------/
 / Feb 26,'06 R0.00  Prototype.
 /
