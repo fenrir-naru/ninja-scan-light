@@ -42,10 +42,10 @@
 extern volatile __xdata u32 global_ms;
 extern volatile __xdata u32 tickcount;
 
-extern volatile __xdata u8 state;
-#define STATE_PERIODIC_ACTIVE 0x01
-#define STATE_POLLING_ACTIVE 0x02
-#define STATE_LOG_ACTIVE 0x04
+extern volatile __xdata u8 sys_state;
+#define SYS_PERIODIC_ACTIVE 0x01
+#define SYS_POLLING_ACTIVE 0x02
+#define SYS_LOG_ACTIVE 0x04
 
 extern volatile u8 timeout_10ms;
 

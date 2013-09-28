@@ -39,7 +39,7 @@
 #include "type.h"
 #include "data_hub.h"
 
-enum address_t {
+typedef enum {
   SELF_TEST_X = 0x0D,
   SELF_TEST_Y = 0x0E,
   SELF_TEST_Z = 0x0F,
@@ -88,7 +88,7 @@ enum address_t {
   FIFO_COUNTL = 0x73,
   FIFO_R_W = 0x74,
   WHO_AM_I = 0x75,
-};
+} address_t;
 
 /*
  * MPU-6000
@@ -109,7 +109,11 @@ enum address_t {
 #define cs_deassert()   (P1 |= 0x40)
 #define is_in_up()   (P1 & 0x80)
 
-#define _nop_() __asm__("nop")
+#define _nop_() { \
+  __asm \
+    nop \
+  __endasm; \
+}
 
 static void mpu6000_write(u8 *buf, u8 size){
   for(; size--; buf++){
@@ -138,7 +142,7 @@ static void mpu6000_read(u8 *buf, u8 size){
 }
 
 #define mpu6000_set(address, value) { \
-  static const u8 addr_value[] = {address, value}; \
+  static const __code u8 addr_value[2] = {address, value}; \
   cs_assert(); \
   mpu6000_write(addr_value, sizeof(addr_value)); \
   cs_deassert(); \
@@ -146,7 +150,7 @@ static void mpu6000_read(u8 *buf, u8 size){
 }
 
 #define mpu6000_get(address, value) { \
-  static const u8 addr[] = {0x80 | address}; \
+  static const __code u8 addr[1] = {0x80 | address}; \
   cs_assert(); \
   mpu6000_write(addr, sizeof(addr)); \
   mpu6000_read((u8 *)&(value), sizeof(value)); \

@@ -100,7 +100,7 @@ static void gps_packet_write(char *packet, int packet_size){
 #define UBX_CFG_RAET_TIME (u16)0
 
 static void set_ubx_cfg_rate(){
-  static const unsigned char packet[6 + 6] = {
+  static const __code unsigned char packet[6 + 6] = {
     0xB5, // packet[0]
     0x62, // packet[1]
     0x06, // packet[2]
@@ -122,7 +122,7 @@ static void set_ubx_cfg_rate(){
 #define UBX_CFG_TP_USER_DELAY  (u32)0
 
 static void set_ubx_cfg_tp(){
-  static const unsigned char packet[20 + 6] = {
+  static const __code unsigned char packet[20 + 6] = {
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x06, // packet[2] 
@@ -142,7 +142,7 @@ static void set_ubx_cfg_tp(){
 }
 
 static void set_ubx_cfg_sbas(){
-  static const unsigned char packet[8 + 6] = {
+  static const __code unsigned char packet[8 + 6] = {
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x06, // packet[2] 
@@ -161,7 +161,7 @@ static void set_ubx_cfg_sbas(){
 
 static void set_ubx_cfg_prt(){
   // UBX
-  static const unsigned char _packet[20 + 6] = {
+  static const __code unsigned char _packet[20 + 6] = {
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x06, // packet[2] 
@@ -278,7 +278,7 @@ static void poll_rxm_eph(u8 svid){
 }
 
 static void poll_aid_hui(){
-  static const unsigned char packet[0 + 6] = {
+  static const __code unsigned char packet[0 + 6] = {
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x0B, // packet[2] 
@@ -311,6 +311,8 @@ time_t gps_std_time(time_t *timer) {
 __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
+typedef enum {NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, UNKNOWN} packet_type_t;
+
 #define UBX_SAT_MAX_ID 32
 static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
@@ -329,7 +331,7 @@ static void make_packet(packet_t *packet){
     static __xdata struct {
       u16 index, size;
       u8 ck_a, ck_b; // チェックサム用
-      enum {NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, UNKNOWN} packet_type;
+      packet_type_t packet_type;
     } ubx_state = {0};
     
     u8 c = *(dst++);

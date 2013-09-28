@@ -192,7 +192,7 @@ void data_hub_polling() {
     if(log_func){
       if(log_func()){
         __critical {
-          state |= STATE_LOG_ACTIVE;
+          sys_state |= SYS_LOG_ACTIVE;
         }
       }else{/*P4 ^= 0x02;*/}
     }

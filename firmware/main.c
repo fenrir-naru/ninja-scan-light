@@ -55,7 +55,7 @@
 
 volatile __xdata u32 global_ms = 0;
 volatile __xdata u32 tickcount = 0;
-volatile __xdata u8 state = 0;
+volatile __xdata u8 sys_state = 0;
 volatile u8 timeout_10ms = 0;
 
 void sysclk_init();
@@ -102,7 +102,7 @@ void main() {
     cdc_polling();
     usb_polling();
 
-    state |= STATE_POLLING_ACTIVE;
+    sys_state |= SYS_POLLING_ACTIVE;
 	}
 }
 
@@ -156,10 +156,6 @@ void port_init() {
     while(!(P1 & 0x02));
   }
   
-	XBR0 = 0x07;  // UART0, SPI, I2C0 enabled
-	// XBR1 = 0x00;   // default
-  XBR2 = 0x03;  // UART1, I2C1 enabled
-  
   // P0
   // 0 => SPI_SCK, 1 => SPI_MISO, 2 => SPI_MOSI, 3 => SPI_-CS,
   // 4 => UART0_TX, 5 => UART0_RX, 6 => -INT0, 7 => VREF(analog)
@@ -190,7 +186,9 @@ void port_init() {
   P3MDOUT = 0xFF;
   P3 = 0x00;
 
-  XBR2 |= 0xC0; // Enable crossbar & Disable weak pull-up
+  XBR0 = 0x07;  // UART0, SPI, I2C0 enabled
+  XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
+  XBR2 = 0x03;  // UART1, I2C1 enabled
 }
 
 void timer_init(){
@@ -238,6 +236,14 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
 
   switch(++loop_10s % 5){
     case 0:
+      if(loop_10s % 8 == 0){ // 50 * 5 * 8 = 2000 [ms]
+        snapshot_state = (SYS_PERIODIC_ACTIVE | sys_state);
+        sys_state = 0;
+        if(loop_10s >= 200){ // 50 * 200 = 10000 [ms]
+          loop_10s = 0;
+          snapshot_gps = gps_num_of_sat;
+        }
+      }
       if(snapshot_gps > 0){
         P2 |= 0x04;
         snapshot_gps--;
@@ -245,17 +251,10 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
       if(snapshot_state & 0x01){
         P2 |= 0x08;
       }
-      snapshot_state >>= 1;
-      if(loop_10s % 8 == 0){ // 50 * 5 * 8 = 2000 [ms]
-        snapshot_state = (STATE_PERIODIC_ACTIVE | state);
-        if(loop_10s % 25 == 0){ // 50 * 5 * 8 * 5 = 10000 [ms]
-          loop_10s = 0;
-          snapshot_gps = gps_num_of_sat;
-        }
-      }
       break;
     case 1:
       P2 &= ~(0x04 | 0x08); // LED0 / 1 off
+      snapshot_state >>= 1;
       break;
   }
 }
