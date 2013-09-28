@@ -34,8 +34,10 @@
 
 #include "usb_other_req.h"
 #include "usb_descriptor.h"
-//#include "usb_cdc.h"
-//#include "usb_msd.h"
+#include "usb_cdc.h"
+#include "usb_msd.h"
+
+#include "mmc.h"
 
 void usb_Class_init(){
   usb_MSD_init();
@@ -44,14 +46,11 @@ void usb_Class_init(){
 void usb_Class_Req(){
   switch(usb_setup_buf.wIndex.i){
     case 0:
-#ifndef DEBUG_MSD_ONLY
 #ifndef CDC_IS_REPLACED_BY_FTDI
-      usb_CDC_req();
-      break;
-    case 2:
-#else
-    case 1:
-#endif
+      if(!mmc_initialized){ 
+        usb_CDC_req();
+        break;
+      }
 #endif
       usb_MSD_req();
       break;
