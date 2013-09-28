@@ -218,7 +218,6 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   timeout_10ms++;
   switch(u32_lsbyte(tickcount) % 16){ // 6.25Hz
     case 0:
-      cdc_need_line_status_update = TRUE;
       break;
     case 4:
       mag3110_capture = TRUE;
