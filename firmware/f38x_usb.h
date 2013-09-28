@@ -160,6 +160,8 @@ void usb0_init();
 extern volatile __bit usb_enable;
 extern volatile __bit usb_previous_enable;
 
+extern void (* __xdata usb_sof)();
+
 void usb_polling();
 
 void usb_isr() __interrupt (INTERRUPT_USB0);

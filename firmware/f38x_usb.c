@@ -502,6 +502,8 @@ void usb0_init(){
 #endif /* _USB_LOW_SPEED_ */
 }
 
+void (* __xdata usb_sof)() = NULL;
+
 /**
  * Top-level USB ISR
  * 
@@ -517,9 +519,6 @@ void usb_isr() __interrupt (INTERRUPT_USB0) {
 
   // Handle Resume interrupt
   if(bCommon & rbRSUINT){resume();}
-    
-  // Handle Reset interrupt
-  if(bCommon & rbRSTINT){reset();}
     
   // Handle Setup packet received
   // or packet transmitted if Endpoint 0 is transmit mode 
@@ -537,8 +536,16 @@ void usb_isr() __interrupt (INTERRUPT_USB0) {
     }
   }
   
+  // Handle Start of Frame interrupt
+  if(bCommon & rbSOF){
+    if(usb_sof){usb_sof();}
+  }
+  
   // Handle Suspend interrupt
   if(bCommon & rbSUSINT){suspend();}
+  
+  // Handle Reset interrupt
+  if(bCommon & rbRSTINT){reset();}
 }
 
 volatile __bit usb_enable;
