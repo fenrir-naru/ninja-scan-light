@@ -64,9 +64,6 @@ typedef struct {
   unsigned char response;          // Indicates expected response;
 } command_t;
 
-#define ACMD(x) ((x) | 0x40)
-#define IS_ACMD(x) ((x) & 0x40)
-
 // Command table for MMC.  This table contains all commands available in SPI
 // mode;  Format of command entries is described above in command structure
 // definition;
@@ -79,12 +76,12 @@ __code command_t command_list[] = {
     {13, CMD,R2},    // CMD13; SEND_STATUS: read card status;
     {16, CMD,R1},    // CMD16; SET_BLOCKLEN: set block size; arg required;
     {17, RD ,R1},    // CMD17; READ_SINGLE_BLOCK: read 1 block; arg required;
-    {18, RD ,R1 },    // CMD18; READ_MULTIPLE_BLOCK: read > 1; arg required;
+    {18, RD ,R1 },   // CMD18; READ_MULTIPLE_BLOCK: read > 1; arg required;
     {24, WR ,R1},    // CMD24; WRITE_BLOCK: write 1 block; arg required;
-    {25, WR ,R1 },    // CMD25; WRITE_MULTIPLE_BLOCK: write > 1; arg required;
+    {25, WR ,R1 },   // CMD25; WRITE_MULTIPLE_BLOCK: write > 1; arg required;
     {27, CMD,R1},    // CMD27; PROGRAM_CSD: program CSD;
-    {28, CMD,R1b},    // CMD28; SET_WRITE_PROT: set wp for group; arg required;
-    {29, CMD,R1b},    // CMD29; CLR_WRITE_PROT: clear group wp; arg required;
+    {28, CMD,R1b},   // CMD28; SET_WRITE_PROT: set wp for group; arg required;
+    {29, CMD,R1b},   // CMD29; CLR_WRITE_PROT: clear group wp; arg required;
     {30, CMD,R1},    // CMD30; SEND_WRITE_PROT: check wp status; arg required;
     {32, CMD,R1},    // CMD32; TAG_SECTOR_START: tag 1st erase; arg required;
     {33, CMD,R1},    // CMD33; TAG_SECTOR_END: tag end(single); arg required;
@@ -92,10 +89,10 @@ __code command_t command_list[] = {
     {35, CMD,R1},    // CMD35; TAG_ERASE_GROUP_START; arg required;
     {36, CMD,R1},    // CMD36; TAG_ERASE_GROUP_END; arg required;
     {37, CMD,R1},    // CMD37; UNTAG_ERASE_GROUP; arg required;
-    {38, CMD,R1b},    // CMD38; ERASE: erase all tagged sectors; arg required;
-    {42, CMD,R1b},    // CMD42; LOCK_UNLOCK; arg required;
+    {38, CMD,R1b},   // CMD38; ERASE: erase all tagged sectors; arg required;
+    {42, CMD,R1b},   // CMD42; LOCK_UNLOCK; arg required;
     {55, CMD,R1},    // CMD55; APP_CMD;
-    {ACMD(41), CMD,R1},    // ACMD41; APP_SEND_OP_CMD; arg required;
+    {41, CMD,R1},    // ACMD41; APP_SEND_OP_CMD; arg required;
     {58, CMD,R3},    // CMD58; READ_OCR: read OCR register;
     {59, CMD,R1},    // CMD59; CRC_ON_OFF: toggles CRC checking; arg required;
     { 8, CMD,R7},    // CMD8;  SEND_IF_COND: Sends SD Memory Card interface condition; arg required;
@@ -150,8 +147,7 @@ static __bit sdhc = 0;
 #define select_MMC() {NSSMD0 = 0;}
 #define deselect_MMC() {NSSMD0 = 1;}
 
-#define raise_exception(code) \
-{\
+#define raise_exception(code) { \
   spi_send_8clock(); \
   deselect_MMC(); \
   spi_send_8clock(); \
@@ -186,6 +182,9 @@ mmc_res_t mmc_flush() {
   return MMC_NORMAL_CODE;
 }
 
+#define issue_command(cmd_index, argument, pchar) \
+_issue_command(&command_list[cmd_index], argument, pchar)
+
 /**
  * This function generates the necessary SPI traffic for all MMC SPI commands.
  * The three parameters are described below:
@@ -212,29 +211,21 @@ mmc_res_t mmc_flush() {
  * from that entry to determine how to proceed.  Returns the 16-bit card 
  * response value;
  */
-static mmc_res_t issue_command(
-    unsigned char cmd_index,
+static mmc_res_t _issue_command(
+    __code command_t *current_command,
     unsigned long argument,
     unsigned char *pchar){
 
   // current data block length;
   static __xdata unsigned int current_blklen = 512;
   
-  // Byte counter for multi-byte fields;
   unsigned char counter;
-  
-  // Local space for the command table entry;
-  command_t __code *current_command = &command_list[cmd_index];
   
   // Temp variable to preserve data block length during temporary changes;
   unsigned int old_blklen;
   
   // Variable for storing card res;
   unsigned char res;
-  
-  if(IS_ACMD(current_command->command_index)){
-    issue_command(APP_CMD,EMPTY,EMPTY);
-  }
 
   // Send buffer SPI clocks to ensure no MMC operations are pending;
   spi_send_8clock();
@@ -511,10 +502,12 @@ void mmc_init(){
     if((buffer[2] == 0x01) && (buffer[3] == 0xAA)){
       /* The card can work at vdd range of 2.7-3.6V */
       /* Wait for leaving idle state (ACMD41 with HCS bit) */
-      while(issue_command(APP_SEND_OP_CMD, 0x40000000UL, EMPTY)){
+      do{
+        issue_command(APP_CMD, EMPTY, EMPTY);
+        if(issue_command(APP_SEND_OP_CMD, 0x40000000UL, EMPTY)){break;}
         wait_ms(1);
         if((++loopguard) == 0){return;}
-      }
+      }while(1);
       if(issue_command(READ_OCR, EMPTY, buffer) == 0){
         /* Check CCS bit in the OCR */
         if(buffer[0] & 0x40){block_addressing = 1;}
