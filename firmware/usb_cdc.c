@@ -54,29 +54,26 @@
 #define CDC_OVRRUN  0x40  // overrun error
 #define CDC_CTS     0x80  // clear to send
 
-volatile __bit cdc_need_line_status_update = FALSE;
-
-static void handle_com(){
-  if(cdc_need_line_status_update){
-    cdc_need_line_status_update = FALSE;
-    {
-      // ResponseAvailable
-      u8 buf[] = {
-        0xA1, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-      };
-      
-      usb_write(buf, sizeof(buf), CDC_COM_EP_IN);
-    }
-    {
-      // SerialState
-      u8 buf[] = {
-        0xA1, 0x20, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
-        0x03, 0x00
-      };
-      
-      usb_write(buf, sizeof(buf), CDC_COM_EP_IN);
-    }
+void cdc_handle_com(){
+  static __xdata u8 invoked = 0;
+  if((invoked++) % 16 > 0){return;}
+#ifndef CDC_IS_REPLACED_BY_FTDI
+  /*{
+    // ResponseAvailable
+    static const __code u8 buf[] = {
+      0xA1, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+    };
+    usb_write(buf, sizeof(buf), CDC_COM_EP_IN);
+  }*/
+  {
+    // SerialState
+    static const __code u8 buf[] = {
+      0xA1, 0x20, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+      0x03, 0x00
+    };
+    usb_write(buf, sizeof(buf), CDC_COM_EP_IN);
   }
+#endif
 }
 
 static u16 cdc_rx_size();
@@ -95,14 +92,8 @@ void cdc_polling(){
   if(!usb_enable){return;}
     
   // USB Disable => Enable
-  if(!usb_previous_enable){
-    cdc_need_line_status_update = TRUE;
-    return;
-  }
+  if(!usb_previous_enable){return;}
 
-#ifndef CDC_IS_REPLACED_BY_FTDI
-  handle_com();
-#endif
   handle_data();
 }
 
@@ -365,35 +356,33 @@ static void cdc_recover(){
 
 u16 cdc_tx(u8 *buf, u16 size){
 #ifdef CDC_IS_REPLACED_BY_FTDI
-#define CDC_IN_BUF_SIZE (CDC_DATA_EP_IN_PACKET_SIZE-1)
-#define CDC_IN_BUF_HEADER 2
-  static __xdata u8 ftdi_packet[CDC_IN_BUF_SIZE] = {
+#define TX_BUF_HEADER 2
+  static __xdata u8 tx_packet[CDC_DATA_EP_IN_PACKET_SIZE-1] = {
       (HEADER0_SIGN | HEADER0_RI),    // 0x41 
       (HEADER1_THRE | HEADER1_TEMT)}; // 0x60
 #else
-#define CDC_IN_BUF_SIZE CDC_DATA_EP_IN_PACKET_SIZE
-#define CDC_IN_BUF_HEADER 0
-  static __xdata u8 ftdi_packet[CDC_IN_BUF_SIZE];
+#define TX_BUF_HEADER 0
+  static __xdata u8 tx_packet[CDC_DATA_EP_IN_PACKET_SIZE-1];
 #endif
-  static __xdata u8 margin = CDC_IN_BUF_SIZE - CDC_IN_BUF_HEADER;
+  static __xdata u8 margin = sizeof(tx_packet) - TX_BUF_HEADER;
   u16 written = 0;
   while(size){
     if(size < margin){
-      memcpy(&(ftdi_packet[CDC_IN_BUF_SIZE - margin]), buf, size);
+      memcpy(&(tx_packet[sizeof(tx_packet) - margin]), buf, size);
       written += size;
       margin -= size;
       break;
     }
-    memcpy(&(ftdi_packet[CDC_IN_BUF_SIZE - margin]), buf, margin);
+    memcpy(&(tx_packet[sizeof(tx_packet) - margin]), buf, margin);
     buf += margin;
     size -= margin;
     timeout_10ms = 0;
-    while(!usb_write(ftdi_packet, CDC_IN_BUF_SIZE, CDC_DATA_EP_IN)){
+    while(!usb_write(tx_packet, sizeof(tx_packet), CDC_DATA_EP_IN)){
       wait_us(50);
       if(timeout_10ms > 10){break;}
     }
     written += margin;
-    margin = CDC_IN_BUF_SIZE - CDC_IN_BUF_HEADER;
+    margin = sizeof(tx_packet) - TX_BUF_HEADER;
   }
   return written;
 }

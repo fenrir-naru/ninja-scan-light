@@ -33,7 +33,7 @@
 #define __CDC_H__
 
 #include "type.h"
-#define CDC_IS_REPLACED_BY_FTDI
+//#define CDC_IS_REPLACED_BY_FTDI
 
 /**
  * Header Functional Descriptor
@@ -77,7 +77,7 @@ typedef struct {
   BYTE bSlaveInterface0;
 } cdc_union_func_descriptor_t;
 
-typedef __code struct {
+typedef struct {
   cdc_header_func_descriptor_t header;
   cdc_abst_control_mana_descriptor_t abst_control_mana;
   cdc_union_func_descriptor_t union_func;
@@ -108,7 +108,7 @@ typedef struct {
 #define SET_CONTROL_LINE_STATE    0x22
 #define SEND_BREAK                0x23
 
-extern volatile __bit cdc_need_line_status_update;
+void cdc_handle_com();
 void usb_CDC_req();
 void cdc_polling();
 u16 cdc_tx(u8 *buf, u16 size);

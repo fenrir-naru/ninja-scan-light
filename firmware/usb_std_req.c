@@ -36,23 +36,17 @@
 #include "usb_descriptor.h"
 #include "usb_std_req.h"
 
-#if (!defined(DEBUG_MSD_ONLY)) && (!(defined(DEBUG_CDC_ONLY)))
-#include "mmc.h" // SDÇ™ë∂ç›ÇµÇ»Ç¢èÍçá
-#define ALTERNATIVE_DESCRIPTOR(name) \
-if(mmc_initialized){ \
-  ep0_Data_Ptr = (BYTE*)&DESC_ ## name; \
-}else{ \
-  ep0_Data_Ptr = (BYTE*)&DESC2_ ## name; \
-}
-#else
-#define ALTERNATIVE_DESCRIPTOR(name) \
-ep0_Data_Ptr = (BYTE*)&DESC_ ## name;
-#endif
+#include "mmc.h"
+#include "usb_cdc.h"
 
 // These are response packets used for
-static __code BYTE ONES_PACKET[2] = {0x01, 0x00};
+static const __code BYTE ONES_PACKET[2] = {0x01, 0x00};
 // communication with host
-static __code BYTE ZERO_PACKET[2] = {0x00, 0x00};
+static const __code BYTE ZERO_PACKET[2] = {0x00, 0x00};
+
+static __code device_descriptor_t * __xdata desc_device;
+static __code configuration_descriptor_t * __xdata desc_config;
+
 
 /**
  * This routine returns a two byte status packet to the host
@@ -81,7 +75,7 @@ static void usb_Get_Status(){
     
     case IN_INTERFACE:
       if((usb_state == DEV_CONFIGURED)
-          && (usb_setup_buf.wIndex.i <= (USB_INTERFACES - 1))){
+          && (usb_setup_buf.wIndex.i < desc_config->bNumInterfaces)){
         // Only valid if device is configured and non-zero index
         // Status packet always returns 0x00
         regist_data((BYTE*)&ZERO_PACKET, 2);
@@ -306,12 +300,21 @@ static void usb_Get_Descriptor(){
   ep0_callback = NULL;
   switch(usb_setup_buf.wValue.c[MSB]){
     case DSC_TYPE_DEVICE:
-      ALTERNATIVE_DESCRIPTOR(DEVICE);
-      ep0_Data_Size = ((device_descriptor_t *)ep0_Data_Ptr)->bLength;
+      if(mmc_initialized){
+        desc_device = &DESC_DEVICE;
+        desc_config = &DESC_CONFIG;
+        usb_sof = NULL;
+      }else{
+        desc_device = &DESC2_DEVICE;
+        desc_config = &DESC2_CONFIG;
+        usb_sof = cdc_handle_com;
+      }
+      ep0_Data_Ptr = (BYTE *)desc_device;
+      ep0_Data_Size = desc_device->bLength;
       break;  
     case DSC_TYPE_CONFIG:  // config + interfaces + endpointsëSïîï‘Ç∑Ç±Ç∆!!
-      ALTERNATIVE_DESCRIPTOR(CONFIG);
-      ep0_Data_Size = ((configuration_descriptor_t *)ep0_Data_Ptr)->wTotalLength.i;
+      ep0_Data_Ptr = (BYTE *)desc_config;
+      ep0_Data_Size = desc_config->wTotalLength.i;
       break;
 	  case DSC_TYPE_STRING:
       ep0_Data_Ptr = DESC_STRINGs[usb_setup_buf.wValue.c[LSB]];
@@ -459,7 +462,7 @@ static void usb_Get_Interface(){
         || (usb_setup_buf.bmRequestType != IN_INTERFACE)
         // or non-zero value or index fields
         || usb_setup_buf.wValue.c[MSB] || usb_setup_buf.wValue.c[LSB] 
-        || (usb_setup_buf.wIndex.i >= USB_INTERFACES)
+        || (usb_setup_buf.wIndex.i >= desc_config->bNumInterfaces)
         // or data length not equal to one
         || usb_setup_buf.wLength.c[MSB] ||(usb_setup_buf.wLength.c[LSB] != 1)){
     // Then return stall due to invalid request
@@ -486,7 +489,7 @@ static void usb_Set_Interface(){
   if((usb_setup_buf.bmRequestType != OUT_INTERFACE)
         || usb_setup_buf.wLength.c[MSB] || usb_setup_buf.wLength.c[LSB]
         || usb_setup_buf.wValue.c[MSB] || usb_setup_buf.wValue.c[LSB]
-        || (usb_setup_buf.wIndex.i >= USB_INTERFACES)){
+        || (usb_setup_buf.wIndex.i >= desc_config->bNumInterfaces)){
     // Othewise send a stall to host
     return;
   }
