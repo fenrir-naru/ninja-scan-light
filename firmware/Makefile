@@ -78,7 +78,8 @@ $(PACKAGE) : $(patsubst %,$(BUILD_DIR)/%,$(PACKAGE))
 
 $(BUILD_DIR)/$(PACKAGE) : $(patsubst %,$(BUILD_DIR)/%,$(OBJS))
 	export PATH=$(BIN_PATH):$$PATH; \
-	$(CXX) $(LFLAGS) $(INCLUDES) -o $@ $(LIBS) $^
+	$(CXX) $(LFLAGS) $(INCLUDES) -o $@ $(LIBS) $^; \
+	if [ ! -f $(basename $@).omf ]; then mv $(basename $@) $(basename $@).omf; fi
 
 $(BUILD_DIR) :
 	mkdir $@
