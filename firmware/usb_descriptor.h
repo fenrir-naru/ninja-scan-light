@@ -35,21 +35,6 @@
 #include "type.h"
 #include "f38x_usb.h"
 
-//#define DEBUG_MSD_ONLY
-//#define DEBUG_CDC_ONLY
-#define USE_IAD
-
-#ifndef DEBUG_CDC_ONLY
-#ifndef DEBUG_MSD_ONLY
-#define USB_INTERFACES 3
-#else
-#define USB_INTERFACES 2
-#endif
-#else
-#define USB_INTERFACES 1
-#endif
-
-
 /**
  * Standard Device Descriptor Type Defintion
  */
