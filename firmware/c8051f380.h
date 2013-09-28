@@ -86,6 +86,7 @@ __sfr __at (0xA7) P3MDOUT       ; /* Port 3 Output Mode                       */
 __sfr __at (0xA8) IE            ; /* Interrupt Enable                         */
 __sfr __at (0xA9) CLKSEL        ; /* Clock Select                             */
 __sfr __at (0xAA) EMI0CN        ; /* EMIF control                             */
+__sfr __at (0xAA) _XPAGE        ; /* XDATA/PDATA PAGE                         */
 __sfr __at (0xAC) SBCON1        ; /* UART1 Baud Rate Generator Control        */
 __sfr __at (0xAE) P4MDOUT       ; /* Port 4 Mode                              */
 __sfr __at (0xAF) PFE0CN        ; /* Prefetch Engine Control                  */
