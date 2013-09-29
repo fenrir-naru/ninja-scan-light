@@ -36,6 +36,7 @@
 
 #include "mpu6000.h"
 
+#include "util.h"
 #include "type.h"
 #include "data_hub.h"
 
@@ -94,11 +95,11 @@ typedef enum {
  * MPU-6000
  *
  * === Connection ===
- * C8051           MPU-6000
- *  P1.4(OUT) => SCK
- *  P1.5(OUT) => MOSI
- *  P1.6(OUT) => -CS
- *  P1.7(IN)   <=  MISO
+ * C8051         MPU-6000
+ *  P1.4(OUT) =>  SCK
+ *  P1.5(OUT) =>  MOSI
+ *  P1.6(OUT) =>  -CS
+ *  P1.7(IN)  <=  MISO
  */
 
 #define clk_up()     (P1 |= 0x10)
@@ -109,53 +110,50 @@ typedef enum {
 #define cs_deassert()   (P1 |= 0x40)
 #define is_in_up()   (P1 & 0x80)
 
-#define _nop_() { \
-  __asm \
-    nop \
-  __endasm; \
-}
-
 static void mpu6000_write(u8 *buf, u8 size){
+  cs_assert();
   for(; size--; buf++){
     u8 mask = 0x80;
     do{
       clk_down();
       ((*buf) & mask) ? out_up() : out_down();
+      wait_8n6clk(2);
       clk_up();
+      wait_8n6clk(2);
     }while(mask >>= 1);
   }
+  cs_deassert();
+  wait_8n6clk(2);
 }
 
 static void mpu6000_read(u8 *buf, u8 size){
+  cs_assert();
   for(; size--; buf++){
     u8 temp = 0;
     u8 mask = 0x80;
     out_down();
     do{
       clk_down();
-      _nop_();
+      wait_8n6clk(2);
       if(is_in_up()) temp |= mask;
       clk_up();
+      wait_8n6clk(2);
     }while(mask >>= 1);
     *buf = temp;
   }
+  cs_deassert();
+  wait_8n6clk(2);
 }
 
 #define mpu6000_set(address, value) { \
   static const __code u8 addr_value[2] = {address, value}; \
-  cs_assert(); \
   mpu6000_write(addr_value, sizeof(addr_value)); \
-  cs_deassert(); \
-  _nop_(); \
 }
 
 #define mpu6000_get(address, value) { \
   static const __code u8 addr[1] = {0x80 | address}; \
-  cs_assert(); \
   mpu6000_write(addr, sizeof(addr)); \
   mpu6000_read((u8 *)&(value), sizeof(value)); \
-  cs_deassert(); \
-  _nop_(); \
 }
 
 volatile __bit mpu6000_capture;

@@ -34,9 +34,13 @@
 
 #include "main.h"
 
-void wait_10n4clk(unsigned char i);
-void wait_us(unsigned int count);
+void wait_8n6clk(unsigned char i);
+void _wait_us(unsigned int count);
 void wait_ms(unsigned int count);
+
+#define wait_us(n) { \
+  ((n) <= 100) ? wait_8n6clk((n) * 5) : _wait_us((n) - 1); \
+}
 
 #ifdef ENDIAN_CORRECT_BY_FUNC
 u32 swap_u32(u32 dw);
@@ -55,17 +59,21 @@ u16 swap_u16(u16 w);
 #endif
 
 
-#ifdef __SDCC__
+#if (defined(__SDCC) || defined(SDCC))
 #define le_u32(dw) (dw)
 #define le_u16(w) (w)
 #define be_u32(dw) swap_u32(dw)
 #define be_u16(w) swap_u16(w)
+#define _nop_() { \
+  __asm \
+    nop \
+  __endasm; \
+}
 #else
 #define le_u32(dw) swap_u32(dw)
 #define le_u16(w) swap_u16(w)
 #define be_u32(dw) (dw)
 #define be_u16(w) (w)
-
 #endif
 
 #define min(a,b) (((a)<(b))?(a):(b))
