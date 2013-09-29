@@ -33,7 +33,7 @@
 #define __MMC_H__
 
 typedef enum {
-  MMC_NORMAL_CODE, MMC_ERROR_CODE
+  MMC_NORMAL = 0, MMC_ERROR = 0xFF,
 } mmc_res_t;
 
 // Physical size in bytes of one MMC FLASH sector

@@ -68,34 +68,34 @@ typedef struct {
 // mode;  Format of command entries is described above in command structure
 // definition;
 __code command_t command_list[] = {
-    { 0, CMD,R1},    // CMD0;  GO_IDLE_STATE: reset card;
-    { 1, CMD,R1},    // CMD1;  SEND_OP_COND: initialize card;
-    { 9, RD ,R1},    // CMD9;  SEND_CSD: get card specific data;
-    {10, RD ,R1},    // CMD10; SEND_CID: get card identifier;
-    {12, CMD,R1},    // CMD12; STOP_TRANSMISSION: end read;
-    {13, CMD,R2},    // CMD13; SEND_STATUS: read card status;
-    {16, CMD,R1},    // CMD16; SET_BLOCKLEN: set block size; arg required;
-    {17, RD ,R1},    // CMD17; READ_SINGLE_BLOCK: read 1 block; arg required;
-    {18, RD ,R1 },   // CMD18; READ_MULTIPLE_BLOCK: read > 1; arg required;
-    {24, WR ,R1},    // CMD24; WRITE_BLOCK: write 1 block; arg required;
-    {25, WR ,R1 },   // CMD25; WRITE_MULTIPLE_BLOCK: write > 1; arg required;
-    {27, CMD,R1},    // CMD27; PROGRAM_CSD: program CSD;
-    {28, CMD,R1b},   // CMD28; SET_WRITE_PROT: set wp for group; arg required;
-    {29, CMD,R1b},   // CMD29; CLR_WRITE_PROT: clear group wp; arg required;
-    {30, CMD,R1},    // CMD30; SEND_WRITE_PROT: check wp status; arg required;
-    {32, CMD,R1},    // CMD32; TAG_SECTOR_START: tag 1st erase; arg required;
-    {33, CMD,R1},    // CMD33; TAG_SECTOR_END: tag end(single); arg required;
-    {34, CMD,R1},    // CMD34; UNTAG_SECTOR: deselect for erase; arg required;
-    {35, CMD,R1},    // CMD35; TAG_ERASE_GROUP_START; arg required;
-    {36, CMD,R1},    // CMD36; TAG_ERASE_GROUP_END; arg required;
-    {37, CMD,R1},    // CMD37; UNTAG_ERASE_GROUP; arg required;
-    {38, CMD,R1b},   // CMD38; ERASE: erase all tagged sectors; arg required;
-    {42, CMD,R1b},   // CMD42; LOCK_UNLOCK; arg required;
-    {55, CMD,R1},    // CMD55; APP_CMD;
-    {41, CMD,R1},    // ACMD41; APP_SEND_OP_CMD; arg required;
-    {58, CMD,R3},    // CMD58; READ_OCR: read OCR register;
-    {59, CMD,R1},    // CMD59; CRC_ON_OFF: toggles CRC checking; arg required;
-    { 8, CMD,R7},    // CMD8;  SEND_IF_COND: Sends SD Memory Card interface condition; arg required;
+    { 0, CMD, R1},  // CMD0;  GO_IDLE_STATE: reset card;
+    { 1, CMD, R1},  // CMD1;  SEND_OP_COND: initialize card;
+    { 9, RD , R1},  // CMD9;  SEND_CSD: get card specific data;
+    {10, RD , R1},  // CMD10; SEND_CID: get card identifier;
+    {12, CMD, R1},  // CMD12; STOP_TRANSMISSION: end read;
+    {13, CMD, R2},  // CMD13; SEND_STATUS: read card status;
+    {16, CMD, R1},  // CMD16; SET_BLOCKLEN: set block size; arg required;
+    {17, RD , R1},  // CMD17; READ_SINGLE_BLOCK: read 1 block; arg required;
+    {18, RD , R1},  // CMD18; READ_MULTIPLE_BLOCK: read > 1; arg required;
+    {24, WR , R1},  // CMD24; WRITE_BLOCK: write 1 block; arg required;
+    {25, WR , R1},  // CMD25; WRITE_MULTIPLE_BLOCK: write > 1; arg required;
+    {27, CMD, R1},  // CMD27; PROGRAM_CSD: program CSD;
+    {28, CMD, R1b}, // CMD28; SET_WRITE_PROT: set wp for group; arg required;
+    {29, CMD, R1b}, // CMD29; CLR_WRITE_PROT: clear group wp; arg required;
+    {30, CMD, R1},  // CMD30; SEND_WRITE_PROT: check wp status; arg required;
+    {32, CMD, R1},  // CMD32; TAG_SECTOR_START: tag 1st erase; arg required;
+    {33, CMD, R1},  // CMD33; TAG_SECTOR_END: tag end(single); arg required;
+    {34, CMD, R1},  // CMD34; UNTAG_SECTOR: deselect for erase; arg required;
+    {35, CMD, R1},  // CMD35; TAG_ERASE_GROUP_START; arg required;
+    {36, CMD, R1},  // CMD36; TAG_ERASE_GROUP_END; arg required;
+    {37, CMD, R1},  // CMD37; UNTAG_ERASE_GROUP; arg required;
+    {38, CMD, R1b}, // CMD38; ERASE: erase all tagged sectors; arg required;
+    {42, CMD, R1b}, // CMD42; LOCK_UNLOCK; arg required;
+    {55, CMD, R1},  // CMD55; APP_CMD;
+    {41, CMD, R1},  // For ACMD41; APP_SEND_OP_CMD; arg required;
+    {58, CMD, R3},  // CMD58; READ_OCR: read OCR register;
+    {59, CMD, R1},  // CMD59; CRC_ON_OFF: toggles CRC checking; arg required;
+    { 8, CMD, R7},  // CMD8;  SEND_IF_COND: Sends SD Memory Card interface condition; arg required;
   };
 
 // Command Table Index Constants:
@@ -130,7 +130,7 @@ enum {
   APP_SEND_OP_CMD,
   READ_OCR,
   CRC_ON_OFF,
-  SEND_IF_COND
+  SEND_IF_COND,
 };
 
 // MMC size variable;  Set during initialization;
@@ -147,11 +147,10 @@ static __bit sdhc = 0;
 #define select_MMC() {NSSMD0 = 0;}
 #define deselect_MMC() {NSSMD0 = 1;}
 
-#define raise_exception(code) { \
+#define epilogue() { \
   spi_send_8clock(); \
   deselect_MMC(); \
   spi_send_8clock(); \
-  return code; \
 }
 
 mmc_res_t mmc_flush() {
@@ -179,7 +178,7 @@ mmc_res_t mmc_flush() {
      */
     spi_send_8clock();
   }
-  return MMC_NORMAL_CODE;
+  return MMC_NORMAL;
 }
 
 #define issue_command(cmd_index, argument, pchar) \
@@ -211,7 +210,7 @@ _issue_command(&command_list[cmd_index], argument, pchar)
  * from that entry to determine how to proceed.  Returns the 16-bit card 
  * response value;
  */
-static mmc_res_t _issue_command(
+static unsigned char _issue_command(
     __code command_t *current_command,
     unsigned long argument,
     unsigned char *pchar){
@@ -226,6 +225,10 @@ static mmc_res_t _issue_command(
   
   // Variable for storing card res;
   unsigned char res;
+  
+  if(current_command == &command_list[APP_SEND_OP_CMD]){
+    issue_command(APP_CMD, EMPTY, EMPTY);
+  }
 
   // Send buffer SPI clocks to ensure no MMC operations are pending;
   spi_send_8clock();
@@ -297,7 +300,9 @@ static mmc_res_t _issue_command(
    */
   counter = sizeof(DWORD_t);
   do {
-    spi_write_read_byte(((DWORD_t *)&argument)->c[--counter]);
+    DWORD_t v;
+    v.i = argument;
+    spi_write_read_byte(v.c[--counter]);
   } while(counter);
   
   /*
@@ -311,14 +316,12 @@ static mmc_res_t _issue_command(
   }
   
   // read the response
-  timeout_10ms = 0;
+  counter = 0xFF;
   while((res = spi_write_read_byte(0xFF)) & BUSY_BIT){
-    if(!mmc_initialized){
-      wait_us(5);
-      timeout_10ms++;
-    }
-    if(timeout_10ms >= 0x80){
-      raise_exception(res);
+    wait_us(100);
+    if(--counter == 0){
+      epilogue();
+      return res;
     }
   }
   
@@ -327,9 +330,6 @@ static mmc_res_t _issue_command(
    * a given command;  The following conditional handles the MMC response;
    */
   switch(current_command->response){
-    case R1:
-      // Read the R1 response from the card;
-      break;
     case R1b:
       // Read the R1b response;
       /*
@@ -338,37 +338,27 @@ static mmc_res_t _issue_command(
        * When byte from card is non-zero,
        * card is no longer busy;
        */
-      timeout_10ms = 0;
-      while((res = spi_write_read_byte(0xff)) == 0x00){
-        if(!mmc_initialized){
-          wait_us(5);
-          timeout_10ms++;
-        }
-        if(timeout_10ms >= 0x80){
-          raise_exception(res);
-        }
-      }
+      do{
+        if(spi_write_read_byte(0xff) != 0x00){break;}
+      }while(1);
+      break;
+    case R1:
+      counter = 0; // Already read the R1 response from the card;
       break;
     case R2:
-      // Read R2 response
-      // Read second byte of response;
-      spi_write_read_byte(0xFF);
+      *(pchar++) = res; // copy the first byte of R2 response
+      res = MMC_NORMAL;
+      counter = 1; // Read R2 remaining response
       break;
     case R3:
     case R7:
-      // Read R3, R7 response;
-      /*
-       * Read next three bytes and store them
-       * in local memory;  These bytes make up
-       * the Operating Conditions Register
-       */
-      counter = 4;
-      while(counter-- > 0){ 
-        *(pchar++) = spi_write_read_byte(0xFF); // (OCR);
-      }
+      counter = 4; // Read R3, R7 response;
       break;
-    default:
-      raise_exception(MMC_ERROR_CODE);
+  }
+  
+  // Read additional response.
+  while(counter-- > 0){ 
+    *(pchar++) = spi_write_read_byte(0xFF);
   }
   
   /*
@@ -377,60 +367,66 @@ static mmc_res_t _issue_command(
    * Read data from the MMC;
    */
   switch(current_command->trans_type){
-    case WR:{
-        /*
-         * Write data to the MMC;
-         * Start by sending 8 SPI clocks so the MMC can prepare for the write;
-         */
-        spi_send_8clock();
-        spi_write_read_byte(START_SBW);
-        
-        spi_write(pchar, current_blklen);  // Write <current_blklen> bytes to MMC;
-        
-        // Write CRC bytes (don't cares);
-        spi_write_read_byte(0xFF);
-        spi_write_read_byte(0xFF);
-        
-        /*
-         * Read Data Response from card;
-         * 
-         * When bit 0 of the MMC response is clear, a valid data response
-         * has been received;
-         */
-        if((spi_write_read_byte(0xFF) & DATA_RESP_MASK) != 0x05){
-          raise_exception(MMC_ERROR_CODE);
-        }
-        spi_send_8clock();
-        if(spi_write_read_byte(0xFF) == 0x00){
-          require_busy_check = TRUE;
-        }
-        break;
-      } 
-    case RD:{
-        unsigned char data_res;
-        
-        /*
-         * wait for a start read Token from the MMC
-         */
-        timeout_10ms = 0;
-        while((data_res = spi_write_read_byte(0xFF)) != START_SBR) {
-          if((data_res != 0xFF) || (timeout_10ms >= 0x80)) { 
-            raise_exception(MMC_ERROR_CODE);
-          }
-        }
-        
-        spi_read(pchar, current_blklen);
+    case WR: {
+      unsigned char data_res;
+      /*
+       * Write data to the MMC;
+       * Start by sending 8 SPI clocks so the MMC can prepare for the write;
+       */
+      spi_send_8clock();
+      spi_write_read_byte(START_SBW);
       
-        /*
-         * After all data is read, read the two
-         * CRC bytes;  These bytes are not used
-         * in this mode, but the placeholders
-         * must be read anyway;
-         */
-        spi_write_read_byte(0xFF);
-        spi_write_read_byte(0xFF);
-        break;
+      spi_write(pchar, current_blklen);  // Write <current_blklen> bytes to MMC;
+      
+      // Write CRC bytes (don't cares);
+      spi_write_read_byte(0xFF);
+      spi_write_read_byte(0xFF);
+      
+      /*
+       * Read Data Response from card;
+       * 
+       * When bit 0 of the MMC response is clear, a valid data response
+       * has been received;
+       */
+      data_res = spi_write_read_byte(0xFF);
+      if((data_res & DATA_RESP_MASK) != 0x05){
+        epilogue();
+        return MMC_ERROR;
       }
+      spi_send_8clock();
+      if(spi_write_read_byte(0xFF) == 0x00){
+        require_busy_check = TRUE;
+      }
+      break;
+    }
+    case RD: {
+      unsigned char data_res;
+      
+      /*
+       * wait for a start read Token from the MMC
+       */
+      timeout_10ms = 0;
+      do{
+        data_res = spi_write_read_byte(0xFF);
+        if(data_res == START_SBR){break;}
+        if((data_res != 0xFF) || (timeout_10ms >= 0x80)) { 
+          epilogue();
+          return MMC_ERROR;
+        }
+      }while(1);
+      
+      spi_read(pchar, current_blklen);
+    
+      /*
+       * After all data is read, read the two CRC bytes;
+       * These bytes are not used in this mode, 
+       * but the placeholders must be read anyway;
+       */
+      spi_write_read_byte(0xFF);
+      spi_write_read_byte(0xFF);
+      
+      break;
+    }
   }
   
   deselect_MMC();
@@ -466,11 +462,9 @@ static __xdata unsigned char buffer[16];
 void mmc_init(){
   
   unsigned char loopguard;
-  
-  unsigned char res;
   unsigned char counter;  // SPI byte counter;
 
-  unsigned int c_size,bl_len;
+  unsigned int c_size, bl_len;
   unsigned char c_mult;
   
   if(mmc_initialized){return;}
@@ -503,12 +497,11 @@ void mmc_init(){
       /* The card can work at vdd range of 2.7-3.6V */
       /* Wait for leaving idle state (ACMD41 with HCS bit) */
       do{
-        issue_command(APP_CMD, EMPTY, EMPTY);
-        if(issue_command(APP_SEND_OP_CMD, 0x40000000UL, EMPTY)){break;}
+        if(issue_command(APP_SEND_OP_CMD, 1UL << 30, EMPTY) == MMC_NORMAL){break;}
         wait_ms(1);
         if((++loopguard) == 0){return;}
       }while(1);
-      if(issue_command(READ_OCR, EMPTY, buffer) == 0){
+      if(issue_command(READ_OCR, EMPTY, buffer) == MMC_NORMAL){
         /* Check CCS bit in the OCR */
         if(buffer[0] & 0x40){block_addressing = 1;}
       }
@@ -538,11 +531,10 @@ void mmc_init(){
    * Get the Card Specific Data (CSD)
    * register to determine the size of the MMC;
    */
-  res = issue_command(SEND_STATUS,EMPTY,EMPTY);
-
-  res = issue_command(SEND_CSD,EMPTY,buffer);
-	
-  if(res != 0) {return;}
+  if((issue_command(SEND_STATUS, EMPTY, buffer) != MMC_NORMAL)
+      || (issue_command(SEND_CSD, EMPTY, buffer) != MMC_NORMAL)){
+    return;
+  }
 
   switch(buffer[0] & 0xC0){
     case (0x01 << 6):
@@ -598,7 +590,8 @@ void mmc_init(){
 mmc_res_t mmc_read(
     unsigned long address, 
     unsigned char *pchar){
-  return issue_command(READ_SINGLE_BLOCK, address, pchar);
+  return (issue_command(READ_SINGLE_BLOCK, address, pchar) == MMC_NORMAL
+      ? MMC_NORMAL : MMC_ERROR);
 }
 
 /**
@@ -614,7 +607,8 @@ mmc_res_t mmc_read(
 mmc_res_t mmc_write(
     unsigned long address, 
     unsigned char *wdata){
-  return issue_command(WRITE_BLOCK, address, wdata);
+  return (issue_command(WRITE_BLOCK, address, wdata) == MMC_NORMAL
+      ? MMC_NORMAL : MMC_ERROR);
 }
 
 /**
@@ -622,5 +616,6 @@ mmc_res_t mmc_write(
  * 
  */
 mmc_res_t mmc_get_status(){
-  return issue_command(SEND_STATUS, EMPTY, EMPTY);
+  return (issue_command(SEND_STATUS, EMPTY, buffer) == MMC_NORMAL
+      ? MMC_NORMAL : MMC_ERROR);
 }

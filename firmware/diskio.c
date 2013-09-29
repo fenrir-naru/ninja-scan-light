@@ -48,7 +48,7 @@ DSTATUS disk_status (BYTE drive){
 DRESULT disk_read (BYTE drive, BYTE *buf, DWORD start_sector, BYTE sectors){
   if(drive != 0){return RES_NOTRDY;}
   while(sectors--){
-    if(mmc_read(start_sector, buf) != MMC_NORMAL_CODE){
+    if(mmc_read(start_sector, buf) != MMC_NORMAL){
       mmc_get_status();
       return RES_ERROR;
     }
@@ -62,7 +62,7 @@ DRESULT disk_ioctl (BYTE drive, BYTE ctrl, void *buff){
   if(drive != 0){return RES_NOTRDY;}
   switch(ctrl){
     case CTRL_SYNC :
-      if(mmc_flush() != MMC_NORMAL_CODE){return RES_ERROR;}
+      if(mmc_flush() != MMC_NORMAL){return RES_ERROR;}
       break;
     case GET_SECTOR_COUNT :
       *(DWORD *)buff = mmc_physical_sectors;
@@ -88,7 +88,7 @@ DRESULT disk_ioctl (BYTE drive, BYTE ctrl, void *buff){
 DRESULT disk_write (BYTE drive, const BYTE *buf, DWORD start_sector, BYTE sectors){
   if(drive != 0){return STA_NODISK;}
   while(sectors--){
-    if(mmc_write(start_sector, buf) != MMC_NORMAL_CODE){
+    if(mmc_write(start_sector, buf) != MMC_NORMAL){
       mmc_get_status();
       return RES_ERROR;
     }
