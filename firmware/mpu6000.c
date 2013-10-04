@@ -40,6 +40,9 @@
 #include "type.h"
 #include "data_hub.h"
 
+#define cs_wait() wait_8n6clk(50)
+#define clk_wait() wait_8n6clk(5)
+
 typedef enum {
   SELF_TEST_X = 0x0D,
   SELF_TEST_Y = 0x0E,
@@ -49,7 +52,7 @@ typedef enum {
   CONFIG = 0x1A,
   GYRO_CONFIG = 0x1B,
   ACCEL_CONFIG = 0x1C,
-  FIFO_EN = 23,
+  FIFO_EN = 0x23,
   I2C_MST_CTRL = 0x24,
   I2C_SLV0_ADDR = 0x25,
   I2C_SLV0_REG = 0x26,
@@ -111,54 +114,63 @@ typedef enum {
 #define is_in_up()   (P1 & 0x80)
 
 static void mpu6000_write(u8 *buf, u8 size){
-  cs_assert();
   for(; size--; buf++){
     u8 mask = 0x80;
     do{
       clk_down();
       ((*buf) & mask) ? out_up() : out_down();
-      wait_8n6clk(2);
+      clk_wait();
       clk_up();
-      wait_8n6clk(2);
+      clk_wait();
     }while(mask >>= 1);
   }
-  cs_deassert();
-  wait_8n6clk(2);
 }
 
 static void mpu6000_read(u8 *buf, u8 size){
-  cs_assert();
   for(; size--; buf++){
     u8 temp = 0;
     u8 mask = 0x80;
-    out_down();
     do{
       clk_down();
-      wait_8n6clk(2);
-      if(is_in_up()) temp |= mask;
+      clk_wait();
       clk_up();
-      wait_8n6clk(2);
+      if(is_in_up()) temp |= mask;
+      clk_wait();
     }while(mask >>= 1);
     *buf = temp;
   }
-  cs_deassert();
-  wait_8n6clk(2);
 }
 
 #define mpu6000_set(address, value) { \
   static const __code u8 addr_value[2] = {address, value}; \
+  cs_assert(); \
+  cs_wait(); \
   mpu6000_write(addr_value, sizeof(addr_value)); \
+  cs_deassert(); \
+  cs_wait(); \
 }
 
 #define mpu6000_get(address, value) { \
   static const __code u8 addr[1] = {0x80 | address}; \
+  cs_assert(); \
+  cs_wait(); \
   mpu6000_write(addr, sizeof(addr)); \
   mpu6000_read((u8 *)&(value), sizeof(value)); \
+  cs_deassert(); \
+  cs_wait(); \
 }
 
-volatile __bit mpu6000_capture;
+volatile __bit mpu6000_capture = FALSE;
+
+static __bit mpu6000_available = FALSE;
 
 void mpu6000_init(){
+  cs_deassert();
+  clk_up();
+  mpu6000_set(PWR_MGMT_1, 0x80); // Chip reset
+  wait_ms(100);
+  mpu6000_set(PWR_MGMT_1, 0x03); // Wake up device and select GyroZ clock (better performance)
+  
   mpu6000_set(USER_CTRL, 0x34); // Enable Master I2C, disable primary I2C I/F, and reset FIFO.
   mpu6000_set(SMPLRT_DIV, 79); // SMPLRT_DIV = 79, 100Hz sampling;
   // CONFIG = 0; // Disable FSYNC, No DLPF
@@ -167,7 +179,14 @@ void mpu6000_init(){
   mpu6000_set(FIFO_EN, 0xF8); // FIFO enabled for temperature(2), gyro(2 * 3), accelerometer(2 * 3). Total 14 bytes.
   mpu6000_set(I2C_MST_CTRL, (0xC8 | 13)); // Multi-master, Wait for external sensor, I2C stop then start cond., clk 400KHz
   mpu6000_set(USER_CTRL, 0x70); // Enable FIFO with Master I2C enabled, and primary I2C I/F disabled.
-  mpu6000_capture = FALSE;
+
+  {
+    u8 who_am_i; // expecting 0x68
+    mpu6000_get(WHO_AM_I, who_am_i);
+    if(who_am_i == 0x68){
+      mpu6000_available = TRUE;
+    }
+  }
 }
 
 static void make_packet(packet_t *packet){
@@ -230,19 +249,21 @@ static void make_packet(packet_t *packet){
 }
 
 void mpu6000_polling(){
+  if(!mpu6000_available){return;}
   if(mpu6000_capture){
-    
-    // データがあるか確認  
-    WORD_t v;
-    mpu6000_get(FIFO_COUNTH, v.c[1]);
-    mpu6000_get(FIFO_COUNTL, v.c[0]);
-    if(v.i < 14){return;}
+
+    // データがあるか確認
+    WORD_t fifo_count;
+    mpu6000_get(FIFO_COUNTH, fifo_count.c[1]);
+    mpu6000_get(FIFO_COUNTL, fifo_count.c[0]);
+
+    if(fifo_count.i < 14){return;}
     
     mpu6000_capture = FALSE;
     data_hub_assign_page(make_packet);
     
     // FIFOリセット
-    if(v.i > 14){
+    if(fifo_count.i > 14){
       mpu6000_set(USER_CTRL, 0x34);
       mpu6000_set(USER_CTRL, 0x70);
     }

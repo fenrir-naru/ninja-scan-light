@@ -63,47 +63,47 @@ void port_init();
 void timer_init();
 
 void main() {
-	sysclk_init();                        // Initialize oscillator
-	port_init();                           // Initialize crossbar and GPIO
+  sysclk_init();                        // Initialize oscillator
+  port_init();                           // Initialize crossbar and GPIO
 
-	uart0_init();
+  uart0_init();
   uart1_init();
   i2c0_init();
   spi_init();
-	disk_initialize(0);
-	timer_init();
-	usb0_init();
+  timer_init();
 
-  // speed up spi, 12MHz.
-  spi_clock(12000);
-  
-  usb_bulk_init();
-  data_hub_init();
-  
-  EA = 1;                                // Global Interrupt enable
-
-  gps_init();
   mpu6000_init();
   mag3110_init();
   ms5611_init();
+
+  data_hub_init();
   
+  EA = 1;                                // Global Interrupt enable
+  
+  disk_initialize(0);
+  
+  gps_init();
+  
+  usb0_init();
+  usb_bulk_init();
+
   // Time Pulse Interrupt config (-INT0)
   IT0 = 1;    // Edge sense
   //PX0 = 1;    // Proiority High
   EX0 = 1;    // Enable
 
-	while (1) {
-	  gps_polling();
+  while (1) {
+    gps_polling();
     mpu6000_polling();
     mag3110_polling();
     ms5611_polling();
     data_hub_polling();
-		msd_polling();
+    msd_polling();
     cdc_polling();
     usb_polling();
 
     sys_state |= SYS_POLLING_ACTIVE;
-	}
+  }
 }
 
 // System clock selections (SFR CLKSEL)
@@ -213,7 +213,7 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
 
   TMR3CN &= ~0x80; // Clear interrupt
   mpu6000_capture = TRUE;
-	global_ms += 10;
+  global_ms += 10;
   tickcount++;
   timeout_10ms++;
   switch(u32_lsbyte(tickcount) % 16){ // 6.25Hz
