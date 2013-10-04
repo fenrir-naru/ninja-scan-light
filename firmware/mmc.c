@@ -133,8 +133,8 @@ enum {
   SEND_IF_COND,
 };
 
-// MMC size variable;  Set during initialization;
-__xdata unsigned long mmc_physical_size = 0;
+// MMC block length;  Set during initialization;
+__xdata unsigned int mmc_block_length = 0;
 
 // MMC block number;  Computed during initialization;
 __xdata unsigned long mmc_physical_sectors = 0;
@@ -316,10 +316,9 @@ static unsigned char _issue_command(
   }
   
   // read the response
-  counter = 0xFF;
+  timeout_10ms = 0;
   while((res = spi_write_read_byte(0xFF)) & BUSY_BIT){
-    wait_us(100);
-    if(--counter == 0){
+    if(timeout_10ms > 0x80){
       epilogue();
       return res;
     }
@@ -464,10 +463,12 @@ void mmc_init(){
   unsigned char loopguard;
   unsigned char counter;  // SPI byte counter;
 
-  unsigned int c_size, bl_len;
+  unsigned int c_size;
   unsigned char c_mult;
   
   if(mmc_initialized){return;}
+  
+  spi_clock(200); // speed up spi, 200KHz.
   
   deselect_MMC();
   wait_ms(100);
@@ -538,14 +539,14 @@ void mmc_init(){
 
   switch(buffer[0] & 0xC0){
     case (0x01 << 6):
-      bl_len = 512;
+      mmc_block_length = 512;
       mmc_physical_sectors = ((unsigned long)(buffer[7] & 0x3F) << 16)
           | (buffer[8] << 8) | buffer[9];
       mmc_physical_sectors++;
       mmc_physical_sectors <<= 10;
       break;
     case (0x00 << 6):
-      bl_len = 1 << (buffer[5] & 0x0f);
+      mmc_block_length = 1 << (buffer[5] & 0x0f);
       c_size = ((buffer[6] & 0x03) << 10) | 
           (buffer[7] << 2) | ((buffer[8] & 0xc0) >> 6);
       c_mult = (((buffer[9] & 0x03) << 1) | ((buffer[10] & 0x80) >> 7));
@@ -574,8 +575,9 @@ void mmc_init(){
    * 14 15-8
    * 15 7-0
    */
-  mmc_physical_size = mmc_physical_sectors * bl_len;
-
+  
+  spi_clock(12000); // speed up spi, 12MHz.
+  
   mmc_initialized = TRUE;
 }
 
