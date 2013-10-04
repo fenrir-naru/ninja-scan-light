@@ -489,6 +489,7 @@ static void reset(){
  * Enable USB0 with suspend detection
  */
 void usb0_init(){
+  usb_sof = NULL;
   POLL_WRITE_BYTE(POWER,  0x08); // Force Asynchronous USB Reset
   POLL_WRITE_BYTE(IN1IE,  0x0F); // Enable Endpoint 0-3 in interrupts
   POLL_WRITE_BYTE(OUT1IE, 0x0F); // Enable Endpoint 0-3 out interrupts
@@ -502,7 +503,7 @@ void usb0_init(){
 #endif /* _USB_LOW_SPEED_ */
 }
 
-void (* __xdata usb_sof)() = NULL;
+void (* __xdata usb_sof)();
 
 /**
  * Top-level USB ISR
