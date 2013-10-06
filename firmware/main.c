@@ -187,8 +187,8 @@ void port_init() {
   P3 = 0x00;
 
   XBR0 = 0x07;  // UART0, SPI, I2C0 enabled
-  XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
   XBR2 = 0x03;  // UART1, I2C1 enabled
+  XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
 }
 
 void timer_init(){
@@ -199,6 +199,16 @@ void timer_init(){
   EIE1 |= 0x80;     // Enable Timer3 interrupts(ET3)
   TMR3CN |= 0x04;   // Start Timer3(TR3)
 }
+
+#ifdef USE_ASM_FOR_PORT_MANIP
+#define led3_on()   {__asm orl _P2,SHARP 0x08 __endasm; }
+#define led4_on()   {__asm orl _P2,SHARP 0x04 __endasm; }
+#define led34_off() {__asm anl _P2,SHARP ~(0x04 | 0x08) __endasm; }
+#else
+#define led3_on()   (P2 |=  0x08)
+#define led4_on()   (P2 |=  0x04)
+#define led34_off() (P2 &= ~(0x04 | 0x08))
+#endif
 
 /**
  * interrupt routine invoked when timer3 overflow
@@ -244,15 +254,15 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
         }
       }
       if(snapshot_gps > 0){
-        P2 |= 0x04;
+        led4_on();
         snapshot_gps--;
       }
       if(snapshot_state & 0x01){
-        P2 |= 0x08;
+        led3_on();
       }
       break;
     case 1:
-      P2 &= ~(0x04 | 0x08); // LED0 / 1 off
+      led34_off(); // LED3 / 4 off
       snapshot_state >>= 1;
       break;
   }

@@ -105,20 +105,29 @@ typedef enum {
  *  P1.7(IN)  <=  MISO
  */
 
-#define clk_up()     (P1 |= 0x10)
-#define clk_down()   (P1 &= ~0x10)
-#define out_up()     (P1 |= 0x20)
-#define out_down()   (P1 &= ~0x20)
+#ifdef USE_ASM_FOR_PORT_MANIP
+#define clk_up()      {__asm orl _P1,SHARP  0x10 __endasm; }
+#define clk_down()    {__asm anl _P1,SHARP ~0x10 __endasm; }
+#define out_up()      {__asm orl _P1,SHARP  0x20 __endasm; }
+#define out_down()    {__asm anl _P1,SHARP ~0x20 __endasm; }
+#define cs_assert()   {__asm anl _P1,SHARP ~0x40 __endasm; }
+#define cs_deassert() {__asm orl _P1,SHARP  0x40 __endasm; }
+#else
+#define clk_up()      (P1 |=  0x10)
+#define clk_down()    (P1 &= ~0x10)
+#define out_up()      (P1 |=  0x20)
+#define out_down()    (P1 &= ~0x20)
 #define cs_assert()   (P1 &= ~0x40)
-#define cs_deassert()   (P1 |= 0x40)
-#define is_in_up()   (P1 & 0x80)
+#define cs_deassert() (P1 |=  0x40)
+#endif
+#define is_in_up()    (P1 & 0x80)
 
 static void mpu6000_write(u8 *buf, u8 size){
   for(; size--; buf++){
     u8 mask = 0x80;
     do{
       clk_down();
-      ((*buf) & mask) ? out_up() : out_down();
+      if((*buf) & mask){out_up();}else{out_down();}
       clk_wait();
       clk_up();
       clk_wait();

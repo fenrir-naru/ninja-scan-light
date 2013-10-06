@@ -71,4 +71,10 @@ extern volatile u8 timeout_10ms;
   EA = 1; \
 }
 
+#if (defined(__SDCC_REVISION) && (__SDCC_REVISION > 4818)) \
+    || (defined(SDCC_REVISION) && (SDCC_REVISION > 4818)) // upper than sdcc-2.7.0? 
+#define USE_ASM_FOR_PORT_MANIP
+#define SHARP #
+#endif
+
 #endif      /* __MAIN_H__ */

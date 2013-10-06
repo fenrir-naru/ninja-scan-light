@@ -161,12 +161,17 @@ static void set_ubx_cfg_sbas(){
 
 static void set_ubx_cfg_prt(){
   // UBX
-  static const __code unsigned char _packet[20 + 6] = {
+#if (defined(SDCC) && (SDCC < 270)) // lower than sdcc-2.7.0 ?
+  unsigned char packet[20 + 6] = {
+#else
+  unsigned char packet[20 + 6];
+  static const __code unsigned char _packet[sizeof(packet)] = {
+#endif
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x06, // packet[2] 
     0x00, // packet[3] 
-    expand_16(sizeof(_packet) - 6), // packet[4 + 0]  
+    expand_16(sizeof(packet) - 6), // packet[4 + 0]  
     0x00, // packet[6 + 0]   // Port.NO
     0x00, // packet[6 + 1]   // Res0
     0x00, // packet[6 + 2]   // Res1
@@ -185,8 +190,9 @@ static void set_ubx_cfg_prt(){
     0x00, // packet[6 + 18] 
     0x00, // packet[6 + 19] 
   };
-  unsigned char packet[sizeof(_packet)];
+#if !(defined(SDCC) && (SDCC < 270)) // Not lower than sdcc-2.7.0?
   memcpy(packet, _packet, sizeof(packet));
+#endif
   
   {
     u8 i;

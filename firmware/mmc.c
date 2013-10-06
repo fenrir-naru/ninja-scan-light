@@ -34,11 +34,11 @@
 #include "util.h"
 #include "type.h"
 #include "f38x_spi.h"
+#include <string.h>
 
 // Command table value definitions
 // Used in the issue_command function to
 // decode and execute MMC command requests
-#define     EMPTY  0
 enum {NO, YES};
 enum {CMD, RD, WR};
 enum {R1, R1b, R2, R3, R7};
@@ -144,11 +144,23 @@ static __bit require_busy_check = FALSE;
 static __bit block_addressing = 0;
 static __bit sdhc = 0;
 
-#define select_MMC() {NSSMD0 = 0;}
-#define deselect_MMC() {NSSMD0 = 1;}
+#define select_MMC() spi_assert_cs()
+#define deselect_MMC() spi_deassert_cs()
 
-#define epilogue() { \
+/*
+ * Send buffer SPI clocks 
+ * to ensure no MMC operations are pending
+ */
+#define prologue() { \
   spi_send_8clock(); \
+  select_MMC(); \
+}
+
+/*
+ * Send 8 more SPI clocks to ensure the card 
+ * has finished all necessary operations 
+ */
+#define epilogue() { \
   deselect_MMC(); \
   spi_send_8clock(); \
 }
@@ -157,11 +169,7 @@ mmc_res_t mmc_flush() {
   if(require_busy_check){
     require_busy_check = FALSE;
     
-    // Send buffer SPI clocks to ensure no MMC operations are pending;
-    spi_send_8clock();
-    select_MMC();
-    spi_send_8clock();
-    
+    prologue();
     /*
      * wait for end of busy signal;
      * 
@@ -170,13 +178,7 @@ mmc_res_t mmc_flush() {
      * card is no longer busy;
      */
     while(spi_write_read_byte(0xFF) == 0x00);
-    
-    deselect_MMC();
-    /*
-     * Send 8 more SPI clocks to ensure
-     * the card has finished all necessary operations; 
-     */
-    spi_send_8clock();
+    epilogue();
   }
   return MMC_NORMAL;
 }
@@ -227,14 +229,10 @@ static unsigned char _issue_command(
   unsigned char res;
   
   if(current_command == &command_list[APP_SEND_OP_CMD]){
-    issue_command(APP_CMD, EMPTY, EMPTY);
+    issue_command(APP_CMD, 0, NULL);
   }
-
-  // Send buffer SPI clocks to ensure no MMC operations are pending;
-  spi_send_8clock();
-  select_MMC();
-  // Send another byte of SPI clocks;
-  spi_send_8clock();
+  
+  prologue();
   
   if(require_busy_check){
     require_busy_check = FALSE;
@@ -428,17 +426,14 @@ static unsigned char _issue_command(
     }
   }
   
-  deselect_MMC();
-  /*
-   * Send 8 more SPI clocks to ensure
-   * the card has finished all necessary operations; 
-   */
-  spi_send_8clock();
+  epilogue();
   
   // Restore old block length if needed;
-  if((current_command->command_index == 9)||
-    (current_command->command_index == 10)) {
-    current_blklen = old_blklen;
+  switch(current_command->command_index){
+    case 9:
+    case 10:
+      current_blklen = old_blklen;
+      break;
   }
   return res;
 }
@@ -460,11 +455,8 @@ static __xdata unsigned char buffer[16];
  */
 void mmc_init(){
   
-  unsigned char loopguard;
+  unsigned short loopguard;
   unsigned char counter;  // SPI byte counter;
-
-  unsigned int c_size;
-  unsigned char c_mult;
   
   if(mmc_initialized){return;}
   
@@ -488,7 +480,7 @@ void mmc_init(){
    * Send the GO_IDLE_STATE command with CS driven low;
    * This causes the MMC to enter SPI mode;
    */
-  issue_command(GO_IDLE_STATE, EMPTY,EMPTY);
+  issue_command(GO_IDLE_STATE, 0, NULL);
 
   loopguard = 0;
   if(issue_command(SEND_IF_COND, 0x01AA, buffer) == 1) {
@@ -498,11 +490,11 @@ void mmc_init(){
       /* The card can work at vdd range of 2.7-3.6V */
       /* Wait for leaving idle state (ACMD41 with HCS bit) */
       do{
-        if(issue_command(APP_SEND_OP_CMD, 1UL << 30, EMPTY) == MMC_NORMAL){break;}
-        wait_ms(1);
-        if((++loopguard) == 0){return;}
+        if(issue_command(APP_SEND_OP_CMD, 1UL << 30, NULL) == MMC_NORMAL){break;}
+        wait_us(50);
+        if((++loopguard) > 0x1000){return;}
       }while(1);
-      if(issue_command(READ_OCR, EMPTY, buffer) == MMC_NORMAL){
+      if(issue_command(READ_OCR, 0, buffer) == MMC_NORMAL){
         /* Check CCS bit in the OCR */
         if(buffer[0] & 0x40){block_addressing = 1;}
       }
@@ -510,7 +502,7 @@ void mmc_init(){
   }else{
     /* SDSC or MMC */
     unsigned char cmd; 
-    if(issue_command(APP_SEND_OP_CMD, EMPTY, EMPTY) <= 1){
+    if(issue_command(APP_SEND_OP_CMD, 0, NULL) <= 1){
       /* SDSC */
       cmd = APP_SEND_OP_CMD;
     }else{
@@ -518,12 +510,12 @@ void mmc_init(){
       cmd = SEND_OP_COND;
     }
     /* Wait for leaving idle state */
-    while(issue_command(cmd, 0, EMPTY)){
-      wait_ms(1);
-      if((++loopguard) == 0){return;}
+    while(issue_command(cmd, 0, NULL)){
+      wait_us(50);
+      if((++loopguard) > 0x1000){return;}
     }
     /* Set R/W block length to 512 */
-    if(issue_command(SET_BLOCKLEN, (unsigned long)MMC_PHYSICAL_BLOCK_SIZE, EMPTY) != 0){
+    if(issue_command(SET_BLOCKLEN, (unsigned long)MMC_PHYSICAL_BLOCK_SIZE, NULL) != 0){
       return;
     }
   }
@@ -532,8 +524,8 @@ void mmc_init(){
    * Get the Card Specific Data (CSD)
    * register to determine the size of the MMC;
    */
-  if((issue_command(SEND_STATUS, EMPTY, buffer) != MMC_NORMAL)
-      || (issue_command(SEND_CSD, EMPTY, buffer) != MMC_NORMAL)){
+  if((issue_command(SEND_STATUS, 0, buffer) != MMC_NORMAL)
+      || (issue_command(SEND_CSD, 0, buffer) != MMC_NORMAL)){
     return;
   }
 
@@ -545,15 +537,17 @@ void mmc_init(){
       mmc_physical_sectors++;
       mmc_physical_sectors <<= 10;
       break;
-    case (0x00 << 6):
+    case (0x00 << 6): {
+      unsigned int c_size 
+          = ((buffer[6] & 0x03) << 10) | (buffer[7] << 2) | ((buffer[8] & 0xc0) >> 6);
+      unsigned char c_mult 
+          = (((buffer[9] & 0x03) << 1) | ((buffer[10] & 0x80) >> 7));
       mmc_block_length = 1 << (buffer[5] & 0x0f);
-      c_size = ((buffer[6] & 0x03) << 10) | 
-          (buffer[7] << 2) | ((buffer[8] & 0xc0) >> 6);
-      c_mult = (((buffer[9] & 0x03) << 1) | ((buffer[10] & 0x80) >> 7));
       
       // Determine the number of MMC sectors;
       mmc_physical_sectors = (unsigned long)(c_size+1)*(1 << (c_mult+2));
       break;
+    }
     default:
       return;
   }
@@ -618,6 +612,6 @@ mmc_res_t mmc_write(
  * 
  */
 mmc_res_t mmc_get_status(){
-  return (issue_command(SEND_STATUS, EMPTY, buffer) == MMC_NORMAL
+  return (issue_command(SEND_STATUS, 0, buffer) == MMC_NORMAL
       ? MMC_NORMAL : MMC_ERROR);
 }

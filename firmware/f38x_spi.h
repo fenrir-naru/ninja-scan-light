@@ -29,11 +29,15 @@
  * 
  */
 
-#ifndef __F34X_SPI_H__
-#define __F34X_SPI_H__
+#ifndef __F38X_SPI_H__
+#define __F38X_SPI_H__
 
+#include "c8051F380.h"
 #include "main.h"
 #include "type.h"
+
+#define spi_assert_cs() {NSSMD0 = 0;}
+#define spi_deassert_cs() {NSSMD0 = 1;}
 
 u8 spi_ckr(u8 new_value);
 void spi_init();
