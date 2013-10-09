@@ -63,8 +63,9 @@ void port_init();
 void timer_init();
 
 void main() {
-  sysclk_init();                        // Initialize oscillator
-  port_init();                           // Initialize crossbar and GPIO
+  sysclk_init(); // Initialize oscillator
+  wait_ms(1000);
+  port_init(); // Initialize crossbar and GPIO
 
   uart0_init();
   uart1_init();
@@ -78,7 +79,7 @@ void main() {
 
   data_hub_init();
   
-  EA = 1;                                // Global Interrupt enable
+  EA = 1; // Global Interrupt enable
   
   disk_initialize(0);
   
@@ -312,6 +313,6 @@ DWORD get_fattime(){
 }
 
 unsigned char _sdcc_external_startup(){
-	PCA0MD &= ~0x40; ///< Disable Watchdog timer
+  PCA0MD &= ~0x40; ///< Disable Watchdog timer
   return 0;
 }
