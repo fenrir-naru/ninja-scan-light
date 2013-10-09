@@ -175,12 +175,25 @@ static void scsi_Request_Sense(){
  */
 static void scsi_Read_Capacity10(){
 	
-  u32 count;
-  disk_ioctl(scsi_lun, GET_SECTOR_COUNT, (void *)&count);
-  count--;
+  DWORD_t v;
+  disk_ioctl(scsi_lun, GET_SECTOR_COUNT, (void *)&v);
+  v.i--;
   
-  scsi_Read_Capacity_10.lba.i = be_u32(count);
+#if (defined(__SDCC) || defined(SDCC))
+  // Little endian => Big endian
+  scsi_Read_Capacity_10.lba.c[3] = v.c[0];
+  scsi_Read_Capacity_10.lba.c[2] = v.c[1];
+  scsi_Read_Capacity_10.lba.c[1] = v.c[2];
+  scsi_Read_Capacity_10.lba.c[0] = v.c[3];
+  v.i = scsi_block_size;
+  scsi_Read_Capacity_10.block_length.c[3] = v.c[0];
+  scsi_Read_Capacity_10.block_length.c[2] = v.c[1];
+  scsi_Read_Capacity_10.block_length.c[1] = v.c[2];
+  scsi_Read_Capacity_10.block_length.c[0] = v.c[3];
+#else
+  scsi_Read_Capacity_10.lba.i = be_u32(v.i);
   scsi_Read_Capacity_10.block_length.i = be_u32(scsi_block_size);
+#endif
 
   scsi_tx_short(
       (u8 *)&scsi_Read_Capacity_10,
@@ -200,7 +213,7 @@ static void scsi_Mode_Sense6(){
 static __xdata struct {
   unsigned int blocks;
   int byte_in_block;
-  u32 d_LBA;
+  DWORD_t d_LBA;
 } scsi_target;
 
 static unsigned char __xdata disk_retry;
@@ -213,8 +226,8 @@ static void scsi_Read10(){
   while((scsi_target.byte_in_block >= scsi_block_size)
       || !(scsi_Residue)){
     if(scsi_target.blocks){
-      if(disk_read(scsi_lun, scratch, scsi_target.d_LBA, 1) == RES_OK){
-        scsi_target.d_LBA++;
+      if(disk_read(scsi_lun, scratch, scsi_target.d_LBA.i, 1) == RES_OK){
+        scsi_target.d_LBA.i++;
         scsi_target.blocks--;
         scsi_target.byte_in_block = 0;
         disk_retry = 0;
@@ -249,8 +262,8 @@ static void scsi_Read10(){
 static void scsi_Write10(){
   while((scsi_target.byte_in_block <= 0) 
       || !(scsi_Residue)){
-    if(disk_write(scsi_lun, scratch, scsi_target.d_LBA, 1) == RES_OK){
-      scsi_target.d_LBA++;
+    if(disk_write(scsi_lun, scratch, scsi_target.d_LBA.i, 1) == RES_OK){
+      scsi_target.d_LBA.i++;
       if(--(scsi_target.blocks)){
         scsi_target.byte_in_block = scsi_block_size;
         disk_retry = 0;
@@ -279,34 +292,46 @@ static void scsi_Write10(){
 }
 
 void setup_read_write(){
-  // Big endian
-  unsigned int tf_length = msd_cbw.CBWCB[7];
-  tf_length <<= 8; tf_length |= msd_cbw.CBWCB[8];
+#if (defined(__SDCC) || defined(SDCC))
+  WORD_t tf_length = {{msd_cbw.CBWCB[8]}, {msd_cbw.CBWCB[7]}};
+#else
+  // Big endian => Little endian
+  WORD_t tf_length;
+  tf_length.i = msd_cbw.CBWCB[7];
+  tf_length.i <<= 8; tf_length.i |= msd_cbw.CBWCB[8];
+#endif
   
   // Case (2), (3)
-  if(!tf_length){
+  if(tf_length.i == 0){
   	msd_action 
         = MSD_HOST_SIDE(msd_action) | MSD_DEVICE_NO_DATA;
     scsi_Status = SCSI_PASSED;
     return;
   }
   
-  // Big endian
-  scsi_target.d_LBA = msd_cbw.CBWCB[2];
-  scsi_target.d_LBA <<= 8; scsi_target.d_LBA |= msd_cbw.CBWCB[3];
-  scsi_target.d_LBA <<= 8; scsi_target.d_LBA |= msd_cbw.CBWCB[4];
-  scsi_target.d_LBA <<= 8; scsi_target.d_LBA |= msd_cbw.CBWCB[5];
+#if (defined(__SDCC) || defined(SDCC))
+  // Big endian => Little endian
+  scsi_target.d_LBA.c[0] = msd_cbw.CBWCB[5];
+  scsi_target.d_LBA.c[1] = msd_cbw.CBWCB[4];
+  scsi_target.d_LBA.c[2] = msd_cbw.CBWCB[3];
+  scsi_target.d_LBA.c[3] = msd_cbw.CBWCB[2];
+#else
+  scsi_target.d_LBA.i = msd_cbw.CBWCB[2];
+  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msd_cbw.CBWCB[3];
+  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msd_cbw.CBWCB[4];
+  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msd_cbw.CBWCB[5];
+#endif
   
   scsi_target.blocks = (scsi_Residue + scsi_block_size - 1) / scsi_block_size;
   
   // Case (7), (13)
-  if(scsi_target.blocks < tf_length){
+  if(scsi_target.blocks < tf_length.i){
     res_status = SCSI_PHASE_ERROR;
   }
   
   // Case (4), (5), (6), (9), (11), (12)
   else{
-    scsi_target.blocks = tf_length;
+    scsi_target.blocks = tf_length.i;
     res_status = SCSI_PASSED;
   }
   

@@ -33,19 +33,26 @@
 #include <string.h>
 #include <limits.h>
 
-#ifdef ENDIAN_CORRECT_BY_FUNC
+#ifdef ENDIAN_SWAP_BY_FUNC
 u32 swap_u32(u32 dw){
-  DWORD dw2;
-  dw2.c[0] = (DWORD)(dw).c[3];
-  dw2.c[1] = (DWORD)(dw).c[2];
-  dw2.c[2] = (DWORD)(dw).c[1];
-  dw2.c[3] = (DWORD)(dw).c[0];
+  DWORD_t dw2;
+  u8 tmp;
+  dw2.i = dw;
+  tmp = dw2.c[0];
+  dw2.c[0] = dw2.c[3];
+  dw2.c[3] = tmp;
+  tmp = dw2.c[1];
+  dw2.c[1] = dw2.c[2];
+  dw2.c[2] = tmp;
   return dw2.i;
 }
 u16 swap_u16(u16 w){
-  WORD w2;
-  w2.c[0] = (DWORD)(w).c[1];
-  w2.c[1] = (DWORD)(w).c[0];
+  WORD_t w2;
+  u8 tmp;
+  w2.i = w;
+  tmp = w2.c[0];
+  w2.c[0] = w2.c[1];
+  w2.c[1] = tmp;
   return w2.i;
 }
 #endif
