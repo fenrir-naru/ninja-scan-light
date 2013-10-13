@@ -66,6 +66,7 @@ typedef union {u32 i; u8 c[4];} DWORD_t;
 #define __xdata
 #define __code
 #define __interrupt(x)
+#define __at(x)
 #define u32_lsbyte(x) ((x) & 0xFF)
 #else
 #define u32_lsbyte(x) (((DWORD_t *)&(x))->c[0]) // Little Endian
