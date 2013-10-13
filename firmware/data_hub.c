@@ -40,11 +40,11 @@
 #include "ff.h"
 #include "diskio.h"
 
-static __xdata packet_t packet;
+static packet_t packet;
 
 static void packet_init(
     packet_t *p, 
-    __xdata payload_t *buf,
+    payload_t *buf,
     payload_size_t max_size){
   
   p->buf_begin = p->current = buf;
@@ -54,16 +54,16 @@ static void packet_init(
 #define BUFFER_SIZE (PAGE_SIZE * 16 * 2) // ダブルバッファ
 #define PAGES (BUFFER_SIZE / PAGE_SIZE)
 
-static __xdata payload_t payload_buf[BUFFER_SIZE];
+static payload_t payload_buf[BUFFER_SIZE];
 
-static __xdata payload_t * __xdata free_page
+static payload_t * __xdata free_page
     = payload_buf;
-static __xdata payload_t * __xdata locked_page
+static payload_t * __xdata locked_page
     = payload_buf;
 
 payload_size_t data_hub_assign_page(void (* packet_maker)(packet_t *)){
-  __xdata payload_t * next_free_page = free_page + PAGE_SIZE;
-  if(next_free_page >= (__xdata payload_t *)(payload_buf + sizeof(payload_buf))){
+  payload_t *next_free_page = free_page + PAGE_SIZE;
+  if(next_free_page >= (payload_buf + sizeof(payload_buf))){
     next_free_page -= sizeof(payload_buf);
   }
   
@@ -177,8 +177,8 @@ void data_hub_polling() {
     
   // データが境界に達した場合、書き込む
   while(TRUE){
-    __xdata payload_t * next_locked_page = locked_page + log_block_size;
-    if(next_locked_page >= (__xdata payload_t *)(payload_buf + sizeof(payload_buf))){
+    payload_t * next_locked_page = locked_page + log_block_size;
+    if(next_locked_page >= (payload_buf + sizeof(payload_buf))){
       next_locked_page -= sizeof(payload_buf);
     }
     

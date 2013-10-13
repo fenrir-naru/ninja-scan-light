@@ -33,15 +33,16 @@
 #define __DATA_HUB_H__
 
 #include "ff.h"
+#include "type.h"
 
-typedef char payload_t;
+typedef char __xdata payload_t;
 typedef unsigned char payload_size_t;
 
 typedef struct{
   payload_t *buf_begin;
   payload_t *current;
   payload_t *buf_end;
-} packet_t;
+} __xdata packet_t;
 
 #define PAGE_SIZE 32 // ŒÅ’è
 
