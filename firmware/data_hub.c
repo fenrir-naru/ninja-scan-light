@@ -78,8 +78,8 @@ payload_size_t data_hub_assign_page(void (* packet_maker)(packet_t *)){
   return PAGE_SIZE;
 }
 
-static __xdata FIL dat_file;
-__xdata __at (0x01D0) FATFS fs;
+static FIL dat_file;
+FATFS __at (0x01D0) fs;
 
 __bit log_file_opened;
 
@@ -122,7 +122,6 @@ static __xdata u16 log_block_size; // PAGE_SIZE‚Ì”{”‚Å‚ ‚é‚±‚Æ‚ªğŒ
 static u16 log_to_file(){
   u16 accepted_bytes;
   
-  //P4 ^= 0x02;
   log_file_write( 
     locked_page,
     log_block_size, &accepted_bytes);

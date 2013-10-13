@@ -12,6 +12,8 @@
 /   personal, non-profit or commercial product UNDER YOUR RESPONSIBILITY.
 / * Redistributions of source code must retain the above copyright notice.
 /
+/ M.Naruoka was modified the original code with the above licence retained, 2013.
+/
 /----------------------------------------------------------------------------*/
 
 #ifndef _FATFS
@@ -105,7 +107,7 @@ typedef struct {
 	DWORD	database;		/* Data start sector */
 	DWORD	winsect;		/* Current sector appearing in the win[] */
 	BYTE	win[_MAX_SS];	/* Disk access window for Directory, FAT (and Data on tiny cfg) */
-} FATFS;
+} __xdata FATFS;
 
 
 
@@ -134,7 +136,7 @@ typedef struct {
 #if !_FS_TINY
 	BYTE	buf[_MAX_SS];	/* File data read/write buffer */
 #endif
-} FIL;
+} __xdata FIL;
 
 
 
@@ -326,6 +328,11 @@ int ff_del_syncobj (_SYNC_t sobj);				/* Delete a sync object */
 #define	LD_DWORD(ptr)		(DWORD)(*(DWORD*)(BYTE*)(ptr))
 #define	ST_WORD(ptr,val)	*(WORD*)(BYTE*)(ptr)=(WORD)(val)
 #define	ST_DWORD(ptr,val)	*(DWORD*)(BYTE*)(ptr)=(DWORD)(val)
+#define LD_WORD2(ptr) (WORD)(*(WORD __xdata *)(BYTE __xdata *)(ptr))
+#define LD_DWORD2(ptr) (DWORD)(*(DWORD __xdata *)(BYTE __xdata *)(ptr))
+#define ST_WORD2(ptr,val) *(WORD __xdata *)(BYTE __xdata *)(ptr)=(WORD)(val)
+#define ST_DWORD2(ptr,val) *(DWORD __xdata *)(BYTE __xdata *)(ptr)=(DWORD)(val)
+
 #else					/* Use byte-by-byte access to the FAT structure */
 #define	LD_WORD(ptr)		(WORD)(((WORD)*((BYTE*)(ptr)+1)<<8)|(WORD)*(BYTE*)(ptr))
 #define	LD_DWORD(ptr)		(DWORD)(((DWORD)*((BYTE*)(ptr)+3)<<24)|((DWORD)*((BYTE*)(ptr)+2)<<16)|((WORD)*((BYTE*)(ptr)+1)<<8)|*(BYTE*)(ptr))
