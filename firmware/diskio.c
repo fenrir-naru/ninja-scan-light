@@ -68,7 +68,7 @@ DRESULT disk_ioctl (BYTE drive, BYTE ctrl, void *buff){
       *(DWORD *)buff = mmc_physical_sectors;
       break;
     case GET_SECTOR_SIZE :
-      *(u16 *)buff = MMC_PHYSICAL_BLOCK_SIZE;
+      *(u16 *)buff = mmc_block_length;
       break;
     default:
       return RES_PARERR;
