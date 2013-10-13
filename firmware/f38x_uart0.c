@@ -154,29 +154,25 @@ FIFO_SIZE_T uart0_rx_size(){
 
 ///< Interrupt(TI0 / RI0)
 void interrupt_uart0 () __interrupt (INTERRUPT_UART0) {
-  unsigned char c;
+  unsigned char res;
 
   if(RI0){
     RI0 = 0;
-    /* リングバッファに1バイト書き出し */
-    c = SBUF0;
-    //if(fifo_char_write(&fifo_rx0, (char *)&c, 1) > 0){
-    //if(fifo_char_put(&fifo_rx0, (char *)&c)){
-    if(fifo_char_put2(&fifo_rx0, c)){
-      P4 &= ~0x02;
-    }else{P4 ^= 0x02;}
+    /* push to ring buffer */
+    FIFO_DIRECT_PUT(fifo_rx0, SBUF0, res);
+    if(res == 0){
+      // TODO: buffer overflow
+    }
   }
 
   if(TI0){
     TI0 = 0;
-    /* 書き込むデータがあるか確認 */
-    //if(fifo_char_get(&fifo_tx0, (char *)&c) > 0){
-    if(fifo_char_size(&fifo_tx0) > 0){
-      c = fifo_char_get2(&fifo_tx0);
-      TB80 = 1; // TB80は書込み中フラグとして使う、1(書込み中)に
-      SBUF0 = c;
+    /* has byte to write? */
+    FIFO_DIRECT_GET(fifo_tx0, SBUF0, res);
+    if(res > 0){
+      TB80 = 1; // TB80 is used as UART0 writing flag. set 1 (writing)
     }else{
-      TB80 = 0; // TB80は書込み中フラグとして使う、0(書込みしていない)に
+      TB80 = 0; // TB80 is used as UART0 writing flag. set 0 (not writing)
     }
   }
 }
@@ -199,3 +195,4 @@ char getchar (void){
   while(uart0_read(&c, sizeof(c)) == 0);
   return c;
 }
+

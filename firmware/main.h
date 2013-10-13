@@ -77,4 +77,8 @@ extern volatile u8 timeout_10ms;
 #define SHARP #
 #endif
 
+#define FIFO_TYPE char
+#define FIFO_SIZE_T unsigned char
+#define FIFO_BUFFER_STORAGE __xdata
+
 #endif      /* __MAIN_H__ */

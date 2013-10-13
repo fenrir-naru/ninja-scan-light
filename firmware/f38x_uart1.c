@@ -142,26 +142,25 @@ FIFO_SIZE_T uart1_rx_size(){
 
 ///< Interrupt(TI1 / RI1)
 void interrupt_uart1 (void) __interrupt (INTERRUPT_UART1) {
-  unsigned char c;
+  unsigned char res;
 
   if(SCON1 & 0x01){   // RI1
     SCON1 &= ~0x01;
-    /* リングバッファに1バイト書き出し */
-    c = SBUF1;
-    if(fifo_char_put2(&fifo_rx1, c)){
-      P4 &= ~0x02;
-    }else{P4 ^= 0x02;}
+    /* push to ring buffer */
+    FIFO_DIRECT_PUT(fifo_rx1, SBUF1, res);
+    if(res == 0){
+      // TODO: buffer overflow
+    }
   }
 
   if(SCON1 & 0x02){   // TI1
     SCON1 &= ~0x02;
-    /* 書き込むデータがあるか確認 */
-    if(fifo_char_size(&fifo_tx1) > 0){
-      c = fifo_char_get2(&fifo_tx1);
-      SCON1 |= 0x08;   // TBX1は書込み中フラグとして使う、1(書込み中)に
-      SBUF1 = c;
+    /* has byte to write? */
+    FIFO_DIRECT_GET(fifo_tx1, SBUF1, res);
+    if(res > 0){
+      SCON1 |= 0x08;   // TBX1 is used as UART1 writing flag. set 1 (writing)
     }else{
-      SCON1 &= ~0x08;  // TBX1は書込み中フラグとして使う、0(書込みしていない)に
+      SCON1 &= ~0x08;  // TBX1 is used as UART1 writing flag. set 0 (not writing)
     }
   }
 }
