@@ -166,6 +166,16 @@ void usb_polling();
 
 void usb_isr() __interrupt (INTERRUPT_USB0);
 
+#ifdef USE_ASM_FOR_SFR_MANIP
+#define CRITICAL_USB0(func) \
+{ \
+  {__asm anl _EIE1,SHARP ~0x02 __endasm; } \
+  { \
+    func; \
+  } \
+  {__asm orl _EIE1,SHARP 0x02 __endasm; } \
+}
+#else
 #define CRITICAL_USB0(func) \
 { \
   EIE1 &= ~(0x02); \
@@ -174,5 +184,6 @@ void usb_isr() __interrupt (INTERRUPT_USB0);
   } \
   EIE1 |= (0x02); \
 }
+#endif
 
 #endif /* _USB_ISR_H_ */

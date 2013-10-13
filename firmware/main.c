@@ -201,7 +201,7 @@ void timer_init(){
   TMR3CN |= 0x04;   // Start Timer3(TR3)
 }
 
-#ifdef USE_ASM_FOR_PORT_MANIP
+#ifdef USE_ASM_FOR_SFR_MANIP
 #define led3_on()   {__asm orl _P2,SHARP 0x08 __endasm; }
 #define led4_on()   {__asm orl _P2,SHARP 0x04 __endasm; }
 #define led34_off() {__asm anl _P2,SHARP ~(0x04 | 0x08) __endasm; }

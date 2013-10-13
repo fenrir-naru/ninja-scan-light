@@ -37,12 +37,21 @@
 
 #define DEFAULT_BAUDRATE  9600UL          // Baud rate of UART in bps
 
+#ifdef USE_ASM_FOR_SFR_MANIP
+#define CRITICAL_UART1(func) \
+{\
+  {__asm anl _EIE2,SHARP ~0x02 __endasm; } \
+  func;\
+  {__asm orl _EIE2,SHARP 0x02 __endasm; } \
+}
+#else
 #define CRITICAL_UART1(func) \
 {\
   EIE2 &= ~0x02;\
   func;\
   EIE2 |= 0x02;\
 }
+#endif
 
 __xdata fifo_char_t fifo_tx1; ///< FIFO TX
 __xdata fifo_char_t fifo_rx1; ///< FIFO RX

@@ -75,10 +75,20 @@ static __code void(* __xdata stall_callbacks[6])();
 ((dir == DIR_IN) ? (ep_index - 1) : (ep_index + 2))
 
 // consider into both interrupt and user invoked cases
-#ifdef CRITICAL_USB0
-#undef CRITICAL_USB0
-#endif
-#define CRITICAL_USB0(func) \
+#ifdef USE_ASM_FOR_SFR_MANIP
+#define CRITICAL_USB0_SPECIAL(func) \
+{ \
+  BYTE eie1_backup = EIE1; \
+  {__asm anl _EIE1,SHARP ~0x02 __endasm; } \
+  { \
+    func; \
+  } \
+  if(eie1_backup & 0x02){ \
+    {__asm orl _EIE1,SHARP 0x02 __endasm; } \
+  } \
+}
+#else
+#define CRITICAL_USB0_SPECIAL(func) \
 { \
   BYTE eie1_backup = EIE1; \
   EIE1 &= ~(0x02); \
@@ -87,6 +97,7 @@ static __code void(* __xdata stall_callbacks[6])();
   } \
   if(eie1_backup & 0x02){EIE1 |= 0x02;} \
 }
+#endif
 
 #ifndef min
 #define min(x, y) (((x) < (y)) ? (x) : (y))

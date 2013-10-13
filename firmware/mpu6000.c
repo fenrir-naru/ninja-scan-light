@@ -105,7 +105,7 @@ typedef enum {
  *  P1.7(IN)  <=  MISO
  */
 
-#ifdef USE_ASM_FOR_PORT_MANIP
+#ifdef USE_ASM_FOR_SFR_MANIP
 #define clk_up()      {__asm orl _P1,SHARP  0x10 __endasm; }
 #define clk_down()    {__asm anl _P1,SHARP ~0x10 __endasm; }
 #define out_up()      {__asm orl _P1,SHARP  0x20 __endasm; }
