@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual C++ Express 2010
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log2ubx", "log2ubx.vcxproj", "{855BC1B5-DB8C-4D69-9AEA-A85194620608}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log_CSV", "log_CSV.vcxproj", "{D5B410B6-719A-4ABC-ACE2-1304143B7A17}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Debug|Win32.ActiveCfg = Debug|Win32
+		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Debug|Win32.Build.0 = Debug|Win32
+		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Release|Win32.ActiveCfg = Release|Win32
+		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Release|Win32.Build.0 = Release|Win32
+		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Debug|Win32.ActiveCfg = Debug|Win32
+		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Debug|Win32.Build.0 = Debug|Win32
+		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Release|Win32.ActiveCfg = Release|Win32
+		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
