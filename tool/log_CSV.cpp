@@ -32,6 +32,7 @@
 #if defined(_MSC_VER) && _MSC_VER >= 1400
 #define _USE_MATH_DEFINES
 //#define sprintf sprintf_s
+typedef __int64 int64_t;
 #endif
 
 #include <iostream>
@@ -70,7 +71,7 @@ struct Options : public GlobalOptions {
       page_A(false), page_G(false), page_F(false), 
       page_P(false), page_M(false), page_N(false),
       page_other(false),
-      page_P_mode(0),
+      page_P_mode(5),
       page_F_mode(3),
       page_M_mode(0),
       debug_level(0) {}
@@ -284,6 +285,35 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     struct HandlerP {
       HandlerP() {}
       
+      void ms5611_convert(
+          const Int32 &d1, const Int32 &d2,
+          Int32 &pressure, Int32 &temperature,
+          const Uint16 (&coef)[6]) const {
+        Int32 dT(d2 - (coef[4] << 8));
+        temperature = (Int32)2000 + (((int64_t)dT * coef[5]) >> 23);
+
+        int64_t off(((int64_t)coef[1] << 16) + (((int64_t)coef[3] * dT) >> 7));
+        int64_t sens(((int64_t)coef[0] << 15) + (((int64_t)coef[2] * dT) >> 8));
+
+        // Figure 3
+        if(temperature < 2000){
+          Int32 t2(((int64_t)dT * dT) << 31);
+          Int32 dT2(temperature - 2000), dT2_2(dT2 * dT2);
+          Int32 off2((dT2_2 * 5) >> 1);
+          Int32 sens2((dT2_2 * 5) >> 2);
+          if(temperature < -1500){
+            Int32 dT3(temperature + 1500), dT3_2(dT3 * dT3);
+            off2 += dT3_2 * 7;
+            sens2 += (dT3_2 * 11) >> 1;
+          }
+          temperature -= t2;
+          off -= off2;
+          sens -= sens2;
+        }
+
+        pressure = (Int32)(((((int64_t)d1 * sens) >> 21) - off) >> 15);
+      }
+
       /**
        * Pページ(エアデータセンサからの情報)の処理用関数
        * Pページの内容が正しいかvalidateで確認した後、実処理を行うこと。
@@ -296,58 +326,32 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         float_sylph_t current(observer.fetch_ITOW());
         if(!options.is_time_in_range(current)){return;}
         
-        P_Observer_t::values_t values(observer.fetch_values());
         switch(options.page_P_mode){
-          case 1 :
-#define s(x) (signed short)(x)
-            options.out() << current << ", "
-                 << -2 << ", "
-                 << s(values.air_speed[0]) << ", "
-                 << s(values.air_alpha[0]) << ", "
-                 << s(values.air_beta[0]) << ", "
-                 << s(values.air_speed[1]) << endl;
-            options.out() << current << ", "
-                 << -1 << ", "
-                 << s(values.air_alpha[1]) << ", "
-                 << s(values.air_beta[1]) << ", "
-                 << s(values.air_speed[2]) << ", "
-                 << s(values.air_alpha[2]) << endl;
-            options.out() << current << ", "
-                 << 0 << ", "
-                 << s(values.air_beta[2]) << ", "
-                 << s(values.air_speed[3]) << ", "
-                 << s(values.air_alpha[3]) << ", "
-                 << s(values.air_beta[3]) << endl;
-#undef s
-            break;
-          case 2 :
-            char buf[256];
-            sprintf(buf, "%8.3f, %8.5f, %8.5f, %8.5f, %8.5f", 
-                current,
-                0.36 * values.air_beta[2],
-                0.1 * (short)(values.air_speed[3]),
-                0.1 * (short)(values.air_alpha[3]),
-                0.1 * (short)(values.air_beta[3]));
-            options.out() << buf << endl;
-            break;
-          case 3: { // ADSの8ch 16bitsを全て活用する場合
-            options.out() << current << ", " << 0;
-            char buf[2];
-            for(int i = 0; i < 8; i++){
-              observer.inspect(&(buf[0]), sizeof(buf), 7 + (sizeof(buf) * i));
-              options.out() << ", " << be_char2_2_num<short>(buf[0]);
+          case 5: { // MS5611 with coefficients
+            Uint16 coef[6];
+            char buf[sizeof(Uint16)];
+            for(int i(0); i < sizeof(coef) / sizeof(coef[0]); i++){
+              observer.inspect(&buf[0], sizeof(buf), 19 + (sizeof(buf) * i));
+              coef[i] = be_char2_2_num<Uint16>(*buf);
             }
-            options.out() << endl;
+
+            for(int i(0); i < 2; i++){
+              options.out() << current << ", " << (i - 1) << ", ";
+              char buf[4][2];
+              buf[0][0] = buf[0][1] = 0;
+              observer.inspect(&buf[1][0], 3, 7 + 6 * i);
+              observer.inspect(&buf[1][1], 3, 10 + 6 * i);
+              Uint32
+                  d1(be_char4_2_num<Uint32>(buf[0][0])),
+                  d2(be_char4_2_num<Uint32>(buf[0][1]));
+              Int32 pressure, temperature;
+              ms5611_convert(d1, d2, pressure, temperature, coef);
+              options.out()
+                  << pressure << ", "
+                  << temperature << endl;
+            }
             break;
           }
-          default :
-            for(int i(0); i < 4; i++){
-              options.out() << current << ", "
-                   << (i - 3) << ", "
-                   << values.air_speed[i] << ", "
-                   << values.air_alpha[i] << ", "
-                   << values.air_beta[i] << endl;
-            }
         }
       }
     } handler_P;
