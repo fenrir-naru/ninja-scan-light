@@ -337,13 +337,13 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
 
             for(int i(0); i < 2; i++){
               options.out() << current << ", " << (i - 1) << ", ";
-              char buf[4][2];
-              buf[0][0] = buf[0][1] = 0;
-              observer.inspect(&buf[1][0], 3, 7 + 6 * i);
+              char buf[2][4];
+              buf[0][0] = buf[1][0] = 0;
+              observer.inspect(&buf[0][1], 3, 7 + 6 * i);
               observer.inspect(&buf[1][1], 3, 10 + 6 * i);
               Uint32
                   d1(be_char4_2_num<Uint32>(buf[0][0])),
-                  d2(be_char4_2_num<Uint32>(buf[0][1]));
+                  d2(be_char4_2_num<Uint32>(buf[1][0]));
               Int32 pressure, temperature;
               ms5611_convert(d1, d2, pressure, temperature, coef);
               options.out()
