@@ -132,12 +132,6 @@ void msd_polling(){
   
   msd_state_t current;
   
-  if(!usb_enable){return;}
-  if(!usb_previous_enable){
-    msd_State = MSD_DO_RESET;
-    return;
-  }
-  
   CRITICAL_USB0(
     current = msd_State;
     discard_state_transition = FALSE;
@@ -160,13 +154,13 @@ void msd_polling(){
             && (msd_cbw.bCBWCBLength && (msd_cbw.bCBWCBLength <= 0x10))
             && (!(msd_cbw.bmCBWFlags & (~0x80)))){
           
-          scsi_Residue = le_u32(msd_cbw.dCBWDataTransferLength.i);
-          scsi_Status = SCSI_FAILED;
+          scsi_residue = le_u32(msd_cbw.dCBWDataTransferLength.i);
+          scsi_status = SCSI_FAILED;
           
           scsi_lun = msd_cbw.bCBWLUN;
           disk_ioctl(scsi_lun, GET_SECTOR_SIZE, (void *)&scsi_block_size);
           
-          if(scsi_Residue){
+          if(scsi_residue){
             msd_action 
                 = (msd_cbw.bmCBWFlags & 0x80) ? MSD_HOST_RX : MSD_HOST_TX;
           }else{
@@ -184,19 +178,19 @@ void msd_polling(){
             case (MSD_HOST_NO_DATA | MSD_DEVICE_RX):
             case (MSD_HOST_NO_DATA | MSD_DEVICE_TX):
               current = MSD_MAKE_CSW;
-              scsi_Status = SCSI_PHASE_ERROR;
+              scsi_status = SCSI_PHASE_ERROR;
               break;
             
             // case(8)
             case (MSD_HOST_TX | MSD_DEVICE_TX):
-              scsi_Status = SCSI_PHASE_ERROR;
+              scsi_status = SCSI_PHASE_ERROR;
               current = MSD_DO_STALL;
               ep_in_stall = TRUE;
               break;
             
             // case(10)
             case (MSD_HOST_RX | MSD_DEVICE_RX):
-              scsi_Status = SCSI_PHASE_ERROR;
+              scsi_status = SCSI_PHASE_ERROR;
               current = MSD_DO_STALL;
               ep_out_stall = TRUE;
               break;
@@ -218,12 +212,12 @@ void msd_polling(){
 
     case MSD_DATA:
       scsi_ex();
-      if(scsi_Status != SCSI_PENDING){
-        if(scsi_Residue > 0){
+      if(scsi_status != SCSI_PENDING){
+        if(scsi_residue > 0){
           
           // Case (4) and Case (5)?
           if(MSD_HOST_SIDE(msd_action) == MSD_HOST_RX){
-            msd_csw.dCSWDataResidue.i = le_u32(scsi_Residue);
+            msd_csw.dCSWDataResidue.i = le_u32(scsi_residue);
             current = MSD_ZERO_PADDING;
             break;
           }
@@ -263,8 +257,8 @@ void msd_polling(){
       // Reply with a CSW:
       msd_csw.dCSWSignature.i = le_u32(CSW_SIGNATURE);
       msd_csw.dCSWTag.i = msd_cbw.dCBWTag.i;
-      msd_csw.bCSWStatus = scsi_Status;
-      msd_csw.dCSWDataResidue.i = le_u32(scsi_Residue);
+      msd_csw.bCSWStatus = scsi_status;
+      msd_csw.dCSWDataResidue.i = le_u32(scsi_residue);
       current = MSD_STATUS_TRANSPORT;
 
 		case MSD_STATUS_TRANSPORT:

@@ -41,6 +41,9 @@
 #include "usb_std_req.h"
 #include "usb_other_req.h"
 
+#include "usb_msd.h"
+#include "usb_cdc.h"
+
 // Holds the current USB State def. in F34x_USB_Main.h
 __xdata BYTE usb_state;
 
@@ -512,6 +515,9 @@ void usb0_init(){
   USB0XCN = 0xE0;                // Enable transceiver; select full speed
   POLL_WRITE_BYTE(CLKREC, 0x80); // Enable clock recovery, single-step mode disabled
 #endif /* _USB_LOW_SPEED_ */
+
+  reset();
+  usb_mode = USB_INACTIVE;
 }
 
 void (* __xdata usb_sof)();
@@ -560,20 +566,7 @@ void usb_isr() __interrupt (INTERRUPT_USB0) {
   if(bCommon & rbRSTINT){reset();}
 }
 
-volatile __bit usb_enable;
-volatile __bit usb_previous_enable;
-
-/**
- * Function rests the input and output counters for USB
- * 
- */
-void usb_bulk_init(){
-  CRITICAL_USB0(
-    reset();
-    usb_enable = (REG01CN & 0x40);
-    usb_previous_enable = !usb_enable;
-  );
-}
+volatile usb_mode_t usb_mode;
 
 static unsigned int usb_tx(
   write_target_t *target,
@@ -584,7 +577,7 @@ static unsigned int usb_tx(
   unsigned int count_orig = count, add;
   do{
     add = 0;
-    CRITICAL_USB0(      
+    CRITICAL_USB0_SPECIAL(      
       BYTE control_reg;
   
       // Set index to EP ep_index
@@ -647,7 +640,7 @@ unsigned int usb_fill(
 
 unsigned int usb_count_ep_out(unsigned char index){
   unsigned int res;
-  CRITICAL_USB0(
+  CRITICAL_USB0_SPECIAL(
     res = count_ep_out(index);
   );
   return res;
@@ -661,7 +654,7 @@ unsigned int usb_read(
   unsigned int read_count = fifo_read_C(ptr_buf, count, index);
   count_ep_out(index) -= read_count;
   if(!(count_ep_out(index))){
-    CRITICAL_USB0(
+    CRITICAL_USB0_SPECIAL(
       POLL_WRITE_BYTE(INDEX, index);
       POLL_WRITE_BYTE(EOUTCSR1, 0);
     );
@@ -682,20 +675,20 @@ void usb_flush(unsigned char index){
 }
 
 void usb_status_lock(unsigned char dir, unsigned char ep_index){
-  CRITICAL_USB0(
+  CRITICAL_USB0_SPECIAL(
     usb_ep_status(dir, ep_index) |= EP_OWNED_BY_USER;
   );
 }
 
 void usb_status_unlock(unsigned char dir, unsigned char ep_index){
-  CRITICAL_USB0(
+  CRITICAL_USB0_SPECIAL(
     usb_ep_status(dir, ep_index) &= ~EP_OWNED_BY_USER;
   );
 }
 
 void usb_stall(unsigned char dir, unsigned char ep_index,  
     __code void(*callback)()){
-  CRITICAL_USB0(
+  CRITICAL_USB0_SPECIAL(
     usb_ep_status(dir, ep_index) 
         = (usb_ep_status(dir, ep_index) & EP_OWNED_BY_USER) | EP_HALT;
   
@@ -714,7 +707,7 @@ void usb_stall(unsigned char dir, unsigned char ep_index,
 }
 
 void usb_clear_halt(unsigned char dir, unsigned char ep_index){
-  CRITICAL_USB0(
+  CRITICAL_USB0_SPECIAL(
     usb_ep_status(dir, ep_index) 
         = (usb_ep_status(dir, ep_index) & EP_OWNED_BY_USER) | EP_IDLE;
     
@@ -731,11 +724,32 @@ void usb_clear_halt(unsigned char dir, unsigned char ep_index){
 }
 
 void usb_polling(){
-  usb_previous_enable = usb_enable;
-  usb_enable = (REG01CN & 0x40);
   
-  EIE1 &= ~0x02;  // Disable USB0 Interrupts
-  if(usb_previous_enable && usb_enable){
-    EIE1 |= 0x02; // Enable USB0 Interrupts
+  switch(usb_mode){
+    case USB_INACTIVE:
+      if(REG01CN & 0x40){
+        usb_mode = USB_CABLE_CONNECTED;
+        EIE1 |= 0x02; // Enable USB0 Interrupts
+      }
+      return;
+    case USB_CABLE_CONNECTED:
+      break;
+    case USB_CDC_READY:
+      usb_mode = USB_CDC_ACTIVE;
+      break;
+    case USB_CDC_ACTIVE:
+      cdc_polling();
+      break;
+    case USB_MSD_READY:
+      usb_mode = USB_MSD_ACTIVE;
+      break;
+    case USB_MSD_ACTIVE:
+      msd_polling();
+      break;
+  }
+  
+  if(!(REG01CN & 0x40)){
+    EIE1 &= ~0x02;  // Disable USB0 Interrupts
+    usb_mode = USB_INACTIVE;
   }
 }

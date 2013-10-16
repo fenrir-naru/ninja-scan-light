@@ -37,23 +37,23 @@
 #include "usb_cdc.h"
 #include "usb_msd.h"
 
-#include "mmc.h"
-
 void usb_Class_init(){
   usb_MSD_init();
 }
 
 void usb_Class_Req(){
-  switch(usb_setup_buf.wIndex.i){
-    case 0:
-#ifndef CDC_IS_REPLACED_BY_FTDI
-      if(!mmc_initialized){ 
-        usb_CDC_req();
-        break;
-      }
-#endif
+  if(usb_setup_buf.wIndex.i > 0){return;}
+  switch(usb_mode){
+    case USB_MSD_READY:
+    case USB_MSD_ACTIVE:
       usb_MSD_req();
       break;
+#ifndef CDC_IS_REPLACED_BY_FTDI
+    case USB_CDC_READY:
+    case USB_CDC_ACTIVE:
+      usb_CDC_req();
+      break;
+#endif
   }
 }
 

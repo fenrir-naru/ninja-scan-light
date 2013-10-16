@@ -89,11 +89,6 @@ static void handle_data(){
 }
 
 void cdc_polling(){
-  if(!usb_enable){return;}
-    
-  // USB Disable => Enable
-  if(!usb_previous_enable){return;}
-
   handle_data();
 }
 

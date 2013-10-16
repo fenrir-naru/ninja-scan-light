@@ -33,6 +33,7 @@
 #include <time.h>
 
 #include "main.h"
+#include "util.h"
 
 #include "c8051f380.h"
 #include "f38x_usb.h"
@@ -41,13 +42,9 @@
 #include "f38x_i2c0.h"
 #include "f38x_spi.h"
 
-#include "diskio.h"
-#include "usb_msd.h"
-#include "usb_cdc.h"
-
-#include "util.h"
-
 #include "data_hub.h"
+
+#include "diskio.h"
 #include "gps.h"
 #include "mpu6000.h"
 #include "mag3110.h"
@@ -86,7 +83,6 @@ void main() {
   gps_init();
   
   usb0_init();
-  usb_bulk_init();
 
   // Time Pulse Interrupt config (-INT0)
   IT0 = 1;    // Edge sense
@@ -99,8 +95,6 @@ void main() {
     mag3110_polling();
     ms5611_polling();
     data_hub_polling();
-    msd_polling();
-    cdc_polling();
     usb_polling();
 
     sys_state |= SYS_POLLING_ACTIVE;

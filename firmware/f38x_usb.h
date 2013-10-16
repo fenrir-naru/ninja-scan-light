@@ -154,11 +154,17 @@ void usb_status_lock(unsigned char dir, unsigned char ep_index);
 void usb_status_unlock(unsigned char dir, unsigned char ep_index);
 void usb_stall(unsigned char dir, unsigned char ep_index, __code void(*)());
 void usb_clear_halt(unsigned char dir, unsigned char ep_index);
-void usb_bulk_init();
 void usb0_init();
 
-extern volatile __bit usb_enable;
-extern volatile __bit usb_previous_enable;
+typedef enum {
+  USB_INACTIVE,
+  USB_CABLE_CONNECTED,
+  USB_CDC_READY,
+  USB_CDC_ACTIVE,
+  USB_MSD_READY,
+  USB_MSD_ACTIVE,
+} usb_mode_t;
+extern volatile usb_mode_t usb_mode;
 
 extern void (* __xdata usb_sof)();
 

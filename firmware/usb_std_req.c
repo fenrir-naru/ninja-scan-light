@@ -304,10 +304,12 @@ static void usb_Get_Descriptor(){
         desc_device = &DESC_DEVICE;
         desc_config = &DESC_CONFIG;
         usb_sof = NULL;
+        usb_mode = USB_MSD_READY;
       }else{
         desc_device = &DESC2_DEVICE;
         desc_config = &DESC2_CONFIG;
         usb_sof = cdc_handle_com;
+        usb_mode = USB_CDC_READY;
       }
       ep0_Data_Ptr = (BYTE *)desc_device;
       ep0_Data_Size = desc_device->bLength;
