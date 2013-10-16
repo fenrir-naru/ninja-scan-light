@@ -78,58 +78,40 @@ payload_size_t data_hub_assign_page(void (* packet_maker)(packet_t *)){
   return PAGE_SIZE;
 }
 
-static FIL dat_file;
+static FIL file;
 FATFS __at (0x01D0) fs;
 
-__bit log_file_opened;
-
-#define log_file_open() \
-if(!log_file_opened){ \
-	if(f_mount(0, &fs) == FR_OK){ \
-  	if(f_open(&dat_file, "log.dat", (FA_OPEN_ALWAYS | FA_WRITE)) == FR_OK){ \
-    	f_lseek(&dat_file, dat_file.fsize); \
-    	log_file_opened = TRUE; \
-  	} \
-	} \
-}
-#define log_file_close() \
-if(log_file_opened){ \
-  log_file_opened = FALSE; \
-  f_close(&dat_file); \
-} \
-f_mount(0, NULL)
-#define log_file_write(buf, size, result) \
-f_write(&dat_file, buf, size, result)
-#define log_file_sync() \
-f_sync(&dat_file)
+static __bit log_file_opened;
 
 void data_hub_load_config(char *fname, void (* func)(FIL *)){
   if(f_mount(0, &fs) == FR_OK){
-    if(f_open(&dat_file, fname, (FA_OPEN_EXISTING | FA_READ)) == FR_OK){
-      func(&dat_file);
-      f_close(&dat_file);
+    if(f_open(&file, fname, (FA_OPEN_EXISTING | FA_READ)) == FR_OK){
+      func(&file);
+      f_close(&file);
     }
     f_mount(0, NULL);
   }
 }
 
+static __xdata u16 log_block_size; // PAGE_SIZEの倍数であることが条件
+
 void data_hub_init(){
   log_file_opened = FALSE;
+  free_page = locked_page = payload_buf;
+  log_block_size = PAGE_SIZE;
 }
-
-static __xdata u16 log_block_size; // PAGE_SIZEの倍数であることが条件
 
 static u16 log_to_file(){
   u16 accepted_bytes;
   
-  log_file_write( 
+  f_write(&file,
     locked_page,
     log_block_size, &accepted_bytes);
   {
     static __xdata u8 loop = 0;
     if((++loop) == 64){
       loop = 0;
-      log_file_sync();
+      f_sync(&file);
     }
   }
   
@@ -146,7 +128,6 @@ static u16 log_to_host(){
       && (cdc_tx(locked_page, log_block_size) == log_block_size)
       && cdc_tx((u8 *)&crc, sizeof(crc)))){
     return 0;
-    //P4 ^= 0x02;
   }
   return log_block_size;
 }
@@ -155,24 +136,33 @@ void data_hub_polling() {
   
   __code u16 (* log_func)() = NULL;
   
-  if(usb_enable){
-    // USB Disbale => Enable
-    if(!usb_previous_enable){
-      log_file_close();
-      free_page = locked_page = payload_buf;
-      return;
-    }
-    log_block_size = PAGE_SIZE;
-    log_func = log_to_host;
-  }else{
-    // USB Enable => Disable
-    if(usb_previous_enable){
-      log_file_open();
-      free_page = locked_page = payload_buf;
-      return;
-    }
-    disk_ioctl(0, GET_SECTOR_SIZE, (void *)&log_block_size);
-    log_func = log_to_file;
+  switch(usb_mode){
+    case USB_INACTIVE:
+    case USB_CABLE_CONNECTED:
+      if(!log_file_opened){
+        if((f_mount(0, &fs) != FR_OK)
+            || (f_open(&file, "log.dat", (FA_OPEN_ALWAYS | FA_WRITE)) != FR_OK)){
+          break;
+        }
+        f_lseek(&file, file.fsize);
+        log_file_opened = TRUE;
+        log_block_size = BUFFER_SIZE / 2;
+        free_page = locked_page = payload_buf;
+        return;
+      }
+      log_func = log_to_file;
+      break;
+    case USB_CDC_ACTIVE:
+      log_block_size = PAGE_SIZE;
+      log_func = log_to_host;
+      break;
+    case USB_MSD_ACTIVE:
+      if(log_file_opened){
+        log_file_opened = FALSE;
+        f_close(&file);
+        f_mount(0, NULL);
+      }
+      break;
   }
     
   // データが境界に達した場合、書き込む
@@ -193,7 +183,7 @@ void data_hub_polling() {
         __critical {
           sys_state |= SYS_LOG_ACTIVE;
         }
-      }else{/*P4 ^= 0x02;*/}
+      }
     }
     
     locked_page = next_locked_page;

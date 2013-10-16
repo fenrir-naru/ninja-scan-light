@@ -547,10 +547,6 @@ void mmc_init(){
       // Determine the number of MMC sectors;
       mmc_physical_sectors = (unsigned long)(c_size+1)*(1 << (c_mult+2));
       
-      while(mmc_block_length > MMC_PHYSICAL_BLOCK_SIZE){
-        mmc_block_length >>= 1;
-        mmc_physical_sectors <<= 1;
-      }
       break;
     }
     default:
