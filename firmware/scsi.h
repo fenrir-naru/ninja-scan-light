@@ -34,17 +34,18 @@
 
 #include "type.h"
 
-#define SCSI_PASSED 		    0
-#define SCSI_FAILED 		    1
-#define SCSI_PHASE_ERROR 	2
-#define SCSI_PENDING       0xFF
-
 void scsi_setup();
 void scsi_ex();
 
-extern u8 __xdata scsi_Status;
-extern u32 __xdata scsi_Residue;
+typedef enum {
+  SCSI_PASSED,
+  SCSI_FAILED,
+  SCSI_PHASE_ERROR,
+  SCSI_PENDING,
+} __xdata scsi_status_t;
+extern scsi_status_t scsi_status;
 
+extern u32 __xdata scsi_residue;
 extern u8 __xdata scsi_lun;
 extern u16 __xdata scsi_block_size;
 
