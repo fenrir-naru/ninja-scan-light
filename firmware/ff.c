@@ -897,7 +897,7 @@ FRESULT put_fat (
 )
 {
 	UINT bc;
-	BYTE *p;
+	__xdata BYTE *p;
 	FRESULT res;
 
 
