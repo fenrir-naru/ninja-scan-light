@@ -56,10 +56,8 @@ static void packet_init(
 
 static payload_t payload_buf[BUFFER_SIZE];
 
-static payload_t * __xdata free_page
-    = payload_buf;
-static payload_t * __xdata locked_page
-    = payload_buf;
+static payload_t * __xdata free_page;
+static payload_t * __xdata locked_page;
 
 payload_size_t data_hub_assign_page(void (* packet_maker)(packet_t *)){
   payload_t *next_free_page = free_page + PAGE_SIZE;
@@ -153,7 +151,11 @@ void data_hub_polling() {
       log_func = log_to_file;
       break;
     case USB_CDC_ACTIVE:
-      log_block_size = PAGE_SIZE;
+      if(log_block_size != PAGE_SIZE){
+        log_block_size = PAGE_SIZE;
+        free_page = locked_page = payload_buf;
+        return;
+      }
       log_func = log_to_host;
       break;
     case USB_MSD_ACTIVE:
