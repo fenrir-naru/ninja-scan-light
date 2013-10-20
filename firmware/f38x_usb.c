@@ -334,15 +334,9 @@ static void handle_setup(){
       // Call correct subroutine to handle each kind of standard request
       switch(usb_setup_buf.bmRequestType & DRT_MASK){
         // Standard device request
-        case DRT_STD :
-          usb_Std_Req();
-          break;
-        case DRT_CLASS :
-          usb_Class_Req();
-          break;
-        case DRT_VENDOR :
-          usb_Vendor_Req();
-          break;
+        case DRT_STD:     usb_standard_request(); break;
+        case DRT_CLASS:   usb_class_request();    break;
+        case DRT_VENDOR:  usb_vendor_request();   break;
       }
       
       // Set index back to endpoint 0
@@ -491,7 +485,7 @@ static void reset(){
   POLL_WRITE_BYTE(POWER, 0x01);
   
   // initialize class
-  usb_Class_init();
+  usb_class_init();
 }
 
 /**

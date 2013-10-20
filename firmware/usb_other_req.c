@@ -37,11 +37,11 @@
 #include "usb_cdc.h"
 #include "usb_msd.h"
 
-void usb_Class_init(){
+void usb_class_init(){
   usb_MSD_init();
 }
 
-void usb_Class_Req(){
+void usb_class_request(){
   if(usb_setup_buf.wIndex.i > 0){return;}
   switch(usb_mode){
     case USB_MSD_READY:
@@ -57,7 +57,7 @@ void usb_Class_Req(){
   }
 }
 
-void usb_Vendor_Req(){
+void usb_vendor_request(){
 #ifdef CDC_IS_REPLACED_BY_FTDI 
   usb_CDC_req();
 #endif

@@ -39,6 +39,21 @@
 #include "mmc.h"
 #include "usb_cdc.h"
 
+// Standard Request Codes
+enum {
+  GET_STATUS = 0x00,        // Get Status
+  CLEAR_FEATURE = 0x01,     // Clear Feature
+  SET_FEATURE = 0x03,       // Set Feature
+  SET_ADDRESS = 0x05,       // Set Address
+  GET_DESCRIPTOR = 0x06,    // Get Descriptor
+  SET_DESCRIPTOR = 0x07,    // Set Descriptor (not used)
+  GET_CONFIGURATION = 0x08, // Get Configuration
+  SET_CONFIGURATION = 0x09, // Set Configuration
+  GET_INTERFACE = 0x0A,     // Get Interface
+  SET_INTERFACE = 0x0B,     // Set Interface
+  SYNCH_FRAME = 0x0C,       // Synch Frame (not used)
+};
+
 // These are response packets used for
 static const __code BYTE ONES_PACKET[2] = {0x01, 0x00};
 // communication with host
@@ -51,7 +66,7 @@ static __code configuration_descriptor_t * __xdata desc_config;
 /**
  * This routine returns a two byte status packet to the host
  */
-static void usb_Get_Status(){
+static void get_status(){
   
   // If non-zero return length or data length not
   // equal to 2 then send a stall indicating invalid request
@@ -131,7 +146,7 @@ static void usb_Get_Status(){
  * This routine can clear Halt Endpoint features on EPs.
  * 
  */
-static void usb_Clear_Feature(){
+static void clear_feature(){
 
   // Send procedural stall if device isn't configured
   if((usb_state != DEV_CONFIGURED)
@@ -197,7 +212,7 @@ static void usb_Clear_Feature(){
  * This routine will set the EP Halt feature for EPs.
  * 
  */
-static void usb_Set_Feature(){
+static void set_feature(){
 
   // Make sure device is configured, setup data
   // is all valid and that request is directed at an endpoint
@@ -258,7 +273,7 @@ static void usb_Set_Feature(){
  * Set new function address
  * 
  */
-static void usb_Set_Address(){
+static void set_address(){
   
   // Request must be directed to device
   // with index and length set to zero.
@@ -290,12 +305,12 @@ static void usb_Set_Address(){
  * descriptor and sets the endpoint status to transmit
  * 
  */
-static void usb_Get_Descriptor(){
+static void get_descriptor(){
 
   /* 
    * Determine which type of descriptor was requested, 
    * and set data ptr and size accordingly
-   * @see USB spec. 9.4.3 Get Descriptor
+   * @see USB spec. 9.4.3 get Descriptor
    */
   ep0_callback = NULL;
   switch(usb_setup_buf.wValue.c[MSB]){
@@ -342,7 +357,7 @@ static void usb_Get_Descriptor(){
  * This routine returns current configuration value
  * 
  */
-static void usb_Get_Configuration(){
+static void get_configuration(){
 
   // This request must be directed to the device
   if ((usb_setup_buf.bmRequestType != IN_DEVICE)
@@ -404,7 +419,7 @@ static void set_endpoints_configuration(){
  * This routine allows host to change current device configuration value
  * 
  */
-static void usb_Set_Configuration(){
+static void set_configuration(){
 
   // Device must be addressed before configured
   if((usb_state == DEV_DEFAULT)
@@ -456,7 +471,7 @@ static void usb_Set_Configuration(){
  * is supported by this firmware
  * 
  */
-static void usb_Get_Interface(){
+static void get_interface(){
 
   // If device is not configured
   if((usb_state != DEV_CONFIGURED)
@@ -484,7 +499,7 @@ static void usb_Get_Interface(){
  * This function sets interface if it's supported
  * 
  */
-static void usb_Set_Interface(){
+static void set_interface(){
   
   // Make sure request is directed at interface
   // and all other packet values are set to zero
@@ -501,34 +516,16 @@ static void usb_Set_Interface(){
   usb_request_completed = TRUE;
 }
 
-void usb_Std_Req(){
+void usb_standard_request(){
   switch(usb_setup_buf.bRequest){
-    case GET_STATUS:
-      usb_Get_Status();
-      break;             
-    case CLEAR_FEATURE:
-      usb_Clear_Feature();
-      break;
-    case SET_FEATURE:
-      usb_Set_Feature();
-      break;
-    case SET_ADDRESS:
-      usb_Set_Address();
-      break;
-    case GET_DESCRIPTOR:
-      usb_Get_Descriptor();
-      break;
-    case GET_CONFIGURATION:
-      usb_Get_Configuration();
-      break;
-    case SET_CONFIGURATION:
-      usb_Set_Configuration();
-      break;
-    case GET_INTERFACE:
-      usb_Get_Interface();
-      break;
-    case SET_INTERFACE:
-      usb_Set_Interface();
-      break;
+    case GET_STATUS:        get_status();         break;
+    case CLEAR_FEATURE:     clear_feature();      break;
+    case SET_FEATURE:       set_feature();        break;
+    case SET_ADDRESS:       set_address();        break;
+    case GET_DESCRIPTOR:    get_descriptor();     break;
+    case GET_CONFIGURATION: get_configuration();  break;
+    case SET_CONFIGURATION: set_configuration();  break;
+    case GET_INTERFACE:     get_interface();      break;
+    case SET_INTERFACE:     set_interface();      break;
   }
 }
