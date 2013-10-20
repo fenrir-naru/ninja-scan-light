@@ -36,14 +36,6 @@
 #include "main.h"
 #include <string.h>
 
-// Define device states
-#define DEV_ATTACHED        0x00        // Device is in Attached State
-#define DEV_POWERED         0x01        // Device is in Powered State
-#define DEV_DEFAULT         0x02        // Device is in Default State
-#define DEV_ADDRESS         0x03        // Device is in Addressed State
-#define DEV_CONFIGURED      0x04        // Device is in Configured State
-#define DEV_SUSPENDED       0x05        // Device is in Suspended State
-
 // Define wIndex bitmaps
 #define is_EP_IN(ep_address) ((ep_address) & (0x80))
 #define EP_NUMBER(ep_address) ((ep_address) & ~(0x80))
@@ -57,17 +49,6 @@
 // Define wValue bitmaps for Standard Feature Selectors
 #define DEVICE_REMOTE_WAKEUP    0x01        // Remote wakeup feature(not used)
 #define ENDPOINT_HALT           0x00        // Endpoint_Halt feature selector
-
-// Define Endpoint States
-#define EP_IDLE                 0x00        // This signifies Endpoint Idle State
-#define EP_TX                   0x01        // Endpoint Transmit State
-#define EP_RX                   0x02        // Endpoint Receive State
-#define EP_HALT                 0x03        // Endpoint Halt State (return stalls)
-#define EP_STALL                0x04        // Endpoint Stall (send procedural stall next status phase)
-#define EP_ADDRESS              0x05        // Endpoint Address (change FADDR during next status phase)
-
-#define EP_OWNED_BY_USER        0x80        // Endpoint state owned by user
-#define ep_strip_owner(state) ((state) & ~EP_OWNED_BY_USER)
 
 // Device Request Direction (bmRequestType bit7)
 #define DRD_MASK    0x80    // Mask for device request direction
@@ -100,36 +81,46 @@
 #define OUT_VR_INTERFACE  (DRD_OUT | DRT_VENDOR | DRR_INTERFACE)
 #define IN_VR_INTERFACE   (DRD_IN  | DRT_VENDOR | DRR_INTERFACE)
 
-/**
- * Setup Packet Type Definition
- */
-typedef struct {
-   BYTE bmRequestType;          // Request recipient, type, and direction
-   BYTE bRequest;               // Specific standard request number
-   WORD_t wValue;                 // varies according to request
-   WORD_t wIndex;                 // varies according to request
-   WORD_t wLength;                // Number of bytes to transfer
-} setup_buffer_t;               // End of Setup Packet Type
+// Setup Packet Type Definition
+typedef __xdata struct {
+   BYTE bmRequestType; // Request recipient, type, and direction
+   BYTE bRequest;      // Specific standard request number
+   WORD_t wValue;      // varies according to request
+   WORD_t wIndex;      // varies according to request
+   WORD_t wLength;     // Number of bytes to transfer
+} ep0_setup_t;
+extern ep0_setup_t ep0_setup;
 
-// Buffer for current device request information
-extern __xdata setup_buffer_t usb_setup_buf;
+typedef __xdata struct {
+  BYTE *buf;
+  unsigned int size;
+  __code void (*callback)();
+} ep0_data_t;
+extern ep0_data_t ep0_data;
 
-extern BYTE* ep0_Data_Ptr;
-extern __xdata unsigned int ep0_Data_Size;
-extern void __xdata (*ep0_callback)();
+extern volatile __bit ep0_request_completed;
 
-#define regist_data(target, size) \
-{ \
-  ep0_Data_Ptr = target; \
-  ep0_Data_Size = size; \
-  ep0_callback = NULL; \
+#define ep0_regist_data(_ptr, _size) { \
+  ep0_data.buf = _ptr; \
+  ep0_data.size = _size; \
+  ep0_data.callback = NULL; \
 }
-#define reserve_data(target, size, call_back_func) \
-{ \
-  ep0_Data_Ptr = target; \
-  ep0_Data_Size = size; \
-  ep0_callback = call_back_func; \
+#define ep0_reserve_data(_ptr, _size, _func) { \
+  ep0_data.buf = _ptr; \
+  ep0_data.size = _size; \
+  ep0_data.callback = _func; \
 }
+
+// Define Endpoint States
+#define EP_IDLE                 0x00        // This signifies Endpoint Idle State
+#define EP_TX                   0x01        // Endpoint Transmit State
+#define EP_RX                   0x02        // Endpoint Receive State
+#define EP_HALT                 0x03        // Endpoint Halt State (return stalls)
+#define EP_STALL                0x04        // Endpoint Stall (send procedural stall next status phase)
+#define EP_ADDRESS              0x05        // Endpoint Address (change FADDR during next status phase)
+
+#define EP_OWNED_BY_USER        0x80        // Endpoint state owned by user
+#define ep_strip_owner(state) ((state) & ~EP_OWNED_BY_USER)
 
 extern BYTE __xdata usb_ep_stat[7];
 #define DIR_IN 0x00
@@ -137,11 +128,6 @@ extern BYTE __xdata usb_ep_stat[7];
 #define usb_ep0_status usb_ep_stat[0]
 #define usb_ep_status(dir, ep_number) \
 usb_ep_stat[((dir == DIR_OUT) ? (3 + ep_number) : (ep_number))]
-
-// Determines current USB device state
-extern __xdata BYTE usb_state;
-
-extern volatile __bit usb_request_completed;
 
 unsigned int usb_write(BYTE* ptr_buf, unsigned int count, unsigned char index);
 unsigned int usb_fill(BYTE buf, unsigned int count, unsigned char index);
@@ -155,6 +141,17 @@ void usb_status_unlock(unsigned char dir, unsigned char ep_index);
 void usb_stall(unsigned char dir, unsigned char ep_index, __code void(*)());
 void usb_clear_halt(unsigned char dir, unsigned char ep_index);
 void usb0_init();
+
+// Define device states
+typedef __xdata enum {
+  DEV_ATTACHED = 0x00,    // Device is in Attached State
+  DEV_POWERED = 0x01,     // Device is in Powered State
+  DEV_DEFAULT = 0x02,     // Device is in Default State
+  DEV_ADDRESS = 0x03,     // Device is in Addressed State
+  DEV_CONFIGURED = 0x04,  // Device is in Configured State
+  DEV_SUSPENDED = 0x05,   // Device is in Suspended State
+} usb_state_t;
+extern usb_state_t usb_state;
 
 typedef enum {
   USB_INACTIVE,

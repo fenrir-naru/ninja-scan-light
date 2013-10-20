@@ -238,17 +238,17 @@ static __xdata ftdi_ep0_buf[2];
  * Nothing to do other than unloading the data sent in the data stage.
  */
 static void cdc_Send_Encapsulated_Command(){
-  if((usb_setup_buf.bmRequestType == OUT_CL_INTERFACE)
-      && (usb_setup_buf.wValue.i == 0 )
-      && (usb_setup_buf.wLength.i <= sizeof(cdc_line_coding_t))){
+  if((ep0_setup.bmRequestType == OUT_CL_INTERFACE)
+      && (ep0_setup.wValue.i == 0 )
+      && (ep0_setup.wLength.i <= sizeof(cdc_line_coding_t))){
     
-    reserve_data(
+    ep0_reserve_data(
         (u8 *)lc_buffer,
-        usb_setup_buf.wLength.i,
+        ep0_setup.wLength.i,
         cdc_set_line_coding_complete
       );
     usb_ep0_status = EP_RX;
-    usb_request_completed = TRUE;
+    ep0_request_completed = TRUE;
   }
 }
 
@@ -258,12 +258,12 @@ static void cdc_Send_Encapsulated_Command(){
  * Return a zero-length packet
  */
 static void cdc_Get_Encapsulated_Command(){
-  if((usb_setup_buf.bmRequestType == IN_CL_INTERFACE)
-    && (usb_setup_buf.wValue.i == 0)){
+  if((ep0_setup.bmRequestType == IN_CL_INTERFACE)
+    && (ep0_setup.wValue.i == 0)){
              
-    regist_data((u8 *)lc_buffer, 0); // Send ZLP
+    ep0_regist_data((u8 *)lc_buffer, 0); // Send ZLP
     usb_ep0_status = EP_TX;
-    usb_request_completed = TRUE;
+    ep0_request_completed = TRUE;
   }
 }
 
@@ -281,17 +281,17 @@ static void cdc_Get_Encapsulated_Command(){
  * 6   bDataBits    Data bits: 5, 6, 7, 8, 16
  */
 static void cdc_Set_Line_Coding(){
-  if((usb_setup_buf.bmRequestType == OUT_CL_INTERFACE)
-    && (usb_setup_buf.wValue.i == 0)
-    && (usb_setup_buf.wLength.i == sizeof(cdc_line_coding_t))){
+  if((ep0_setup.bmRequestType == OUT_CL_INTERFACE)
+    && (ep0_setup.wValue.i == 0)
+    && (ep0_setup.wLength.i == sizeof(cdc_line_coding_t))){
     
-    reserve_data(
+    ep0_reserve_data(
         (u8 *)lc_buffer,
         sizeof(cdc_line_coding_t),
         cdc_set_line_coding_complete
       );
     usb_ep0_status = EP_RX;
-    usb_request_completed = TRUE;
+    ep0_request_completed = TRUE;
   }
 }
 
@@ -301,13 +301,13 @@ static void cdc_Set_Line_Coding(){
  * Return the line coding structure
  */
 static void cdc_Get_Line_Coding(){
-  if((usb_setup_buf.bmRequestType == IN_CL_INTERFACE)
-      && (usb_setup_buf.wValue.i == 0)
-      && (usb_setup_buf.wLength.i == sizeof(cdc_line_coding_t))){
+  if((ep0_setup.bmRequestType == IN_CL_INTERFACE)
+      && (ep0_setup.wValue.i == 0)
+      && (ep0_setup.wLength.i == sizeof(cdc_line_coding_t))){
 
-    regist_data((u8 *)(&uart_line_coding), sizeof(cdc_line_coding_t));
+    ep0_regist_data((u8 *)(&uart_line_coding), sizeof(cdc_line_coding_t));
     usb_ep0_status = EP_TX;
-    usb_request_completed = TRUE;
+    ep0_request_completed = TRUE;
   }
 }
 
@@ -320,10 +320,10 @@ static void cdc_Get_Line_Coding(){
  *  bit 0  DTR
  */
 static void cdc_Set_ControlLine_State(){
-  if((usb_setup_buf.bmRequestType == OUT_CL_INTERFACE)
-    && (usb_setup_buf.wLength.i == 0)){
-    set_line_state(usb_setup_buf.wValue.c[LSB] & (CDC_RTS | CDC_DTR));
-    usb_request_completed = TRUE;
+  if((ep0_setup.bmRequestType == OUT_CL_INTERFACE)
+    && (ep0_setup.wLength.i == 0)){
+    set_line_state(ep0_setup.wValue.c[LSB] & (CDC_RTS | CDC_DTR));
+    ep0_request_completed = TRUE;
   }
 }
 
@@ -336,10 +336,10 @@ static void cdc_Set_ControlLine_State(){
  *  0x0000: stop break
  */
 static void cdc_Send_Break(){
-  if ((usb_setup_buf.bmRequestType == OUT_CL_INTERFACE)
-    && (usb_setup_buf.wLength.i == 0) ){
-    send_break(usb_setup_buf.wValue.i);
-    usb_request_completed = TRUE;
+  if ((ep0_setup.bmRequestType == OUT_CL_INTERFACE)
+    && (ep0_setup.wLength.i == 0) ){
+    send_break(ep0_setup.wValue.i);
+    ep0_request_completed = TRUE;
   }
 }
 
@@ -424,7 +424,7 @@ u16 cdc_rx(u8 *buf, u16 size){
 #endif
 
 void usb_CDC_req(){
-  switch(usb_setup_buf.bRequest){
+  switch(ep0_setup.bRequest){
 #ifdef CDC_IS_REPLACED_BY_FTDI
     case PORT_RESET:
     case SET_FLOW_CTRL:
@@ -432,16 +432,16 @@ void usb_CDC_req(){
     case SET_ERROR_CHAR:
     case SET_LATENCY_TIMER:
     case ERACE_EEPROM:
-      usb_request_completed = TRUE;
+      ep0_request_completed = TRUE;
       break;
     case MODEM_CTRL:
-      set_line_state(usb_setup_buf.wValue.c[LSB] & (CDC_RTS | CDC_DTR));
-      usb_request_completed = TRUE;
+      set_line_state(ep0_setup.wValue.c[LSB] & (CDC_RTS | CDC_DTR));
+      ep0_request_completed = TRUE;
       break;
     case SET_BAUD_RATE: {
       // TODO: bit16 support?
       unsigned int divisor;
-      switch(divisor = ((usb_setup_buf.wValue.c[MSB] & 0xC0) >> 6)){
+      switch(divisor = ((ep0_setup.wValue.c[MSB] & 0xC0) >> 6)){
         case 0x01:
           divisor = 4;
           break;
@@ -449,43 +449,43 @@ void usb_CDC_req(){
           divisor = 1;
           break;
       }
-      divisor += (usb_setup_buf.wValue.i & 0x3FFF) << 3;
+      divisor += (ep0_setup.wValue.i & 0x3FFF) << 3;
       uart_line_coding.baudrate.i = le_u32(24000000UL / divisor);
-      usb_request_completed = TRUE;
+      ep0_request_completed = TRUE;
       break;
     }
     case SET_DATA:
       // USB is little endian
-      uart_line_coding.stopbit = (usb_setup_buf.wValue.c[MSB] >> 3) & 0x07;
-      uart_line_coding.parity = usb_setup_buf.wValue.c[MSB] & 0x07;
-      uart_line_coding.databit = usb_setup_buf.wValue.c[LSB];
-      usb_request_completed = TRUE;
+      uart_line_coding.stopbit = (ep0_setup.wValue.c[MSB] >> 3) & 0x07;
+      uart_line_coding.parity = ep0_setup.wValue.c[MSB] & 0x07;
+      uart_line_coding.databit = ep0_setup.wValue.c[LSB];
+      ep0_request_completed = TRUE;
       break;
     case GET_MODEM_STATUS:
-      if(usb_setup_buf.wLength.c[LSB] <= 2){
+      if(ep0_setup.wLength.c[LSB] <= 2){
         ftdi_ep0_buf[0] = 0x70;
         ftdi_ep0_buf[1] = 0x00;
-        regist_data((u8 *)ftdi_ep0_buf,
-            usb_setup_buf.wLength.c[LSB]);
+        ep0_regist_data((u8 *)ftdi_ep0_buf,
+            ep0_setup.wLength.c[LSB]);
         usb_ep0_status = EP_TX;
-        usb_request_completed = TRUE;
+        ep0_request_completed = TRUE;
       }
       break;
     case GET_LATENCY_TIMER:
-      //TODO: regist_data(hoge, 1);
+      //TODO: ep0_regist_data(hoge, 1);
       usb_ep0_status = EP_TX;
-      //usb_request_completed = TRUE;
+      //ep0_request_completed = TRUE;
       break;
     case READ_EEPROM:
-      regist_data((u8 *)(&ftdi_rom[(usb_setup_buf.wIndex.i << 1)]),
-          usb_setup_buf.wLength.c[LSB]);
+      ep0_regist_data((u8 *)(&ftdi_rom[(ep0_setup.wIndex.i << 1)]),
+          ep0_setup.wLength.c[LSB]);
       usb_ep0_status = EP_TX;
-      usb_request_completed = TRUE;
+      ep0_request_completed = TRUE;
       break;
     case WRITE_EEPROM:
-      //TODO: reserve_data((u8 *)lc_buffer, usb_setup_buf.wLength.c[LSB], set_line_coding);
+      //TODO: ep0_reserve_data((u8 *)lc_buffer, ep0_setup.wLength.c[LSB], set_line_coding);
       usb_ep0_status = EP_RX;
-      //usb_request_completed = TRUE;
+      //ep0_request_completed = TRUE;
       break;
 #else
     case SEND_ENCAPSULATED_COMMAND:

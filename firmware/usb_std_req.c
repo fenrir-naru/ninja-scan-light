@@ -70,19 +70,19 @@ static void get_status(){
   
   // If non-zero return length or data length not
   // equal to 2 then send a stall indicating invalid request
-  if(usb_setup_buf.wValue.c[MSB] 
-        || usb_setup_buf.wValue.c[LSB] 
-        || usb_setup_buf.wLength.c[MSB]
-        || (usb_setup_buf.wLength.c[LSB] != 2)){
+  if(ep0_setup.wValue.c[MSB] 
+        || ep0_setup.wValue.c[LSB] 
+        || ep0_setup.wLength.c[MSB]
+        || (ep0_setup.wLength.c[LSB] != 2)){
     return;
   }
 
   // Determine if recipient was device, interface, or EP
-  switch(usb_setup_buf.bmRequestType){
+  switch(ep0_setup.bmRequestType){
     case IN_DEVICE:
-      if(usb_setup_buf.wIndex.i == 0){
+      if(ep0_setup.wIndex.i == 0){
         // send 0x00, indicating bus power and no remote wake-up supported
-        regist_data((BYTE*)&ZERO_PACKET, 2);
+        ep0_regist_data((BYTE*)&ZERO_PACKET, 2);
         break;
       }
       // else Send stall if request is invalid
@@ -90,10 +90,10 @@ static void get_status(){
     
     case IN_INTERFACE:
       if((usb_state == DEV_CONFIGURED)
-          && (usb_setup_buf.wIndex.i < desc_config->bNumInterfaces)){
+          && (ep0_setup.wIndex.i < desc_config->bNumInterfaces)){
         // Only valid if device is configured and non-zero index
         // Status packet always returns 0x00
-        regist_data((BYTE*)&ZERO_PACKET, 2);
+        ep0_regist_data((BYTE*)&ZERO_PACKET, 2);
         break;
       }
       // Otherwise send stall to host
@@ -101,12 +101,12 @@ static void get_status(){
       
     case IN_ENDPOINT:
       if((usb_state == DEV_CONFIGURED) 
-          && (usb_setup_buf.wIndex.c[MSB] == 0)){
+          && (ep0_setup.wIndex.c[MSB] == 0)){
         // Make sure device is configured and index msb = 0x00
         
         // Handle case if request is directed to some EPs
         __bit is_valid_req = FALSE;
-        switch(usb_setup_buf.wIndex.c[LSB]){
+        switch(ep0_setup.wIndex.c[LSB]){
           case IN_EP1:
           case IN_EP2:
           case IN_EP3:
@@ -114,15 +114,15 @@ static void get_status(){
           case OUT_EP2:
           case OUT_EP3: {
             
-            BYTE ep_dir = (is_EP_IN(usb_setup_buf.wIndex.c[LSB]) ? DIR_IN : DIR_OUT);
-            BYTE ep_number = EP_NUMBER(usb_setup_buf.wIndex.c[LSB]);
+            BYTE ep_dir = (is_EP_IN(ep0_setup.wIndex.c[LSB]) ? DIR_IN : DIR_OUT);
+            BYTE ep_number = EP_NUMBER(ep0_setup.wIndex.c[LSB]);
             
             if(ep_strip_owner(usb_ep_status(ep_dir, ep_number)) == EP_HALT){
               // If endpoint is halted, return 0x01,0x00
-              regist_data((BYTE*)&(ONES_PACKET), 2);
+              ep0_regist_data((BYTE*)&(ONES_PACKET), 2);
             }else{
               // Otherwise return 0x00,0x00 to indicate endpoint active
-              regist_data((BYTE*)&(ZERO_PACKET), 2);
+              ep0_regist_data((BYTE*)&(ZERO_PACKET), 2);
             }
             
             is_valid_req = TRUE;
@@ -139,7 +139,7 @@ static void get_status(){
   }
   
   usb_ep0_status = EP_TX;
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -151,32 +151,32 @@ static void clear_feature(){
   // Send procedural stall if device isn't configured
   if((usb_state != DEV_CONFIGURED)
         // or request is made to host(remote wakeup not supported)
-        || (usb_setup_buf.bmRequestType == OUT_DEVICE)
+        || (ep0_setup.bmRequestType == OUT_DEVICE)
         // or request is made to interface
-        || (usb_setup_buf.bmRequestType == OUT_INTERFACE)
+        || (ep0_setup.bmRequestType == OUT_INTERFACE)
         // or msbs of value or index set to non-zero value
-        || usb_setup_buf.wValue.c[MSB] || usb_setup_buf.wIndex.c[MSB]
+        || ep0_setup.wValue.c[MSB] || ep0_setup.wIndex.c[MSB]
         // or data length set to non-zero.
-        || usb_setup_buf.wLength.c[MSB] || usb_setup_buf.wLength.c[LSB]){
+        || ep0_setup.wLength.c[MSB] || ep0_setup.wLength.c[LSB]){
     return;
   }
     
   // Verify that packet was directed at an endpoint
-  if((usb_setup_buf.bmRequestType != OUT_ENDPOINT)
+  if((ep0_setup.bmRequestType != OUT_ENDPOINT)
         // the feature selected was HALT_ENDPOINT
-        || (usb_setup_buf.wValue.c[LSB] != ENDPOINT_HALT)){
+        || (ep0_setup.wValue.c[LSB] != ENDPOINT_HALT)){
     return;
   }
   
   {
-    BYTE ep_number = EP_NUMBER(usb_setup_buf.wIndex.c[LSB]);
+    BYTE ep_number = EP_NUMBER(ep0_setup.wIndex.c[LSB]);
     
     // the request was directed at IN_EP3 or OUT_EP3
     // or IN_EP1 or IN_EP2 or OUT_EP2
     
     // Clear feature endpoint halt
     // and Set endpoint status back to idle
-    switch(usb_setup_buf.wIndex.c[LSB]){
+    switch(ep0_setup.wIndex.c[LSB]){
       case IN_EP1:
       case IN_EP2:
       case IN_EP3: {
@@ -205,7 +205,7 @@ static void clear_feature(){
     }
   }
   
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -217,10 +217,10 @@ static void set_feature(){
   // Make sure device is configured, setup data
   // is all valid and that request is directed at an endpoint
   if((usb_state != DEV_CONFIGURED)
-          || (usb_setup_buf.bmRequestType == OUT_DEVICE)
-          || (usb_setup_buf.bmRequestType == OUT_INTERFACE)
-          || usb_setup_buf.wValue.c[MSB]  || usb_setup_buf.wIndex.c[MSB]
-          || usb_setup_buf.wLength.c[MSB] || usb_setup_buf.wLength.c[LSB]){
+          || (ep0_setup.bmRequestType == OUT_DEVICE)
+          || (ep0_setup.bmRequestType == OUT_INTERFACE)
+          || ep0_setup.wValue.c[MSB]  || ep0_setup.wIndex.c[MSB]
+          || ep0_setup.wLength.c[MSB] || ep0_setup.wLength.c[LSB]){
     
     // Otherwise send stall to host
     return;
@@ -228,17 +228,17 @@ static void set_feature(){
 
   // Make sure endpoint exists and that halt
   // endpoint feature is selected
-  if((usb_setup_buf.bmRequestType != OUT_ENDPOINT)
-        || (usb_setup_buf.wValue.c[LSB] != ENDPOINT_HALT)){
+  if((ep0_setup.bmRequestType != OUT_ENDPOINT)
+        || (ep0_setup.wValue.c[LSB] != ENDPOINT_HALT)){
     // Send procedural stall
     return;
   }
   
   {
-    BYTE ep_number = EP_NUMBER(usb_setup_buf.wIndex.c[LSB]);
+    BYTE ep_number = EP_NUMBER(ep0_setup.wIndex.c[LSB]);
     
     // Set feature endpoint halt
-    switch(usb_setup_buf.wIndex.c[LSB]){
+    switch(ep0_setup.wIndex.c[LSB]){
       case IN_EP1:
       case IN_EP2:
       case IN_EP3: {
@@ -266,7 +266,7 @@ static void set_feature(){
     }
   }
   
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -277,10 +277,10 @@ static void set_address(){
   
   // Request must be directed to device
   // with index and length set to zero.
-  if((usb_setup_buf.bmRequestType != OUT_DEVICE)
-          || usb_setup_buf.wIndex.c[MSB] || usb_setup_buf.wIndex.c[LSB]
-          || usb_setup_buf.wLength.c[MSB] || usb_setup_buf.wLength.c[LSB]
-          || usb_setup_buf.wValue.c[MSB]  || (usb_setup_buf.wValue.c[LSB] & 0x80)){
+  if((ep0_setup.bmRequestType != OUT_DEVICE)
+          || ep0_setup.wIndex.c[MSB] || ep0_setup.wIndex.c[LSB]
+          || ep0_setup.wLength.c[MSB] || ep0_setup.wLength.c[LSB]
+          || ep0_setup.wValue.c[MSB]  || (ep0_setup.wValue.c[LSB] & 0x80)){
             
     // Send stall if setup data invalid
     return;
@@ -288,7 +288,7 @@ static void set_address(){
 
   // Set endpoint zero to update address next status phase
   usb_ep0_status = EP_ADDRESS;
-  if(usb_setup_buf.wValue.c[LSB] != 0){
+  if(ep0_setup.wValue.c[LSB] != 0){
     // Indicate that device state is now address
     usb_state = DEV_ADDRESS;
   }else{
@@ -297,7 +297,7 @@ static void set_address(){
   }
   
   // Indicate setup packet has been serviced
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -312,8 +312,8 @@ static void get_descriptor(){
    * and set data ptr and size accordingly
    * @see USB spec. 9.4.3 get Descriptor
    */
-  ep0_callback = NULL;
-  switch(usb_setup_buf.wValue.c[MSB]){
+  ep0_data.callback = NULL;
+  switch(ep0_setup.wValue.c[MSB]){
     case DSC_TYPE_DEVICE:
       if(mmc_initialized){
         desc_device = &DESC_DEVICE;
@@ -326,17 +326,17 @@ static void get_descriptor(){
         usb_sof = cdc_handle_com;
         usb_mode = USB_CDC_READY;
       }
-      ep0_Data_Ptr = (BYTE *)desc_device;
-      ep0_Data_Size = desc_device->bLength;
+      ep0_data.buf = (BYTE *)desc_device;
+      ep0_data.size = desc_device->bLength;
       break;  
     case DSC_TYPE_CONFIG:  // config + interfaces + endpoints‘S•”•Ô‚·‚±‚Æ!!
-      ep0_Data_Ptr = (BYTE *)desc_config;
-      ep0_Data_Size = desc_config->wTotalLength.i;
+      ep0_data.buf = (BYTE *)desc_config;
+      ep0_data.size = desc_config->wTotalLength.i;
       break;
     case DSC_TYPE_STRING:
-      ep0_Data_Ptr = DESC_STRINGs[usb_setup_buf.wValue.c[LSB]];
+      ep0_data.buf = DESC_STRINGs[ep0_setup.wValue.c[LSB]];
       // Can have a maximum of 255 strings
-      ep0_Data_Size = *ep0_Data_Ptr;
+      ep0_data.size = *ep0_data.buf;
       break;
     default:
       // Send Stall if unsupported request
@@ -344,13 +344,13 @@ static void get_descriptor(){
   }
   
   // activate only when the requested descriptor is valid
-  if ((usb_setup_buf.wLength.c[LSB] < ep0_Data_Size) && (usb_setup_buf.wLength.c[MSB] == 0)){
-    ep0_Data_Size = usb_setup_buf.wLength.i;  // Send only requested amount of data
+  if ((ep0_setup.wLength.c[LSB] < ep0_data.size) && (ep0_setup.wLength.c[MSB] == 0)){
+    ep0_data.size = ep0_setup.wLength.i;  // Send only requested amount of data
   }
   
   // Put endpoint in transmit mode
   usb_ep0_status = EP_TX;
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -360,13 +360,13 @@ static void get_descriptor(){
 static void get_configuration(){
 
   // This request must be directed to the device
-  if ((usb_setup_buf.bmRequestType != IN_DEVICE)
+  if ((ep0_setup.bmRequestType != IN_DEVICE)
           // with value word set to zero
-          || usb_setup_buf.wValue.c[MSB] || usb_setup_buf.wValue.c[LSB]
+          || ep0_setup.wValue.c[MSB] || ep0_setup.wValue.c[LSB]
           // and index set to zero
-          || usb_setup_buf.wIndex.c[MSB] || usb_setup_buf.wIndex.c[LSB]
+          || ep0_setup.wIndex.c[MSB] || ep0_setup.wIndex.c[LSB]
           // and setup length set to one
-          || usb_setup_buf.wLength.c[MSB] || (usb_setup_buf.wLength.c[LSB] != 1)){
+          || ep0_setup.wLength.c[MSB] || (ep0_setup.wLength.c[LSB] != 1)){
     // Otherwise send a stall to host
     return;
   }
@@ -374,16 +374,16 @@ static void get_configuration(){
   if(usb_state == DEV_CONFIGURED){
     // If the device is configured, then return value 0x01  
     // since this software only supports one configuration
-    regist_data((BYTE*)&ONES_PACKET, 1);
+    ep0_regist_data((BYTE*)&ONES_PACKET, 1);
   }else if(usb_state == DEV_ADDRESS){
     // If the device is in address state, it is not
     // configured, so return 0x00
-    regist_data((BYTE*)&ZERO_PACKET, 1);
+    ep0_regist_data((BYTE*)&ZERO_PACKET, 1);
   }
 
   // Put endpoint into transmit mode
   usb_ep0_status = EP_TX;
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 static void set_endpoints_configuration(){
@@ -424,18 +424,18 @@ static void set_configuration(){
   // Device must be addressed before configured
   if((usb_state == DEV_DEFAULT)
           // and request recipient must be the device
-          || (usb_setup_buf.bmRequestType != OUT_DEVICE)
+          || (ep0_setup.bmRequestType != OUT_DEVICE)
           // the index and length words must be zero
-          || usb_setup_buf.wIndex.c[MSB] || usb_setup_buf.wIndex.c[LSB]
-          || usb_setup_buf.wLength.c[MSB] || usb_setup_buf.wLength.c[LSB] 
+          || ep0_setup.wIndex.c[MSB] || ep0_setup.wIndex.c[LSB]
+          || ep0_setup.wLength.c[MSB] || ep0_setup.wLength.c[LSB] 
           // This software only supports config = 0,1
-          || usb_setup_buf.wValue.c[MSB] || (usb_setup_buf.wValue.c[LSB] > 1)){
+          || ep0_setup.wValue.c[MSB] || (ep0_setup.wValue.c[LSB] > 1)){
     // Send stall if setup data is invalid
     return;
   }
   
   // Any positive configuration request
-  if(usb_setup_buf.wValue.c[LSB] > 0){
+  if(ep0_setup.wValue.c[LSB] > 0){
     
     set_endpoints_configuration();
     
@@ -463,7 +463,7 @@ static void set_configuration(){
     usb_ep_status(DIR_OUT, 3) = EP_HALT;      
   }     
   
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -476,23 +476,23 @@ static void get_interface(){
   // If device is not configured
   if((usb_state != DEV_CONFIGURED)
         // or recipient is not an interface
-        || (usb_setup_buf.bmRequestType != IN_INTERFACE)
+        || (ep0_setup.bmRequestType != IN_INTERFACE)
         // or non-zero value or index fields
-        || usb_setup_buf.wValue.c[MSB] || usb_setup_buf.wValue.c[LSB] 
-        || (usb_setup_buf.wIndex.i >= desc_config->bNumInterfaces)
+        || ep0_setup.wValue.c[MSB] || ep0_setup.wValue.c[LSB] 
+        || (ep0_setup.wIndex.i >= desc_config->bNumInterfaces)
         // or data length not equal to one
-        || usb_setup_buf.wLength.c[MSB] ||(usb_setup_buf.wLength.c[LSB] != 1)){
+        || ep0_setup.wLength.c[MSB] ||(ep0_setup.wLength.c[LSB] != 1)){
     // Then return stall due to invalid request
     return;
   }
   
   // Otherwise, return 0x00 to host
-  regist_data((BYTE*)&ZERO_PACKET, 1);
+  ep0_regist_data((BYTE*)&ZERO_PACKET, 1);
   
   // Set Serviced Setup packet, put endpoint in transmit
   // mode and reset Data sent counter         
   usb_ep0_status = EP_TX;
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 /**
@@ -503,21 +503,21 @@ static void set_interface(){
   
   // Make sure request is directed at interface
   // and all other packet values are set to zero
-  if((usb_setup_buf.bmRequestType != OUT_INTERFACE)
-        || usb_setup_buf.wLength.c[MSB] || usb_setup_buf.wLength.c[LSB]
-        || usb_setup_buf.wValue.c[MSB] || usb_setup_buf.wValue.c[LSB]
-        || (usb_setup_buf.wIndex.i >= desc_config->bNumInterfaces)){
+  if((ep0_setup.bmRequestType != OUT_INTERFACE)
+        || ep0_setup.wLength.c[MSB] || ep0_setup.wLength.c[LSB]
+        || ep0_setup.wValue.c[MSB] || ep0_setup.wValue.c[LSB]
+        || (ep0_setup.wIndex.i >= desc_config->bNumInterfaces)){
     // Othewise send a stall to host
     return;
   }
   
   set_endpoints_configuration();
   
-  usb_request_completed = TRUE;
+  ep0_request_completed = TRUE;
 }
 
 void usb_standard_request(){
-  switch(usb_setup_buf.bRequest){
+  switch(ep0_setup.bRequest){
     case GET_STATUS:        get_status();         break;
     case CLEAR_FEATURE:     clear_feature();      break;
     case SET_FEATURE:       set_feature();        break;

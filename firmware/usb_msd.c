@@ -82,8 +82,8 @@ void usb_MSD_init(){
 
 static void usb_MSD_reset(){
   // Parse this class-specific request
-  if((usb_setup_buf.bmRequestType == 0x21) 
-      && (usb_setup_buf.wLength.i == 0x00)) {
+  if((ep0_setup.bmRequestType == 0x21) 
+      && (ep0_setup.wLength.i == 0x00)) {
     
     usb_status_unlock(DIR_IN, MSD_EP_IN);
     usb_status_unlock(DIR_OUT, MSD_EP_OUT);
@@ -91,27 +91,27 @@ static void usb_MSD_reset(){
     msd_State = MSD_DO_RESET;
     discard_state_transition = TRUE;
     
-    usb_request_completed = TRUE;
+    ep0_request_completed = TRUE;
   }
 }
 
 static void usb_MSD_Get_MaxLUN(){ 
   // Parse this class-specific request
-  if((usb_setup_buf.bmRequestType == 0xA1) 
-      && (usb_setup_buf.wLength.i == 0x01)
-      && (usb_setup_buf.wValue.i == 0x00)) {
+  if((ep0_setup.bmRequestType == 0xA1) 
+      && (ep0_setup.wLength.i == 0x01)
+      && (ep0_setup.wValue.i == 0x00)) {
     // Return max lun to host:
     static __code unsigned char maxlun[] = {0x00}; // Only 1 LUN supported
-    regist_data(maxlun, 1);
+    ep0_regist_data(maxlun, 1);
     
     // put endpoint in transmit mode
     usb_ep0_status = EP_TX;
-    usb_request_completed = TRUE;
+    ep0_request_completed = TRUE;
   }
 }
 
 void usb_MSD_req(){
-  switch(usb_setup_buf.bRequest){
+  switch(ep0_setup.bRequest){
     case MSD_GET_MAX_LUN:
       usb_MSD_Get_MaxLUN();
       break;

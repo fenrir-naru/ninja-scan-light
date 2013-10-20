@@ -44,20 +44,12 @@
 #include "usb_msd.h"
 #include "usb_cdc.h"
 
-// Holds the current USB State def. in F34x_USB_Main.h
-__xdata BYTE usb_state;
+// Holds the current USB State
+usb_state_t usb_state;
 
-// Buffer for current device request information
-__xdata setup_buffer_t usb_setup_buf;
-
-// Size of data to return
-__xdata unsigned int ep0_Data_Size;
-
-// Pointer to data to return
-BYTE* ep0_Data_Ptr;
-
-volatile __bit usb_request_completed;
-void __xdata (*ep0_callback)();
+ep0_setup_t ep0_setup;
+ep0_data_t ep0_data;
+volatile __bit ep0_request_completed;
 
 // Holds the status for each endpoint
 BYTE __xdata usb_ep_stat[7];
@@ -65,7 +57,7 @@ BYTE __xdata usb_ep_stat[7];
 static __xdata unsigned int ep_out_stored[3];
 #define count_ep_out(index) ep_out_stored[index - 1]
 
-static __code unsigned int ep_size[] = {
+static const __code unsigned int ep_size[] = {
   PACKET_SIZE_EP0,
   PACKET_SIZE_EP1,
   PACKET_SIZE_EP2,
@@ -299,7 +291,7 @@ static void handle_setup(){
 
   // Handle Status Phase of Set Address command
   if(usb_ep0_status == EP_ADDRESS){
-    POLL_WRITE_BYTE(FADDR, usb_setup_buf.wValue.c[LSB]);
+    POLL_WRITE_BYTE(FADDR, ep0_setup.wValue.c[LSB]);
     usb_ep0_status = EP_IDLE;
   }
 
@@ -327,12 +319,12 @@ static void handle_setup(){
     // although if EP0 is idle, this should always be the case
     if(control_reg & rbOPRDY){                                 
       
-      fifo0_read_C((BYTE *)&usb_setup_buf, 8);
+      fifo0_read_C((BYTE *)&ep0_setup, 8);
       
-      usb_request_completed = FALSE;
+      ep0_request_completed = FALSE;
       
       // Call correct subroutine to handle each kind of standard request
-      switch(usb_setup_buf.bmRequestType & DRT_MASK){
+      switch(ep0_setup.bmRequestType & DRT_MASK){
         // Standard device request
         case DRT_STD:     usb_standard_request(); break;
         case DRT_CLASS:   usb_class_request();    break;
@@ -342,7 +334,7 @@ static void handle_setup(){
       // Set index back to endpoint 0
       POLL_WRITE_BYTE(INDEX, EP0_IDX);
       
-      if(!usb_request_completed){
+      if(!ep0_request_completed){
         // Send stall to host if invalid request
         POLL_WRITE_BYTE(E0CSR, rbSDSTL);
         // Put the endpoint in stall status
@@ -377,13 +369,13 @@ static void handle_setup(){
      
       {
         write_target_t target;
-        target.array = ep0_Data_Ptr;
-        if(ep0_Data_Size -= fifo0_write_C(&target, ep0_Data_Size)){
+        target.array = ep0_data.buf;
+        if(ep0_data.size -= fifo0_write_C(&target, ep0_data.size)){
           
           // Advance data pointer
-          ep0_Data_Ptr += PACKET_SIZE_EP0;
-        }else if(ep0_callback){
-          ep0_callback();
+          ep0_data.buf += PACKET_SIZE_EP0;
+        }else if(ep0_data.callback){
+          ep0_data.callback();
         }else{
           
           // Add Data End bit to bitmask
@@ -413,24 +405,24 @@ static void handle_setup(){
         // Empty the FIFO
         // FIFO must be read out just the size it has,
         // otherwize the FIFO pointer on the SIE goes out of synch.
-        fifo0_read_C((BYTE*)ep0_Data_Ptr, recieved);
+        fifo0_read_C((BYTE*)ep0_data.buf, recieved);
         
-        if(ep0_Data_Size > recieved){
+        if(ep0_data.size > recieved){
           // Update the scheduled number to be received
-          ep0_Data_Size -= recieved;
+          ep0_data.size -= recieved;
           
           // Advance the pointer
-          ep0_Data_Ptr += recieved;
+          ep0_data.buf += recieved;
         }else{
           // Meet the end of the data stage
-          ep0_Data_Size = 0;
+          ep0_data.size = 0;
           
           // Signal end of data stage
           control_reg |= rbDATAEND;
           
           usb_ep0_status = EP_IDLE;
   
-          ep0_callback();
+          ep0_data.callback();
         }
   
         POLL_WRITE_BYTE(E0CSR, control_reg);

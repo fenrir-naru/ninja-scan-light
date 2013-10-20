@@ -42,7 +42,7 @@ void usb_class_init(){
 }
 
 void usb_class_request(){
-  if(usb_setup_buf.wIndex.i > 0){return;}
+  if(ep0_setup.wIndex.i > 0){return;}
   switch(usb_mode){
     case USB_MSD_READY:
     case USB_MSD_ACTIVE:
