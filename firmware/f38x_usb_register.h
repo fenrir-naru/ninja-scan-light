@@ -146,7 +146,7 @@
 #define  rbOutISO       0x40 
 
 // INDEX IDENTIFIERS
-#define  EP0_IDX		     0x00
+#define  EP0_IDX        0x00
 
 // Register read/write macros
 

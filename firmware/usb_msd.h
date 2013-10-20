@@ -35,20 +35,20 @@
 #include "type.h"
 
 typedef struct {
-	DWORD_t dCBWSignature;
-	DWORD_t dCBWTag;
-	DWORD_t dCBWDataTransferLength;
-	BYTE  bmCBWFlags;
-	BYTE  bCBWLUN;
-	BYTE  bCBWCBLength;
-	BYTE  CBWCB[16];
+  DWORD_t dCBWSignature;
+  DWORD_t dCBWTag;
+  DWORD_t dCBWDataTransferLength;
+  BYTE  bmCBWFlags;
+  BYTE  bCBWLUN;
+  BYTE  bCBWCBLength;
+  BYTE  CBWCB[16];
 } msd_cbw_t;
 
 typedef struct {
-	DWORD_t dCSWSignature;
-	DWORD_t dCSWTag;
-	DWORD_t dCSWDataResidue;
-	BYTE  bCSWStatus;
+  DWORD_t dCSWSignature;
+  DWORD_t dCSWTag;
+  DWORD_t dCSWDataResidue;
+  BYTE  bCSWStatus;
 } msd_csw_t;
 
 extern msd_cbw_t __xdata msd_cbw;

@@ -53,10 +53,10 @@
 #endif
 
 typedef struct {
-	FIFO_BUFFER_STORAGE FIFO_TYPE *buffer;
-	FIFO_SIZE_T size;
-	FIFO_BUFFER_STORAGE FIFO_TYPE *prius;
-	FIFO_BUFFER_STORAGE FIFO_TYPE *follower;
+  FIFO_BUFFER_STORAGE FIFO_TYPE *buffer;
+  FIFO_SIZE_T size;
+  FIFO_BUFFER_STORAGE FIFO_TYPE *prius;
+  FIFO_BUFFER_STORAGE FIFO_TYPE *follower;
 } FIFO_T(FIFO_TYPE);
 
 /* The mechanizm of the ring buffer.

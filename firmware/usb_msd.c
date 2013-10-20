@@ -39,8 +39,8 @@
 #include "util.h"
 #include "diskio.h"
 
-#define DIRECTION_IN	  0x80
-#define DIRECTION_OUT	0x00
+#define DIRECTION_IN   0x80
+#define DIRECTION_OUT  0x00
 
 #define CBW_SIGNATURE 0x43425355
 #define CSW_SIGNATURE 0x53425355
@@ -261,8 +261,8 @@ void msd_polling(){
       msd_csw.dCSWDataResidue.i = le_u32(scsi_residue);
       current = MSD_STATUS_TRANSPORT;
 
-		case MSD_STATUS_TRANSPORT:
-			if(usb_write((BYTE*)&msd_csw, sizeof(msd_csw_t), MSD_EP_IN)){
+    case MSD_STATUS_TRANSPORT:
+      if(usb_write((BYTE*)&msd_csw, sizeof(msd_csw_t), MSD_EP_IN)){
         current = MSD_READY;
       }
       break;

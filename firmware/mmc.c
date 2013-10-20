@@ -473,7 +473,7 @@ void mmc_init(){
   while(counter--){spi_write_read_byte(0xFF);}
   
   select_MMC(); 
- 	
+   
   wait_ms(1);
   
   /*

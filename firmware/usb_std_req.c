@@ -318,9 +318,9 @@ static void usb_Get_Descriptor(){
       ep0_Data_Ptr = (BYTE *)desc_config;
       ep0_Data_Size = desc_config->wTotalLength.i;
       break;
-	  case DSC_TYPE_STRING:
+    case DSC_TYPE_STRING:
       ep0_Data_Ptr = DESC_STRINGs[usb_setup_buf.wValue.c[LSB]];
-		  // Can have a maximum of 255 strings
+      // Can have a maximum of 255 strings
       ep0_Data_Size = *ep0_Data_Ptr;
       break;
     default:
@@ -421,7 +421,7 @@ static void usb_Set_Configuration(){
   
   // Any positive configuration request
   if(usb_setup_buf.wValue.c[LSB] > 0){
-  	
+    
     set_endpoints_configuration();
     
     // results in configuration being set to 1                                         

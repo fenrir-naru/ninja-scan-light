@@ -99,7 +99,7 @@ const __code endpoint_descriptor_t DESC_ENDPOINT4 = {
 const __code endpoint_descriptor_t DESC_ENDPOINT5 = {
   sizeof(endpoint_descriptor_t), // bLength
   DSC_TYPE_ENDPOINT,              // bDescriptorType
-  OUT_EP3,		                    // bEndpointAddress
+  OUT_EP3,                        // bEndpointAddress
   DSC_EP_BULK,                    // bmAttributes
   {PACKET_SIZE_EP3},              // MaxPacketSize
   0                               // bInterval

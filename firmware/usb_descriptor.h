@@ -43,7 +43,7 @@ typedef struct {
    BYTE bDescriptorType;        // Descriptor Type (=1)
    WORD bcdUSB;                 // USB Spec Release Number in BCD
    BYTE bDeviceClass;           // Device Class Code
-   BYTE bDeviceSubClass;        // Device Subclass Code	
+   BYTE bDeviceSubClass;        // Device Subclass Code  
    BYTE bDeviceProtocol;        // Device Protocol Code
    BYTE bMaxPacketSize0;        // Maximum Packet Size for EP0 
    WORD idVendor;               // Vendor ID 
@@ -61,7 +61,7 @@ typedef struct {
 typedef struct {
    BYTE bLength;                // Size of this Descriptor in Bytes
    BYTE bDescriptorType;        // Descriptor Type (=2)
-   WORD_t wTotalLength;           // Total Length of Data for this Conf
+   WORD_t wTotalLength;         // Total Length of Data for this Conf
    BYTE bNumInterfaces;         // No of Interfaces supported by this Conf
    BYTE bConfigurationValue;    // Designator Value for *this* Configuration
    BYTE iConfiguration;         // Index of String Desc for this Conf
@@ -92,7 +92,7 @@ typedef struct {
    BYTE bDescriptorType;        // Descriptor Type (=5)
    BYTE bEndpointAddress;       // Endpoint Address (Number + Direction)
    BYTE bmAttributes;           // Endpoint Attributes (Transfer Type)
-   WORD_t wMaxPacketSize;	        // Max. Endpoint Packet Size
+   WORD_t wMaxPacketSize;       // Max. Endpoint Packet Size
    BYTE bInterval;              // Polling Interval (Interrupt) ms
 } endpoint_descriptor_t;        // End of Endpoint Descriptor Type
 

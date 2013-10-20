@@ -173,7 +173,7 @@ static void read_capacity10(){
     DWORD_t lba;
     DWORD_t block_length;
   } __xdata read_capacity10_param;
-	
+  
   DWORD_t v;
   disk_ioctl(scsi_lun, GET_SECTOR_COUNT, (void *)&v);
   v.i--;
@@ -305,7 +305,7 @@ void setup_read_write(){
   
   // Case (2), (3)
   if(tf_length.i == 0){
-  	msd_action 
+    msd_action 
         = MSD_HOST_SIDE(msd_action) | MSD_DEVICE_NO_DATA;
     scsi_status = SCSI_PASSED;
     return;
