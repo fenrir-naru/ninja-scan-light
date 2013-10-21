@@ -41,23 +41,26 @@
 #include <string.h>
 
 enum command_t {
-  SCSI_TEST_UNIT_READY              = 0x00,
-  SCSI_REQUEST_SENSE                = 0x03,
-  SCSI_FORMAT_UNIT                  = 0x04,
-  SCSI_SEND_DIAGNOSTIC              = 0x10,
+  //SCSI_FORMAT_UNIT                  = 0x04,
   SCSI_INQUIRY                      = 0x12,
-  SCSI_MODE_SELECT_6                = 0x15,
-  SCSI_MODE_SENSE_6                 = 0x1A,
   SCSI_START_STOP_UNIT              = 0x1B,
+  //SCSI_MODE_SELECT_10               = 0x55,
+  SCSI_MODE_SENSE_6                 = 0x1A,
+  //SCSI_MODE_SENSE_10                = 0x5A,
   SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL = 0x1E,
-  SCSI_READ_CAPACITY_10             = 0x25,
-  SCSI_READ_CAPACITY_16             = 0x9E,
-  SCSI_READ_6                       = 0x08,
   SCSI_READ_10                      = 0x28,
-  SCSI_READ_16                      = 0x88,
-  SCSI_WRITE_10                     = 0x2A,
+  //SCSI_READ_12                      = 0xA8,
+  SCSI_READ_CAPACITY_10             = 0x25,
+  //SCSI_READ_FORMAT_CAPACITIES       = 0x23,
+  SCSI_REQUEST_SENSE                = 0x03,
+  //SCSI_REZERO_UNIT                  = 0x01,
+  //SCSI_SEEK_10                      = 0x2B,
+  //SCSI_SEND_DIAGNOSTIC              = 0x10,
+  SCSI_TEST_UNIT_READY              = 0x00,
   SCSI_VERIFY_10                    = 0x2F,
-  SCSI_READ_FORMAT_CAPACITIES       = 0x23,
+  SCSI_WRITE_10                     = 0x2A,
+  //SCSI_WRITE_12                     = 0xAA,
+  //SCSI_WRITE_VERIFY                 = 0x2E,
 };
 
 scsi_status_t scsi_status;
@@ -70,7 +73,7 @@ u16 __xdata scsi_block_size = 0;
 // Buffer for read/write transfers:
 static u8 __xdata scratch[512];
 
-static __code void (* __xdata pending_job)(void);
+static void (* __xdata pending_job)();
 
 static struct {
   u8 *buf;
@@ -294,11 +297,12 @@ static void write10(){
 }
 
 void setup_read_write(){
-#if (defined(__SDCC) || defined(SDCC))
-  WORD_t tf_length = {{msd_cbw.CBWCB[8]}, {msd_cbw.CBWCB[7]}};
-#else
-  // Big endian => Little endian
   WORD_t tf_length;
+#if (defined(__SDCC) || defined(SDCC))
+  // Big endian => Little endian
+  tf_length.c[0] = msd_cbw.CBWCB[8];
+  tf_length.c[1] = msd_cbw.CBWCB[7];
+#else
   tf_length.i = msd_cbw.CBWCB[7];
   tf_length.i <<= 8; tf_length.i |= msd_cbw.CBWCB[8];
 #endif
