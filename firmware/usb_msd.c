@@ -173,6 +173,7 @@ void msd_polling(){
           ep_in_stall = FALSE;
           ep_out_stall = FALSE;
           
+          // @see http://www.usb.org/developers/devclass_docs/usbmassbulk_10.pdf Table 6.1
           switch(msd_action){
             // case(2),(3)
             case (MSD_HOST_NO_DATA | MSD_DEVICE_RX):
