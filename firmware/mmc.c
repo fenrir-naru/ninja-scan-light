@@ -134,7 +134,7 @@ enum {
 };
 
 // MMC block length;  Set during initialization;
-__xdata unsigned int mmc_block_length = 0;
+__xdata unsigned short mmc_block_length = 0;
 
 // MMC block number;  Computed during initialization;
 __xdata unsigned long mmc_physical_sectors = 0;
@@ -216,14 +216,11 @@ static unsigned char _issue_command(
     __code command_t *current_command,
     unsigned long argument,
     unsigned char *pchar){
-
-  // current data block length;
-  static __xdata unsigned int current_blklen = 512;
   
   unsigned char counter;
   
   // Temp variable to preserve data block length during temporary changes;
-  unsigned int old_blklen;
+  unsigned short rw_block_length = mmc_block_length;
   
   // Variable for storing card res;
   unsigned char res;
@@ -250,19 +247,7 @@ static unsigned char _issue_command(
   // Issue command opcode;
   spi_write_read_byte(current_command->command_index | 0x40);
   
-  old_blklen = current_blklen;
   switch(current_command->command_index){
-    /*
-     * If current command changes block length, update block length variable
-     * to keep track;
-     * 
-     * Command byte = 16 means that a set block length command is taking place
-     * and block length variable must be set;
-     */
-    case 16:
-      current_blklen = argument;
-      break;
-    
     /*
      * Command byte = 9 or 10 means that a 16-byte register value is being read
      * from the card, block length must be set to 16 bytes, and restored at the
@@ -272,7 +257,7 @@ static unsigned char _issue_command(
      */
     case 9:
     case 10:
-      current_blklen = 16;
+      rw_block_length = 16;
       break;
     
     /*
@@ -373,7 +358,7 @@ static unsigned char _issue_command(
       spi_send_8clock();
       spi_write_read_byte(START_SBW);
       
-      spi_write(pchar, current_blklen);  // Write <current_blklen> bytes to MMC;
+      spi_write(pchar, rw_block_length);
       
       // Write CRC bytes (don't cares);
       spi_write_read_byte(0xFF);
@@ -412,7 +397,7 @@ static unsigned char _issue_command(
         }
       }while(1);
       
-      spi_read(pchar, current_blklen);
+      spi_read(pchar, rw_block_length);
     
       /*
        * After all data is read, read the two CRC bytes;
@@ -428,13 +413,6 @@ static unsigned char _issue_command(
   
   epilogue();
   
-  // Restore old block length if needed;
-  switch(current_command->command_index){
-    case 9:
-    case 10:
-      current_blklen = old_blklen;
-      break;
-  }
   return res;
 }
 
@@ -514,10 +492,6 @@ void mmc_init(){
       wait_us(50);
       if((++loopguard) > 0x1000){return;}
     }
-    /* Set R/W block length to 512 */
-    if(issue_command(SET_BLOCKLEN, (unsigned long)MMC_PHYSICAL_BLOCK_SIZE, NULL) != 0){
-      return;
-    }
   }
   
   /*
@@ -547,6 +521,16 @@ void mmc_init(){
       // Determine the number of MMC sectors;
       mmc_physical_sectors = (unsigned long)(c_size+1)*(1 << (c_mult+2));
       
+      if(mmc_block_length > MMC_PHYSICAL_BLOCK_SIZE){
+        /* Set R/W block length to 512 */
+        if(issue_command(SET_BLOCKLEN, (unsigned long)MMC_PHYSICAL_BLOCK_SIZE, NULL) != 0){
+          return;
+        }
+        do{
+          mmc_block_length >>= 1;
+          mmc_physical_sectors <<= 1;
+        }while(mmc_block_length > MMC_PHYSICAL_BLOCK_SIZE);
+      }
       break;
     }
     default:
