@@ -29,14 +29,14 @@
  * 
  */
 
-#ifndef  _USB_DESC_H_
-#define  _USB_DESC_H_
+#ifndef  _USB_DESCRIPTOR_H_
+#define  _USB_DESCRIPTOR_H_
 
 #include "type.h"
 #include "f38x_usb.h"
 
 /**
- * Standard Device Descriptor Type Defintion
+ * Standard Device Descriptor Type Definition
  */
 typedef struct {
    BYTE bLength;                // Size of this Descriptor in Bytes
@@ -139,15 +139,11 @@ typedef struct {
 #define SET_IDLE        0x0A   // Code for Set Idle
 #define SET_PROTOCOL    0x0B   // Code for Set Protocol
 
-// These are created in F34x_USB_Descriptor.c
+// These are created in usb_descriptor.c
 extern const device_descriptor_t DESC_DEVICE;
 extern const configuration_descriptor_t DESC_CONFIG;
 extern __code BYTE * __code DESC_STRINGs[4];
-
-#if (!defined(DEBUG_MSC_ONLY)) && (!defined(DEBUG_CDC_ONLY))
 extern const device_descriptor_t DESC2_DEVICE;
 extern const configuration_descriptor_t DESC2_CONFIG;
 
-#endif
-
-#endif  /* _USB_DESC_H_ */
+#endif  /* _USB_DESCRIPTOR_H_ */
