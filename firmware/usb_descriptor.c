@@ -39,9 +39,13 @@
 #define DESC_DEVICE_bcdDevice     0x0000
 #define DESC_DEVICE_iManufacturer 0x01
 #define DESC_DEVICE_iProduct      0x02
-#define DESC_DEVICE_iSerialNumber 0x03
 #define DESC_DEVICE_idVendor      0x10C4 
+#define DESC_DEVICE_idProduct     0x0000
 
+/*
+ * Descriptor Declarations 1
+ * for MSC, when MicroSD is inserted.
+ */ 
 const __code device_descriptor_t DESC_DEVICE = {
   sizeof(device_descriptor_t),   // bLength(0x12)
   DSC_TYPE_DEVICE,                // bDescriptorType
@@ -51,18 +55,18 @@ const __code device_descriptor_t DESC_DEVICE = {
   0x00,                           // bDeviceProtocol
   PACKET_SIZE_EP0,                // bMaxPacketSize0
   {DESC_DEVICE_idVendor},         // idVendor
-  {0x0200},                       // idProduct(M)
+  {0x0200/*DESC_DEVICE_idProduct*/},        // idProduct
   {DESC_DEVICE_bcdDevice},        // bcdDevice
   DESC_DEVICE_iManufacturer,      // iManufacturer
   DESC_DEVICE_iProduct,           // iProduct
-  DESC_DEVICE_iSerialNumber,      // iSerialNumber
+  0x03,                           // iSerialNumber
   0x01                            // bNumConfigurations
 }; //end of DEVICE
 
 #define DESC_CONFIG_bConfigurationValue 0x01                               
 #define DESC_CONFIG_iConfiguration      0x00
 #define DESC_CONFIG_bmAttributes        0x80
-#define DESC_CONFIG_MaxPower            0x0F
+#define DESC_CONFIG_MaxPower            0xFA // 500mA
 
 const __code configuration_descriptor_t DESC_CONFIG = {
   sizeof(configuration_descriptor_t),// Length(0x09)
@@ -75,7 +79,7 @@ const __code configuration_descriptor_t DESC_CONFIG = {
   DESC_CONFIG_MaxPower                // MaxPower
 }; //end of CONFIG
 
-const __code interface_descriptor_t DESC_INTERFACE3 = {
+const __code interface_descriptor_t DESC_INTERFACE1 = {
   sizeof(interface_descriptor_t),  // bLength
   DSC_TYPE_INTERFACE,               // bDescriptorType
   0x00,                             // (for MSC only)
@@ -87,7 +91,7 @@ const __code interface_descriptor_t DESC_INTERFACE3 = {
   0x00                              // iInterface
 }; //end of INTERFACE3
 
-const __code endpoint_descriptor_t DESC_ENDPOINT4 = {
+const __code endpoint_descriptor_t DESC_ENDPOINT1 = {
   sizeof(endpoint_descriptor_t), // bLength
   DSC_TYPE_ENDPOINT,              // bDescriptorType
   IN_EP3,                         // bEndpointAddress
@@ -96,7 +100,7 @@ const __code endpoint_descriptor_t DESC_ENDPOINT4 = {
   0                               // bInterval
 }; //end of ENDPOINT4
 
-const __code endpoint_descriptor_t DESC_ENDPOINT5 = {
+const __code endpoint_descriptor_t DESC_ENDPOINT2 = {
   sizeof(endpoint_descriptor_t), // bLength
   DSC_TYPE_ENDPOINT,              // bDescriptorType
   OUT_EP3,                        // bEndpointAddress
@@ -105,74 +109,10 @@ const __code endpoint_descriptor_t DESC_ENDPOINT5 = {
   0                               // bInterval
 }; //end of ENDPOINT5
 
-#define STR0LEN 4
-const __code BYTE DESC_STRING0[STR0LEN] = {
-  STR0LEN, 0x03, 0x09, 0x04
-}; //end of String0_Desc
-
-#define STR1LEN sizeof("naruoka.org")*2
-
-const __code  BYTE DESC_STRING1[STR1LEN] = {
-  STR1LEN, 0x03,
-  'n', 0,
-  'a', 0,
-  'r', 0,
-  'u', 0,
-  'o', 0,
-  'k', 0,
-  'a', 0,
-  '.', 0,
-  'o', 0,
-  'r', 0,
-  'g', 0,
-}; //end of String1_Desc
-
-#define STR2LEN sizeof("NAV4_C8051")*2
-
-const __code BYTE DESC_STRING2[STR2LEN] = {
-  STR2LEN, 0x03,
-  'N', 0,
-  'A', 0,
-  'V', 0,
-  '4', 0,
-  '_', 0,
-  'C', 0,
-  '8', 0,
-  '0', 0,
-  '5', 0,
-  '1', 0,
-}; //end of String2_Desc
-
-#define STR3LEN sizeof("ORIGINAL")*2
-
-const __code BYTE DESC_STRING3[STR3LEN] = {
-  STR3LEN, 0x03,
-  'O', 0,
-  'R', 0,
-  'I', 0,
-  'G', 0,
-  'I', 0,
-  'N', 0,
-  'A', 0,
-  'L', 0,
-}; //end of String2_Desc
-
-// code上に作ったcode pointerの配列参照をしようとすると、なぜか配列がidataに存在するようにコンパイルされる
-// xdata上に作ってもidataを参照してしまう
-// ･･･と思ったら、USB_Std_Req.cにexternがあることに気づかなかった
-__code BYTE * __code DESC_STRINGs[4] = {
-  DESC_STRING0,
-  DESC_STRING1,
-  DESC_STRING2,
-  DESC_STRING3
-};
-
-
-// SDをはずした際はCDCデバイスのみとして機能するようにする
-
-//---------------------------
-// Descriptor Declarations 2
-//---------------------------
+/*
+ * Descriptor Declarations 2
+ * for CDC-ACM, when MicroSD is not inserted.
+ */ 
 const __code device_descriptor_t DESC2_DEVICE = {
   sizeof(device_descriptor_t),   // bLength(0x12)
   DSC_TYPE_DEVICE,                // bDescriptorType
@@ -187,17 +127,18 @@ const __code device_descriptor_t DESC2_DEVICE = {
   0x00,                           // bDeviceProtocol
 #endif
   PACKET_SIZE_EP0,                // bMaxPacketSize0
-  {DESC_DEVICE_idVendor},         // idVendor
 #ifndef CDC_IS_REPLACED_BY_FTDI
-  {0x0198},                       // idProduct(C)
+  {DESC_DEVICE_idVendor},         // idVendor
+  {0x0198/*DESC_DEVICE_idProduct*/},        // idProduct
   {DESC_DEVICE_bcdDevice},        // bcdDevice
 #else
-  {0x0196},                       // idProduct(C(FTDI))
-  {0x0600},                       // bcdDevice(FT232R)
+  {0x0403},                       // idVendor  => FTDI
+  {0x6001},                       // idProduct => FT232R
+  {0x0600},                       // bcdDevice => (FT232R)
 #endif
   DESC_DEVICE_iManufacturer,      // iManufacturer
   DESC_DEVICE_iProduct,           // iProduct
-  DESC_DEVICE_iSerialNumber,      // iSerialNumber
+  0x04,                           // iSerialNumber
   0x01                            // bNumConfigurations
 }; //end of DEVICE
 
@@ -310,3 +251,62 @@ const __code endpoint_descriptor_t DESC2_ENDPOINT3 = {
   0                               // bInterval
 }; //end of ENDPOINT3
 
+const __code  BYTE DESC_STRING1[] = {
+  sizeof(DESC_STRING1), DSC_TYPE_STRING,
+  'n', 0,
+  'a', 0,
+  'r', 0,
+  'u', 0,
+  'o', 0,
+  'k', 0,
+  'a', 0,
+  '.', 0,
+  'o', 0,
+  'r', 0,
+  'g', 0,
+}; //end of String1_Desc
+
+const __code BYTE DESC_STRING2[] = {
+  sizeof(DESC_STRING2), DSC_TYPE_STRING,
+  'N', 0,
+  'i', 0,
+  'n', 0,
+  'j', 0,
+  'a', 0,
+  'S', 0,
+  'c', 0,
+  'a', 0,
+  'n', 0,
+  'L', 0,
+}; //end of String2_Desc
+
+const __code BYTE DESC_STRING3[] = {
+  sizeof(DESC_STRING3), DSC_TYPE_STRING,
+  'M', 0,
+  'S', 0,
+  'C', 0,
+  '.', 0,
+  'X', 0,
+  'X', 0,
+  'X', 0,
+  'X', 0,
+}; //end of String3_Desc
+
+const __code BYTE DESC_STRING4[] = {
+  sizeof(DESC_STRING4), DSC_TYPE_STRING, 
+  'C', 0,
+  'D', 0,
+  'C', 0,
+  '.', 0,
+  'X', 0,
+  'X', 0,
+  'X', 0,
+  'X', 0,
+}; //end of String4_Desc
+
+const __code BYTE * __code DESC_STRINGs[4] = {
+  DESC_STRING1,
+  DESC_STRING2,
+  DESC_STRING3,
+  DESC_STRING4,
+};

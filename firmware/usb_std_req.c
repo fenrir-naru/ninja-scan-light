@@ -334,7 +334,8 @@ static void get_descriptor(){
       ep0_data.size = desc_config->wTotalLength.i;
       break;
     case DSC_TYPE_STRING:
-      ep0_data.buf = DESC_STRINGs[ep0_setup.wValue.c[LSB]];
+      if(ep0_setup.wValue.c[LSB] == 0){return;}
+      ep0_data.buf = DESC_STRINGs[ep0_setup.wValue.c[LSB]-1];
       // Can have a maximum of 255 strings
       ep0_data.size = *ep0_data.buf;
       break;

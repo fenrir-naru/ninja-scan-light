@@ -142,8 +142,8 @@ typedef struct {
 // These are created in usb_descriptor.c
 extern const device_descriptor_t DESC_DEVICE;
 extern const configuration_descriptor_t DESC_CONFIG;
-extern __code BYTE * __code DESC_STRINGs[4];
 extern const device_descriptor_t DESC2_DEVICE;
 extern const configuration_descriptor_t DESC2_CONFIG;
+extern const __code BYTE * __code DESC_STRINGs[4];
 
 #endif  /* _USB_DESCRIPTOR_H_ */
