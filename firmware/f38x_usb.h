@@ -158,8 +158,8 @@ typedef enum {
   USB_CABLE_CONNECTED,
   USB_CDC_READY,
   USB_CDC_ACTIVE,
-  USB_MSD_READY,
-  USB_MSD_ACTIVE,
+  USB_MSC_READY,
+  USB_MSC_ACTIVE,
 } usb_mode_t;
 extern volatile usb_mode_t usb_mode;
 

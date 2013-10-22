@@ -144,7 +144,7 @@ extern const device_descriptor_t DESC_DEVICE;
 extern const configuration_descriptor_t DESC_CONFIG;
 extern __code BYTE * __code DESC_STRINGs[4];
 
-#if (!defined(DEBUG_MSD_ONLY)) && (!defined(DEBUG_CDC_ONLY))
+#if (!defined(DEBUG_MSC_ONLY)) && (!defined(DEBUG_CDC_ONLY))
 extern const device_descriptor_t DESC2_DEVICE;
 extern const configuration_descriptor_t DESC2_CONFIG;
 

@@ -158,7 +158,7 @@ void data_hub_polling() {
       }
       log_func = log_to_host;
       break;
-    case USB_MSD_ACTIVE:
+    case USB_MSC_ACTIVE:
       if(log_file_opened){
         log_file_opened = FALSE;
         f_close(&file);

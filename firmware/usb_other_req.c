@@ -35,18 +35,18 @@
 #include "usb_other_req.h"
 #include "usb_descriptor.h"
 #include "usb_cdc.h"
-#include "usb_msd.h"
+#include "usb_msc.h"
 
 void usb_class_init(){
-  usb_MSD_init();
+  usb_MSC_init();
 }
 
 void usb_class_request(){
   if(ep0_setup.wIndex.i > 0){return;}
   switch(usb_mode){
-    case USB_MSD_READY:
-    case USB_MSD_ACTIVE:
-      usb_MSD_req();
+    case USB_MSC_READY:
+    case USB_MSC_ACTIVE:
+      usb_MSC_req();
       break;
 #ifndef CDC_IS_REPLACED_BY_FTDI
     case USB_CDC_READY:

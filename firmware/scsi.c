@@ -33,7 +33,7 @@
 
 #include "scsi.h"
 
-#include "usb_msd.h"
+#include "usb_msc.h"
 #include "util.h"
 
 #include "diskio.h"
@@ -82,7 +82,7 @@ static struct {
 
 static void scsi_tx_1packet(){
   u8 write_count;
-  if((write_count = usb_write(tx_data.buf, tx_data.size, MSD_EP_IN)) > 0){
+  if((write_count = usb_write(tx_data.buf, tx_data.size, MSC_EP_IN)) > 0){
     scsi_residue -= write_count;
     if(tx_data.size -= write_count){
       tx_data.buf += write_count;
@@ -111,7 +111,7 @@ static void scsi_tx_short(u8* ptr, unsigned count){
   
   tx_data.buf = ptr;
   
-  msd_action |= MSD_DEVICE_TX;
+  msc_action |= MSC_DEVICE_TX;
   pending_job = scsi_tx_1packet;
   scsi_status = SCSI_PENDING;
 }
@@ -254,7 +254,7 @@ static void read10(){
     write_count = usb_write( 
         scratch + scsi_target.byte_in_block, 
         write_count,
-        MSD_EP_IN);
+        MSC_EP_IN);
     scsi_target.byte_in_block += write_count;
     scsi_residue -= write_count;
   }
@@ -290,7 +290,7 @@ static void write10(){
     read_count = usb_read(
         scratch + scsi_block_size - scsi_target.byte_in_block, 
         read_count,
-        MSD_EP_OUT); 
+        MSC_EP_OUT); 
     scsi_target.byte_in_block -= read_count;
     scsi_residue -= read_count;
   }
@@ -300,32 +300,32 @@ void setup_read_write(){
   WORD_t tf_length;
 #if (defined(__SDCC) || defined(SDCC))
   // Big endian => Little endian
-  tf_length.c[0] = msd_cbw.CBWCB[8];
-  tf_length.c[1] = msd_cbw.CBWCB[7];
+  tf_length.c[0] = msc_cbw.CBWCB[8];
+  tf_length.c[1] = msc_cbw.CBWCB[7];
 #else
-  tf_length.i = msd_cbw.CBWCB[7];
-  tf_length.i <<= 8; tf_length.i |= msd_cbw.CBWCB[8];
+  tf_length.i = msc_cbw.CBWCB[7];
+  tf_length.i <<= 8; tf_length.i |= msc_cbw.CBWCB[8];
 #endif
   
   // Case (2), (3)
   if(tf_length.i == 0){
-    msd_action 
-        = MSD_HOST_SIDE(msd_action) | MSD_DEVICE_NO_DATA;
+    msc_action 
+        = MSC_HOST_SIDE(msc_action) | MSC_DEVICE_NO_DATA;
     scsi_status = SCSI_PASSED;
     return;
   }
   
 #if (defined(__SDCC) || defined(SDCC))
   // Big endian => Little endian
-  scsi_target.d_LBA.c[0] = msd_cbw.CBWCB[5];
-  scsi_target.d_LBA.c[1] = msd_cbw.CBWCB[4];
-  scsi_target.d_LBA.c[2] = msd_cbw.CBWCB[3];
-  scsi_target.d_LBA.c[3] = msd_cbw.CBWCB[2];
+  scsi_target.d_LBA.c[0] = msc_cbw.CBWCB[5];
+  scsi_target.d_LBA.c[1] = msc_cbw.CBWCB[4];
+  scsi_target.d_LBA.c[2] = msc_cbw.CBWCB[3];
+  scsi_target.d_LBA.c[3] = msc_cbw.CBWCB[2];
 #else
-  scsi_target.d_LBA.i = msd_cbw.CBWCB[2];
-  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msd_cbw.CBWCB[3];
-  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msd_cbw.CBWCB[4];
-  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msd_cbw.CBWCB[5];
+  scsi_target.d_LBA.i = msc_cbw.CBWCB[2];
+  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msc_cbw.CBWCB[3];
+  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msc_cbw.CBWCB[4];
+  scsi_target.d_LBA.i <<= 8; scsi_target.d_LBA.i |= msc_cbw.CBWCB[5];
 #endif
   
   scsi_target.blocks = (scsi_residue + scsi_block_size - 1) / scsi_block_size;
@@ -352,7 +352,7 @@ void setup_read_write(){
  * 
  */
 void scsi_setup(){
-  switch((enum command_t)(msd_cbw.CBWCB[0])) { // SCSI Operation code
+  switch((enum command_t)(msc_cbw.CBWCB[0])) { // SCSI Operation code
     case SCSI_INQUIRY:
       inquiry();
       break;
@@ -368,13 +368,13 @@ void scsi_setup(){
       
     case SCSI_READ_10:
       pending_job = read10;
-      msd_action |= MSD_DEVICE_TX;
+      msc_action |= MSC_DEVICE_TX;
       setup_read_write();
       break;
       
     case SCSI_WRITE_10:
       pending_job = write10;
-      msd_action |= MSD_DEVICE_RX;
+      msc_action |= MSC_DEVICE_RX;
       setup_read_write();
       break;
       
@@ -382,7 +382,7 @@ void scsi_setup(){
     case SCSI_TEST_UNIT_READY:
     case SCSI_START_STOP_UNIT:
     case SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL:
-      msd_action |= MSD_DEVICE_NO_DATA;
+      msc_action |= MSC_DEVICE_NO_DATA;
       scsi_status = SCSI_PASSED;
       break;
   }

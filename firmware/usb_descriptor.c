@@ -33,7 +33,7 @@
 #include "usb_descriptor.h"
 
 #include "usb_cdc.h"
-#include "usb_msd.h"
+#include "usb_msc.h"
 
 #define DESC_DEVICE_bcdUSB        0x0200
 #define DESC_DEVICE_bcdDevice     0x0000
@@ -78,7 +78,7 @@ const __code configuration_descriptor_t DESC_CONFIG = {
 const __code interface_descriptor_t DESC_INTERFACE3 = {
   sizeof(interface_descriptor_t),  // bLength
   DSC_TYPE_INTERFACE,               // bDescriptorType
-  0x00,                             // (for MSD only)
+  0x00,                             // (for MSC only)
   0x00,                             // bAlternateSetting
   0x02,                             // bNumEndpoints
   0x08,                             // bInterfaceClass // MASS STORAGE DEVICE 

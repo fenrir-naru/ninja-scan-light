@@ -319,7 +319,7 @@ static void get_descriptor(){
         desc_device = &DESC_DEVICE;
         desc_config = &DESC_CONFIG;
         usb_sof = NULL;
-        usb_mode = USB_MSD_READY;
+        usb_mode = USB_MSC_READY;
       }else{
         desc_device = &DESC2_DEVICE;
         desc_config = &DESC2_CONFIG;

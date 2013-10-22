@@ -41,7 +41,7 @@
 #include "usb_std_req.h"
 #include "usb_other_req.h"
 
-#include "usb_msd.h"
+#include "usb_msc.h"
 #include "usb_cdc.h"
 
 // Holds the current USB State
@@ -726,11 +726,11 @@ void usb_polling(){
     case USB_CDC_ACTIVE:
       cdc_polling();
       break;
-    case USB_MSD_READY:
-      usb_mode = USB_MSD_ACTIVE;
+    case USB_MSC_READY:
+      usb_mode = USB_MSC_ACTIVE;
       break;
-    case USB_MSD_ACTIVE:
-      msd_polling();
+    case USB_MSC_ACTIVE:
+      msc_polling();
       break;
   }
   
