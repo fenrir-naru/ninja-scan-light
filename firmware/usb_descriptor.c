@@ -39,8 +39,7 @@
 #define DESC_DEVICE_bcdDevice     0x0000
 #define DESC_DEVICE_iManufacturer 0x01
 #define DESC_DEVICE_iProduct      0x02
-#define DESC_DEVICE_idVendor      0x10C4 
-#define DESC_DEVICE_idProduct     0x0000
+#define DESC_DEVICE_idVendor      0x10C4 // Silicon Laboratories
 
 /*
  * Descriptor Declarations 1
@@ -55,7 +54,7 @@ const __code device_descriptor_t DESC_DEVICE = {
   0x00,                           // bDeviceProtocol
   PACKET_SIZE_EP0,                // bMaxPacketSize0
   {DESC_DEVICE_idVendor},         // idVendor
-  {0x0200/*DESC_DEVICE_idProduct*/},        // idProduct
+  {0x8911},                       // idProduct
   {DESC_DEVICE_bcdDevice},        // bcdDevice
   DESC_DEVICE_iManufacturer,      // iManufacturer
   DESC_DEVICE_iProduct,           // iProduct
@@ -129,7 +128,7 @@ const __code device_descriptor_t DESC2_DEVICE = {
   PACKET_SIZE_EP0,                // bMaxPacketSize0
 #ifndef CDC_IS_REPLACED_BY_FTDI
   {DESC_DEVICE_idVendor},         // idVendor
-  {0x0198/*DESC_DEVICE_idProduct*/},        // idProduct
+  {0x8912},                       // idProduct
   {DESC_DEVICE_bcdDevice},        // bcdDevice
 #else
   {0x0403},                       // idVendor  => FTDI
@@ -278,6 +277,10 @@ const __code BYTE DESC_STRING2[] = {
   'a', 0,
   'n', 0,
   'L', 0,
+  'i', 0,
+  'g', 0,
+  'h', 0,
+  't', 0,
 }; //end of String2_Desc
 
 const __code BYTE DESC_STRING3[] = {

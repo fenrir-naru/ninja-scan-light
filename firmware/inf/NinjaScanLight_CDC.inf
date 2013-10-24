@@ -38,7 +38,7 @@ DefaultDestDir=12
 ;------------------------------------------
 
 [MYCORP]
-%MYDEV000%=MYDEV000,USB\VID_10C4&PID_0198
+%MYDEV000%=MYDEV000,USB\VID_10C4&PID_8912
 
 [MYDEV000.NT]
 include=mdmcpq.inf
