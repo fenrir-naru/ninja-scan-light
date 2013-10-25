@@ -58,7 +58,7 @@ AddService = usbser, 0x00000002, Service_Inst
 ;------------------------------------------
 
 [MYCORP.NTamd64]
-%MYDEV000%=MYDEV000,USB\VID_10C4&PID_0198
+%MYDEV000%=MYDEV000,USB\VID_10C4&PID_8912
 
 [MYDEV000.NTamd64]
 include=mdmcpq.inf
