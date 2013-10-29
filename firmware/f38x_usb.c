@@ -44,6 +44,8 @@
 #include "usb_msc.h"
 #include "usb_cdc.h"
 
+#include "util.h"
+
 // Holds the current USB State
 usb_state_t usb_state;
 
@@ -503,7 +505,14 @@ void usb0_init(){
 #endif /* _USB_LOW_SPEED_ */
 
   reset();
-  usb_mode = USB_INACTIVE;
+
+  if(REG01CN & 0x40){
+    usb_mode = USB_CABLE_CONNECTED;
+    EIE1 |= 0x02; // Enable USB0 Interrupts
+    wait_ms(100);
+  }else{
+    usb_mode = USB_INACTIVE;
+  }
 }
 
 void (* __xdata usb_sof)();
