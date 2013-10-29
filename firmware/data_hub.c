@@ -97,6 +97,8 @@ void data_hub_init(){
   log_file_opened = FALSE;
   free_page = locked_page = payload_buf;
   log_block_size = PAGE_SIZE;
+
+  disk_initialize(0);
 }
 
 static u16 log_to_file(){

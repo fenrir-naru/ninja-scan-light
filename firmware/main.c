@@ -44,7 +44,6 @@
 
 #include "data_hub.h"
 
-#include "diskio.h"
 #include "gps.h"
 #include "mpu6000.h"
 #include "mag3110.h"
@@ -77,8 +76,6 @@ void main() {
   data_hub_init();
   
   EA = 1; // Global Interrupt enable
-  
-  disk_initialize(0);
   
   gps_init();
   
