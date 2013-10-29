@@ -41,26 +41,26 @@
 #include <string.h>
 
 enum command_t {
-  //SCSI_FORMAT_UNIT                  = 0x04,
-  SCSI_INQUIRY                      = 0x12,
-  SCSI_START_STOP_UNIT              = 0x1B,
-  //SCSI_MODE_SELECT_10               = 0x55,
-  SCSI_MODE_SENSE_6                 = 0x1A,
-  //SCSI_MODE_SENSE_10                = 0x5A,
-  SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL = 0x1E,
-  SCSI_READ_10                      = 0x28,
-  //SCSI_READ_12                      = 0xA8,
-  SCSI_READ_CAPACITY_10             = 0x25,
-  //SCSI_READ_FORMAT_CAPACITIES       = 0x23,
-  SCSI_REQUEST_SENSE                = 0x03,
-  //SCSI_REZERO_UNIT                  = 0x01,
-  //SCSI_SEEK_10                      = 0x2B,
-  //SCSI_SEND_DIAGNOSTIC              = 0x10,
-  SCSI_TEST_UNIT_READY              = 0x00,
-  SCSI_VERIFY_10                    = 0x2F,
-  SCSI_WRITE_10                     = 0x2A,
-  //SCSI_WRITE_12                     = 0xAA,
-  //SCSI_WRITE_VERIFY                 = 0x2E,
+  //FORMAT_UNIT                  = 0x04,
+  INQUIRY                      = 0x12,
+  START_STOP_UNIT              = 0x1B,
+  //MODE_SELECT_10               = 0x55,
+  MODE_SENSE_6                 = 0x1A,
+  //MODE_SENSE_10                = 0x5A,
+  PREVENT_ALLOW_MEDIUM_REMOVAL = 0x1E,
+  READ_10                      = 0x28,
+  //READ_12                      = 0xA8,
+  READ_CAPACITY_10             = 0x25,
+  READ_FORMAT_CAPACITIES       = 0x23,
+  REQUEST_SENSE                = 0x03,
+  //REZERO_UNIT                  = 0x01,
+  //SEEK_10                      = 0x2B,
+  //SEND_DIAGNOSTIC              = 0x10,
+  TEST_UNIT_READY              = 0x00,
+  VERIFY_10                    = 0x2F,
+  WRITE_10                     = 0x2A,
+  //WRITE_12                     = 0xAA,
+  //WRITE_VERIFY                 = 0x2E,
 };
 
 scsi_status_t scsi_status;
@@ -166,16 +166,21 @@ static void request_sense(){
       sizeof(request_sense_response));
 }
 
+static __xdata struct {
+  unsigned char reserved[3];
+  unsigned char capacity_list_length; // in byte
+  struct {
+    DWORD_t lba;
+    DWORD_t block_length;
+  } read_capacity10_param;
+} read_format_capacities_param = {
+    {0x00, 0x00, 0x00}, sizeof(read_format_capacities_param.read_capacity10_param)};
+
 /**
  * This function responses to capacity informations request
  * 
  */
 static void read_capacity10(){
-  
-  static struct {
-    DWORD_t lba;
-    DWORD_t block_length;
-  } __xdata read_capacity10_param;
   
   DWORD_t v;
   disk_ioctl(scsi_lun, GET_SECTOR_COUNT, (void *)&v);
@@ -183,23 +188,49 @@ static void read_capacity10(){
   
 #if (defined(__SDCC) || defined(SDCC))
   // Little endian => Big endian
-  read_capacity10_param.lba.c[3] = v.c[0];
-  read_capacity10_param.lba.c[2] = v.c[1];
-  read_capacity10_param.lba.c[1] = v.c[2];
-  read_capacity10_param.lba.c[0] = v.c[3];
+  read_format_capacities_param.read_capacity10_param.lba.c[3] = v.c[0];
+  read_format_capacities_param.read_capacity10_param.lba.c[2] = v.c[1];
+  read_format_capacities_param.read_capacity10_param.lba.c[1] = v.c[2];
+  read_format_capacities_param.read_capacity10_param.lba.c[0] = v.c[3];
   v.i = scsi_block_size;
-  read_capacity10_param.block_length.c[3] = v.c[0];
-  read_capacity10_param.block_length.c[2] = v.c[1];
-  read_capacity10_param.block_length.c[1] = v.c[2];
-  read_capacity10_param.block_length.c[0] = v.c[3];
+  read_format_capacities_param.read_capacity10_param.block_length.c[3] = v.c[0];
+  read_format_capacities_param.read_capacity10_param.block_length.c[2] = v.c[1];
+  read_format_capacities_param.read_capacity10_param.block_length.c[1] = v.c[2];
+  read_format_capacities_param.read_capacity10_param.block_length.c[0] = v.c[3];
 #else
-  read_capacity10_param.lba.i = be_u32(v.i);
-  read_capacity10_param.block_length.i = be_u32((u32)scsi_block_size);
+  read_format_capacities_param.read_capacity10_param.lba.i = be_u32(v.i);
+  read_format_capacities_param.read_capacity10_param.block_length.i = be_u32((u32)scsi_block_size);
 #endif
 
   scsi_tx_short(
-      (u8 *)&read_capacity10_param,
-      sizeof(read_capacity10_param));
+      (u8 *)&read_format_capacities_param.read_capacity10_param,
+      sizeof(read_format_capacities_param.read_capacity10_param));
+}
+
+static void read_format_capacities(){
+
+  DWORD_t v;
+  disk_ioctl(scsi_lun, GET_SECTOR_COUNT, (void *)&v);
+
+#if (defined(__SDCC) || defined(SDCC))
+  // Little endian => Big endian
+  read_format_capacities_param.read_capacity10_param.lba.c[3] = v.c[0];
+  read_format_capacities_param.read_capacity10_param.lba.c[2] = v.c[1];
+  read_format_capacities_param.read_capacity10_param.lba.c[1] = v.c[2];
+  read_format_capacities_param.read_capacity10_param.lba.c[0] = v.c[3];
+  v.i = scsi_block_size;
+  read_format_capacities_param.read_capacity10_param.block_length.c[3] = v.c[0];
+  read_format_capacities_param.read_capacity10_param.block_length.c[2] = v.c[1];
+  read_format_capacities_param.read_capacity10_param.block_length.c[1] = v.c[2];
+#else
+  read_format_capacities_param.read_capacity10_param.lba.i = be_u32(v.i);
+  read_format_capacities_param.read_capacity10_param.block_length.i = be_u32((u32)scsi_block_size);
+#endif
+  read_format_capacities_param.read_capacity10_param.block_length.c[0] = 0x02; // Formatted media
+
+  scsi_tx_short(
+      (u8 *)&read_format_capacities_param,
+      sizeof(read_format_capacities_param));
 }
 
 /**
@@ -353,35 +384,35 @@ void setup_read_write(){
  */
 void scsi_setup(){
   switch((enum command_t)(msc_cbw.CBWCB[0])) { // SCSI Operation code
-    case SCSI_INQUIRY:
+    case INQUIRY:
       inquiry();
       break;
-    case SCSI_REQUEST_SENSE:
+    case REQUEST_SENSE:
       request_sense();
       break;
-    case SCSI_MODE_SENSE_6:
+    case MODE_SENSE_6:
       mode_sense6();
       break;
-    case SCSI_READ_CAPACITY_10:
+    case READ_CAPACITY_10:
       read_capacity10();
       break;
-      
-    case SCSI_READ_10:
+    case READ_FORMAT_CAPACITIES:
+      read_format_capacities();
+      break;
+    case READ_10:
       pending_job = read10;
       msc_action |= MSC_DEVICE_TX;
       setup_read_write();
       break;
-      
-    case SCSI_WRITE_10:
+    case WRITE_10:
       pending_job = write10;
       msc_action |= MSC_DEVICE_RX;
       setup_read_write();
       break;
-      
-    case SCSI_VERIFY_10:
-    case SCSI_TEST_UNIT_READY:
-    case SCSI_START_STOP_UNIT:
-    case SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL:
+    case VERIFY_10:
+    case TEST_UNIT_READY:
+    case START_STOP_UNIT:
+    case PREVENT_ALLOW_MEDIUM_REMOVAL:
       msc_action |= MSC_DEVICE_NO_DATA;
       scsi_status = SCSI_PASSED;
       break;
