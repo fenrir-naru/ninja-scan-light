@@ -317,7 +317,7 @@ time_t gps_std_time(time_t *timer) {
 __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
-typedef enum {NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, UNKNOWN} packet_type_t;
+typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, UNKNOWN} packet_type_t;
 
 #define UBX_SAT_MAX_ID 32
 static void make_packet(packet_t *packet){
@@ -361,6 +361,7 @@ static void make_packet(packet_t *packet){
         switch(ubx_state.ck_a){
           case 0x01:
             switch(c){
+              case 0x06: ubx_state.packet_type = NAV_SOL; break;
               case 0x20: ubx_state.packet_type = NAV_TIMEGPS; break;
               case 0x21: ubx_state.packet_type = NAV_TIMEUTC; break;
             }
@@ -381,7 +382,7 @@ static void make_packet(packet_t *packet){
       default: {
         if(ubx_state.index == ubx_state.size){
           if(ubx_state.ck_b == c){ // correct checksum
-            if(ubx_state.packet_type == RXM_RAW){
+            if(ubx_state.packet_type == (GPS_TIME_FROM_RAW_DATA ? RXM_RAW : NAV_SOL)){
               gps_ms = ((gps_ms / 1000) + 1) * 1000;
               if(gps_ms >= (u32)60 * 60 * 24 * 7 * 1000){
                 gps_ms = 0;
@@ -432,6 +433,7 @@ static void make_packet(packet_t *packet){
                 case 26: if((c & 0x03) == 0x03){gps_utc_valid = TRUE;} break;
               }
               break;
+#if GPS_TIME_FROM_RAW_DATA // switch for gps_time source, RXM_RAW or NAV_SOL
             case RXM_RAW:
               switch(ubx_state.index){
                 case 7:
@@ -449,6 +451,25 @@ static void make_packet(packet_t *packet){
                   break;
               }
               break;
+#else
+            case NAV_SOL:
+              switch(ubx_state.index){
+                case 7:
+                case 8:
+                case 9:
+                case 10:
+                  *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
+                  break;
+                case 15:
+                case 16:
+                  *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 15))) = c;
+                  break;
+                case 54:
+                  gps_num_of_sat = c;
+                  break;
+              }
+              break;
+#endif
           }
         }
         break; 
