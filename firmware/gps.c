@@ -86,18 +86,18 @@ static void gps_packet_write(char *packet, int packet_size){
 )
 
 #define expand_16(x) \
-((x) & 0xFF), \
-((x) >> 8) & 0xFF
+((u16)(x) & 0xFF), \
+((u16)(x) >> 8) & 0xFF
 
 #define expand_32(x) \
-((x) & 0xFF), \
-((x) >> 8) & 0xFF, \
-((x) >> 16) & 0xFF, \
-((x) >> 24) & 0xFF
+((u32)(x) & 0xFF), \
+((u32)(x) >> 8) & 0xFF, \
+((u32)(x) >> 16) & 0xFF, \
+((u32)(x) >> 24) & 0xFF
 
-#define UBX_CFG_RATE_MEAS (u16)200 // 5Hz
-#define UBX_CFG_RATE_NAV  (u16)1
-#define UBX_CFG_RAET_TIME (u16)0
+#define UBX_CFG_RATE_MEAS 200 // 5Hz
+#define UBX_CFG_RATE_NAV  1
+#define UBX_CFG_RAET_TIME 0
 
 static void set_ubx_cfg_rate(){
   static const __code unsigned char packet[6 + 6] = {
@@ -113,13 +113,13 @@ static void set_ubx_cfg_rate(){
   gps_packet_write(packet, sizeof(packet));
 }
 
-#define UBX_CFG_TP_INTERVAL    (u32)1000000
-#define UBX_CFG_TP_LENGTH      (u32)1000
-#define UBX_CFG_TP_STATUS      (s8)-1
-#define UBX_CFG_TP_TIMEREF     (u8)0
-#define UBX_CFG_TP_CABLE_DELAY (u16)50
-#define UBX_CFG_TP_RF_DELAY    (u16)820
-#define UBX_CFG_TP_USER_DELAY  (u32)0
+#define UBX_CFG_TP_INTERVAL    1000000
+#define UBX_CFG_TP_LENGTH      1000
+#define UBX_CFG_TP_STATUS      -1
+#define UBX_CFG_TP_TIMEREF     0
+#define UBX_CFG_TP_CABLE_DELAY 50
+#define UBX_CFG_TP_RF_DELAY    820
+#define UBX_CFG_TP_USER_DELAY  0
 
 static void set_ubx_cfg_tp(){
   static const __code unsigned char packet[20 + 6] = {
@@ -157,7 +157,7 @@ static void set_ubx_cfg_sbas(){
   gps_packet_write(packet, sizeof(packet));
 }
 
-#define UBX_CFG_PRT_BAUDRATE  (u32)115200
+#define UBX_CFG_PRT_BAUDRATE  115200
 
 static void set_ubx_cfg_prt(){
   // UBX
