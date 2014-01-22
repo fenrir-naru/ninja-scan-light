@@ -108,6 +108,8 @@ typedef struct {
 #define SET_CONTROL_LINE_STATE    0x22
 #define SEND_BREAK                0x23
 
+extern volatile __bit cdc_force;
+
 void cdc_handle_com();
 void usb_CDC_req();
 void cdc_polling();

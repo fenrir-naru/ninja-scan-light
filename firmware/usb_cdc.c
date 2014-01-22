@@ -54,6 +54,8 @@
 #define CDC_OVRRUN  0x40  // overrun error
 #define CDC_CTS     0x80  // clear to send
 
+volatile __bit cdc_force = FALSE;
+
 void cdc_handle_com(){
   static __xdata u8 invoked = 0;
   if((invoked++) % 16 > 0){return;}

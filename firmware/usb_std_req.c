@@ -315,7 +315,7 @@ static void get_descriptor(){
   ep0_data.callback = NULL;
   switch(ep0_setup.wValue.c[MSB]){
     case DSC_TYPE_DEVICE:
-      if(mmc_initialized){
+      if((!cdc_force) && mmc_initialized){
         desc_device = &DESC_DEVICE;
         desc_config = &DESC_CONFIG;
         usb_sof = NULL;
