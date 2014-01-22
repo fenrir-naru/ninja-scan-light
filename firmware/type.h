@@ -61,7 +61,7 @@ typedef union {u32 i; u8 c[4];} DWORD_t;
 #define MSB 1
 
 #if !(defined(__SDCC) || defined(SDCC))
-#define __bit
+#define __bit unsigned char
 #define __data
 #define __xdata
 #define __code
