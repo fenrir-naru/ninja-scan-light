@@ -39,6 +39,8 @@
 // SYSCLK frequency in Hz
 #define SYSCLK    48000000UL
 
+extern __xdata void (*main_loop_prologue)();
+
 extern volatile __xdata u32 global_ms;
 extern volatile __xdata u32 tickcount;
 

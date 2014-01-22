@@ -228,6 +228,25 @@ static void set_ubx_cfg_msg(u8 _class, u8 id, u8 rate1){
   gps_packet_write(packet, sizeof(packet));
 }
 
+#if GPS_DIRECT
+#include "data_hub.h"
+#include "usb_cdc.h"
+
+static void gps_direct(){
+  char buf[32];
+  while(1){
+    cdc_tx(buf, (u16)uart0_read(buf, sizeof(buf)));
+    uart0_write(buf, (u8)cdc_rx(buf, sizeof(buf)));
+  }
+}
+
+static void gps_direct_init(FIL *f){
+  cdc_force = TRUE;
+  main_loop_prologue = gps_direct;
+}
+
+#endif
+
 void gps_init(){
   
   // init wait
@@ -269,6 +288,10 @@ void gps_init(){
   // NMEA-RMC
   // NMEA-VTG
   // NMEA-ZDA
+
+#if GPS_DIRECT
+  data_hub_load_config("DIRECT.GPS", gps_direct_init);
+#endif
 }
 
 static void poll_rxm_eph(u8 svid){

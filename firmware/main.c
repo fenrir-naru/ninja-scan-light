@@ -54,6 +54,8 @@ volatile __xdata u32 tickcount = 0;
 volatile __xdata u8 sys_state = 0;
 volatile u8 timeout_10ms = 0;
 
+__xdata void (*main_loop_prologue)() = NULL;
+
 void sysclk_init();
 void port_init();
 void timer_init();
@@ -78,13 +80,17 @@ void main() {
   EA = 1; // Global Interrupt enable
   
   gps_init();
-  
+
   usb0_init();
 
   // Time Pulse Interrupt config (-INT0)
   IT0 = 1;    // Edge sense
   //PX0 = 1;    // Proiority High
   EX0 = 1;    // Enable
+
+  if(main_loop_prologue){
+    main_loop_prologue();
+  }
 
   while (1) {
     gps_polling();
