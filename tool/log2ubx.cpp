@@ -31,7 +31,7 @@
 
 #if defined(_MSC_VER) && _MSC_VER >= 1400
 #define _USE_MATH_DEFINES
-//#define sprintf sprintf_s
+//#define _CRT_SECURE_NO_WARNINGS // sprintf_s“™‚Ö‚Ì„§‚ğ~‚ß‚é
 #endif
 
 #include <iostream>
