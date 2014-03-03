@@ -60,22 +60,42 @@ void sysclk_init();
 void port_init();
 void timer_init();
 
+#ifdef USE_ASM_FOR_SFR_MANIP
+#define p21_hiz()   {__asm orl _P2,SHARP  0x02 __endasm; }
+#define p21_low()   {__asm anl _P2,SHARP ~0x02 __endasm; }
+#define scl0_hiz()  {__asm orl _P1,SHARP  0x02 __endasm; }
+#define scl0_low()  {__asm anl _P1,SHARP ~0x02 __endasm; }
+#define led3_on()   {__asm orl _P2,SHARP  0x08 __endasm; }
+#define led4_on()   {__asm orl _P2,SHARP  0x04 __endasm; }
+#define led34_on()  {__asm orl _P2,SHARP  (0x04 | 0x08) __endasm; }
+#define led34_off() {__asm anl _P2,SHARP ~(0x04 | 0x08) __endasm; }
+#else
+#define p21_hiz()   (P2 |=  0x02)
+#define p21_low()   (P2 &= ~0x02)
+#define scl0_hiz()  (P1 |=  0x02)
+#define scl0_low()  (P1 &= ~0x02)
+#define led3_on()   (P2 |=  0x08)
+#define led4_on()   (P2 |=  0x04)
+#define led34_on()  (P2 |=  (0x04 | 0x08))
+#define led34_off() (P2 &= ~(0x04 | 0x08))
+#endif
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
   port_init(); // Initialize crossbar and GPIO
 
+  spi_init();
+  data_hub_init();
+
+  timer_init();
   uart0_init();
   uart1_init();
   i2c0_init();
-  spi_init();
-  timer_init();
 
   mpu6000_init();
   mag3110_init();
   ms5611_init();
-
-  data_hub_init();
   
   EA = 1; // Global Interrupt enable
   
@@ -148,9 +168,9 @@ void port_init() {
 
   // check scl0(P1.1) and sda0(P1.0), if not Hi, perform clock out to reset I2C0.
   while((P1 & 0x03) != 0x03){
-    P1 &= ~0x02;
+    scl0_low();
     while(P1 & 0x02);
-    P1 |=  0x02;
+    scl0_hiz();
     while(!(P1 & 0x02));
   }
   
@@ -197,16 +217,6 @@ void timer_init(){
   EIE1 |= 0x80;     // Enable Timer3 interrupts(ET3)
   TMR3CN |= 0x04;   // Start Timer3(TR3)
 }
-
-#ifdef USE_ASM_FOR_SFR_MANIP
-#define led3_on()   {__asm orl _P2,SHARP 0x08 __endasm; }
-#define led4_on()   {__asm orl _P2,SHARP 0x04 __endasm; }
-#define led34_off() {__asm anl _P2,SHARP ~(0x04 | 0x08) __endasm; }
-#else
-#define led3_on()   (P2 |=  0x08)
-#define led4_on()   (P2 |=  0x04)
-#define led34_off() (P2 &= ~(0x04 | 0x08))
-#endif
 
 /**
  * interrupt routine invoked when timer3 overflow
