@@ -482,6 +482,18 @@ static void reset(){
   usb_class_init();
 }
 
+static void enable_phy(){
+#ifdef _USB_LOW_SPEED_
+  USB0XCN = 0xC0;                // Enable transceiver; select low speed
+  POLL_WRITE_BYTE(CLKREC, 0xA0); // Enable clock recovery; single-step mode disabled; low speed mode enabled
+#else
+  USB0XCN = 0xE0;                // Enable transceiver; select full speed
+  POLL_WRITE_BYTE(CLKREC, 0x80); // Enable clock recovery, single-step mode disabled
+#endif /* _USB_LOW_SPEED_ */
+  reset();
+  EIE1 |= 0x02; // Enable USB0 Interrupts
+}
+
 /**
  * USB Initialization
  *
@@ -492,23 +504,15 @@ static void reset(){
  */
 void usb0_init(){
   usb_sof = NULL;
+
   POLL_WRITE_BYTE(POWER,  0x08); // Force Asynchronous USB Reset
   POLL_WRITE_BYTE(IN1IE,  0x0F); // Enable Endpoint 0-3 in interrupts
   POLL_WRITE_BYTE(OUT1IE, 0x0F); // Enable Endpoint 0-3 out interrupts
   POLL_WRITE_BYTE(CMIE,   0x07); // Enable Reset, Resume, and Suspend interrupts
-#ifdef _USB_LOW_SPEED_
-  USB0XCN = 0xC0;                // Enable transceiver; select low speed
-  POLL_WRITE_BYTE(CLKREC, 0xA0); // Enable clock recovery; single-step mode disabled; low speed mode enabled
-#else
-  USB0XCN = 0xE0;                // Enable transceiver; select full speed
-  POLL_WRITE_BYTE(CLKREC, 0x80); // Enable clock recovery, single-step mode disabled
-#endif /* _USB_LOW_SPEED_ */
-
-  reset();
 
   if(REG01CN & 0x40){
     usb_mode = USB_CABLE_CONNECTED;
-    EIE1 |= 0x02; // Enable USB0 Interrupts
+    enable_phy();
     wait_ms(100);
   }else{
     usb_mode = USB_INACTIVE;
@@ -724,7 +728,7 @@ void usb_polling(){
     case USB_INACTIVE:
       if(REG01CN & 0x40){
         usb_mode = USB_CABLE_CONNECTED;
-        EIE1 |= 0x02; // Enable USB0 Interrupts
+        enable_phy();
       }
       return;
     case USB_CABLE_CONNECTED:
@@ -745,6 +749,7 @@ void usb_polling(){
   
   if(!(REG01CN & 0x40)){
     EIE1 &= ~0x02;  // Disable USB0 Interrupts
+    USB0XCN = 0;
     usb_mode = USB_INACTIVE;
   }
 }
