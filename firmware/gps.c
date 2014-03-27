@@ -279,7 +279,7 @@ void gps_init(){
   set_ubx_cfg_msg(0x01, 0x21, 20);  // NAV-TIMEUTC  // 20 + 8 = 28 bytes
   set_ubx_cfg_msg(0x01, 0x30, 10);  // NAV-SVINFO  // (8 + 12 * x) + 8 = 112 bytes (@8)
   set_ubx_cfg_msg(0x02, 0x10, 1);  // RXM-RAW     // (8 + 24 * x) + 8 = 208 bytes (@8)
-  set_ubx_cfg_msg(0x02, 0x11, 10);  // RXM-SFRB    // 42 + 8 = 50 bytes
+  set_ubx_cfg_msg(0x02, 0x11, 1);  // RXM-SFRB    // 42 + 8 = 50 bytes
   
   // NMEA-GGA
   // NMEA-GLL
