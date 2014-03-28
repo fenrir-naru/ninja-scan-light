@@ -247,6 +247,15 @@ static void gps_direct_init(FIL *f){
 
 #endif
 
+static void additional_config(FIL *f){
+  char buf[8];
+  u16 buf_filled;
+  while(f_read(f, buf, sizeof(buf), &buf_filled) == FR_OK){
+    gps_write(buf, buf_filled);
+    if(buf_filled < sizeof(buf)){break;}
+  }
+}
+
 void gps_init(){
   
   // init wait
@@ -281,13 +290,7 @@ void gps_init(){
   set_ubx_cfg_msg(0x02, 0x10, 1);  // RXM-RAW     // (8 + 24 * x) + 8 = 208 bytes (@8)
   set_ubx_cfg_msg(0x02, 0x11, 1);  // RXM-SFRB    // 42 + 8 = 50 bytes
   
-  // NMEA-GGA
-  // NMEA-GLL
-  // NMEA-GSA
-  // NMEA-GSV
-  // NMEA-RMC
-  // NMEA-VTG
-  // NMEA-ZDA
+  data_hub_load_config("GPS.CFG", additional_config);
 
 #if GPS_DIRECT
   data_hub_load_config("DIRECT.GPS", gps_direct_init);
