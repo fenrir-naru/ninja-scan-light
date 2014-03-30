@@ -54,27 +54,33 @@ static __xdata __at (0x000 + UART0_TX_BUFFER_SIZE)
 /**
  * Change UART0 baudrate
  */
-void uart0_bauding(unsigned long baudrate){
-  unsigned long selector1 = SYSCLK/baudrate/2;
-  unsigned long selector2 = selector1 / 256;
+void uart0_bauding_config(u16 baudrate_register){
   
   TR1 = 0;
-  
-  if (selector2 < 1){
-    TH1 = 0x0ff & (-selector1);
-    CKCON |=  0x08;                  // T1M = 1; SCA1:0 = xx
-  }else if (selector2 < 4){
-    TH1 = 0x0ff & (-(selector1/4));
-    CKCON &= ~0x0B;                  
-    CKCON |=  0x01;                  // T1M = 0; SCA1:0 = 01
-  }else if (selector2 < 12){
-    TH1 = 0x0ff & (-(selector1/12));
-    CKCON &= ~0x0B;                  // T1M = 0; SCA1:0 = 00
-  }else{
-    TH1 = 0x0ff & (-(selector1/48));
-    CKCON &= ~0x0B;                  // T1M = 0; SCA1:0 = 10
-    CKCON |=  0x02;
-  }
+  do{
+    if (baudrate_register < 0x100){
+      TH1 = (u8)(~baudrate_register);
+      CKCON |=  0x08;  // T1M = 1; SCA1:0 = xx
+      break;
+    }
+    baudrate_register >>= 2; // 1/4
+    if (baudrate_register < 0x100){
+      TH1 = (u8)(~baudrate_register);
+      CKCON &= ~0x0B;
+      CKCON |=  0x01;  // T1M = 0; SCA1:0 = 01
+      break;
+    }
+    baudrate_register /= 3; // 1/4*1/3=1/12
+    if (baudrate_register < 0x100){
+      TH1 = (u8)(~baudrate_register);
+      CKCON &= ~0x0B;  // T1M = 0; SCA1:0 = 00
+      break;
+    }
+    baudrate_register >>= 2; // 1/4*1/3*1/4=1/48
+    TH1 = (u8)(~baudrate_register);
+    CKCON &= ~0x0B;
+    CKCON |=  0x02;    // T1M = 0; SCA1:0 = 10
+  }while(0);
   
   TL1 = TH1;        // init Timer1
   TMOD &= ~0xf0;    // TMOD: timer 1 in 8-bit autoreload

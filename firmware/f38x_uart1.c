@@ -31,7 +31,6 @@
 
 #include <stdio.h>
 
-#include "main.h"
 #include "f38x_uart1.h"
 #include "fifo.h"
 
@@ -64,13 +63,11 @@ static __xdata __at (0x100 + UART1_TX_BUFFER_SIZE)
  * Change UART1 baudrate
  * 
  */
-void uart1_bauding(unsigned long baudrate){
-  unsigned long selector = 0x10000UL - (SYSCLK/baudrate/2);
-  
+void uart1_bauding_config(u16 baudrate_register){
   SBCON1 = 0x03; // SB1PS[1:0] = 11;
   
-  SBRLH1 = (unsigned char)((selector >> 8) & 0xFF);
-  SBRLL1 = (unsigned char)(selector & 0xFF);
+  SBRLH1 = (u8)((baudrate_register >> 8) & 0xFF);
+  SBRLL1 = (u8)(baudrate_register & 0xFF);
   
   SBCON1 |= 0x40; // SB1RUN = 1;
 }
