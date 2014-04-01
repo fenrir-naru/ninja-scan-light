@@ -343,7 +343,7 @@ time_t gps_std_time(time_t *timer) {
 __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
-typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, UNKNOWN} packet_type_t;
+typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, RXM_SFRB, UNKNOWN} packet_type_t;
 
 #define UBX_SAT_MAX_ID 32
 static void make_packet(packet_t *packet){
@@ -395,6 +395,7 @@ static void make_packet(packet_t *packet){
           case 0x02:
             switch(c){
               case 0x10: ubx_state.packet_type = RXM_RAW; break;
+              case 0x11: ubx_state.packet_type = RXM_SFRB; break;
             }
             break;
         }
