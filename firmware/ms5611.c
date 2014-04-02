@@ -77,7 +77,7 @@ void ms5611_init(){
 static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
   
-  // packet‚ð“o˜^‚·‚é‚Ì‚É\•ª‚ÈƒTƒCƒY‚ª‚ ‚é‚©Šm”F
+  // Check whether buffer size is sufficient
   if((packet->buf_end - dst) < PAGE_SIZE){
     return;
   }
@@ -87,7 +87,7 @@ static void make_packet(packet_t *packet){
   *(dst++) = 0;
   *(dst++) = u32_lsbyte(tickcount);
   
-  // Žž‚Ì“o˜^ALSB first
+  // Record time, LSB first
   memcpy(dst, &global_ms, sizeof(global_ms));
   dst += sizeof(global_ms);
   

@@ -202,7 +202,7 @@ static void make_packet(packet_t *packet){
   
   payload_t *dst = packet->current, *dst_end = packet->buf_end;
   
-  // packetを登録するのに十分なサイズがあるか確認
+  // Check whether buffer size is sufficient
   if((dst_end - dst) < PAGE_SIZE){
     return;
   }
@@ -210,16 +210,16 @@ static void make_packet(packet_t *packet){
   *(dst++) = 'A';
   *(dst++) = u32_lsbyte(tickcount);
   
-  // 時刻の登録、LSB first
+  // Record time, LSB first
   //*((u32 *)(packet->current)) = global_ms;
   memcpy(dst, &global_ms, sizeof(global_ms));
   dst += sizeof(global_ms);
   
   memset(dst, 0, dst_end - dst);
   
-  // 値の取得
+  // Get values
   {
-    // FIFOから、accel, temp, gyroの順
+    // from FIFO, accelerometer, temperature, and gyro values are extracted.
     u8 buf[14], i;
     __data u8 *_buf;
     mpu6000_get(FIFO_R_W, buf);
@@ -261,7 +261,7 @@ void mpu6000_polling(){
   if(!mpu6000_available){return;}
   if(mpu6000_capture){
 
-    // データがあるか確認
+    // Whether data is ready or not.
     WORD_t fifo_count;
     mpu6000_get(FIFO_COUNTH, fifo_count.c[1]);
     mpu6000_get(FIFO_COUNTL, fifo_count.c[0]);
@@ -271,7 +271,7 @@ void mpu6000_polling(){
     mpu6000_capture = FALSE;
     data_hub_assign_page(make_packet);
     
-    // FIFOリセット
+    // Reset FIFO
     if(fifo_count.i > 14){
       mpu6000_set(USER_CTRL, 0x34);
       mpu6000_set(USER_CTRL, 0x70);
