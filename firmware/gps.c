@@ -343,7 +343,7 @@ time_t gps_std_time(time_t *timer) {
 __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
-typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, RXM_SFRB, UNKNOWN} packet_type_t;
+typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, RXM_SFRB, UNKNOWN = 0} packet_type_t;
 
 #define UBX_SAT_MAX_ID 32
 static void make_packet(packet_t *packet){
@@ -382,8 +382,7 @@ static void make_packet(packet_t *packet){
       case 3: 
         ubx_state.ck_a = ubx_state.ck_b = c;
         continue; // jump to while loop.
-      case 4: 
-        ubx_state.packet_type = UNKNOWN;
+      case 4:
         switch(ubx_state.ck_a){
           case 0x01:
             switch(c){
@@ -432,72 +431,74 @@ static void make_packet(packet_t *packet){
             }
           }
           ubx_state.index = 0;
+          ubx_state.packet_type = UNKNOWN;
           continue; // jump to while loop.
         }else if(ubx_state.index == (ubx_state.size - 1)){
           if(ubx_state.ck_a != c){ // incorrect checksum
             ubx_state.index = 0;
+            ubx_state.packet_type = UNKNOWN;
           }
           continue; // jump to while loop.
-        }else{
-          switch(ubx_state.packet_type){
-            case NAV_TIMEGPS:
-              if(ubx_state.index == 17){
-                leap_seconds = (s8)c;
-              }
-              break;
-            case NAV_TIMEUTC:
-              switch(ubx_state.index){
-                case 19:
-                  gps_utc_valid = FALSE;
-                case 20:
-                  *((u8 *)(((u8 *)&gps_utc.tm_year) + (ubx_state.index - 19))) = c;
-                  break;
-                case 21: gps_utc.tm_mon = c - 1; break;
-                case 22: gps_utc.tm_mday = c; break;
-                case 23: gps_utc.tm_hour = c; break;
-                case 24: gps_utc.tm_min = c; break;
-                case 25: gps_utc.tm_sec = c; break;
-                case 26: if((c & 0x03) == 0x03){gps_utc_valid = TRUE;} break;
-              }
-              break;
+        }
+
+        switch(ubx_state.packet_type){
+          case NAV_TIMEGPS:
+            if(ubx_state.index == 17){
+              leap_seconds = (s8)c;
+            }
+            break;
+          case NAV_TIMEUTC:
+            switch(ubx_state.index){
+              case 19:
+                gps_utc_valid = FALSE;
+              case 20:
+                *((u8 *)(((u8 *)&gps_utc.tm_year) + (ubx_state.index - 19))) = c;
+                break;
+              case 21: gps_utc.tm_mon = c - 1; break;
+              case 22: gps_utc.tm_mday = c; break;
+              case 23: gps_utc.tm_hour = c; break;
+              case 24: gps_utc.tm_min = c; break;
+              case 25: gps_utc.tm_sec = c; break;
+              case 26: if((c & 0x03) == 0x03){gps_utc_valid = TRUE;} break;
+            }
+            break;
 #if GPS_TIME_FROM_RAW_DATA // switch for gps_time source, RXM_RAW or NAV_SOL
-            case RXM_RAW:
-              switch(ubx_state.index){
-                case 7:
-                case 8:
-                case 9:
-                case 10:
-                  *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
-                  break;
-                case 11:
-                case 12:
-                  *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 11))) = c;
-                  break;
-                case 13:
-                  gps_num_of_sat = c;
-                  break;
-              }
-              break;
+          case RXM_RAW:
+            switch(ubx_state.index){
+              case 7:
+              case 8:
+              case 9:
+              case 10:
+                *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
+                break;
+              case 11:
+              case 12:
+                *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 11))) = c;
+                break;
+              case 13:
+                gps_num_of_sat = c;
+                break;
+            }
+            break;
 #else
-            case NAV_SOL:
-              switch(ubx_state.index){
-                case 7:
-                case 8:
-                case 9:
-                case 10:
-                  *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
-                  break;
-                case 15:
-                case 16:
-                  *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 15))) = c;
-                  break;
-                case 54:
-                  gps_num_of_sat = c;
-                  break;
-              }
-              break;
+          case NAV_SOL:
+            switch(ubx_state.index){
+              case 7:
+              case 8:
+              case 9:
+              case 10:
+                *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
+                break;
+              case 15:
+              case 16:
+                *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 15))) = c;
+                break;
+              case 54:
+                gps_num_of_sat = c;
+                break;
+            }
+            break;
 #endif
-          }
         }
         break; 
       }
