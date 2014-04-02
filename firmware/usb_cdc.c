@@ -363,6 +363,7 @@ u16 cdc_tx(u8 *buf, u16 size){
 #endif
   static __xdata u8 margin = sizeof(tx_packet) - TX_BUF_HEADER;
   u16 written = 0;
+  u8 retry;
   while(size){
     if(size < margin){
       memcpy(&(tx_packet[sizeof(tx_packet) - margin]), buf, size);
@@ -373,10 +374,9 @@ u16 cdc_tx(u8 *buf, u16 size){
     memcpy(&(tx_packet[sizeof(tx_packet) - margin]), buf, margin);
     buf += margin;
     size -= margin;
-    timeout_10ms = 0;
-    while(!usb_write(tx_packet, sizeof(tx_packet), CDC_DATA_EP_IN)){
+    for(retry = 0; retry < 20; ++retry){ // timeout is approximately 1ms.
+      if(usb_write(tx_packet, sizeof(tx_packet), CDC_DATA_EP_IN)){break;}
       wait_us(50);
-      if(timeout_10ms > 10){break;}
     }
     written += margin;
     margin = sizeof(tx_packet) - TX_BUF_HEADER;
