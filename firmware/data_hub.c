@@ -39,6 +39,7 @@
 #include "f38x_usb.h"
 #include "ff.h"
 #include "diskio.h"
+#include "f38x_uart1.h"
 
 static packet_t packet;
 
@@ -118,18 +119,31 @@ static u16 log_to_file(){
   return accepted_bytes;
 }
 
+static const u8 protocol_header[] = {0xF7, 0xE0};
+
 static u16 log_to_host(){
-  static __xdata u8 header[] = {0xF7, 0xE0};
   static __xdata u16 sequence_num = 0;
   u16 crc = crc16(locked_page, log_block_size, 
       crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(!(cdc_tx(header, sizeof(header))
+  if(!(cdc_tx(protocol_header, sizeof(protocol_header))
       && cdc_tx((u8 *)&sequence_num, sizeof(sequence_num))
       && (cdc_tx(locked_page, log_block_size) == log_block_size)
       && cdc_tx((u8 *)&crc, sizeof(crc)))){
     return 0;
   }
   return log_block_size;
+}
+
+void data_hub_send_telemetry(char buf[PAGE_SIZE]){
+  static __xdata u16 sequence_num = 0;
+  u16 crc = crc16(buf, sizeof(buf),
+      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
+  if(!(uart1_write(protocol_header, sizeof(protocol_header))
+      && uart1_write((u8 *)&sequence_num, sizeof(sequence_num))
+      && (uart1_write(buf, sizeof(buf)) == sizeof(buf))
+      && uart1_write((u8 *)&crc, sizeof(crc)))){
+    return;
+  }
 }
 
 void data_hub_polling() {
