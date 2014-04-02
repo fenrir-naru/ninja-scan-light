@@ -95,6 +95,14 @@ static void make_packet(packet_t *packet){
   dst += sizeof(pressure_data);
   
   packet->current = dst;
+
+  { // Telemetry
+    static __xdata unsigned char count = 0;
+    if(++count >= 2){ // approximately 1Hz
+      data_hub_send_telemetry(packet->buf_begin);
+      count = 0;
+    }
+  }
 }
 
 void ms5611_polling(){
