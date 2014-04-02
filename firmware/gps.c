@@ -350,6 +350,7 @@ static void push_telemetry(char c){
   static __xdata unsigned char index = 0;
   buf[++index] = c;
   if(index >= (sizeof(buf) - 1)){
+    data_hub_send_telemetry(buf);
     index = 0;
   }
 }
@@ -400,7 +401,7 @@ static void make_packet(packet_t *packet){
             switch(c){
               case 0x06: {
                 static __xdata unsigned char count = 0;
-                if(++count >= 5){
+                if(++count >= 5){ // approximately 1Hz
                   make_telemetry = TRUE;
                   count = 0;
                 }
@@ -453,12 +454,12 @@ static void make_packet(packet_t *packet){
               }else{
                 poll_rxm_eph(sv_eph_selector);
               }
+            }else if((ubx_state.packet_type == NAV_TIMEUTC) && (gps_utc.tm_mday > 0)){
+              gps_utc.tm_year -= 1900;
+              gps_utc_valid = TRUE;
             }
           }else{ // incorrect checksum
-            if(ubx_state.packet_type == NAV_TIMEUTC){
-              gps_utc.tm_year -= 1900;
-              gps_utc_valid = FALSE;
-            }
+            // do something
           }
 
           // reset to initial state
@@ -486,7 +487,7 @@ static void make_packet(packet_t *packet){
               case 23: gps_utc.tm_hour = c; break;
               case 24: gps_utc.tm_min = c; break;
               case 25: gps_utc.tm_sec = c; break;
-              case 26: if((c & 0x03) == 0x03){gps_utc_valid = TRUE;} break;
+              case 26: if(!(c & 0x04)){gps_utc.tm_mday = 0; /*invalid UTC;*/} break;
             }
             break;
 #if GPS_TIME_FROM_RAW_DATA // switch for gps_time source, RXM_RAW or NAV_SOL
