@@ -140,7 +140,7 @@ void data_hub_send_telemetry(char buf[PAGE_SIZE]){
       crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
   if(!(uart1_write(protocol_header, sizeof(protocol_header))
       && uart1_write((u8 *)&sequence_num, sizeof(sequence_num))
-      && (uart1_write(buf, sizeof(buf)) == sizeof(buf))
+      && (uart1_write(buf, PAGE_SIZE) == PAGE_SIZE)
       && uart1_write((u8 *)&crc, sizeof(crc)))){
     return;
   }
