@@ -345,6 +345,15 @@ __xdata struct tm gps_utc;
 
 typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, RXM_SFRB, UNKNOWN = 0} packet_type_t;
 
+static void push_telemetry(char c){
+  static __xdata char buf[PAGE_SIZE] = {'G'};
+  static __xdata unsigned char index = 0;
+  buf[++index] = c;
+  if(index >= (sizeof(buf) - 1)){
+    index = 0;
+  }
+}
+
 #define UBX_SAT_MAX_ID 32
 static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
@@ -368,6 +377,9 @@ static void make_packet(packet_t *packet){
     
     u8 c = *(dst++);
     
+    static __bit make_telemetry = FALSE;
+    if(make_telemetry){push_telemetry(c);}
+
     switch(++ubx_state.index){
       case 1:
         if(c == 0xB5){
@@ -386,7 +398,15 @@ static void make_packet(packet_t *packet){
         switch(ubx_state.ck_a){
           case 0x01:
             switch(c){
-              case 0x06: ubx_state.packet_type = NAV_SOL; break;
+              case 0x06: {
+                static __xdata unsigned char count = 0;
+                if(++count >= 5){
+                  make_telemetry = TRUE;
+                  count = 0;
+                }
+                ubx_state.packet_type = NAV_SOL;
+                break;
+              }
               case 0x20: ubx_state.packet_type = NAV_TIMEGPS; break;
               case 0x21: ubx_state.packet_type = NAV_TIMEUTC; break;
             }
@@ -398,6 +418,12 @@ static void make_packet(packet_t *packet){
             }
             break;
         }
+        if(make_telemetry){
+          push_telemetry(0xB5);
+          push_telemetry(0x62);
+          push_telemetry(ubx_state.ck_a);
+          push_telemetry(ubx_state.ck_b);
+        }
         break;
       case 5:
         ubx_state.size += c;
@@ -406,8 +432,12 @@ static void make_packet(packet_t *packet){
         ubx_state.size += ((u16)c << 8);
         break;
       default: {
-        if(ubx_state.index == ubx_state.size){
-          if(ubx_state.ck_b == c){ // correct checksum
+        if(ubx_state.index >= (ubx_state.size - 1)){
+          if(ubx_state.index == (ubx_state.size - 1)){
+            if(ubx_state.ck_a == c){ // partially correct checksum
+              continue; // jump to while loop.
+            }
+          }else if(ubx_state.ck_b == c){ // correct checksum
             if(ubx_state.packet_type == (GPS_TIME_FROM_RAW_DATA ? RXM_RAW : NAV_SOL)){
               gps_ms = ((gps_ms / 1000) + 1) * 1000;
               if(gps_ms >= (u32)60 * 60 * 24 * 7 * 1000){
@@ -424,20 +454,17 @@ static void make_packet(packet_t *packet){
                 poll_rxm_eph(sv_eph_selector);
               }
             }
-          }else{
+          }else{ // incorrect checksum
             if(ubx_state.packet_type == NAV_TIMEUTC){
               gps_utc.tm_year -= 1900;
               gps_utc_valid = FALSE;
             }
           }
+
+          // reset to initial state
           ubx_state.index = 0;
           ubx_state.packet_type = UNKNOWN;
-          continue; // jump to while loop.
-        }else if(ubx_state.index == (ubx_state.size - 1)){
-          if(ubx_state.ck_a != c){ // incorrect checksum
-            ubx_state.index = 0;
-            ubx_state.packet_type = UNKNOWN;
-          }
+          make_telemetry = FALSE;
           continue; // jump to while loop.
         }
 
