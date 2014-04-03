@@ -97,11 +97,11 @@ void uart1_init() {
 }
 
 /**
- * Regist sending data via UART1
+ * Register trasmitting data via UART1
  * 
  * @param data pointer to data
  * @param size size of data
- * @return (FIFO_SIZE_T) the size of registed data to buffer
+ * @return (FIFO_SIZE_T) the size of registered data to buffer
  */
 FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size){
   // TB80ÇÕèëçûÇ›íÜÉtÉâÉOÇ∆ÇµÇƒégÇ§
@@ -118,16 +118,16 @@ FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size){
 }
 
 /**
- * Return the size of untransimitted data via UART1
+ * Return the size of storable data which will be transfered via UART1
  * 
  * @return (FIFO_SIZE_T) the size
  */
 FIFO_SIZE_T uart1_tx_size(){
-  return fifo_char_size(&fifo_tx1);
+  return fifo_char_fifo(&fifo_tx1);
 }
 
 /**
- * Get the recieved data via UART1
+ * Get the received data via UART1
  * 
  * @param buf buffer
  * @param size the size of buffer
@@ -138,7 +138,7 @@ FIFO_SIZE_T uart1_read(char *buf, FIFO_SIZE_T size){
 }
 
 /**
- * Return the size of ungrabbed data via UART1
+ * Return the size of unread data which is received via UART1
  * 
  * @return (FIFO_SIZE_T) the size
  */
