@@ -150,7 +150,7 @@ FIFO_SIZE_T uart0_read(char *buf, FIFO_SIZE_T size){
 }
 
 /**
- * Return the size of unread data which is received via UART1
+ * Return the size of unread data which is received via UART0
  * 
  * @return (FIFO_SIZE_T) the size
  */
