@@ -134,8 +134,8 @@ FIFO_SIZE_T uart0_write(char *buf, FIFO_SIZE_T size){
  * 
  * @return (FIFO_SIZE_T) the size
  */
-FIFO_SIZE_T uart0_tx_size(){
-  return fifo_char_size(&fifo_tx0);
+FIFO_SIZE_T uart0_tx_margin(){
+  return fifo_char_margin(&fifo_tx0);
 }
 
 /**

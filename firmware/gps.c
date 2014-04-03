@@ -50,7 +50,6 @@ void gps_write(char *buf, int size){
     size -= written;
     if(size == 0){break;}
     buf += written;
-    //P4 ^= 0x01;
   }
 }
 
@@ -263,7 +262,7 @@ void gps_init(){
   
   // set U-blox configuration
   set_ubx_cfg_prt();              // baudrate change
-  while(uart0_tx_size() > 0);
+  while(uart0_tx_active());
   uart0_bauding(UBX_CFG_PRT_BAUDRATE);
   
   // baudrate change wait

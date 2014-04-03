@@ -48,8 +48,10 @@ void uart1_init();
 
 FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size);
 FIFO_SIZE_T uart1_read(char *buf, FIFO_SIZE_T size);
-FIFO_SIZE_T uart1_tx_size();
+FIFO_SIZE_T uart1_tx_margin();
 FIFO_SIZE_T uart1_rx_size();
+
+#define uart1_tx_active() (SCON1 & 0x08)
 
 void interrupt_uart1() __interrupt (INTERRUPT_UART1);
 
