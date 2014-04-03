@@ -255,14 +255,6 @@ static void make_packet(packet_t *packet){
   }
   
   packet->current = dst;
-
-  { // Telemetry
-    static __xdata unsigned char count = 0;
-    if(++count >= 20){ // approximately 5Hz
-      data_hub_send_telemetry(packet->buf_begin);
-      count = 0;
-    }
-  }
 }
 
 void mpu6000_polling(){

@@ -85,8 +85,6 @@ static void make_packet(packet_t *packet){
   dst += sizeof(mag_data);
   
   packet->current = dst;
-
-  data_hub_send_telemetry(packet->buf_begin); // Telemetry approximately 1Hz.
 }
 
 void mag3110_polling(){

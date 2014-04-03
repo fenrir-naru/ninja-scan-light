@@ -70,9 +70,25 @@ payload_size_t data_hub_assign_page(void (* packet_maker)(packet_t *)){
   
   packet_init(&packet, free_page, PAGE_SIZE);
   packet_maker(&packet);
-  if(packet.current > packet.buf_begin){
-    free_page = next_free_page;
+  if(packet.current == packet.buf_begin){
+    return 0;
   }
+
+  free_page = next_free_page;
+
+  do{
+#define whether_send_telemetry(page, frequency) \
+if(*packet.buf_begin == page){ \
+  static __xdata unsigned char count = 0; \
+  if(++count < frequency){break;} \
+  count = 0; \
+}
+    whether_send_telemetry('A', 20) // 'A' page : approximately 5 Hz
+    else whether_send_telemetry('P', 2) // 'P' page : approximately 1 Hz
+    else whether_send_telemetry('M', 2) // 'M' page : approximately 1 Hz
+    else break;
+    data_hub_send_telemetry(packet.buf_begin);
+  }while(0);
   
   return PAGE_SIZE;
 }
