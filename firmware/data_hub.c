@@ -136,7 +136,7 @@ static u16 log_to_host(){
 
 void data_hub_send_telemetry(char buf[PAGE_SIZE]){
   static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, sizeof(buf),
+  u16 crc = crc16(buf, PAGE_SIZE,
       crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
   if(uart1_tx_margin() < (
       sizeof(protocol_header) + sizeof(sequence_num) + PAGE_SIZE + sizeof(crc))){
