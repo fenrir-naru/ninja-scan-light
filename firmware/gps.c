@@ -422,7 +422,7 @@ static void make_packet(packet_t *packet){
           push_telemetry(0xB5);
           push_telemetry(0x62);
           push_telemetry(ubx_state.ck_a);
-          push_telemetry(ubx_state.ck_b);
+          push_telemetry(c);
         }
         break;
       case 5:
