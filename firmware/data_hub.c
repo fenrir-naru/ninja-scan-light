@@ -138,12 +138,14 @@ void data_hub_send_telemetry(char buf[PAGE_SIZE]){
   static __xdata u16 sequence_num = 0;
   u16 crc = crc16(buf, sizeof(buf),
       crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(!(uart1_write(protocol_header, sizeof(protocol_header))
-      && uart1_write((u8 *)&sequence_num, sizeof(sequence_num))
-      && (uart1_write(buf, PAGE_SIZE) == PAGE_SIZE)
-      && uart1_write((u8 *)&crc, sizeof(crc)))){
+  if(uart1_tx_margin() < (
+      sizeof(protocol_header) + sizeof(sequence_num) + PAGE_SIZE + sizeof(crc))){
     return;
   }
+  uart1_write(protocol_header, sizeof(protocol_header));
+  uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
+  uart1_write(buf, PAGE_SIZE);
+  uart1_write((u8 *)&crc, sizeof(crc));
 }
 
 void data_hub_polling() {
