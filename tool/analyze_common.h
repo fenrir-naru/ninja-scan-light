@@ -10,8 +10,10 @@
 #include <cmath>
 #include <cstdlib>
 #include <cfloat>
+#if defined(_MSC_VER)
 #include <io.h>
 #include <fcntl.h>
+#endif
 
 #include "util/comstream.h"
 #include "util/endian.h"

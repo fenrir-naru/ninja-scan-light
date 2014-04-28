@@ -42,10 +42,6 @@ typedef __int64 int64_t;
 #include <sstream>
 #include <exception>
 
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
-
 #define IS_LITTLE_ENDIAN 1
 #include "SylphideStream.h"
 #include "SylphideProcessor.h"

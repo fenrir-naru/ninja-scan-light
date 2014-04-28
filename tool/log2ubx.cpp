@@ -41,10 +41,6 @@
 #include <exception>
 #include <cstring>
 
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
-
 #define DEBUG 1
 
 #define IS_LITTLE_ENDIAN 1
@@ -187,7 +183,7 @@ int main(int argc, char *argv[]){
 
   cerr << "log2ubx." << endl;
   if(argc < 2){
-    cerr << "Usage: (exe) log.dat [options]" << endl;
+    cerr << "Usage: " << argv[0] << " log.dat [options]" << endl;
     return -1;
   }
   
