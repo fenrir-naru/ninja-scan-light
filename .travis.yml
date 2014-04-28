@@ -1,0 +1,4 @@
+language: cpp
+
+script:
+  - (cd ./tool && make clean all)
