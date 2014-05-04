@@ -296,11 +296,11 @@ void gps_init(){
 #endif
 }
 
-static void poll_rxm_eph(u8 svid){
+static void poll_aid_eph(u8 svid){
   unsigned char packet[1 + 6] = {
     0xB5, // packet[0] 
     0x62, // packet[1] 
-    0x02, // packet[2] 
+    0x0B, // packet[2] 
     0x31, // packet[3] 
     expand_16(sizeof(packet) - 6), // packet[4 + 0]  
     svid, // packet[6 + 0]
@@ -342,7 +342,12 @@ time_t gps_std_time(time_t *timer) {
 __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
-typedef enum {NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, RXM_RAW, RXM_SFRB, UNKNOWN = 0} packet_type_t;
+typedef enum {
+  NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, NAV_SVINFO,
+  RXM_RAW, RXM_SFRB,
+  AID_HUI, AID_EPH,
+  UNKNOWN = 0
+} packet_type_t;
 
 static void push_telemetry(char c){
   static __xdata char buf[PAGE_SIZE] = {'G'};
@@ -354,7 +359,7 @@ static void push_telemetry(char c){
   }
 }
 
-#define UBX_SAT_MAX_ID 32
+#define UBX_GPS_MAX_ID 32
 static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
   u8 size = packet->buf_end - dst;
@@ -374,6 +379,9 @@ static void make_packet(packet_t *packet){
       u8 ck_a, ck_b; // チェックサム用
       packet_type_t packet_type;
     } ubx_state = {0};
+    
+    static __xdata u32 ephemeris_received_gps = 0;
+    static __xdata u8 svid;
     
     u8 c = *(dst++);
     
@@ -409,12 +417,19 @@ static void make_packet(packet_t *packet){
               }
               case 0x20: ubx_state.packet_type = NAV_TIMEGPS; break;
               case 0x21: ubx_state.packet_type = NAV_TIMEUTC; break;
+              case 0x30: ubx_state.packet_type = NAV_SVINFO; break;
             }
             break;
           case 0x02:
             switch(c){
               case 0x10: ubx_state.packet_type = RXM_RAW; break;
               case 0x11: ubx_state.packet_type = RXM_SFRB; break;
+            }
+            break;
+          case 0x0B:
+            switch(c){
+              case 0x02: ubx_state.packet_type = AID_HUI; break;
+              case 0x31: ubx_state.packet_type = AID_EPH; break;
             }
             break;
         }
@@ -447,15 +462,23 @@ static void make_packet(packet_t *packet){
               gps_time_modified = TRUE;
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
               static __xdata u8 sv_eph_selector = 0;
-              if((++sv_eph_selector) > UBX_SAT_MAX_ID){
-                poll_aid_hui();
+              if((++sv_eph_selector) > UBX_GPS_MAX_ID){
                 sv_eph_selector = 0;
+                poll_aid_hui();
               }else{
-                poll_rxm_eph(sv_eph_selector);
+                poll_aid_eph(sv_eph_selector);
               }
             }else if((ubx_state.packet_type == NAV_TIMEUTC) && (gps_utc.tm_mday > 0)){
               gps_utc.tm_year -= 1900;
               gps_utc_valid = TRUE;
+            }else if((ubx_state.packet_type == AID_EPH) && (svid <= UBX_GPS_MAX_ID)){
+              u32 mask = 1;
+              mask <<= (svid - 1);
+              if(ubx_state.size > (8 + 8)){
+                ephemeris_received_gps |= mask;
+              }else{
+                ephemeris_received_gps &= ~mask;
+              }
             }
           }else{ // incorrect checksum
             // do something
@@ -526,6 +549,32 @@ static void make_packet(packet_t *packet){
             }
             break;
 #endif
+          case NAV_SVINFO: {
+            if(ubx_state.index < (6 + 8)){break;}
+            switch(ubx_state.index % 12){
+              case ((6 + 8) % 12) + 2:
+                svid = c;
+                break;
+              case ((6 + 8) % 12) + 3: {
+                u32 mask = 1;
+                if(svid > UBX_GPS_MAX_ID){break;}
+                mask <<= (svid - 1);
+                if(c & 0x08){
+                  if(!(ephemeris_received_gps & mask)){
+                    poll_aid_eph(svid);
+                  }
+                }else{
+                  ephemeris_received_gps &= ~mask;
+                }
+                break;
+              }
+            }
+            break;
+          }
+          case AID_EPH: {
+            if(ubx_state.index == (6 + 1)){svid = c;}
+            break;
+          }
         }
         break; 
       }
