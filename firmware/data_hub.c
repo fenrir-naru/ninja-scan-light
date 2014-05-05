@@ -93,6 +93,10 @@ if(*packet.buf_begin == page){ \
   return PAGE_SIZE;
 }
 
+static void force_cdc(FIL *f){
+  cdc_force = TRUE;
+}
+
 static FIL file;
 FATFS __at (0x01D0) fs;
 
@@ -116,6 +120,8 @@ void data_hub_init(){
   log_block_size = PAGE_SIZE;
 
   disk_initialize(0);
+
+  data_hub_load_config("FORCE.CDC", force_cdc);
 }
 
 static u16 log_to_file(){
