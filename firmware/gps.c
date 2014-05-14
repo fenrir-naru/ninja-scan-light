@@ -210,8 +210,8 @@ static void set_ubx_cfg_prt(){
   gps_write(str3, strlen(str3));*/
 }
 
-static void set_ubx_cfg_msg(u8 _class, u8 id, u8 rate1){
-  unsigned char packet[6 + 6] = {
+static void set_ubx_cfg_msg(u8 _class, u8 id, u8 rate){
+  unsigned char packet[6 + 3] = { // 3 byte payload CFG-MSG, which will change message rate for the current port.
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x06, // packet[2] 
@@ -219,10 +219,7 @@ static void set_ubx_cfg_msg(u8 _class, u8 id, u8 rate1){
     expand_16(sizeof(packet) - 6), // packet[4 + 0]  
     _class,   // packet[6 + 0]
     id,       // packet[6 + 1]  
-    rate1,    // packet[6 + 2]  //(u8)0;
-    rate1,    // packet[6 + 3]  
-    rate1,    // packet[6 + 4]  //(u8)0;
-    (u8)0,    // packet[6 + 5]  
+    rate,     // packet[6 + 2]
   };
   gps_packet_write(packet, sizeof(packet));
 }
