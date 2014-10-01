@@ -52,7 +52,7 @@ static void packet_init(
   p->buf_end = p->current + max_size;
 }
 
-#define BUFFER_SIZE (PAGE_SIZE * 16 * 2) // ダブルバッファ
+#define BUFFER_SIZE (PAGE_SIZE * 16 * 2) // "*2" means double buffer
 #define PAGES (BUFFER_SIZE / PAGE_SIZE)
 
 static payload_t payload_buf[BUFFER_SIZE];
@@ -112,7 +112,7 @@ void data_hub_load_config(char *fname, void (* func)(FIL *)){
   }
 }
 
-static __xdata u16 log_block_size; // PAGE_SIZEの倍数であることが条件
+static __xdata u16 log_block_size; // Must be multiple number of PAGE_SIZE
 
 void data_hub_init(){
   log_file_opened = FALSE;
@@ -170,6 +170,31 @@ void data_hub_send_telemetry(char buf[PAGE_SIZE]){
   uart1_write((u8 *)&crc, sizeof(crc));
 }
 
+static u8 open_file(){
+  char fname[] = "log.dat";
+  if(f_mount(0, &fs) != FR_OK){return FALSE;}
+#if CHECK_INCREMENT_LOG_DAT
+  if(f_open(&file, "LOG.INC", (FA_OPEN_EXISTING | FA_WRITE)) == FR_OK){
+    f_lseek(&file, file.fsize);
+    {
+      u16 num = (file.fsize % 1000);
+      u8 i, j;
+      for(i = 0, j = 6; i < 3; i++, j--){
+        fname[j] = '0' + (num % 10);
+        num /= 10;
+      } // Generate file name such as log.000
+      f_write(&file, "*", 1, &num); // Add 1 byte to log.inc
+    }
+    f_close(&file);
+  }
+#endif
+  if(f_open(&file, fname, (FA_OPEN_ALWAYS | FA_WRITE)) != FR_OK){
+    return FALSE;
+  }
+  f_lseek(&file, file.fsize);
+  return TRUE;
+}
+
 void data_hub_polling() {
   
   __code u16 (* log_func)() = NULL;
@@ -178,11 +203,7 @@ void data_hub_polling() {
     case USB_INACTIVE:
     case USB_CABLE_CONNECTED:
       if(!log_file_opened){
-        if((f_mount(0, &fs) != FR_OK)
-            || (f_open(&file, "log.dat", (FA_OPEN_ALWAYS | FA_WRITE)) != FR_OK)){
-          break;
-        }
-        f_lseek(&file, file.fsize);
+        if(!open_file()){break;}
         log_file_opened = TRUE;
         log_block_size = BUFFER_SIZE / 2;
         free_page = locked_page = payload_buf;
@@ -207,7 +228,7 @@ void data_hub_polling() {
       break;
   }
     
-  // データが境界に達した場合、書き込む
+  // Dump when the data size exceeds predefined boundary.
   while(TRUE){
     payload_t * next_locked_page = locked_page + log_block_size;
     if(next_locked_page >= (payload_buf + sizeof(payload_buf))){

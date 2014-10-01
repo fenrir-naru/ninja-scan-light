@@ -44,7 +44,12 @@ typedef struct{
   payload_t *buf_end;
 } __xdata packet_t;
 
-#define PAGE_SIZE 32 // ŒÅ’è
+#define PAGE_SIZE 32 // Do not change
+
+/* 1 is to use function of incremental log file name
+ * such as log.NNN (N is number) when "log.inc" file exists.
+ */
+#define CHECK_INCREMENT_LOG_DAT 1
 
 void data_hub_init();
 void data_hub_load_config(char *fname, void (*func)(FIL *));
