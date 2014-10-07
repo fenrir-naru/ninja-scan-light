@@ -45,7 +45,7 @@ static __xdata u8 mag_data[PAGE_SIZE - 8];
  * M page design =>
  * 'M', 0x80, 0, tickcount & 0xFF, // + 4
  * global_ms(4 bytes), // + 8
- * mag_XYZ[0-3](little endian, 2 * 3 bytes) // + 32
+ * mag_XYZ[0-3](Big endian, 2 * 3 bytes) // + 32
  */
 
 volatile __bit mag3110_capture;
@@ -73,7 +73,7 @@ static void make_packet(packet_t *packet){
   }
     
   *(dst++) = 'M';
-  *(dst++) = 0x80; // Little endian mode
+  *(dst++) = 0x80; // Big endian mode
   *(dst++) = 0;
   *(dst++) = u32_lsbyte(tickcount);
   
