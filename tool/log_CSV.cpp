@@ -285,7 +285,8 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 options.gps_utc.itow_sec = (observer.fetch_ITOW_ms() / 1000);
                 options.gps_utc.utc_time = gpstime_zero
                     + (7u * 24 * 60 * 60) * gps_week
-                    + options.gps_utc.itow_sec;
+                    + options.gps_utc.itow_sec
+                    - leap_seconds; // POSIX time ignores leap seconds.
                 options.gps_utc.valid = true;
                 break;
               }
