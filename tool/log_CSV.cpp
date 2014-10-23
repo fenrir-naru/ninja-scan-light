@@ -297,6 +297,8 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             break;
         }
         
+        if(!options.page_G){return;}
+
         if(change_itow
             && (itow_ms_0x0102 == itow_ms_0x0112)){
           
