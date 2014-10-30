@@ -317,16 +317,15 @@ static void poll_aid_hui(){
 }
 
 volatile __bit gps_time_modified = FALSE;
+__xdata gps_time_t gps_time = {0, 0};
 __xdata u8 gps_num_of_sat = 0;
-__xdata u16 gps_wn = 0;
-__xdata s32 gps_ms = 0;
 
 static __xdata s8 leap_seconds = 0;
 #if USE_GPS_STD_TIME
 time_t gps_std_time(time_t *timer) {
   time_t res = 0;
-  if(gps_wn > 0){ // valid
-   res = ((time_t)60 * 60 * 24 * 7) * gps_wn
+  if(gps_time.wn > 0){ // valid
+   res = ((time_t)60 * 60 * 24 * 7) * gps_time.wn
        + (global_ms / 1000) 
        - leap_seconds
        + (time_t)315964800; // Jan 01, 1970, 00:00:00 UTC
@@ -379,6 +378,7 @@ static void make_packet(packet_t *packet){
     
     static __xdata u32 ephemeris_received_gps = 0;
     static __xdata u8 svid;
+    static __xdata gps_time_t time_buf;
     
     u8 c = *(dst++);
     
@@ -451,11 +451,13 @@ static void make_packet(packet_t *packet){
             }
           }else if(ubx_state.ck_b == c){ // correct checksum
             if(ubx_state.packet_type == (GPS_TIME_FROM_RAW_DATA ? RXM_RAW : NAV_SOL)){
-              gps_ms = ((gps_ms / 1000) + 1) * 1000;
-              if(gps_ms >= (u32)60 * 60 * 24 * 7 * 1000){
-                gps_ms = 0;
-                gps_wn++;
+              time_buf.itow_ms = ((time_buf.itow_ms / 1000) + 1) * 1000;
+              if(time_buf.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
+                time_buf.itow_ms = 0;
+                time_buf.wn++;
               }
+              gps_time_modified = FALSE;
+              memcpy(&gps_time, &time_buf, sizeof(gps_time_t));
               gps_time_modified = TRUE;
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
               static __xdata u8 sv_eph_selector = 0;
@@ -516,11 +518,11 @@ static void make_packet(packet_t *packet){
               case 8:
               case 9:
               case 10:
-                *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
+                *((u8 *)(((u8 *)&(time_buf.itow_ms)) + (ubx_state.index - 7))) = c;
                 break;
               case 11:
               case 12:
-                *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 11))) = c;
+                *((u8 *)(((u8 *)&(time_buf.wn)) + (ubx_state.index - 11))) = c;
                 break;
               case 13:
                 gps_num_of_sat = c;
@@ -534,11 +536,11 @@ static void make_packet(packet_t *packet){
               case 8:
               case 9:
               case 10:
-                *((u8 *)(((u8 *)&gps_ms) + (ubx_state.index - 7))) = c;
+                *((u8 *)(((u8 *)&(time_buf.itow_ms)) + (ubx_state.index - 7))) = c;
                 break;
               case 15:
               case 16:
-                *((u8 *)(((u8 *)&gps_wn) + (ubx_state.index - 15))) = c;
+                *((u8 *)(((u8 *)&(time_buf.wn)) + (ubx_state.index - 15))) = c;
                 break;
               case 54:
                 gps_num_of_sat = c;

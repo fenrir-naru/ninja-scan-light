@@ -279,7 +279,7 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
 void interrupt_int0() __interrupt(INTERRUPT_INT0) {
   if(gps_time_modified){
     gps_time_modified = FALSE;
-    global_ms = gps_ms;
+    global_ms = gps_time.itow_ms;
   }
 }
 
