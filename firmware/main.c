@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, M.Naruoka (fenrir)
+ * Copyright (c) 2015, M.Naruoka (fenrir)
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -45,8 +45,12 @@
 #include "data_hub.h"
 
 #include "gps.h"
+#if defined(NINJA_VER) && (NINJA_VER >= 200)
+#include "mpu9250.h"
+#else
 #include "mpu6000.h"
 #include "mag3110.h"
+#endif
 #include "ms5611.h"
 
 volatile __xdata u32 global_ms = 0;
@@ -93,8 +97,12 @@ void main() {
   uart1_init();
   i2c0_init();
 
+#if defined(NINJA_VER) && (NINJA_VER >= 200)
+  mpu9250_init();
+#else
   mpu6000_init();
   mag3110_init();
+#endif
   ms5611_init();
   
   EA = 1; // Global Interrupt enable
@@ -114,8 +122,12 @@ void main() {
 
   while (1) {
     gps_polling();
+#if defined(NINJA_VER) && (NINJA_VER >= 200)
+    mpu9250_polling();
+#else
     mpu6000_polling();
     mag3110_polling();
+#endif
     ms5611_polling();
     data_hub_polling();
     usb_polling();
@@ -230,7 +242,11 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   static u8 loop_10s = 0;
 
   TMR3CN &= ~0x80; // Clear interrupt
+#if defined(NINJA_VER) && (NINJA_VER >= 200)
+  mpu9250_capture = TRUE;
+#else
   mpu6000_capture = TRUE;
+#endif
   global_ms += 10;
   tickcount++;
   timeout_10ms++;
@@ -238,7 +254,9 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
     case 0:
       break;
     case 4:
+#if !(defined(NINJA_VER) && (NINJA_VER >= 200))
       mag3110_capture = TRUE;
+#endif
       break;
     case 8:
       ms5611_capture = TRUE; // Read pressure
