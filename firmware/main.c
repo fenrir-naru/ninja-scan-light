@@ -31,6 +31,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include "main.h"
 #include "util.h"
@@ -64,6 +65,8 @@ void sysclk_init();
 void port_init();
 void timer_init();
 
+static __xdata int standby_sec = 0;
+
 #ifdef USE_ASM_FOR_SFR_MANIP
 #define p21_hiz()   {__asm orl _P2,SHARP  0x02 __endasm; }
 #define p21_low()   {__asm anl _P2,SHARP ~0x02 __endasm; }
@@ -84,6 +87,60 @@ void timer_init();
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
+void power_on_delay_check(FIL *f){
+  // extract stanby time[s] from file
+  char buf[8];
+  u16 res;
+  if(f_read(f, buf, sizeof(buf) - 1, &res) != FR_OK){
+    return;
+  }
+  buf[res] = '\0';
+  standby_sec = atoi(buf);
+}
+
+void power_on_delay(){
+  /* How to standby with minimum power consumption
+   * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P2.2, P2.3).
+   * 1-2. Disable LTC4080 regulator output
+   * 1-3. Enable low frequency internal oscillator
+   * 2-1. Selecting the low frequency oscillator
+   * 2-2. Disable unused peripherals
+   * 2-3. Standby for the specified time
+   * 3.   Perform software reset.
+   */
+
+  // step 1
+  P0MDOUT = P1MDOUT = P3MDOUT = 0;
+  P2MDOUT = (0x04 | 0x08);
+  P0 = P1 = P3 = 0xFF;
+  P2 = ~(0x04 | 0x08);
+
+  p21_low();
+
+  OSCLCN = 0x82; // enable low frequency OSC with 40KHz output config
+  while(!(OSCLCN & 0x40)); // wait for ready
+
+  // step 2
+  TMR3CN = 0x00;    // Stop Timer3; Clear TF3;
+  CKCON |= 0xC0;   // Timer3 clocked based on SYSCLK;
+  TMR3RL = (0x10000 - 40000);  // Re-initialize reload value (40KHz, 1s)
+  TMR3 = 0xFFFF;    // Set to reload immediately
+  CLKSEL = (CLKSEL & ~0x07) | 0x04; // Select L-F oscillator
+
+  SPI0CN &= ~0x01; // Disable SPI
+  OSCICN &= ~0x80; // Disable H-F oscillator
+
+  TMR3CN |= 0x04;   // Start Timer3(TR3)
+  while(standby_sec-- > 0){
+    if(standby_sec & 0x0F){led34_off();}else{led34_on();}
+    while(!(TMR3CN & 0x80));
+    TMR3CN &=~0x80;
+  }
+
+  // step 3
+  RSTSRC = 0x10; // RSTSRC.4(SWRSF) = 1 causes software reset
+}
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -91,6 +148,14 @@ void main() {
 
   spi_init();
   data_hub_init();
+
+#if defined(NINJA_VER) && (NINJA_VER >= 200)
+  if((!(REG01CN & 0x40)) && (RSTSRC & 0x02)){
+    // When USB is disconnected, check power on reset, which causes RSTSRC.1(PORSF) = 1.
+    data_hub_load_config("DELAY.CFG", power_on_delay_check);
+    if(standby_sec > 0){power_on_delay();}
+  }
+#endif
 
   timer_init();
   uart0_init();
