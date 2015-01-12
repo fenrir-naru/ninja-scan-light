@@ -101,10 +101,10 @@ void power_on_delay_check(FIL *f){
 void power_on_delay(){
   /* How to standby with minimum power consumption
    * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P2.2, P2.3).
-   * 1-2. Disable LTC4080 regulator output
-   * 1-3. Enable low frequency internal oscillator
+   * 1-2. Shutdown LTC3550 buck regulator
+   * 1-3. Enable the low frequency internal oscillator
    * 2-1. Selecting the low frequency oscillator
-   * 2-2. Disable unused peripherals
+   * 2-2. Disable unused peripherals including the high frequency oscillator
    * 2-3. Standby for the specified time
    * 3.   Perform software reset.
    */
