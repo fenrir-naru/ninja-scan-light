@@ -1,9 +1,9 @@
-ninja-scan-light
-================
+NinjaScan-Light
+===============
 
 <a href='https://github.com/fenrir-naru/ninja-scan-light/blob/master/board/NinjaScanLight-board_impl.jpg'><img src='https://raw.githubusercontent.com/fenrir-naru/ninja-scan-light/master/board/NinjaScanLight-board_impl-thumb.jpg' width='400px' /></a>
 
-NinjaScan-Light is an ultra-small (1.0 x 1.4 inch, approximately 26 x 36 mm) motion logger. 
+[NinjaScan-Light](https://github.com/fenrir-naru/ninja-scan-light/wiki) is an ultra-small (1.0 x 1.4 inch, approximately 26 x 36 mm) motion logger. 
 It consists of
  
 1. Silicon Laboratories C8051F381 MCU providing USB connectability, 
@@ -14,6 +14,10 @@ It consists of
 1. Power management including Li-Ion battery charger, Linear Technology LTC3550, and 
 1. MicroSD supporting SDHC/FAT32. 
 
-More information in [Wiki](https://github.com/fenrir-naru/ninja-scan-light/wiki)
+**More information in [Wiki](https://github.com/fenrir-naru/ninja-scan-light/wiki).**
+
+## Additional information
+* External links for [Compiled binaries](https://drive.google.com/folderview?id=0ByrAl6X3Khv2S3h3VGRMTkl1T1U&usp=sharing), and [Gerbers](https://drive.google.com/folderview?id=0ByrAl6X3Khv2TkJ5Wkp4RmhMWjg&usp=sharing).
+* The project owner's website is [Fenrir's BLog](http://fenrir.naruoka.org/).
 
 [![Build Status](https://travis-ci.org/fenrir-naru/ninja-scan-light.svg?branch=master)](https://travis-ci.org/fenrir-naru/ninja-scan-light)
