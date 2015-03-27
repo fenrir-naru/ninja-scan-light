@@ -1,5 +1,8 @@
 ninja-scan-light
 ================
+
+<a href='https://github.com/fenrir-naru/ninja-scan-light/blob/master/board/NinjaScanLight-board_impl.jpg'><img src='https://raw.githubusercontent.com/fenrir-naru/ninja-scan-light/master/board/NinjaScanLight-board_impl-thumb.jpg' width='400px' /></a>
+
 NinjaScan-Light is an ultra-small (1.0 x 1.4 inch, approximately 26 x 36 mm) motion logger. 
 It consists of
  
