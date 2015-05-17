@@ -102,7 +102,7 @@ static void usb_MSC_Get_MaxLUN(){
       && (ep0_setup.wValue.i == 0x00)) {
     // Return max lun to host:
     static __code unsigned char maxlun[] = {0x00}; // Only 1 LUN supported
-    ep0_regist_data(maxlun, 1);
+    ep0_register_data(maxlun, 1);
     
     // put endpoint in transmit mode
     usb_ep0_status = EP_TX;

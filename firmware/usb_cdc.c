@@ -56,9 +56,27 @@
 
 volatile __bit cdc_force = FALSE;
 
-void cdc_handle_com(){
-  static __xdata u8 invoked = 0;
-  if((invoked++) % 16 > 0){return;}
+static u16 cdc_rx_size();
+
+void cdc_polling(){
+  static __xdata u8 previous_frame_num = 0;
+  u8 current_frame_num = usb_frame_num & 0xF0; // per 16 frames
+
+  u8 read_count;
+  char buf[CDC_DATA_EP_OUT_PACKET_SIZE + 1];
+  
+  buf[0] = 'D'; // debug
+  while(read_count = min(((u8)cdc_rx_size()), sizeof(buf) - 1)){
+    cdc_rx(buf + 1, read_count);
+  }
+
+  if(previous_frame_num == current_frame_num){
+    return;
+  }
+  previous_frame_num = current_frame_num;
+
+  cdc_tx(NULL, 0); // flush
+  
 #ifndef CDC_IS_REPLACED_BY_FTDI
   /*{
     // ResponseAvailable
@@ -76,22 +94,6 @@ void cdc_handle_com(){
     usb_write(buf, sizeof(buf), CDC_COM_EP_IN);
   }
 #endif
-}
-
-static u16 cdc_rx_size();
-
-static void handle_data(){
-  u8 read_count;
-  char buf[CDC_DATA_EP_OUT_PACKET_SIZE + 1];
-  
-  buf[0] = 'D'; // debug
-  while(read_count = min(((u8)cdc_rx_size()), sizeof(buf) - 1)){
-    cdc_rx(buf + 1, read_count);
-  }
-}
-
-void cdc_polling(){
-  handle_data();
 }
 
 // line coding structure and its default value
@@ -263,7 +265,7 @@ static void cdc_Get_Encapsulated_Command(){
   if((ep0_setup.bmRequestType == IN_CL_INTERFACE)
     && (ep0_setup.wValue.i == 0)){
              
-    ep0_regist_data((u8 *)lc_buffer, 0); // Send ZLP
+    ep0_register_data((u8 *)lc_buffer, 0); // Send ZLP
     usb_ep0_status = EP_TX;
     ep0_request_completed = TRUE;
   }
@@ -307,7 +309,7 @@ static void cdc_Get_Line_Coding(){
       && (ep0_setup.wValue.i == 0)
       && (ep0_setup.wLength.i == sizeof(cdc_line_coding_t))){
 
-    ep0_regist_data((u8 *)(&uart_line_coding), sizeof(cdc_line_coding_t));
+    ep0_register_data((u8 *)(&uart_line_coding), sizeof(cdc_line_coding_t));
     usb_ep0_status = EP_TX;
     ep0_request_completed = TRUE;
   }
@@ -347,11 +349,8 @@ static void cdc_Send_Break(){
 
 #endif
 
-static void cdc_recover(){
-  usb_clear_halt(DIR_OUT, CDC_DATA_EP_OUT);
-}
-
 u16 cdc_tx(u8 *buf, u16 size){
+  static __bit require_ZLP = FALSE;
 #ifdef CDC_IS_REPLACED_BY_FTDI
 #define TX_BUF_HEADER 2
   static __xdata u8 tx_packet[CDC_DATA_EP_IN_PACKET_SIZE-1] = {
@@ -359,12 +358,29 @@ u16 cdc_tx(u8 *buf, u16 size){
       (HEADER1_THRE | HEADER1_TEMT)}; // 0x60
 #else
 #define TX_BUF_HEADER 0
-  static __xdata u8 tx_packet[CDC_DATA_EP_IN_PACKET_SIZE-1];
+  static __xdata u8 tx_packet[CDC_DATA_EP_IN_PACKET_SIZE];
 #endif
   static __xdata u8 margin = sizeof(tx_packet) - TX_BUF_HEADER;
   u16 written = 0;
   u8 retry;
-  while(size){
+  if(size == 0){ // flush
+    if(margin < (sizeof(tx_packet) - TX_BUF_HEADER)){
+      if(usb_write(tx_packet, sizeof(tx_packet) - margin, CDC_DATA_EP_IN) > 0){
+        if((sizeof(tx_packet) == CDC_DATA_EP_IN_PACKET_SIZE) && (margin == 0)){
+          require_ZLP = TRUE;
+        }else{
+          require_ZLP = FALSE;
+        }
+        margin = sizeof(tx_packet) - TX_BUF_HEADER;
+      }
+    }
+    if(require_ZLP){
+      require_ZLP = FALSE;
+      usb_write(NULL, 0, CDC_DATA_EP_IN);
+    }
+    return 0;
+  }
+  do{
     if(size < margin){
       memcpy(&(tx_packet[sizeof(tx_packet) - margin]), buf, size);
       written += size;
@@ -374,13 +390,18 @@ u16 cdc_tx(u8 *buf, u16 size){
     memcpy(&(tx_packet[sizeof(tx_packet) - margin]), buf, margin);
     buf += margin;
     size -= margin;
-    for(retry = 0; retry < 20; ++retry){ // timeout is approximately 1ms.
-      if(usb_write(tx_packet, sizeof(tx_packet), CDC_DATA_EP_IN)){break;}
-      wait_us(50);
+    for(retry = 0; retry < 200; ++retry){ // timeout is approximately 1ms.
+      if(usb_write(tx_packet, sizeof(tx_packet), CDC_DATA_EP_IN)){
+        if(sizeof(tx_packet) == CDC_DATA_EP_IN_PACKET_SIZE){
+          require_ZLP = TRUE;
+        }
+        break;
+      }
+      wait_us(5);
     }
     written += margin;
     margin = sizeof(tx_packet) - TX_BUF_HEADER;
-  }
+  }while(size);
   return written;
 }
 
@@ -417,7 +438,7 @@ u16 cdc_rx(u8 *buf, u16 size){
 #else
 
 static u16 cdc_rx_size(){
-  return usb_count_ep_out(CDC_DATA_EP_OUT);;
+  return usb_count_ep_out(CDC_DATA_EP_OUT);
 }
 
 u16 cdc_rx(u8 *buf, u16 size){
@@ -467,19 +488,19 @@ void usb_CDC_req(){
       if(ep0_setup.wLength.c[LSB] <= 2){
         ftdi_ep0_buf[0] = 0x70;
         ftdi_ep0_buf[1] = 0x00;
-        ep0_regist_data((u8 *)ftdi_ep0_buf,
+        ep0_register_data((u8 *)ftdi_ep0_buf,
             ep0_setup.wLength.c[LSB]);
         usb_ep0_status = EP_TX;
         ep0_request_completed = TRUE;
       }
       break;
     case GET_LATENCY_TIMER:
-      //TODO: ep0_regist_data(hoge, 1);
+      //TODO: ep0_register_data(hoge, 1);
       usb_ep0_status = EP_TX;
       //ep0_request_completed = TRUE;
       break;
     case READ_EEPROM:
-      ep0_regist_data((u8 *)(&ftdi_rom[(ep0_setup.wIndex.i << 1)]),
+      ep0_register_data((u8 *)(&ftdi_rom[(ep0_setup.wIndex.i << 1)]),
           ep0_setup.wLength.c[LSB]);
       usb_ep0_status = EP_TX;
       ep0_request_completed = TRUE;

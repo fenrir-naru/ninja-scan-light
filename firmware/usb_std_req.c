@@ -82,7 +82,7 @@ static void get_status(){
     case IN_DEVICE:
       if(ep0_setup.wIndex.i == 0){
         // send 0x00, indicating bus power and no remote wake-up supported
-        ep0_regist_data((BYTE*)&ZERO_PACKET, 2);
+        ep0_register_data((BYTE*)&ZERO_PACKET, 2);
         break;
       }
       // else Send stall if request is invalid
@@ -93,7 +93,7 @@ static void get_status(){
           && (ep0_setup.wIndex.i < desc_config->bNumInterfaces)){
         // Only valid if device is configured and non-zero index
         // Status packet always returns 0x00
-        ep0_regist_data((BYTE*)&ZERO_PACKET, 2);
+        ep0_register_data((BYTE*)&ZERO_PACKET, 2);
         break;
       }
       // Otherwise send stall to host
@@ -119,10 +119,10 @@ static void get_status(){
             
             if(ep_strip_owner(usb_ep_status(ep_dir, ep_number)) == EP_HALT){
               // If endpoint is halted, return 0x01,0x00
-              ep0_regist_data((BYTE*)&(ONES_PACKET), 2);
+              ep0_register_data((BYTE*)&(ONES_PACKET), 2);
             }else{
               // Otherwise return 0x00,0x00 to indicate endpoint active
-              ep0_regist_data((BYTE*)&(ZERO_PACKET), 2);
+              ep0_register_data((BYTE*)&(ZERO_PACKET), 2);
             }
             
             is_valid_req = TRUE;
@@ -318,12 +318,10 @@ static void get_descriptor(){
       if((!cdc_force) && mmc_initialized){
         desc_device = &DESC_DEVICE;
         desc_config = &DESC_CONFIG;
-        usb_sof = NULL;
         usb_mode = USB_MSC_READY;
       }else{
         desc_device = &DESC2_DEVICE;
         desc_config = &DESC2_CONFIG;
-        usb_sof = cdc_handle_com;
         usb_mode = USB_CDC_READY;
       }
       ep0_data.buf = (BYTE *)desc_device;
@@ -375,11 +373,11 @@ static void get_configuration(){
   if(usb_state == DEV_CONFIGURED){
     // If the device is configured, then return value 0x01  
     // since this software only supports one configuration
-    ep0_regist_data((BYTE*)&ONES_PACKET, 1);
+    ep0_register_data((BYTE*)&ONES_PACKET, 1);
   }else if(usb_state == DEV_ADDRESS){
     // If the device is in address state, it is not
     // configured, so return 0x00
-    ep0_regist_data((BYTE*)&ZERO_PACKET, 1);
+    ep0_register_data((BYTE*)&ZERO_PACKET, 1);
   }
 
   // Put endpoint into transmit mode
@@ -488,7 +486,7 @@ static void get_interface(){
   }
   
   // Otherwise, return 0x00 to host
-  ep0_regist_data((BYTE*)&ZERO_PACKET, 1);
+  ep0_register_data((BYTE*)&ZERO_PACKET, 1);
   
   // Set Serviced Setup packet, put endpoint in transmit
   // mode and reset Data sent counter         

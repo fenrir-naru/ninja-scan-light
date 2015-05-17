@@ -110,7 +110,6 @@ typedef struct {
 
 extern volatile __bit cdc_force;
 
-void cdc_handle_com();
 void usb_CDC_req();
 void cdc_polling();
 u16 cdc_tx(u8 *buf, u16 size);

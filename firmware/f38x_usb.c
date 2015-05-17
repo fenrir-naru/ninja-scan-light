@@ -96,13 +96,6 @@ static __code void(* __xdata stall_callbacks[6])();
 }
 #endif
 
-#ifndef min
-#define min(x, y) (((x) < (y)) ? (x) : (y))
-#endif
-#ifndef max
-#define max(x, y) (((x) > (y)) ? (x) : (y))
-#endif
-
 /**
  * Read from the selected endpoint FIFO
  * 
@@ -114,21 +107,15 @@ static __code void(* __xdata stall_callbacks[6])();
 static unsigned int fifo_read_C(
     BYTE* ptr_data, 
     unsigned int u_num_bytes,
-    unsigned char index 
-){
-  
-  if(index){u_num_bytes = min(u_num_bytes, count_ep_out(index));}
+    unsigned char index){
   
   // Check if >0 bytes requested,
   if(u_num_bytes){
     
-    unsigned int read_count;
+    unsigned int read_count = u_num_bytes;
   
-    // Set address
-    USB0ADR = (FIFO_EP0 + index);
-    
-    // Set auto-read and initiate first read
-    USB0ADR |= 0xC0;       
+    // Set address and auto-read to initiate first read
+    USB0ADR = (FIFO_EP0 + index) | 0xC0;
   
     // Wait for BUSY->'0' (data ready)
     while(USB0ADR & 0x80);
@@ -136,7 +123,7 @@ static unsigned int fifo_read_C(
     // Unload <NumBytes> from the selected FIFO
     if(ptr_data){
       
-      for(read_count = u_num_bytes - 1; read_count; read_count--){
+      while(--read_count){
         // Copy data byte
         *(ptr_data++) = USB0DAT;
         
@@ -151,17 +138,20 @@ static unsigned int fifo_read_C(
       *(ptr_data++) = USB0DAT;
     }else{
       volatile BYTE c;
-      for(read_count = u_num_bytes - 1; read_count; read_count--){
-        
+      while(--read_count){
         // Copy data byte
         c = USB0DAT;
         
         // Wait for BUSY->'0' (data ready)
         while(USB0ADR & 0x80);              
       }
+
+      // Clear auto-read
+      USB0ADR &= ~0x40;
+
+      // Copy data byte
+      c = USB0DAT;
     }
-    
-    USB0ADR = 0;
   }
   
   return u_num_bytes;
@@ -177,21 +167,25 @@ typedef struct {
 /**
  * Write to the selected endpoint FIFO
  * 
- * @param ptr_data read data destination
+ * @param target write data source
  * @param u_num_bytes number of bytes to unload
  * @param addr target address
  * @return number to write
  */
 static unsigned int fifo_write_C(
-  write_target_t *target,
-  unsigned int u_num_bytes,
-  unsigned char index
-){
+    write_target_t *target,
+    unsigned int u_num_bytes,
+    unsigned char index){
   
-  unsigned int target_bytes = min(u_num_bytes, ep_size[index]);
-  
+  if(u_num_bytes > ep_size[index]){
+    u_num_bytes = ep_size[index];
+  }
+
   // If >0 bytes requested,
-  if(target_bytes){
+  if(u_num_bytes){
+    unsigned int remain = u_num_bytes;
+
+    BYTE *ptr = target->array;
       
     // Wait for BUSY->'0' (register available)
     while(USB0ADR & 0x80);
@@ -199,26 +193,31 @@ static unsigned int fifo_write_C(
     // Set address (mask out bits7-6)
     USB0ADR = (FIFO_EP0 + index);
   
-    if(target->array){
+    if(ptr){
       // Write <NumBytes> to the selected FIFO
-      for(u_num_bytes = target_bytes; u_num_bytes; u_num_bytes--){
-        USB0DAT = *((target->array)++);
+      while(remain--){
+        USB0DAT = *(ptr++);
       }
+      target->array = ptr; // advance pointer
     }else{
       // Write <NumBytes> to the selected FIFO
-      for(u_num_bytes = target_bytes; u_num_bytes; u_num_bytes--){
-        USB0DAT = target->c;
+      BYTE c = target->c;
+      while(remain--){
+        USB0DAT = c;
       }
     }
   }
   
-  return target_bytes;
+  return u_num_bytes;
 }
 #define fifo0_write_C(target, u_num_bytes) \
 fifo_write_C(target, u_num_bytes, 0)
 
 /**
- * Handle Endpoints whose dircetion is IN.
+ * Handle IN 1-3 Endpoint interrupts, which are generated when
+ * 1. An IN packet is successfully transferred to the host.
+ * 2. Software writes 1 to the FLUSH bit (EINCSRL.3) when the target FIFO is not empty.
+ * 3. Hardware generates a STALL condition.
  * 
  * @param ep_index Index of Endpoint
  */
@@ -243,7 +242,9 @@ static void usb_handle_in(unsigned char ep_index){
 }
 
 /**
- * Handle Endpoints whose dircetion is IN.
+ * Handle OUT Endpoint interrupts, which are generated when
+ * 1. Hardware sets the OPRDY bit (EINCSRL.0) to 1.
+ * 2. Hardware generates a STALL condition.
  * 
  * @param ep_index Index of Endpoint
  * 
@@ -264,15 +265,12 @@ static void usb_handle_out(unsigned char ep_index){
     if(callback_func){callback_func();}
   }
   
-  // If endpoint is halted, send a stall
-  else if(ep_strip_owner(usb_ep_status(DIR_OUT, ep_index)) == EP_HALT){
-    POLL_WRITE_BYTE(EOUTCSR1, rbOutSDSTL);
-  }
-
   // Otherwise read received packet from host
-  else{
-    POLL_READ_BYTE(EOUTCNTH, *(((BYTE *)&(ep_out_stored[ep_index - 1])) + 1));
-    POLL_READ_BYTE(EOUTCNTL, *((BYTE *)&(ep_out_stored[ep_index - 1])));
+  else if(control_reg & rbOutOPRDY){
+    BYTE b1, b2;
+    POLL_READ_BYTE(EOUTCNTH, b1);
+    POLL_READ_BYTE(EOUTCNTL, b2);
+    count_ep_out(ep_index) = ((((unsigned int)b1) << 8) | b2);
   }
 }
 
@@ -370,15 +368,21 @@ static void handle_setup(){
       control_reg = rbINPRDY;
      
       {
+        unsigned int written;
+
         write_target_t target;
         target.array = ep0_data.buf;
-        if(ep0_data.size -= fifo0_write_C(&target, ep0_data.size)){
+
+        written = fifo0_write_C(&target, ep0_data.size);
+
+        if(ep0_data.size > written){
+
+          ep0_data.size -= written;
+          ep0_data.buf = target.array; // Get advanced data pointer
+        }else if(written < ep_size[0]){
+          // check whether the last write size is less than maximum packet size, which requires additional ZLP
           
-          // Advance data pointer
-          ep0_data.buf += PACKET_SIZE_EP0;
-        }else if(ep0_data.callback){
-          ep0_data.callback();
-        }else{
+          if(ep0_data.callback){ep0_data.callback();}
           
           // Add Data End bit to bitmask
           control_reg |= rbDATAEND;
@@ -406,7 +410,7 @@ static void handle_setup(){
         
         // Empty the FIFO
         // FIFO must be read out just the size it has,
-        // otherwize the FIFO pointer on the SIE goes out of synch.
+        // otherwise the FIFO pointer on the SIE goes out of synch.
         fifo0_read_C((BYTE*)ep0_data.buf, recieved);
         
         if(ep0_data.size > recieved){
@@ -453,6 +457,8 @@ static void suspend(){
   
 }
 
+volatile __xdata BYTE usb_frame_num;
+
 /**
  * Set state to default
  * Clear USB Inhibit bit
@@ -475,6 +481,8 @@ static void reset(){
     }
   }
   
+  usb_frame_num = 0;
+
   // Clear USB inhibit bit to enable USB suspend detection
   POLL_WRITE_BYTE(POWER, 0x01);
   
@@ -503,8 +511,6 @@ static void enable_phy(){
  * Enable USB0 with suspend detection
  */
 void usb0_init(){
-  usb_sof = NULL;
-
   POLL_WRITE_BYTE(POWER,  0x08); // Force Asynchronous USB Reset
   POLL_WRITE_BYTE(IN1IE,  0x0F); // Enable Endpoint 0-3 in interrupts
   POLL_WRITE_BYTE(OUT1IE, 0x0F); // Enable Endpoint 0-3 out interrupts
@@ -518,8 +524,6 @@ void usb0_init(){
     usb_mode = USB_INACTIVE;
   }
 }
-
-void (* __xdata usb_sof)();
 
 /**
  * Top-level USB ISR
@@ -554,9 +558,7 @@ void usb_isr() __interrupt (INTERRUPT_USB0) {
   }
   
   // Handle Start of Frame interrupt
-  if(bCommon & rbSOF){
-    if(usb_sof){usb_sof();}
-  }
+  //if(bCommon & rbSOF){}
   
   // Handle Suspend interrupt
   if(bCommon & rbSUSINT){suspend();}
@@ -568,51 +570,40 @@ void usb_isr() __interrupt (INTERRUPT_USB0) {
 volatile usb_mode_t usb_mode;
 
 static unsigned int usb_tx(
-  write_target_t *target,
-  unsigned int count,
-  unsigned char index
-){
-  BYTE *ptr_buf = target->array;
+    write_target_t *target,
+    unsigned int count,
+    unsigned char index){
   unsigned int count_orig = count, add;
   do{
     add = 0;
-    CRITICAL_USB0_SPECIAL(      
+    CRITICAL_USB0_SPECIAL(
       BYTE control_reg;
-  
-      // Set index to EP ep_index
-      POLL_WRITE_BYTE(INDEX, index);
-      
-      // If endpoint is halted, send a stall
-      if(ep_strip_owner(usb_ep_status(DIR_IN, index)) == EP_HALT){
-        POLL_WRITE_BYTE(EINCSR1, rbInSDSTL);
-      
-      }else{
-        
-        // Read contol register for EP ep_index
+
+      // Check endpoint is not halted
+      if(ep_strip_owner(usb_ep_status(DIR_IN, index)) != EP_HALT){
+
+        // Set index to EP ep_index
+        POLL_WRITE_BYTE(INDEX, index);
+
+        // Read control register for EP ep_index
         POLL_READ_BYTE(EINCSR1, control_reg);
         
-        // Regist data for transmition
-        if(!(control_reg & rbInINPRDY)){
-          
+        // Register data for transmission
+        if(!(control_reg & (rbInSDSTL | rbInFLUSH | rbInINPRDY))){
+
           // Clear underrun bit if it was set
-          if(control_reg & rbInUNDRUN){
-            POLL_WRITE_BYTE(EINCSR1, 0x00);
-          }
-      
-          // Put new data on Fifo
-          if(add = fifo_write_C(target, count, index)){
-            // Set In Packet ready bit, indicating fresh data on Fifo
-            POLL_WRITE_BYTE(EINCSR1, rbInINPRDY);
-          }
+          //if(control_reg & rbInUNDRUN){} // TODO
+
+          // Put new data on FIFO
+          add = fifo_write_C(target, count, index);
+
+          // Set In Packet ready bit, indicating fresh data on FIFO
+          POLL_WRITE_BYTE(EINCSR1, rbInINPRDY);
         }
       }
     );
     
     if(!add){break;}
-    if(ptr_buf){
-      ptr_buf += add;
-      target->array = ptr_buf;
-    }
     count -= add;
   }while(count);
   return count_orig - count;
@@ -620,19 +611,17 @@ static unsigned int usb_tx(
 
 unsigned int usb_write(
   BYTE* ptr_buf,
-  unsigned int count,
-  unsigned char index
-){
+    unsigned int count,
+    unsigned char index){
   write_target_t target;
   target.array = ptr_buf;  
   return usb_tx(&target, count, index);
 }
 
 unsigned int usb_fill(
-  BYTE c,
-  unsigned int count,
-  unsigned char index
-){
+    BYTE c,
+    unsigned int count,
+    unsigned char index){
   write_target_t target = {NULL, c};
   return usb_tx(&target, count, index);
 }
@@ -646,31 +635,32 @@ unsigned int usb_count_ep_out(unsigned char index){
 }
 
 unsigned int usb_read(
-  BYTE* ptr_buf,
-  unsigned int count,
-  unsigned char index
-){
-  unsigned int read_count = fifo_read_C(ptr_buf, count, index);
-  count_ep_out(index) -= read_count;
-  if(!(count_ep_out(index))){
-    CRITICAL_USB0_SPECIAL(
+    BYTE* ptr_buf,
+    unsigned int count,
+    unsigned char index){
+  CRITICAL_USB0_SPECIAL(
+    if(count_ep_out(index) < count){
+      count = count_ep_out(index);
+    }
+    count = fifo_read_C(ptr_buf, count, index);
+    count_ep_out(index) -= count;
+    if((count > 0) && (count_ep_out(index) == 0)){
       POLL_WRITE_BYTE(INDEX, index);
       POLL_WRITE_BYTE(EOUTCSR1, 0);
-    );
-  }
-  return read_count;
+    }
+  );
+  return count;
 }
 
 unsigned int usb_skip(
-  unsigned int count,
-  unsigned char index
-){
+    unsigned int count,
+    unsigned char index){
   return usb_read(NULL, count, index);
 }
 
 void usb_flush(unsigned char index){
   // Clear Out Packet ready bit
-  usb_read(NULL, count_ep_out(index), index);
+  usb_read(NULL, ep_size[index], index);
 }
 
 void usb_status_lock(unsigned char dir, unsigned char ep_index){
@@ -746,6 +736,10 @@ void usb_polling(){
       msc_polling();
       break;
   }
+  
+  CRITICAL_USB0_SPECIAL(
+    POLL_READ_BYTE(FRAMEL, usb_frame_num);
+  );
   
   if(!(REG01CN & 0x40)){
     EIE1 &= ~0x02;  // Disable USB0 Interrupts

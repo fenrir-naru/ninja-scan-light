@@ -100,7 +100,7 @@ extern ep0_data_t ep0_data;
 
 extern volatile __bit ep0_request_completed;
 
-#define ep0_regist_data(_ptr, _size) { \
+#define ep0_register_data(_ptr, _size) { \
   ep0_data.buf = _ptr; \
   ep0_data.size = _size; \
   ep0_data.callback = NULL; \
@@ -163,7 +163,7 @@ typedef enum {
 } usb_mode_t;
 extern volatile usb_mode_t usb_mode;
 
-extern void (* __xdata usb_sof)();
+extern volatile __xdata BYTE usb_frame_num;
 
 void usb_polling();
 
