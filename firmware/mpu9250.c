@@ -253,7 +253,7 @@ void mpu9250_init(){
     mpu9250_set(I2C_SLV4_CTRL, 0x80); // Enable I2C slave 4
     wait_ms(20);
 
-    mpu9250_set(I2C_SLV4_REG, AK8963_CNTL1); //I2C slave 0 register address from where to begin data transfer
+    mpu9250_set(I2C_SLV4_REG, AK8963_CNTL1); //I2C slave 4 register address from where to begin data transfer
     mpu9250_set(I2C_SLV4_DO, 0x12); // Register value to continuous measurement mode 1 (8Hz) in 16bit
     mpu9250_set(I2C_SLV4_CTRL, 0x80); // Enable I2C slave 4
     wait_ms(20);
@@ -281,7 +281,7 @@ static void make_packet_inertial(packet_t *packet){
   
   payload_t *dst = packet->current, *dst_end = packet->buf_end;
   
-  // packetを登録するのに十分なサイズがあるか確認
+  // Check whether buffer has sufficient margin
   if((dst_end - dst) < PAGE_SIZE){
     return;
   }
@@ -289,16 +289,16 @@ static void make_packet_inertial(packet_t *packet){
   *(dst++) = 'A';
   *(dst++) = u32_lsbyte(tickcount);
   
-  // 時刻の登録、LSB first
+  // Record time, LSB first
   //*((u32 *)(packet->current)) = global_ms;
   memcpy(dst, &global_ms, sizeof(global_ms));
   dst += sizeof(global_ms);
   
   memset(dst, 0, dst_end - dst);
   
-  // 値の取得
+  // Get values
   {
-    // FIFOから、accel, temp, gyroの順
+    // from FIFO, accelerometer, temperature, and gyro values are extracted.
     u8 buf[14], i;
     __data u8 *_buf;
     mpu9250_get(FIFO_R_W, buf);
@@ -347,7 +347,7 @@ static __xdata u8 mag_data[PAGE_SIZE - 8];
 static void make_packet_mag(packet_t *packet){
   payload_t *dst = packet->current;
 
-  // packetを登録するのに十分なサイズがあるか確認
+  // Check whether buffer has sufficient margin
   if((packet->buf_end - dst) < PAGE_SIZE){
     return;
   }
@@ -357,7 +357,7 @@ static void make_packet_mag(packet_t *packet){
   *(dst++) = 0;
   *(dst++) = u32_lsbyte(tickcount);
 
-  // 時刻の登録、LSB first
+  // Record time, LSB first
   memcpy(dst, &global_ms, sizeof(global_ms));
   dst += sizeof(global_ms);
 
@@ -371,7 +371,7 @@ void mpu9250_polling(){
   if(!mpu9250_available){return;}
   if(mpu9250_capture){
 
-    // データがあるか確認
+    // Check data availability
     WORD_t fifo_count;
     mpu9250_get(FIFO_COUNTH, fifo_count.c[1]);
     mpu9250_get(FIFO_COUNTL, fifo_count.c[0]);
@@ -399,7 +399,7 @@ void mpu9250_polling(){
       }
     }while(0);
 
-    // FIFOリセット
+    // Reset FIFO if size is greater than expected
     if(fifo_count.i > 21){
       mpu9250_set(USER_CTRL, 0x34);
       mpu9250_set(USER_CTRL, 0x70);
