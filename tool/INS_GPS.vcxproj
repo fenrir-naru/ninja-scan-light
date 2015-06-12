@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -11,9 +11,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{855BC1B5-DB8C-4D69-9AEA-A85194620608}</ProjectGuid>
-    <RootNamespace>log2ubx</RootNamespace>
+    <ProjectGuid>{584A0295-087A-46AA-A3C6-E31E2D76EBF8}</ProjectGuid>
+    <RootNamespace>log_CSV</RootNamespace>
     <Keyword>Win32Proj</Keyword>
+    <ProjectName>INS_GPS</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
@@ -83,7 +84,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="log2ubx.cpp" />
+    <ClCompile Include="INS_GPS.cpp" />
     <ClCompile Include="util\crc.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

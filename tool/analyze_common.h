@@ -1,3 +1,34 @@
+/*
+ * Copyright (c) 2013, M.Naruoka (fenrir)
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ * - Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ * - Neither the name of the naruoka.org nor the names of its contributors
+ *   may be used to endorse or promote products derived from this software
+ *   without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
 #ifndef __ANALYZE_COMMON_H__
 #define __ANALYZE_COMMON_H__
 
@@ -37,13 +68,11 @@ struct GlobalOptions {
   
   bool dump_update; ///< 時間更新(Time Update)の際に現在の値を表示するか
   bool dump_correct; ///< 観測更新(Measurement Update)の際に現在の値を表示するか
-  bool dump_q_n2b;  ///< 姿勢をクォータニオンで吐き出すかどうか
   double init_yaw_deg;   ///< 初期ヨー角
   double start_gpstime;  ///< 計測開始時刻
   int start_gpswn; ///< 計測開始週番号
   double end_gpstime;    ///< 計測終了時刻
   int end_gpswn; ///< 計測終了週番号
-  bool log_system_cov; ///< システム共分散行列のログをとるかどうか
   bool est_bias; ///< バイアス推定を行うか
   bool use_udkf; ///< UDKFを使うか
   bool use_magnet; ///< 磁気コンパスを使うか
@@ -57,16 +86,14 @@ struct GlobalOptions {
   iostream_pool_t iostream_pool;
   
   GlobalOptions()
-      : dump_update(false),
-      dump_correct(true),
-      dump_q_n2b(false),
+      : dump_update(true),
+      dump_correct(false),
       init_yaw_deg(0),
       start_gpstime(0), end_gpstime(DBL_MAX),
       start_gpswn(0), end_gpswn(0),
-      log_system_cov(false), 
       est_bias(true),
-      use_udkf(true),
-      use_magnet(true),
+      use_udkf(false),
+      use_magnet(false),
       mag_heading_accuracy_deg(3),
       yaw_correct_with_mag_when_speed_less_than_ms(5),
       out_is_N_packet(false),
@@ -235,15 +262,9 @@ if(std::strstr(spec, "--" #name "=") == spec){ \
     CHECK_OPTION(dump-correct, 
         dump_correct = (strcmp(value, "on") == 0),
         (dump_correct ? "on" : "off"));
-    CHECK_OPTION(dump_q_n2b, 
-        dump_q_n2b = (strcmp(value, "on") == 0),
-        (dump_q_n2b ? "on" : "off"));
     CHECK_OPTION(init-yaw-deg, 
         init_yaw_deg = atof(value),
         init_yaw_deg << " [deg]");
-    CHECK_OPTION(log-covP, 
-        log_system_cov = (strcmp(value, "on") == 0),
-        (log_system_cov ? "on" : "off"));
     CHECK_OPTION(est_bias, 
         est_bias = (strcmp(value, "on") == 0),
         (est_bias ? "on" : "off"));
@@ -300,16 +321,16 @@ class NAVData {
      * 
      */
     virtual void label(std::ostream &out = std::cout) const {
-      out << "longitude" << "\t"
-           << "latitude" << "\t"
-           << "height" << "\t" 
-           << "v_north" << "\t"
-           << "v_east" << "\t"
-           << "v_down" << "\t"
-           << "Yaw(Ψ)" << "\t"        //Ψ(yaw)
-           << "Pitch(Θ)" << "\t"      //Θ(pitch)
-           << "Roll(Φ)" << "\t"       //Φ(roll)
-           << "Azimuth(α)" << "\t";   //α(azimuth)
+      out << "longitude" << ", "
+           << "latitude" << ", "
+           << "height" << ", "
+           << "v_north" << ", "
+           << "v_east" << ", "
+           << "v_down" << ", "
+           << "Yaw(Ψ)" << ", "        //Ψ(yaw)
+           << "Pitch(Θ)" << ", "      //Θ(pitch)
+           << "Roll(Φ)" << ", "       //Φ(roll)
+           << "Azimuth(α)" << ", ";   //α(azimuth)
     }
     
   protected:
@@ -319,16 +340,16 @@ class NAVData {
      * @param itow 現在時刻
      */
     virtual void dump(std::ostream &out) const {
-      out << rad2deg(longitude()) << "\t"
-           << rad2deg(latitude()) << "\t"
-           << height() << "\t" 
-           << v_north() << "\t"
-           << v_east() << "\t"
-           << v_down() << "\t"
-           << rad2deg(heading()) << "\t"      //Ψ(yaw)   <- q_{g}^{b}
-           << rad2deg(euler_theta()) << "\t"  //Θ(pitch) <- q_{n}^{b}
-           << rad2deg(euler_phi()) << "\t"    //Φ(roll)  <- q_{n}^{b}
-           << rad2deg(azimuth()) << "\t";     //α(azimuth)
+      out << rad2deg(longitude()) << ", "
+           << rad2deg(latitude()) << ", "
+           << height() << ", "
+           << v_north() << ", "
+           << v_east() << ", "
+           << v_down() << ", "
+           << rad2deg(heading()) << ", "      //Ψ(yaw)   <- q_{g}^{b}
+           << rad2deg(euler_theta()) << ", "  //Θ(pitch) <- q_{n}^{b}
+           << rad2deg(euler_phi()) << ", "    //Φ(roll)  <- q_{n}^{b}
+           << rad2deg(azimuth()) << ", ";     //α(azimuth)
     }
     
   public:
