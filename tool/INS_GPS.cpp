@@ -1214,7 +1214,7 @@ void g_packet_handler(const G_Observer_t &observer){
           G_Observer_t::velocity_acc_t
             velocity_acc(observer.fetch_velocity_acc());
           
-          if(packet.itow == observer.fetch_ITOW()){
+          if(std::abs(packet.itow - observer.fetch_ITOW()) < 1E-3){
             packet.vel_ned[0] = velocity.north;
             packet.vel_ned[1] = velocity.east;
             packet.vel_ned[2] = velocity.down;
