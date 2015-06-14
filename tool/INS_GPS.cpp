@@ -87,10 +87,12 @@ struct Options : public GlobalOptions {
    */
   float_sylph_t back_propagate_depth;
   
+  bool gps_fake_lock; //< true when gps dummy date is used.
+
   Options()
       : GlobalOptions(),
-      back_propagate(false), 
-      back_propagate_depth(0) {};
+      back_propagate(false), back_propagate_depth(0),
+      gps_fake_lock(false) {}
   ~Options(){}
   
   /**
@@ -100,20 +102,25 @@ struct Options : public GlobalOptions {
    * @return (bool) true when consumed, otherwise false
    */
   bool check_spec(char *spec){
-    using std::cerr;
-    using std::endl;
+
+#define CHECK_OPTION(name, operation, disp) \
+if(std::strstr(spec, "--" #name "=") == spec){ \
+  char *value(spec + strlen("--" #name "=")); \
+  {operation;} \
+  std::cerr << #name << ": " << disp << std::endl; \
+  return true; \
+}
+    CHECK_OPTION(back_propagate,
+        back_propagate = (strcmp(value, "on") == 0),
+        (back_propagate ? "on" : "off"));
+    CHECK_OPTION(bp_depth,
+        back_propagate_depth = atof(value),
+        back_propagate_depth);
+    CHECK_OPTION(fake_lock,
+        gps_fake_lock = (strcmp(value, "on") == 0),
+        (gps_fake_lock ? "on" : "off"));
+#undef CHECK_OPTION
     
-    if(strstr(spec, "--back_propagate=") == spec){
-      char *value(spec + strlen("--back_propagate="));
-      back_propagate = (strcmp(value, "on") == 0);
-      cerr << "back_propagate: " << (back_propagate ? "on" : "off") << endl;
-      return true;
-    }else if(strstr(spec, "--bp_depth=") == spec){
-      char *value(spec + strlen("--bp_depth="));
-      back_propagate_depth = atof(value);
-      cerr << "bp_depth: " << back_propagate_depth << endl;
-      return true;
-    }
     return GlobalOptions::check_spec(spec);
   }
 } options;
@@ -268,7 +275,7 @@ struct G_Packet : Packet {
   /**
    * convert to a structured data required by INS/GPS routine
    */
-  GPS_UBLOX_3D<float_sylph_t> convert() const{
+  GPS_UBLOX_3D<float_sylph_t> convert() const {
     GPS_UBLOX_3D<float_sylph_t> packet;
     {
       packet.v_n = vel_ned[0];
@@ -517,7 +524,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         P(0, 0) = P(1, 1) = P(2, 2) = 1E+1;
         P(3, 3) = P(4, 4) = P(5, 5) = 1E-8;
         P(6, 6) = 1E+2;
-        P(7, 7) = P(8, 8) = P(9, 9) = 1E-4; //CRS03 1E-1;   //-4
+        P(7, 7) = P(8, 8) = P(9, 9) = 1E-4;
 
         nav.getFilter().setP(P);
       }
@@ -1016,7 +1023,7 @@ class Status{
       Vector3<float_sylph_t>
           accel(current_processor->calibration.raw2accel(a_packet.ch)),
           gyro(current_processor->calibration.raw2gyro(a_packet.ch));
-      
+
 #define pow2(x) ((x) * (x))
       if(!initalized){
         before_init_a_packets.push_back(a_packet);
@@ -1305,7 +1312,7 @@ ins_gps.set_filter_Q( \
         }
       }
     }
-    
+
     // Check and sort G packets in order of observation time
     typedef vector<StreamProcessor *> mu_queue_t;
     mu_queue_t mu_queue;
@@ -1347,20 +1354,30 @@ ins_gps.set_filter_Q( \
       
       FIFO<A_Packet, operator_eq_t> &a_packet_fifo(
           processor_storage.front()->a_packet_fifo);
+      const unsigned a_packet_fifo_size(a_packet_fifo.stored());
+
+      if(options.gps_fake_lock){
+        if(a_packet_fifo_size > 0){
+          packet.itow = a_packet_fifo[a_packet_fifo_size - 1].itow;
+        }
+        packet.llh[0] = packet.llh[1] = packet.llh[2] = 0;
+        packet.acc_2d = packet.acc_v = 1E+1;
+        packet.vel_ned[0] = packet.vel_ned[1] = packet.vel_ned[2] = 0;
+        packet.acc_vel = 1;
+      }
     
       // Time update to the last sample before GPS observation
-      unsigned stored(a_packet_fifo.stored());
       int i = 0;
       for(; 
-          (i < stored) && (a_packet_fifo[i].itow < packet.itow);
+          (i < a_packet_fifo_size) && (a_packet_fifo[i].itow < packet.itow);
           i++){
         status.time_update(a_packet_fifo[i]);
         status.dump(Status::DUMP_UPDATE, a_packet_fifo[i].itow);
       }
       
       // Time update to the GPS observation
-      if(stored){
-        A_Packet interpolation(a_packet_fifo[(stored > i) ? i : (i - 1)]);
+      if(a_packet_fifo_size){
+        A_Packet interpolation(a_packet_fifo[(a_packet_fifo_size > i) ? i : (i - 1)]);
         interpolation.itow = packet.itow;
         status.time_update(interpolation);
       }
@@ -1406,11 +1423,11 @@ int main(int argc, char *argv[]){
     config("index_temp_ch 8");
     config("acc_bias 32768 32768 32768");
     config("acc_bias_tc 0 0 0"); // No temperature compensation
-    config("acc_sf 2.3942016e-3 2.3942016e-3 2.3942016e-3"); // MPU-6000/9250 8[G] full scale; 8*9.80665/(1<<15) [m/s^2]
+    config("acc_sf 4.1767576e+2 4.1767576e+2 4.1767576e+2"); // MPU-6000/9250 8[G] full scale; (1<<15)/(8*9.80665) [1/(m/s^2)]
     config("acc_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
     config("gyro_bias 32768 32768 32768");
     config("gyro_bias_tc 0 0 0"); // No temperature compensation
-    config("gyro_sf 1.0652644e-3 1.0652644e-3 1.0652644e-3"); // MPU-6000/9250 2000[dps] full scale; 2000/(1<<15)/180*PI [rad/s]
+    config("gyro_sf 9.3873405e+2 9.3873405e+2 9.3873405e+2"); // MPU-6000/9250 2000[dps] full scale; (1<<15)/(2000/180*PI) [1/(rad/s)]
     config("gyro_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
     config("sigma_accel 0.05 0.05 0.05"); // approx. 150[mG] ? standard deviation
     config("sigma_gyro 5e-3 5e-3 5e-3"); // approx. 0.3[dps] standard deviation
@@ -1418,7 +1435,6 @@ int main(int argc, char *argv[]){
   }
 
   for(int arg_index(1); arg_index < argc; arg_index++){
-
     if(strstr(argv[arg_index], "--calib_file=") == argv[arg_index]){ // calibration file
       cerr << "IMU Calibration file reading..." << endl;
       char *spec(argv[arg_index] + strlen("--calib_file="));
@@ -1460,15 +1476,21 @@ int main(int argc, char *argv[]){
       stream_processor->set_m_handler(m_packet_handler);  // Register M page handler
     }
     
-    cerr << "Log file : ";
+    cerr << "Log file: ";
     istream &in(options.spec2istream(argv[arg_index]));
-    stream_processor->set_stream(options.in_sylphide ? new SylphideIStream(in, PAGE_SIZE) : &in);
+    stream_processor->set_stream(
+        options.in_sylphide ? new SylphideIStream(in, PAGE_SIZE) : &in);
 
     processor_storage.push_back(stream_processor);
     stream_processor = NULL;
   }
 
-  options.out() << setprecision(10);
+  if(options.out_sylphide){
+    options._out = new SylphideOStream(options.out(), PAGE_SIZE);
+  }else{
+    options.out() << setprecision(10);
+  }
+
   loop();
   
   for(processor_storage_t::iterator it(processor_storage.begin());

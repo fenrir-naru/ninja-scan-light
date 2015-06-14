@@ -196,7 +196,7 @@ int main(int argc, char *argv[]){
   for(int i(2); i < argc; i++){
     if(options.check_spec(argv[i])){continue;}
     
-    cerr << "Unknown option!! : " << argv[i] << endl;
+    cerr << "Unknown option!!: " << argv[i] << endl;
     return -1;
   }
   
@@ -208,7 +208,7 @@ int main(int argc, char *argv[]){
       out_fname.erase(index);
     }
     out_fname.append(".ubx");
-    cerr << "Output : ";
+    cerr << "Output: ";
     options._out = &(options.spec2ostream(out_fname.c_str(), true));
   }
   

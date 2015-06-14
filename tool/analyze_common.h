@@ -50,38 +50,38 @@
 #include "util/endian.h"
 
 /**
- * 度からラジアンに変換
+ * Convert units from degrees to radians
  *
- * @param degree 度
- * @return (double) ラジアン
+ * @param degrees
+ * @return (double) radians
  */
-double deg2rad(const double &degree){return degree * M_PI / 180;}
+double deg2rad(const double &degrees){return degrees * M_PI / 180;}
 /**
- * ラジアンから度に変換
+ * Convert units from radians to degrees
  *
- * @param radians ラジアン
- * @return (double) 度
+ * @param radians radians
+ * @return (double) degrees
  */
 double rad2deg(const double &radians){return radians * 180 / M_PI;}
 
 struct GlobalOptions {
   
-  bool dump_update; ///< 時間更新(Time Update)の際に現在の値を表示するか
-  bool dump_correct; ///< 観測更新(Measurement Update)の際に現在の値を表示するか
-  double init_yaw_deg;   ///< 初期ヨー角
-  double start_gpstime;  ///< 計測開始時刻
-  int start_gpswn; ///< 計測開始週番号
-  double end_gpstime;    ///< 計測終了時刻
-  int end_gpswn; ///< 計測終了週番号
-  bool est_bias; ///< バイアス推定を行うか
-  bool use_udkf; ///< UDKFを使うか
-  bool use_magnet; ///< 磁気コンパスを使うか
-  double mag_heading_accuracy_deg; ///< 磁気コンパスの精度[deg]
-  double yaw_correct_with_mag_when_speed_less_than_ms; ///< 方位補正を速度[m/s]以下の場合行う、0以下で非適用
-  bool out_is_N_packet; ///< 出力をNPacket形式で出す
-  std::ostream *_out; ///< 出力先、out()で参照をとるべき
-  bool in_sylphide;   ///< trueのとき、入力がSylphideプロトコル
-  bool out_sylphide;  ///< trueのとき、出力がSylphideプロトコル
+  bool dump_update; ///< True for dumping states at time updates
+  bool dump_correct; ///< True for dumping states at measurement updates
+  double init_yaw_deg;   ///< Initial yaw angle
+  double start_gpstime;  ///< Start GPS time
+  int start_gpswn; ///< Start GPS week
+  double end_gpstime;    ///< End GPS time
+  int end_gpswn; ///< End GPS week
+  bool est_bias; ///< True for performing bias estimation
+  bool use_udkf; ///< True for UD Kalman filtering
+  bool use_magnet; ///< True for utilizing magnetic sensor
+  double mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
+  double yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
+  bool out_is_N_packet; ///< True for NPacket formatted outputs
+  std::ostream *_out; ///< Pointer for output stream
+  bool in_sylphide;   ///< True when inputs is Sylphide formated
+  bool out_sylphide;  ///< True when outputs is Sylphide formated
   typedef std::map<const char *, std::iostream *> iostream_pool_t;
   iostream_pool_t iostream_pool;
   
@@ -133,16 +133,16 @@ struct GlobalOptions {
       const bool force_fstream = false){
     if(!force_fstream){
       if(strcmp(spec, "-") == 0){
-        // 標準入力は'-'で指定
+        // '-' stands for standard inputs
         std::cerr << "[std::cin]" << std::endl;
 #if defined(_MSC_VER)
       setmode(fileno(stdin), O_BINARY);
 #endif
         return std::cin;
       }else if(strstr(spec, COMPORT_PREFIX) == spec){
-        // COMポート
-        // 先に登録されていないか確認する
-        // (COMポート名[:速度])で指定、速度を分離する
+        std::cerr << spec << std::endl;
+        // COM ports
+        // COM_name[:baudrate] format is acceptable.
         char *baudrate_spec((char *)strchr(spec, ':'));
         if(baudrate_spec){
           *baudrate_spec = '\0';
@@ -175,16 +175,16 @@ struct GlobalOptions {
       const bool force_fstream = false){
     if(!force_fstream){
       if(strcmp(spec, "-") == 0){
-        // 標準出力は'-'で指定
+        // '-' stands for standard outputs
         std::cerr << "[std::cout]" << std::endl;
 #if defined(_MSC_VER)
       setmode(fileno(stdout), O_BINARY);
 #endif
         return std::cout;
       }else if(strstr(spec, COMPORT_PREFIX) == spec){
+        std::cerr << spec << std::endl;
         // COMポート
-        // 先に登録されていないか確認する
-        // (COMポート名[:速度])で指定、速度を分離する
+        // COM_name[:baudrate] format is acceptable.
         char *baudrate_spec((char *)strchr(spec, ':'));
         if(baudrate_spec){
           *baudrate_spec = '\0';
@@ -211,10 +211,10 @@ struct GlobalOptions {
   std::ostream &out() const {return *_out;}
   
   /**
-   * コマンドに与えられた設定を読み解く
+   * Check spec
    * 
-   * @param spec コマンド
-   * @return (bool) 解読にヒットした場合はtrue、さもなければfalse
+   * @param spec
+   * @return (bool) True when interpreted, otherwise false.
    */
   virtual bool check_spec(char *spec){
     using std::cerr;
@@ -317,7 +317,7 @@ class NAVData {
     virtual float_sylph_t azimuth() const = 0;
     
     /**
-     * 状態を出力する関数のためのラベル
+     * Print label
      * 
      */
     virtual void label(std::ostream &out = std::cout) const {
@@ -327,17 +327,17 @@ class NAVData {
            << "v_north" << ", "
            << "v_east" << ", "
            << "v_down" << ", "
-           << "Yaw(Ψ)" << ", "        //Ψ(yaw)
-           << "Pitch(Θ)" << ", "      //Θ(pitch)
-           << "Roll(Φ)" << ", "       //Φ(roll)
-           << "Azimuth(α)" << ", ";   //α(azimuth)
+           << "Yaw(psi)" << ", "
+           << "Pitch(theta)" << ", "
+           << "Roll(phi)" << ", "
+           << "Azimuth(alpha)" << ", ";
     }
     
   protected:
     /**
-     * 現在の状態を出力する関数
+     * Print current state
      * 
-     * @param itow 現在時刻
+     * @param itow Time stamp
      */
     virtual void dump(std::ostream &out) const {
       out << rad2deg(longitude()) << ", "
@@ -346,17 +346,17 @@ class NAVData {
            << v_north() << ", "
            << v_east() << ", "
            << v_down() << ", "
-           << rad2deg(heading()) << ", "      //Ψ(yaw)   <- q_{g}^{b}
-           << rad2deg(euler_theta()) << ", "  //Θ(pitch) <- q_{n}^{b}
-           << rad2deg(euler_phi()) << ", "    //Φ(roll)  <- q_{n}^{b}
-           << rad2deg(azimuth()) << ", ";     //α(azimuth)
+           << rad2deg(heading()) << ", "      // yaw   <- q_{g}^{b}
+           << rad2deg(euler_theta()) << ", "  // pitch <- q_{n}^{b}
+           << rad2deg(euler_phi()) << ", "    // roll  <- q_{n}^{b}
+           << rad2deg(azimuth()) << ", ";     // azimuth)
     }
     
   public:
     /**
-     * 現在の状態を出力する関数
+     * Print current state
      * 
-     * @param itow 現在時刻
+     * @param itow Time stamp
      */
     friend std::ostream &operator<<(std::ostream &out, const NAVData &nav){
       nav.dump(out);
@@ -364,7 +364,7 @@ class NAVData {
     }
     
     /**
-     * N0 Packetを作成
+     * Make N0 packet
      * 
      */
     void encode_N0(
