@@ -256,11 +256,10 @@ struct Packet{
 };
 
 /**
- * AD変換データを管理するパケット
- * AD変換の生の値を処理し、実際の加速度や角速度に変換する
+ * Inertial and temperature sensor data (ADC raw value)
  */
 struct A_Packet : Packet {
-  int ch[9]; ///< AD変換結果がマッピングされる変数
+  int ch[9]; ///< ADC raw values
 };
 
 /**
@@ -358,7 +357,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         
       protected:
         /**
-         * Call back function for time update
+         * Call-back function for time update
          * 
          * @param A matrix A
          * @param B matrix B
@@ -383,7 +382,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         }
     
         /**
-         * Call back function for measurement (correct) update
+         * Call-back function for measurement (correct) update
          * 
          * @param H matrix H
          * @param R matrix R
@@ -399,21 +398,18 @@ float_sylph_t fname() const {return INS_GPS::fname();}
             Matrix<float_sylph_t> &x_hat){
           if(!snapshots.empty()){
             
-            // 時刻の修正と、どこまで後修正を行うかは
-            // correct中この関数が初めて呼び出されたときに行う
-            // そして、以下の部分がcorrect中一回しか実行されないようにするためのif文
+            // This routine is invoked by measurement update function called correct().
+            // In addition, this routine is reduced to be activated once with the following if-statement.
             float_sylph_t mod_deltaT(snapshots.back().deltaT_from_last_correct);
             if(mod_deltaT > 0){
               
-              // 最新側から見ていって、ある程度以上の時間が離れたcorrectが見つかった場合、
-              // それよりも昔のものは削除して後から修正がかからないようにする
+              // The latest is the first
               for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
                   it != snapshots.rend();
                   ++it){
-                //cerr << it->deltaT_from_last_correct << " => ";
-                // ここでどこまで修正するかコントロールしている
+                // This statement controls depth of back propagation.
                 if(it->deltaT_from_last_correct < options.back_propagate_depth){
-                  if(mod_deltaT > 0.1){ // スナップショットが溜まっていない場合は削除しない
+                  if(mod_deltaT > 0.1){ // Skip only when sufficient amount of snapshots are existed.
                     for(typename snapshots_t::reverse_iterator it2(it);
                         it2 != snapshots.rend();
                         ++it2){
@@ -425,17 +421,15 @@ float_sylph_t fname() const {return INS_GPS::fname();}
                   }
                   break;
                 }
-                // 正の値のものはまだ一回も修正を受けたことが無いもの
-                // 一方、負の値のものは一度修正を受けたもの
+                // Positive value stands for states to which applied back-propagation have not been applied
                 it->deltaT_from_last_correct -= mod_deltaT;
-                //cerr << it->deltaT_from_last_correct << "," << mod_deltaT << endl;
               }
             }
             
             snapshot_content_t previous(snapshots.back());
             snapshots.pop_back();
             
-            // あとから得られた情報を使って以前の内容を修正
+            // Perform back-propagation
             Matrix<float_sylph_t> H_dash(H * previous.Phi);
             Matrix<float_sylph_t> R_dash(R + H * previous.GQGt * H.transpose());
             previous.ins_gps->correct(H_dash, v, R_dash);
