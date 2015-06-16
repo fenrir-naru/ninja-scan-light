@@ -179,27 +179,28 @@ void stream_processor(istream &in){
 
 int main(int argc, char *argv[]){
 
-  //stream_processor(cin);
-
-  cerr << "log2ubx." << endl;
+  cerr << "NinjaScan converter to make ubx format GPS data." << endl;
+  cerr << "Usage: (exe) [options] log.dat" << endl;
   if(argc < 2){
-    cerr << "Usage: " << argv[0] << " log.dat [options]" << endl;
+    cerr << "Error: too few arguments; " << argc << " < min(2)" << endl;
     return -1;
   }
   
-  // ログファイルの指定
-  istream &in(options.spec2istream(argv[1]));
+  int log_index(1); // log file name is assumed to be given by argv[1]
+
+  // Check options
+  for(int i(1); i < argc; i++){
+    if(options.check_spec(argv[i])){continue;}
+    // if arg is not an option, assume arg as log file name
+    if(log_index != 1){ // Detect unknown option by multiple substitution to log_index.
+      cerr << "Unknown option!! : " << argv[i] << endl;
+      return -1;
+    }
+    log_index = i;
+  }
   
   options._out = NULL;
-  
-  // options
-  for(int i(2); i < argc; i++){
-    if(options.check_spec(argv[i])){continue;}
-    
-    cerr << "Unknown option!!: " << argv[i] << endl;
-    return -1;
-  }
-  
+
   // デフォルトの出力先の指定
   if(!options._out){
     string out_fname(argv[1]);
@@ -214,10 +215,10 @@ int main(int argc, char *argv[]){
   
   // SylphideProtocolで着ていた場合はそれに対応
   if(options.in_sylphide){
-    SylphideIStream sylphide_in(in, PAGE_SIZE);
+    SylphideIStream sylphide_in(options.spec2istream(argv[log_index]), PAGE_SIZE);
     stream_processor(sylphide_in);
   }else{
-    stream_processor(in);
+    stream_processor(options.spec2istream(argv[log_index]));
   }
   
   cerr << "Good, Bad = " 

@@ -609,46 +609,45 @@ break;
 
 int main(int argc, char *argv[]){
 
+  cerr << "NinjaScan converter to make CSV format data." << endl;
+  cerr << "Usage: " << argv[0] << " [options, ex) --page=A] log.dat" << endl;
   if(argc < 2){
-    cerr << "Usage: " << argv[0] << " log.dat [options] [--page=(A|F|M|P)]" << endl;
+    cerr << "Error: too few arguments; " << argc << " < min(2)" << endl;
     return -1;
   }
   
-  // 互換性維持のため
-  if(strstr(argv[0], "log_AD_CSV")){
+  // For backward compatibility
+  if(strstr(argv[0], "log_AD_CSV") == argv[0]){
     options.page_A = true;
-  }else if(strstr(argv[0], "log_F_CSV")){
+  }else if(strstr(argv[0], "log_F_CSV") == argv[0]){
     options.page_F = true;
-  }else if(strstr(argv[0], "log_M_CSV")){
+  }else if(strstr(argv[0], "log_M_CSV") == argv[0]){
     options.page_M = true;
-  }else if(strstr(argv[0], "log_P_CSV")){
+  }else if(strstr(argv[0], "log_P_CSV") == argv[0]){
     options.page_P = true;
   }
   
   StreamProcessor processor;
   
-  int arg_index(2);
+  int log_index(1); // log file name is assumed to be given by argv[1]
   
-  // 個別の設定(互換性確保)
-  if(options.page_P){
-    // [option = 0:6bytes/packet; 1:8bytes/packet]
-    options.page_P_mode = atoi(argv[arg_index++]);
-  }
-  
-  // オプションによる出力の設定
-  for(; arg_index < argc; arg_index++){
-    if(options.check_spec(argv[arg_index])){continue;}
-    
-    cerr << "Unknown option!! : " << argv[arg_index] << endl;
-    return -1;
+  // check options
+  for(int i(1); i < argc; i++){
+    if(options.check_spec(argv[i])){continue;}
+    // if arg is not an option, assume arg as log file name
+    if(log_index != 1){ // Detect unknown option by multiple substitution to log_index.
+      cerr << "Unknown option!! : " << argv[i] << endl;
+      return -1;
+    }
+    log_index = i;
   }
   
   options.out().precision(10);
   if(options.in_sylphide){
-    SylphideIStream sylph_in(options.spec2istream(argv[1]), PAGE_SIZE);
+    SylphideIStream sylph_in(options.spec2istream(argv[log_index]), PAGE_SIZE);
     processor.process(sylph_in);
   }else{
-    processor.process(options.spec2istream(argv[1]));
+    processor.process(options.spec2istream(argv[log_index]));
   }
   
   return 0;
