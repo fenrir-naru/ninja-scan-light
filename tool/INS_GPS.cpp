@@ -1401,8 +1401,9 @@ int main(int argc, char *argv[]){
   cerr << setprecision(10);
 
   cerr << "NinjaScan INS/GPS post-processor" << endl;
-  if(argc < 3){
-    cerr << "Usage: (exe) [options] log.dat " << endl;
+  cerr << "Usage: (exe) [options] log.dat" << endl;
+  if(argc < 2){
+    cerr << "Error: too few anguments; " << argc << " < min(2)" << endl;
     return -1;
   }
 
