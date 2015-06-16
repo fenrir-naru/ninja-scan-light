@@ -596,7 +596,7 @@ class INS_GPS_BE_NAV : public INS_GPS_NAV<INS_GPS_BE> {
       super_t::nav.beta_gyro() *= 0.1;
       {
         Matrix<float_sylph_t> P(super_t::nav.getFilter().getP());
-        P(10, 10) = P(11, 11) = P(12, 12) = 1E-2;
+        P(10, 10) = P(11, 11) = P(12, 12) = 1E-4;
         P(13, 13) = P(14, 14) = P(15, 15) = 1E-6;
         super_t::nav.getFilter().setP(P);
       }
@@ -605,9 +605,9 @@ class INS_GPS_BE_NAV : public INS_GPS_NAV<INS_GPS_BE> {
         Q(7, 7) = 1E-4;
         Q(8, 8) = 1E-4;
         Q(9, 9) = 1E-4;
-        Q(10, 10) = 1E-6;
-        Q(11, 11) = 1E-6;
-        Q(12, 12) = 1E-6;
+        Q(10, 10) = 1E-8;
+        Q(11, 11) = 1E-8;
+        Q(12, 12) = 1E-8;
         super_t::nav.getFilter().setQ(Q);
       }
     }
@@ -1085,6 +1085,7 @@ class Status{
           && (options.start_gpswn <= current_processor->g_packet_wn) // Week number check
           && (current_processor == processor_storage.front())
           && (before_init_counter >= before_init_counter_min)
+          && (std::abs(before_init_a_packets.front().itow - g_packet.itow) < (0.1 * before_init_a_packets.size())) // time synchronization check
           && (g_packet.acc_2d <= 20.) && (g_packet.acc_v <= 10.)){
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and to meters, respectively.
