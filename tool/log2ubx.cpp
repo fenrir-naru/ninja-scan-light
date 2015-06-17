@@ -51,8 +51,8 @@ typedef double float_sylph_t;
 
 #include "analyze_common.h"
 
-struct Options : public GlobalOptions {
-  typedef GlobalOptions super_t;
+struct Options : public GlobalOptions<float_sylph_t> {
+  typedef GlobalOptions<float_sylph_t> super_t;
   bool log_is_ubx; ///< ubx2ubxを実現するためのフラグ
   
   Options()
@@ -65,7 +65,7 @@ struct Options : public GlobalOptions {
    * @param spec コマンド
    * @return (bool) 解読にヒットした場合はtrue、さもなければfalse
    */
-  bool check_spec(char *spec){
+  bool check_spec(const char *spec){
     using std::cerr;
     using std::endl;
     
@@ -80,11 +80,13 @@ struct Options : public GlobalOptions {
         i++){
       if(std::strstr(spec, available_options[i]) == spec){
         return super_t::check_spec(spec);
-      }else if(std::strstr(spec, "--" "log_is_ubx" "=") == spec){
-        char *value(spec + std::strlen("--" "log_is_ubx" "="));
-        {log_is_ubx = (std::strcmp(value, "true") == 0);}
-        std::cerr << "log_is_ubx" << ": " << (log_is_ubx ? "true" : "false") << std::endl;
-        return true;
+      }else{
+        const char *value(super_t::get_value(spec, "log_is_ubx"));
+        if(value){
+          log_is_ubx = super_t::is_true(value);
+          std::cerr << "log_is_ubx" << ": " << (log_is_ubx ? "true" : "false") << std::endl;
+          return true;
+        }
       }
     }
     

@@ -53,31 +53,34 @@
  * Convert units from degrees to radians
  *
  * @param degrees
- * @return (double) radians
+ * @return radians
  */
-double deg2rad(const double &degrees){return degrees * M_PI / 180;}
+template <class FloatT>
+FloatT deg2rad(const FloatT &degrees){return degrees * M_PI / 180;}
 /**
  * Convert units from radians to degrees
  *
- * @param radians radians
- * @return (double) degrees
+ * @param radians
+ * @return degrees
  */
-double rad2deg(const double &radians){return radians * 180 / M_PI;}
+template <class FloatT>
+FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
+template <class FloatT>
 struct GlobalOptions {
   
   bool dump_update; ///< True for dumping states at time updates
   bool dump_correct; ///< True for dumping states at measurement updates
-  double init_yaw_deg;   ///< Initial yaw angle
-  double start_gpstime;  ///< Start GPS time
+  FloatT init_yaw_deg;   ///< Initial yaw angle
+  FloatT start_gpstime;  ///< Start GPS time
   int start_gpswn; ///< Start GPS week
-  double end_gpstime;    ///< End GPS time
+  FloatT end_gpstime;    ///< End GPS time
   int end_gpswn; ///< End GPS week
   bool est_bias; ///< True for performing bias estimation
   bool use_udkf; ///< True for UD Kalman filtering
   bool use_magnet; ///< True for utilizing magnetic sensor
-  double mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
-  double yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
+  FloatT mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
+  FloatT yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
   bool out_is_N_packet; ///< True for NPacket formatted outputs
   std::ostream *_out; ///< Pointer for output stream
   bool in_sylphide;   ///< True when inputs is Sylphide formated
@@ -209,23 +212,41 @@ struct GlobalOptions {
   }
   
   std::ostream &out() const {return *_out;}
-  
+
+  static const char *get_value(
+      const char *spec, const char *key, const bool &accept_no_value = true){
+    if(std::strstr(spec, "--") != spec){return NULL;}
+    int offset(2);
+    if(std::strstr((spec + offset), key) != (spec + offset)){return NULL;}
+    offset += std::strlen(key);
+    if(std::strstr((spec + offset), "=") == (spec + offset)){
+      return spec + offset + 1;
+    }else{
+      return accept_no_value ? "true" : NULL;
+    }
+  }
+
+  static bool is_true(const char *value){
+    return (strcmp(value, "on") == 0) || (strcmp(value, "true") == 0);
+  }
+
   /**
    * Check spec
    * 
    * @param spec
    * @return (bool) True when interpreted, otherwise false.
    */
-  virtual bool check_spec(char *spec){
+  virtual bool check_spec(const char *spec){
     using std::cerr;
     using std::endl;
     
-#define CHECK_OPTION(name, operation, disp) \
-if(std::strstr(spec, "--" #name "=") == spec){ \
-  char *value(spec + strlen("--" #name "=")); \
-  {operation;} \
-  std::cerr << #name << ": " << disp << std::endl; \
-  return true; \
+#define CHECK_OPTION(name, novalue, operation, disp) { \
+  const char *value(get_value(spec, #name, novalue)); \
+  if(value){ \
+    {operation;} \
+    std::cerr << #name << ": " << disp << std::endl; \
+    return true; \
+  } \
 }
     {
       int dummy_i;
@@ -244,58 +265,60 @@ if(std::strstr(spec, "--" #name "=") == spec){ \
       }
     }
 
-    CHECK_OPTION(start-gpst, 
+    CHECK_OPTION(start-gpst, false,
         start_gpstime = atof(value),
         start_gpstime);
-    CHECK_OPTION(start-gpswn,
+    CHECK_OPTION(start-gpswn, false,
         start_gpswn = atof(value),
         start_gpswn);
-    CHECK_OPTION(end-gpst, 
+    CHECK_OPTION(end-gpst, false,
         end_gpstime = atof(value),
         end_gpstime);
-    CHECK_OPTION(end-gpswn,
+    CHECK_OPTION(end-gpswn, false,
         end_gpswn = atoi(value),
         end_gpswn);
-    CHECK_OPTION(dump-update, 
-        dump_update = (strcmp(value, "on") == 0),
+    CHECK_OPTION(dump-update, true,
+        dump_update = is_true(value),
         (dump_update ? "on" : "off"));
-    CHECK_OPTION(dump-correct, 
-        dump_correct = (strcmp(value, "on") == 0),
+    CHECK_OPTION(dump-correct, true,
+        dump_correct = is_true(value),
         (dump_correct ? "on" : "off"));
-    CHECK_OPTION(init-yaw-deg, 
+    CHECK_OPTION(init-yaw-deg, false,
         init_yaw_deg = atof(value),
         init_yaw_deg << " [deg]");
-    CHECK_OPTION(est_bias, 
-        est_bias = (strcmp(value, "on") == 0),
+    CHECK_OPTION(est_bias, true,
+        est_bias = is_true(value),
         (est_bias ? "on" : "off"));
-    CHECK_OPTION(use_udkf, 
-        use_udkf = (strcmp(value, "on") == 0),
+    CHECK_OPTION(use_udkf, true,
+        use_udkf = is_true(value),
         (use_udkf ? "on" : "off"));
-    CHECK_OPTION(use_magnet, 
-        use_magnet = (strcmp(value, "on") == 0),
+    CHECK_OPTION(use_magnet, true,
+        use_magnet = is_true(value),
         (use_magnet ? "on" : "off"));
-    CHECK_OPTION(mag_heading_accuracy_deg,
+    CHECK_OPTION(mag_heading_accuracy_deg, false,
         mag_heading_accuracy_deg = atof(value),
         mag_heading_accuracy_deg << " [deg]");
-    CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms,
+    CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms, false,
         yaw_correct_with_mag_when_speed_less_than_ms = atoi(value),
         yaw_correct_with_mag_when_speed_less_than_ms << " [m/s]");
-    CHECK_OPTION(out_N_packet, 
-        out_is_N_packet = (strcmp(value, "on") == 0),
+    CHECK_OPTION(out_N_packet, true,
+        out_is_N_packet = is_true(value),
         (out_is_N_packet ? "on" : "off"));
     
-    if(strstr(spec, "--out=") == spec){
-      char *value(spec + strlen("--out="));
-      cerr << "out: ";
-      _out = &(spec2ostream(value));
-      return true;
+    {
+      const char *value(get_value(spec, "out", false));
+      if(value){
+        cerr << "out: ";
+        _out = &(spec2ostream(value));
+        return true;
+      }
     }
     
-    CHECK_OPTION(in_sylphide, 
-        in_sylphide = (strcmp(value, "on") == 0),
+    CHECK_OPTION(in_sylphide, true,
+        in_sylphide = is_true(value),
         (in_sylphide ? "on" : "off"));
-    CHECK_OPTION(out_sylphide, 
-        out_sylphide = (strcmp(value, "on") == 0),
+    CHECK_OPTION(out_sylphide, true,
+        out_sylphide = is_true(value),
         (out_sylphide ? "on" : "off"));
 #undef CHECK_OPTION
     return false;

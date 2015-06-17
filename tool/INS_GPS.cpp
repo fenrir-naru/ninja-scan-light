@@ -78,7 +78,7 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
 #include "analyze_common.h"
 
-struct Options : public GlobalOptions {
+struct Options : public GlobalOptions<float_sylph_t> {
   bool back_propagate;  //< true when use back_propagation, that is, smoothing.
   
   /**
@@ -101,23 +101,24 @@ struct Options : public GlobalOptions {
    * @param spec command
    * @return (bool) true when consumed, otherwise false
    */
-  bool check_spec(char *spec){
+  bool check_spec(const char *spec){
 
-#define CHECK_OPTION(name, operation, disp) \
-if(std::strstr(spec, "--" #name "=") == spec){ \
-  char *value(spec + strlen("--" #name "=")); \
-  {operation;} \
-  std::cerr << #name << ": " << disp << std::endl; \
-  return true; \
+#define CHECK_OPTION(name, operation, disp) { \
+  const char *value(get_value(spec, #name)); \
+  if(value){ \
+    {operation;} \
+    std::cerr << #name << ": " << disp << std::endl; \
+    return true; \
+  } \
 }
     CHECK_OPTION(back_propagate,
-        back_propagate = (strcmp(value, "on") == 0),
+        back_propagate = is_true(value),
         (back_propagate ? "on" : "off"));
     CHECK_OPTION(bp_depth,
         back_propagate_depth = atof(value),
         back_propagate_depth);
     CHECK_OPTION(fake_lock,
-        gps_fake_lock = (strcmp(value, "on") == 0),
+        gps_fake_lock = is_true(value),
         (gps_fake_lock ? "on" : "off"));
 #undef CHECK_OPTION
     
@@ -916,7 +917,7 @@ class Status{
 
   public:
     Status(NAV &_nav) : initalized(false), nav(_nav), gyro_index(0), gyro_init(false),
-        before_init_a_packets(), before_init_counter(0), before_init_counter_min(0x20) {
+        before_init_a_packets(), before_init_counter(0), before_init_counter_min(0x10) {
     }
   
   public:
@@ -1108,6 +1109,7 @@ class Status{
           }
           acc /= before_init_a_packets.size();
           vec_t acc_reg(-acc / acc.abs());
+          cerr << acc_reg << endl;
           
           // Estimate pitch angle
           pitch = -asin(acc_reg[0]);
