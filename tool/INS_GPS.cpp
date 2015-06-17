@@ -1082,9 +1082,7 @@ class Status{
             nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
           }
         }
-      }else if((options.start_gpstime <= g_packet.itow) // Time check
-          && (options.start_gpswn <= current_processor->g_packet_wn) // Week number check
-          && (current_processor == processor_storage.front())
+      }else if((current_processor == processor_storage.front())
           && (before_init_counter >= before_init_counter_min)
           && (std::abs(before_init_a_packets.front().itow - g_packet.itow) < (0.1 * before_init_a_packets.size())) // time synchronization check
           && (g_packet.acc_2d <= 20.) && (g_packet.acc_v <= 10.)){
@@ -1347,7 +1345,13 @@ ins_gps.set_filter_Q( \
         ++it){
       
       current_processor = *it;
-      G_Packet packet((*it)->g_packet);
+      G_Packet g_packet(current_processor->g_packet);
+      current_processor->g_packet_updated = false;
+
+      if((options.start_gpswn > current_processor->g_packet_wn) // Week number check
+          || (options.start_gpstime > g_packet.itow)){ // Time check
+        continue;
+      }
       
       FIFO<A_Packet, operator_eq_t> &a_packet_fifo(
           processor_storage.front()->a_packet_fifo);
@@ -1355,18 +1359,18 @@ ins_gps.set_filter_Q( \
 
       if(options.gps_fake_lock){
         if(a_packet_fifo_size > 0){
-          packet.itow = a_packet_fifo[a_packet_fifo_size - 1].itow;
+          g_packet.itow = a_packet_fifo[a_packet_fifo_size - 1].itow;
         }
-        packet.llh[0] = packet.llh[1] = packet.llh[2] = 0;
-        packet.acc_2d = packet.acc_v = 1E+1;
-        packet.vel_ned[0] = packet.vel_ned[1] = packet.vel_ned[2] = 0;
-        packet.acc_vel = 1;
+        g_packet.llh[0] = g_packet.llh[1] = g_packet.llh[2] = 0;
+        g_packet.acc_2d = g_packet.acc_v = 1E+1;
+        g_packet.vel_ned[0] = g_packet.vel_ned[1] = g_packet.vel_ned[2] = 0;
+        g_packet.acc_vel = 1;
       }
     
       // Time update to the last sample before GPS observation
       int i = 0;
       for(; 
-          (i < a_packet_fifo_size) && (a_packet_fifo[i].itow < packet.itow);
+          (i < a_packet_fifo_size) && (a_packet_fifo[i].itow < g_packet.itow);
           i++){
         status.time_update(a_packet_fifo[i]);
         status.dump(Status::DUMP_UPDATE, a_packet_fifo[i].itow);
@@ -1375,18 +1379,16 @@ ins_gps.set_filter_Q( \
       // Time update to the GPS observation
       if(a_packet_fifo_size){
         A_Packet interpolation(a_packet_fifo[(a_packet_fifo_size > i) ? i : (i - 1)]);
-        interpolation.itow = packet.itow;
+        interpolation.itow = g_packet.itow;
         status.time_update(interpolation);
       }
       
       a_packet_fifo.skip(i);
       
       // Measurement update
-      status.measurement_update(packet);
-      latest_measurement_update_itow = packet.itow;
-      latest_measurement_update_gpswn = (*it)->g_packet_wn;
-      
-      (*it)->g_packet_updated = false;
+      status.measurement_update(g_packet);
+      latest_measurement_update_itow = g_packet.itow;
+      latest_measurement_update_gpswn = current_processor->g_packet_wn;
     }
     
     status.dump(Status::DUMP_CORRECT, latest_measurement_update_itow);
