@@ -153,8 +153,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
       return true;
     }while(false);
 
-    {
+    do{
       const char *value(GlobalOptions::get_value(spec, "page", false));
+      if(!value){break;}
       switch(*value){
         case 'A': page_A = true; break;
         case 'G': page_G = true; break;
@@ -165,7 +166,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
         default: return false;
       }
       return true;
-    }
+    }while(false);
 
     CHECK_OPTION(direct_sylphide, true, // For compatibility; direct_sylphide is alias of in_sylphide.
         in_sylphide = GlobalOptions::is_true(value),
