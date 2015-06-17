@@ -451,14 +451,17 @@ static void make_packet(packet_t *packet){
             }
           }else if(ubx_state.ck_b == c){ // correct checksum
             if(ubx_state.packet_type == (GPS_TIME_FROM_RAW_DATA ? RXM_RAW : NAV_SOL)){
-              time_buf.itow_ms = ((time_buf.itow_ms / 1000) + 1) * 1000;
-              if(time_buf.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
-                time_buf.itow_ms = 0;
-                time_buf.wn++;
+              u16 ms = time_buf.itow_ms % 1000;
+              if((ms >= 200) && (ms <= 800)){
+                time_buf.itow_ms += (1000 - ms);
+                if(time_buf.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
+                  time_buf.itow_ms = 0;
+                  time_buf.wn++;
+                }
+                gps_time_modified = FALSE;
+                memcpy(&gps_time, &time_buf, sizeof(gps_time_t));
+                gps_time_modified = TRUE;
               }
-              gps_time_modified = FALSE;
-              memcpy(&gps_time, &time_buf, sizeof(gps_time_t));
-              gps_time_modified = TRUE;
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
               static __xdata u8 sv_eph_selector = 0;
               if((++sv_eph_selector) > UBX_GPS_MAX_ID){
