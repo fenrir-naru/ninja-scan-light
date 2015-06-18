@@ -82,6 +82,7 @@ struct GlobalOptions {
   FloatT mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
   FloatT yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
   bool out_is_N_packet; ///< True for NPacket formatted outputs
+  bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated
   std::ostream *_out; ///< Pointer for output stream
   bool in_sylphide;   ///< True when inputs is Sylphide formated
   bool out_sylphide;  ///< True when outputs is Sylphide formated
@@ -100,6 +101,7 @@ struct GlobalOptions {
       mag_heading_accuracy_deg(3),
       yaw_correct_with_mag_when_speed_less_than_ms(5),
       out_is_N_packet(false),
+      reduce_1pps_sync_error(true),
       _out(&(std::cout)),
       in_sylphide(false), out_sylphide(false),
       iostream_pool() {};
@@ -304,6 +306,9 @@ struct GlobalOptions {
     CHECK_OPTION(out_N_packet, true,
         out_is_N_packet = is_true(value),
         (out_is_N_packet ? "on" : "off"));
+    CHECK_OPTION(reduce_1pps_sync_error, true,
+        reduce_1pps_sync_error = is_true(value),
+        (reduce_1pps_sync_error ? "on" : "off"));
     
     {
       const char *value(get_value(spec, "out", false));

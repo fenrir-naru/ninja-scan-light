@@ -183,6 +183,20 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
   protected:
     int invoked;
     typedef SylphideProcessor<float_sylph_t> super_t;
+
+    template <class Observer>
+    static float_sylph_t get_corrected_ITOW(const Observer &observer){
+      float_sylph_t raw_itow(observer.fetch_ITOW());
+      if(options.reduce_1pps_sync_error){
+        static float_sylph_t previous_itow(0);
+        float_sylph_t delta_t(raw_itow - previous_itow);
+        if((delta_t >= 1) && (delta_t < 2)){
+          raw_itow -= 1;
+        }
+        previous_itow = raw_itow;
+      }
+      return raw_itow;
+    }
   
   public:
     /**
@@ -197,7 +211,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void operator()(const super_t::A_Observer_t &observer){
         if(!observer.validate()){return;}
         
-        float_sylph_t current(observer.fetch_ITOW());
+        float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
         
         options.out() 
@@ -325,7 +339,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void operator()(const F_Observer_t &observer){
         if(!observer.validate()){return;}
         
-        float_sylph_t current(observer.fetch_ITOW());
+        float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
         
         options.out() << (count++)
@@ -387,7 +401,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void operator()(const P_Observer_t &observer){
         if(!observer.validate()){return;}
         
-        float_sylph_t current(observer.fetch_ITOW());
+        float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
         
         switch(options.page_P_mode){
@@ -430,7 +444,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void operator()(const M_Observer_t &observer){
         if(!observer.validate()){return;}
         
-        float_sylph_t current(observer.fetch_ITOW());
+        float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
         
         M_Observer_t::values_t values(observer.fetch_values());
@@ -465,7 +479,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void operator()(const N_Observer_t &observer){
         if(!observer.validate()){return;}
         
-        float_sylph_t current(observer.fetch_ITOW());
+        float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
         
         switch(observer.kind()){

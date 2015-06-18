@@ -1156,6 +1156,14 @@ void a_packet_handler(const A_Observer_t &observer){
   FIFO<A_Packet, operator_eq_t> &a_packet_fifo(
       current_processor->a_packet_fifo);
 
+  while(options.reduce_1pps_sync_error){
+    if(a_packet_fifo.is_empty()){break;}
+    float_sylph_t delta_t(packet.itow - a_packet_fifo[-1].itow);
+    if((delta_t < 1) || (delta_t >= 2)){break;}
+    packet.itow -= 1;
+    break;
+  }
+
   while(!a_packet_fifo.margin()){
     a_packet_fifo.skip(1);
   }
@@ -1259,6 +1267,15 @@ void m_packet_handler(const M_Observer_t &observer){
   M_Packet m_packet;
   m_packet.itow = observer.fetch_ITOW();
   m_packet.mag = mag;
+
+  while(options.reduce_1pps_sync_error){
+    if(current_processor->m_packet_spool.empty()){break;}
+    float_sylph_t delta_t(m_packet.itow - current_processor->m_packet_spool.back().itow);
+    if((delta_t < 1) || (delta_t >= 2)){break;}
+    m_packet.itow -= 1;
+    break;
+  }
+
   current_processor->m_packet_spool.push_back(m_packet);
 }
 
