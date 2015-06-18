@@ -603,9 +603,9 @@ class INS_GPS_BE_NAV : public INS_GPS_NAV<INS_GPS_BE> {
       }
       {
         Matrix<float_sylph_t> Q(super_t::nav.getFilter().getQ());
-        Q(7, 7) = 1E-4;
-        Q(8, 8) = 1E-4;
-        Q(9, 9) = 1E-4;
+        Q(7, 7) = 1E-6;
+        Q(8, 8) = 1E-6;
+        Q(9, 9) = 1E-6;
         Q(10, 10) = 1E-8;
         Q(11, 11) = 1E-8;
         Q(12, 12) = 1E-8;
