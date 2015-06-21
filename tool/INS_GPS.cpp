@@ -69,8 +69,6 @@ typedef Processor_t::M_Observer_t M_Observer_t;
 VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
 QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
-#include "util/fifo.h"
-
 #include "navigation/INS_GPS2.h"
 #include "navigation/INS_GPS_BE.h"
 
@@ -807,17 +805,17 @@ class StreamProcessor : public Processor_t {
     bool use_lever_arm;
     Vector3<float_sylph_t> lever_arm;
     StandardCalibration calibration;
-    FIFO<A_Packet, operator_eq_t> a_packet_fifo;
+    deque<A_Packet> a_packet_deque;
     G_Packet g_packet;
     bool g_packet_updated;
     int g_packet_wn;
-    deque<M_Packet> m_packet_spool;
+    deque<M_Packet> m_packet_deque;
     StreamProcessor()
         : Processor_t(), _in(NULL), invoked(0),
         use_lever_arm(false), lever_arm(), calibration(),
-        a_packet_fifo(128),
+        a_packet_deque(),
         g_packet(), g_packet_updated(false), g_packet_wn(0),
-        m_packet_spool() {
+        m_packet_deque() {
 
     }
     ~StreamProcessor(){}
@@ -863,19 +861,19 @@ class StreamProcessor : public Processor_t {
     }
 
     Vector3<float_sylph_t> get_mag() {
-      return m_packet_spool.empty()
+      return m_packet_deque.empty()
           ? Vector3<float_sylph_t>(1, 0, 0) // heading is north
-          : m_packet_spool.back().mag;
+          : m_packet_deque.back().mag;
     }
 
     Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
-      if(m_packet_spool.size() < 2){
+      if(m_packet_deque.size() < 2){
         return Vector3<float_sylph_t>(1, 0, 0); // heading is north
       }
       deque<M_Packet>::iterator
-          previous_it(m_packet_spool.begin()),
-          next_it(m_packet_spool.begin() + 1);
-      for(int i(distance(previous_it, m_packet_spool.end()));
+          previous_it(m_packet_deque.begin()),
+          next_it(m_packet_deque.begin() + 1);
+      for(int i(distance(previous_it, m_packet_deque.end()));
           i > 2;
           i--, previous_it++, next_it++){
         if(next_it->itow >= itow){break;}
@@ -1076,7 +1074,7 @@ class Status{
         }else{ // When do not use lever arm effect.
           nav.correct(g_packet.convert());
         }
-        if(!current_processor->m_packet_spool.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
+        if(!current_processor->m_packet_deque.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
               && (pow(g_packet.vel_ned[0], 2) + pow(g_packet.vel_ned[1], 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
             nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
@@ -1115,7 +1113,7 @@ class Status{
           roll = atan2(acc_reg[1], acc_reg[2]);
           
           // Estimate yaw when magnetic sensor is available
-          if(!current_processor->m_packet_spool.empty()){
+          if(!current_processor->m_packet_deque.empty()){
             yaw = nav.get_mag_yaw(current_processor->get_mag(g_packet.itow), pitch, roll, latitude, longitude, g_packet.llh[2]);
           }
           
@@ -1153,21 +1151,21 @@ void a_packet_handler(const A_Observer_t &observer){
   }
   packet.ch[8] = values.temperature;
   
-  FIFO<A_Packet, operator_eq_t> &a_packet_fifo(
-      current_processor->a_packet_fifo);
+  deque<A_Packet> &a_packet_deque(
+      current_processor->a_packet_deque);
 
   while(options.reduce_1pps_sync_error){
-    if(a_packet_fifo.is_empty()){break;}
-    float_sylph_t delta_t(packet.itow - a_packet_fifo[-1].itow);
+    if(a_packet_deque.empty()){break;}
+    float_sylph_t delta_t(packet.itow - a_packet_deque.back().itow);
     if((delta_t < 1) || (delta_t >= 2)){break;}
     packet.itow -= 1;
     break;
   }
 
-  while(!a_packet_fifo.margin()){
-    a_packet_fifo.skip(1);
+  while(a_packet_deque.size() >= 128){
+    a_packet_deque.pop_front();
   }
-  a_packet_fifo.push(&packet);
+  a_packet_deque.push_back(packet);
 }
 
 /**
@@ -1258,8 +1256,8 @@ void m_packet_handler(const M_Observer_t &observer){
     }
   }
   
-  while(current_processor->m_packet_spool.size() > 0x40){
-    current_processor->m_packet_spool.pop_front();
+  while(current_processor->m_packet_deque.size() > 0x40){
+    current_processor->m_packet_deque.pop_front();
   }
 
   // TODO: magnetic sensor axes must correspond to ones of accelerometer and gyro.
@@ -1269,14 +1267,14 @@ void m_packet_handler(const M_Observer_t &observer){
   m_packet.mag = mag;
 
   while(options.reduce_1pps_sync_error){
-    if(current_processor->m_packet_spool.empty()){break;}
-    float_sylph_t delta_t(m_packet.itow - current_processor->m_packet_spool.back().itow);
+    if(current_processor->m_packet_deque.empty()){break;}
+    float_sylph_t delta_t(m_packet.itow - current_processor->m_packet_deque.back().itow);
     if((delta_t < 1) || (delta_t >= 2)){break;}
     m_packet.itow -= 1;
     break;
   }
 
-  current_processor->m_packet_spool.push_back(m_packet);
+  current_processor->m_packet_deque.push_back(m_packet);
 }
 
 void loop(){
@@ -1357,11 +1355,11 @@ ins_gps.set_filter_Q( \
     
     float_sylph_t latest_measurement_update_itow(0);
     int latest_measurement_update_gpswn(0);
-    for(mu_queue_t::iterator it(mu_queue.begin());
-        it != mu_queue.end();
-        ++it){
+    for(mu_queue_t::iterator it_mu(mu_queue.begin());
+        it_mu != mu_queue.end();
+        ++it_mu){
       
-      current_processor = *it;
+      current_processor = *it_mu;
       G_Packet g_packet(current_processor->g_packet);
       current_processor->g_packet_updated = false;
 
@@ -1370,13 +1368,14 @@ ins_gps.set_filter_Q( \
         continue;
       }
       
-      FIFO<A_Packet, operator_eq_t> &a_packet_fifo(
-          processor_storage.front()->a_packet_fifo);
-      const unsigned a_packet_fifo_size(a_packet_fifo.stored());
+      deque<A_Packet> &a_packet_deque(
+          processor_storage.front()->a_packet_deque);
+      deque<A_Packet>::iterator it_tu(a_packet_deque.begin()), it_tu_end(a_packet_deque.end());
+      const bool a_packet_deque_has_item(it_tu != it_tu_end);
 
       if(options.gps_fake_lock){
-        if(a_packet_fifo_size > 0){
-          g_packet.itow = a_packet_fifo[a_packet_fifo_size - 1].itow;
+        if(a_packet_deque_has_item){
+          g_packet.itow = (it_tu_end - 1)->itow;
         }
         g_packet.llh[0] = g_packet.llh[1] = g_packet.llh[2] = 0;
         g_packet.acc_2d = g_packet.acc_v = 1E+1;
@@ -1385,22 +1384,21 @@ ins_gps.set_filter_Q( \
       }
     
       // Time update to the last sample before GPS observation
-      int i = 0;
       for(; 
-          (i < a_packet_fifo_size) && (a_packet_fifo[i].itow < g_packet.itow);
-          i++){
-        status.time_update(a_packet_fifo[i]);
-        status.dump(Status::DUMP_UPDATE, a_packet_fifo[i].itow);
+          (it_tu != it_tu_end) && (it_tu->itow < g_packet.itow);
+          ++it_tu){
+        status.time_update(*it_tu);
+        status.dump(Status::DUMP_UPDATE, it_tu->itow);
       }
       
       // Time update to the GPS observation
-      if(a_packet_fifo_size){
-        A_Packet interpolation(a_packet_fifo[(a_packet_fifo_size > i) ? i : (i - 1)]);
+      if(a_packet_deque_has_item){
+        A_Packet interpolation((it_tu != it_tu_end) ? *it_tu : *(it_tu - 1));
         interpolation.itow = g_packet.itow;
         status.time_update(interpolation);
       }
       
-      a_packet_fifo.skip(i);
+      a_packet_deque.erase(a_packet_deque.begin(), it_tu);
       
       // Measurement update
       status.measurement_update(g_packet);
