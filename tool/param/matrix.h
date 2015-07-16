@@ -110,6 +110,7 @@ class StorageException: public MatrixException{
 #include <cmath>
 #include <ostream>
 #include <iterator>
+#include <algorithm>
 #include "param/complex.h"
 
 template <class T>
