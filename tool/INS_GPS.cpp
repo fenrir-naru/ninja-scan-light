@@ -1455,10 +1455,10 @@ int main(int argc, char *argv[]){
       char *spec(argv[arg_index] + strlen("--calib_file="));
       fstream fin(spec);
       if(fin.fail()){
-        cerr << "File not found" << endl;
+        cerr << "(error!) Calibration file not found: " << spec << endl;
         return -1;
       }else{
-        cerr << "calib_file: " << spec << endl;
+        cerr << "(opt) calib_file: " << spec << endl;
       }
       char buf[1024];
       while(!fin.eof()){
@@ -1472,7 +1472,7 @@ int main(int argc, char *argv[]){
         &(stream_processor->lever_arm[0]),
         &(stream_processor->lever_arm[1]),
         &(stream_processor->lever_arm[2])) == 3){ // Lever Arm
-      std::cerr << "lever_arm: " << stream_processor->lever_arm << std::endl;
+      std::cerr << "(opt) lever_arm: " << stream_processor->lever_arm << std::endl;
       stream_processor->use_lever_arm = true;
       continue;
     }
@@ -1481,7 +1481,7 @@ int main(int argc, char *argv[]){
     
 
     if(!stream_processor){
-      cerr << "Too many log files." << endl;
+      cerr << "(error!) Too many log files." << endl;
       exit(-1);
     }
 
