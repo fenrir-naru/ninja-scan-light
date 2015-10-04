@@ -1088,7 +1088,11 @@ class Status{
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
         
-        float_sylph_t yaw(deg2rad(options.init_yaw_deg)), pitch, roll;
+        float_sylph_t attitude[3];
+        for(int i(0); i < sizeof(attitude) / sizeof(attitude[0]); ++i){
+          attitude[i] = deg2rad(options.init_attitude_deg[i]);
+        }
+        float_sylph_t&yaw(attitude[0]), &pitch(attitude[1]), &roll(attitude[2]);
         float_sylph_t latitude(deg2rad(g_packet.llh[0])), longitude(deg2rad(g_packet.llh[1]));
         
         while(true){
@@ -1105,7 +1109,6 @@ class Status{
           }
           acc /= before_init_a_packets.size();
           vec_t acc_reg(-acc / acc.abs());
-          cerr << acc_reg << endl;
           
           // Estimate pitch angle
           pitch = -asin(acc_reg[0]);
@@ -1126,6 +1129,10 @@ class Status{
             latitude, longitude, g_packet.llh[2],
             g_packet.vel_ned[0], g_packet.vel_ned[1], g_packet.vel_ned[2],
             yaw, pitch, roll);
+        cerr << "Initial attitude (yaw, pitch, roll) [deg]: "
+            << rad2deg(yaw) << ", "
+            << rad2deg(pitch) << ", "
+            << rad2deg(roll) << endl;
         
         dump_label();
       }

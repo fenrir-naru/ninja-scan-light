@@ -71,7 +71,7 @@ struct GlobalOptions {
   
   bool dump_update; ///< True for dumping states at time updates
   bool dump_correct; ///< True for dumping states at measurement updates
-  FloatT init_yaw_deg;   ///< Initial yaw angle
+  FloatT init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
   FloatT start_gpstime;  ///< Start GPS time
   int start_gpswn; ///< Start GPS week
   FloatT end_gpstime;    ///< End GPS time
@@ -92,7 +92,6 @@ struct GlobalOptions {
   GlobalOptions()
       : dump_update(true),
       dump_correct(false),
-      init_yaw_deg(0),
       start_gpstime(0), end_gpstime(DBL_MAX),
       start_gpswn(0), end_gpswn(0),
       est_bias(true),
@@ -106,6 +105,9 @@ struct GlobalOptions {
       in_sylphide(false), out_sylphide(false),
       iostream_pool() {};
   virtual ~GlobalOptions(){
+    for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
+      init_attitude_deg[i] = 0;
+    }
     for(iostream_pool_t::iterator it(iostream_pool.begin());
         it != iostream_pool.end();
         ++it){
@@ -343,10 +345,25 @@ if(key_checked){ \
         dump_correct = is_true(value),
         (dump_correct ? "on" : "off"));
 
+    CHECK_ALIAS(init_attitude_deg);
+    CHECK_KEY(init-attitude-deg);
+    if(key_checked){
+      const char *value(get_value(spec, key_length, false));
+      if(!value){return false;}
+      int converted(std::sscanf(value, "%lf,%lf,%lf",
+        &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
+      std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args: "
+          << converted << ") :"
+          << init_attitude_deg[0] << ", "
+          << init_attitude_deg[1] << ", "
+          << init_attitude_deg[2] << std::endl;
+      return true;
+    }
+
     CHECK_ALIAS(init_yaw_deg);
     CHECK_OPTION(init-yaw-deg, false,
-        init_yaw_deg = atof(value),
-        init_yaw_deg << " [deg]");
+        init_attitude_deg[0] = atof(value),
+        init_attitude_deg[0] << " [deg]");
 
     CHECK_OPTION(est_bias, true,
         est_bias = is_true(value),
