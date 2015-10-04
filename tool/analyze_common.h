@@ -124,7 +124,7 @@ struct GlobalOptions {
   }
   
   void set_baudrate(ComportStream &com, const char *baudrate_spec){
-    int baudrate(atoi(baudrate_spec));
+    int baudrate(std::atoi(baudrate_spec));
     if(baudrate != com.buffer().set_baudrate(baudrate)){
       std::cerr << " => Unsupported baudrate!!" << std::endl;
       exit(-1);
@@ -183,18 +183,18 @@ struct GlobalOptions {
       const char *spec,
       const bool force_fstream = false){
     if(!force_fstream){
-      if(strcmp(spec, "-") == 0){
+      if(std::strcmp(spec, "-") == 0){
         // '-' stands for standard outputs
         std::cerr << "[std::cout]" << std::endl;
 #if defined(_MSC_VER)
       setmode(fileno(stdout), O_BINARY);
 #endif
         return std::cout;
-      }else if(strstr(spec, COMPORT_PREFIX) == spec){
+      }else if(std::strstr(spec, COMPORT_PREFIX) == spec){
         std::cerr << spec << std::endl;
         // COMƒ|[ƒg
         // COM_name[:baudrate] format is acceptable.
-        char *baudrate_spec((char *)strchr(spec, ':'));
+        char *baudrate_spec((char *)std::strchr(spec, ':'));
         if(baudrate_spec){
           *baudrate_spec = '\0';
           baudrate_spec++;
@@ -265,7 +265,7 @@ struct GlobalOptions {
   }
 
   static bool is_true(const char *value){
-    return (strcmp(value, "on") == 0) || (strcmp(value, "true") == 0);
+    return (std::strcmp(value, "on") == 0) || (std::strcmp(value, "true") == 0);
   }
 
   /**
@@ -284,13 +284,12 @@ struct GlobalOptions {
 
     bool key_checked(false);
 
-#define CHECK_KEY(name) if(!key_checked){ \
-  key_checked = (std::strncmp(key, #name, key_length) == 0); \
-}
+#define CHECK_KEY(name) \
+  (key_checked || \
+    (key_checked = (std::strncmp(key, #name, key_length) == 0)))
 #define CHECK_ALIAS(name) CHECK_KEY(name)
 #define CHECK_OPTION(name, novalue, operation, disp) { \
-  CHECK_KEY(name); \
-  if(key_checked){ \
+  if(CHECK_KEY(name)){ \
     const char *value(get_value(spec, key_length, novalue)); \
     if(!value){return false;} \
     {operation;} \
@@ -298,6 +297,8 @@ struct GlobalOptions {
     return true; \
   } \
 }
+#define CHECK_OPTION_BOOL(target) \
+CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
 
 #define CHECK_GPSTIME(prefix) \
 if(key_checked){ \
@@ -318,86 +319,72 @@ if(key_checked){ \
   return true; \
 }
 
-    CHECK_ALIAS(start_gpst);
-    CHECK_KEY(start-gpst);
+    CHECK_ALIAS(start-gpst);
+    CHECK_KEY(start_gpst);
     CHECK_GPSTIME(start);
 
-    CHECK_ALIAS(end_gpst);
-    CHECK_KEY(end-gpst);
+    CHECK_ALIAS(end-gpst);
+    CHECK_KEY(end_gpst);
     CHECK_GPSTIME(end);
 #undef CHECK_GPSTIME
 
-    CHECK_ALIAS(start_gpswn);
-    CHECK_OPTION(start-gpswn, false,
-        start_gpswn = atof(value),
+    CHECK_ALIAS(start-gpswn);
+    CHECK_OPTION(start_gpswn, false,
+        start_gpswn = std::atof(value),
         start_gpswn);
 
-    CHECK_ALIAS(end_gpswn);
-    CHECK_OPTION(end-gpswn, false,
-        end_gpswn = atoi(value),
+    CHECK_ALIAS(end-gpswn);
+    CHECK_OPTION(end_gpswn, false,
+        end_gpswn = std::atoi(value),
         end_gpswn);
 
-    CHECK_ALIAS(dump_update);
-    CHECK_OPTION(dump-update, true,
-        dump_update = is_true(value),
-        (dump_update ? "on" : "off"));
+    CHECK_ALIAS(dump-update);
+    CHECK_OPTION_BOOL(dump_update);
 
-    CHECK_ALIAS(dump_correct);
-    CHECK_OPTION(dump-correct, true,
-        dump_correct = is_true(value),
-        (dump_correct ? "on" : "off"));
+    CHECK_ALIAS(dump-correct);
+    CHECK_OPTION_BOOL(dump_correct);
 
-    CHECK_ALIAS(init_attitude_deg);
-    CHECK_KEY(init-attitude-deg);
-    if(key_checked){
+    CHECK_ALIAS(init-attitude-deg);
+    if(CHECK_KEY(init_attitude_deg)){
       const char *value(get_value(spec, key_length, false));
       if(!value){return false;}
       int converted(std::sscanf(value, "%lf,%lf,%lf",
         &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
       has_initial_attitude = true;
-      std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args: "
-          << converted << ") :"
+      std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args:"
+          << converted << "): "
           << init_attitude_deg[0] << ", "
           << init_attitude_deg[1] << ", "
           << init_attitude_deg[2] << std::endl;
       return true;
     }
 
-    CHECK_ALIAS(init_yaw_deg);
-    CHECK_OPTION(init-yaw-deg, false,
+    CHECK_ALIAS(init-yaw-deg);
+    CHECK_OPTION(init_yaw_deg, false,
         init_attitude_deg[0] = atof(value),
         init_attitude_deg[0] << " [deg]");
 
-    CHECK_OPTION(est_bias, true,
-        est_bias = is_true(value),
-        (est_bias ? "on" : "off"));
-
-    CHECK_OPTION(use_udkf, true,
-        use_udkf = is_true(value),
-        (use_udkf ? "on" : "off"));
-
-    CHECK_OPTION(use_magnet, true,
-        use_magnet = is_true(value),
-        (use_magnet ? "on" : "off"));
+    CHECK_OPTION_BOOL(est_bias);
+    
+    CHECK_OPTION_BOOL(use_udkf);
+    
+    CHECK_OPTION_BOOL(use_magnet);
 
     CHECK_OPTION(mag_heading_accuracy_deg, false,
-        mag_heading_accuracy_deg = atof(value),
+        mag_heading_accuracy_deg = std::atof(value),
         mag_heading_accuracy_deg << " [deg]");
 
     CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms, false,
-        yaw_correct_with_mag_when_speed_less_than_ms = atoi(value),
+        yaw_correct_with_mag_when_speed_less_than_ms = std::atof(value),
         yaw_correct_with_mag_when_speed_less_than_ms << " [m/s]");
 
-    CHECK_OPTION(out_N_packet, true,
-        out_is_N_packet = is_true(value),
-        (out_is_N_packet ? "on" : "off"));
-
-    CHECK_OPTION(reduce_1pps_sync_error, true,
-        reduce_1pps_sync_error = is_true(value),
-        (reduce_1pps_sync_error ? "on" : "off"));
+    CHECK_ALIAS(out_N_packet);
+    CHECK_OPTION_BOOL(out_is_N_packet);
     
-    {
-      const char *value(get_value(spec, "out", false));
+    CHECK_OPTION_BOOL(reduce_1pps_sync_error);
+    
+    if(CHECK_KEY(out)){
+      const char *value(get_value(spec, key_length, false));
       if(value){
         cerr << "out: ";
         _out = &(spec2ostream(value));
@@ -405,15 +392,11 @@ if(key_checked){ \
       }
     }
     
-    CHECK_OPTION(in_sylphide, true,
-        in_sylphide = is_true(value),
-        (in_sylphide ? "on" : "off"));
+    CHECK_OPTION_BOOL(in_sylphide);
 
-    CHECK_OPTION(out_sylphide, true,
-        out_sylphide = is_true(value),
-        (out_sylphide ? "on" : "off"));
+    CHECK_OPTION_BOOL(out_sylphide);
+#undef CHECK_OPTION_BOOL
 #undef CHECK_OPTION
-
     return false;
   }
 };
