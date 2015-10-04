@@ -1450,15 +1450,13 @@ int main(int argc, char *argv[]){
   }
 
   for(int arg_index(1); arg_index < argc; arg_index++){
-    if(strstr(argv[arg_index], "--calib_file=") == argv[arg_index]){ // calibration file
-      cerr << "IMU Calibration file reading..." << endl;
-      char *spec(argv[arg_index] + strlen("--calib_file="));
-      fstream fin(spec);
+    const char *value;
+    if(value = Options::get_value(argv[arg_index], "calib_file", false)){ // calibration file
+      cerr << "IMU Calibration file (" << value << ") reading..." << endl;
+      fstream fin(value);
       if(fin.fail()){
-        cerr << "(error!) Calibration file not found: " << spec << endl;
+        cerr << "(error!) Calibration file not found: " << value << endl;
         return -1;
-      }else{
-        cerr << "(opt) calib_file: " << spec << endl;
       }
       char buf[1024];
       while(!fin.eof()){
@@ -1468,18 +1466,21 @@ int main(int argc, char *argv[]){
       continue;
     }
 
-    if(std::sscanf(argv[arg_index], "--lever_arm=%lf,%lf,%lf",
-        &(stream_processor->lever_arm[0]),
-        &(stream_processor->lever_arm[1]),
-        &(stream_processor->lever_arm[2])) == 3){ // Lever Arm
-      std::cerr << "(opt) lever_arm: " << stream_processor->lever_arm << std::endl;
+    if(value = Options::get_value(argv[arg_index], "lever_arm", false)){ // Lever Arm
+      if(std::sscanf(value, "%lf,%lf,%lf",
+          &(stream_processor->lever_arm[0]),
+          &(stream_processor->lever_arm[1]),
+          &(stream_processor->lever_arm[2])) != 3){
+        cerr << "(error!) Lever arm option requires 3 arguments." << endl;
+        exit(-1);
+      }
+      std::cerr << "lever_arm: " << stream_processor->lever_arm << std::endl;
       stream_processor->use_lever_arm = true;
       continue;
     }
 
     if(options.check_spec(argv[arg_index])){continue;}
     
-
     if(!stream_processor){
       cerr << "(error!) Too many log files." << endl;
       exit(-1);
@@ -1498,6 +1499,11 @@ int main(int argc, char *argv[]){
 
     processor_storage.push_back(stream_processor);
     stream_processor = NULL;
+  }
+
+  if(processor_storage.empty()){
+    cerr << "(error!) No log file." << endl;
+    exit(-1);
   }
 
   if(options.out_sylphide){

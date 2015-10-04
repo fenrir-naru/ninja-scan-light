@@ -215,17 +215,49 @@ struct GlobalOptions {
   
   std::ostream &out() const {return *_out;}
 
+  /**
+   * @param spec check target
+   * @param key_head pointer to key head pointer to be stored, only available when key found.
+   * @return if key found, return key length, otherwise zero.
+   */
+  static unsigned int get_key(const char *spec, const char **key_head){
+    *key_head = NULL;
+    if(std::strstr(spec, "--") != spec){return 0;}
+    unsigned int offset(2);
+    *key_head = &spec[2];
+    while((spec[offset] != '\0') && (spec[offset] != '=')){
+      offset++;
+    }
+    return offset - 2;
+  }
+
   static const char *get_value(
-      const char *spec, const char *key, const bool &accept_no_value = true){
-    if(std::strstr(spec, "--") != spec){return NULL;}
-    int offset(2);
-    if(std::strstr((spec + offset), key) != (spec + offset)){return NULL;}
-    offset += std::strlen(key);
-    if(std::strstr((spec + offset), "=") == (spec + offset)){
+      const char *spec,
+      const unsigned int &key_length = 0, const bool &accept_no_value = true){
+    unsigned int offset(key_length);
+    if(key_length == 0){ // check key length
+      const char *key_head;
+      if((offset = get_key(spec, &key_head)) == 0){
+        return NULL;
+      }
+    }
+    offset += 2; // move pointer to position followed by "--(key)"
+    if((spec[offset] != '\0') && (spec[offset] == '=')){
       return spec + offset + 1;
     }else{
       return accept_no_value ? "true" : NULL;
     }
+  }
+
+  static const char *get_value(
+      const char *spec, const char *key, const bool &accept_no_value = true){
+    const char *key_head;
+    unsigned int key_length(get_key(spec, &key_head));
+    if(key_length == 0){return NULL;}
+    if(std::strncmp(key, key_head, key_length) != 0){ // check same key?
+      return NULL;
+    }
+    return get_value(spec, key_length, accept_no_value);
   }
 
   static bool is_true(const char *value){
@@ -242,70 +274,104 @@ struct GlobalOptions {
     using std::cerr;
     using std::endl;
     
+    const char *key;
+    const unsigned int key_length(get_key(spec, &key));
+    if(key_length == 0){return false;}
+
+    bool key_checked(false);
+
+#define CHECK_KEY(name) if(!key_checked){ \
+  key_checked = (std::strncmp(key, #name, key_length) == 0); \
+}
+#define CHECK_ALIAS(name) CHECK_KEY(name)
 #define CHECK_OPTION(name, novalue, operation, disp) { \
-  const char *value(get_value(spec, #name, novalue)); \
-  if(value){ \
+  CHECK_KEY(name); \
+  if(key_checked){ \
+    const char *value(get_value(spec, key_length, novalue)); \
+    if(!value){return false;} \
     {operation;} \
-    std::cerr << #name << ": " << disp << std::endl; \
+    std::cerr.write(key, key_length) << ": " << disp << std::endl; \
     return true; \
   } \
 }
-    {
-      int dummy_i;
-      double dummy_d;
-      if(std::sscanf(spec, "--start-gpst=%i:%lf", &dummy_i, &dummy_d) == 2){
-        start_gpstime = dummy_d;
-        start_gpswn = dummy_i;
-        std::cerr << "start-gpst" << ": " << start_gpswn << ":" << start_gpstime << std::endl;
-        return true;
-      }
-      if(std::sscanf(spec, "--end-gpst=%i:%lf", &dummy_i, &dummy_d) == 2){
-        end_gpstime = dummy_d;
-        end_gpswn = dummy_i;
-        std::cerr << "end-gpst" << ": " << end_gpswn << ":" << end_gpstime << std::endl;
-        return true;
-      }
-    }
 
-    CHECK_OPTION(start-gpst, false,
-        start_gpstime = atof(value),
-        start_gpstime);
+#define CHECK_GPSTIME(prefix) \
+if(key_checked){ \
+  const char *value(get_value(spec, key_length, false)); \
+  if(!value){return false;} \
+  int dummy_i; \
+  double dummy_d; \
+  if(std::sscanf(value, "%i:%lf", &dummy_i, &dummy_d) == 2){ \
+    prefix ## _gpstime = dummy_d; \
+    prefix ## _gpswn = dummy_i; \
+    std::cerr.write(key, key_length) << ": " \
+        << prefix ## _gpswn << ":" \
+        << prefix ## _gpstime << std::endl; \
+  }else{ \
+    prefix ## _gpstime = atof(value); \
+    std::cerr.write(key, key_length) << ": " << prefix ## _gpstime << std::endl; \
+  } \
+  return true; \
+}
+
+    CHECK_ALIAS(start_gpst);
+    CHECK_KEY(start-gpst);
+    CHECK_GPSTIME(start);
+
+    CHECK_ALIAS(end_gpst);
+    CHECK_KEY(end-gpst);
+    CHECK_GPSTIME(end);
+#undef CHECK_GPSTIME
+
+    CHECK_ALIAS(start_gpswn);
     CHECK_OPTION(start-gpswn, false,
         start_gpswn = atof(value),
         start_gpswn);
-    CHECK_OPTION(end-gpst, false,
-        end_gpstime = atof(value),
-        end_gpstime);
+
+    CHECK_ALIAS(end_gpswn);
     CHECK_OPTION(end-gpswn, false,
         end_gpswn = atoi(value),
         end_gpswn);
+
+    CHECK_ALIAS(dump_update);
     CHECK_OPTION(dump-update, true,
         dump_update = is_true(value),
         (dump_update ? "on" : "off"));
+
+    CHECK_ALIAS(dump_correct);
     CHECK_OPTION(dump-correct, true,
         dump_correct = is_true(value),
         (dump_correct ? "on" : "off"));
+
+    CHECK_ALIAS(init_yaw_deg);
     CHECK_OPTION(init-yaw-deg, false,
         init_yaw_deg = atof(value),
         init_yaw_deg << " [deg]");
+
     CHECK_OPTION(est_bias, true,
         est_bias = is_true(value),
         (est_bias ? "on" : "off"));
+
     CHECK_OPTION(use_udkf, true,
         use_udkf = is_true(value),
         (use_udkf ? "on" : "off"));
+
     CHECK_OPTION(use_magnet, true,
         use_magnet = is_true(value),
         (use_magnet ? "on" : "off"));
+
     CHECK_OPTION(mag_heading_accuracy_deg, false,
         mag_heading_accuracy_deg = atof(value),
         mag_heading_accuracy_deg << " [deg]");
+
     CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms, false,
         yaw_correct_with_mag_when_speed_less_than_ms = atoi(value),
         yaw_correct_with_mag_when_speed_less_than_ms << " [m/s]");
+
     CHECK_OPTION(out_N_packet, true,
         out_is_N_packet = is_true(value),
         (out_is_N_packet ? "on" : "off"));
+
     CHECK_OPTION(reduce_1pps_sync_error, true,
         reduce_1pps_sync_error = is_true(value),
         (reduce_1pps_sync_error ? "on" : "off"));
@@ -322,10 +388,12 @@ struct GlobalOptions {
     CHECK_OPTION(in_sylphide, true,
         in_sylphide = is_true(value),
         (in_sylphide ? "on" : "off"));
+
     CHECK_OPTION(out_sylphide, true,
         out_sylphide = is_true(value),
         (out_sylphide ? "on" : "off"));
 #undef CHECK_OPTION
+
     return false;
   }
 };
