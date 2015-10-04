@@ -71,6 +71,7 @@ struct GlobalOptions {
   
   bool dump_update; ///< True for dumping states at time updates
   bool dump_correct; ///< True for dumping states at measurement updates
+  bool has_initial_attitude; ///< Whether initial attitude is given.
   FloatT init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
   FloatT start_gpstime;  ///< Start GPS time
   int start_gpswn; ///< Start GPS week
@@ -92,6 +93,7 @@ struct GlobalOptions {
   GlobalOptions()
       : dump_update(true),
       dump_correct(false),
+      has_initial_attitude(false),
       start_gpstime(0), end_gpstime(DBL_MAX),
       start_gpswn(0), end_gpswn(0),
       est_bias(true),
@@ -352,6 +354,7 @@ if(key_checked){ \
       if(!value){return false;}
       int converted(std::sscanf(value, "%lf,%lf,%lf",
         &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
+      has_initial_attitude = true;
       std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args: "
           << converted << ") :"
           << init_attitude_deg[0] << ", "

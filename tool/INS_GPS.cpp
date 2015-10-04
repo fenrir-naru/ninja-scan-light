@@ -915,7 +915,9 @@ class Status{
 
   public:
     Status(NAV &_nav) : initalized(false), nav(_nav), gyro_index(0), gyro_init(false),
-        before_init_a_packets(), before_init_counter(0), before_init_counter_min(0x10) {
+        before_init_a_packets(),
+        before_init_counter(0),
+        before_init_counter_min(options.has_initial_attitude ? 1 : 0x10) {
     }
   
   public:
@@ -1095,7 +1097,7 @@ class Status{
         float_sylph_t&yaw(attitude[0]), &pitch(attitude[1]), &roll(attitude[2]);
         float_sylph_t latitude(deg2rad(g_packet.llh[0])), longitude(deg2rad(g_packet.llh[1]));
         
-        while(true){
+        while(!options.has_initial_attitude){
           // Estimate initial attitude by using accelerometer and magnetic sensor (if available) under static assumption
           
           typedef Vector3<float_sylph_t> vec_t;
