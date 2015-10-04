@@ -53,6 +53,7 @@ typedef double float_sylph_t;
 using namespace std;
 
 struct Options : public GlobalOptions<float_sylph_t> {
+  typedef GlobalOptions<float_sylph_t> super_t;
   bool page_A;
   bool page_G;
   bool page_F;
@@ -71,7 +72,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   int localtime_correction_in_seconds;
   
   Options() 
-      : GlobalOptions(),
+      : super_t(),
       page_A(false), page_G(false), page_F(false), 
       page_P(false), page_M(false), page_N(false),
       page_other(false),
@@ -117,14 +118,13 @@ struct Options : public GlobalOptions<float_sylph_t> {
    */
   bool check_spec(const char *spec){
 #define CHECK_OPTION(name, novalue, operation, disp) { \
-  const char *value(GlobalOptions::get_value(spec, #name, novalue)); \
+  const char *value(get_value(spec, #name, novalue)); \
   if(value){ \
     {operation;} \
     std::cerr << #name << ": " << disp << std::endl; \
     return true; \
   } \
 }
-    char c;
     CHECK_OPTION(page_P_mode, false,
         page_P_mode = atoi(value),
         page_P_mode);
@@ -135,14 +135,14 @@ struct Options : public GlobalOptions<float_sylph_t> {
         page_M_mode = atoi(value),
         page_M_mode);
     CHECK_OPTION(page_other, true,
-        page_other = GlobalOptions::is_true(value),
+        page_other = is_true(value),
         (page_other ? "on" : "off"));
 
     do{ // Change time outputs from gpstime[ms] to calendartime(YY,MM,DD,HH,MM,SS) formats
-      const char *value(GlobalOptions::get_value(spec, "calendar_time"));
+      const char *value(get_value(spec, "calendar_time"));
       if(!value){break;}
       int correction_hr(0);
-      if(!GlobalOptions::is_true(value)){
+      if(!is_true(value)){
         correction_hr = atoi(value); // Specify time zone by hour.
       }
       use_calendar_time = true;
@@ -169,13 +169,13 @@ struct Options : public GlobalOptions<float_sylph_t> {
     }while(false);
 
     CHECK_OPTION(direct_sylphide, true, // For compatibility; direct_sylphide is alias of in_sylphide.
-        in_sylphide = GlobalOptions::is_true(value),
+        in_sylphide = is_true(value),
         (in_sylphide ? "on" : "off"));
     CHECK_OPTION(debug, false, // For compatibility; direct_sylphide is alias of in_sylphide.
         debug_level = atoi(value),
         debug_level);
 #undef CHECK_OPTION
-    return GlobalOptions::check_spec(spec);
+    return super_t::check_spec(spec);
   }
 } options;
 

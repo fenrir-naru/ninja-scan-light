@@ -79,6 +79,8 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 struct Options : public GlobalOptions<float_sylph_t> {
   bool back_propagate;  //< true when use back_propagation, that is, smoothing.
   
+  typedef GlobalOptions<float_sylph_t> super_t;
+
   /**
    * Number of snapshots to be back-propagated.
    * Zero means the last snapshot to be corrected, and negative values mean deeper.
@@ -88,7 +90,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool gps_fake_lock; //< true when gps dummy date is used.
 
   Options()
-      : GlobalOptions(),
+      : super_t(),
       back_propagate(false), back_propagate_depth(0),
       gps_fake_lock(false) {}
   ~Options(){}
@@ -113,14 +115,14 @@ struct Options : public GlobalOptions<float_sylph_t> {
         back_propagate = is_true(value),
         (back_propagate ? "on" : "off"));
     CHECK_OPTION(bp_depth,
-        back_propagate_depth = atof(value),
+        back_propagate_depth = std::atof(value),
         back_propagate_depth);
     CHECK_OPTION(fake_lock,
         gps_fake_lock = is_true(value),
         (gps_fake_lock ? "on" : "off"));
 #undef CHECK_OPTION
     
-    return GlobalOptions::check_spec(spec);
+    return super_t::check_spec(spec);
   }
 } options;
 

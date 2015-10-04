@@ -69,24 +69,24 @@ struct Options : public GlobalOptions<float_sylph_t> {
     using std::cerr;
     using std::endl;
     
-    static const char *available_options[] = {
-        "--start-gpst=",
-        "--end-gpst=",
-        "--out=",
-        "--in_sylphide="};
+    static const char *available_keys[] = {
+        "start_gpst", "start-gpst",
+        "end_gpst", "end-gpst",
+        "out",
+        "in_sylphide"};
     
+    const char *value;
+    if(value = get_value(spec, "log_is_ubx")){
+      log_is_ubx = is_true(value);
+      std::cerr << "log_is_ubx" << ": " << (log_is_ubx ? "true" : "false") << std::endl;
+      return true;
+    }
+
     for(int i(0); 
-        i < sizeof(available_options) / sizeof(available_options[0]);
+        i < sizeof(available_keys) / sizeof(available_keys[0]);
         i++){
-      if(std::strstr(spec, available_options[i]) == spec){
+      if(value = get_value(spec, available_keys[i])){
         return super_t::check_spec(spec);
-      }else{
-        const char *value(super_t::get_value(spec, "log_is_ubx"));
-        if(value){
-          log_is_ubx = super_t::is_true(value);
-          std::cerr << "log_is_ubx" << ": " << (log_is_ubx ? "true" : "false") << std::endl;
-          return true;
-        }
       }
     }
     
@@ -184,7 +184,7 @@ int main(int argc, char *argv[]){
   cerr << "NinjaScan converter to make ubx format GPS data." << endl;
   cerr << "Usage: (exe) [options] log.dat" << endl;
   if(argc < 2){
-    cerr << "Error: too few arguments; " << argc << " < min(2)" << endl;
+    cerr << "(error!) Too few arguments; " << argc << " < min(2)" << endl;
     return -1;
   }
   
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]){
     if(options.check_spec(argv[i])){continue;}
     // if arg is not an option, assume arg as log file name
     if(log_index != 1){ // Detect unknown option by multiple substitution to log_index.
-      cerr << "Unknown option!! : " << argv[i] << endl;
+      cerr << "(error!) Unknown option!! : " << argv[i] << endl;
       return -1;
     }
     log_index = i;
