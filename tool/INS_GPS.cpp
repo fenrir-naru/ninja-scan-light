@@ -1085,7 +1085,7 @@ class Status{
           && (std::abs(before_init_a_packets.front().itow - g_packet.itow) < (0.1 * before_init_a_packets.size())) // time synchronization check
           && (g_packet.acc_2d <= 20.) && (g_packet.acc_v <= 10.)){
         /*
-         * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and to meters, respectively.
+         * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
         
         float_sylph_t yaw(deg2rad(options.init_yaw_deg)), pitch, roll;
