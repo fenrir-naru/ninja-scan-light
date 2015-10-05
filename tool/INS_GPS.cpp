@@ -1495,8 +1495,8 @@ int main(int argc, char *argv[]){
 
     if(options.check_spec(argv[arg_index])){continue;}
     
-    if(!stream_processor){
-      cerr << "(error!) Too many log files." << endl;
+    if(!processor_storage.empty()){
+      cerr << "(error!) Unknown option or too many log." << endl;
       exit(-1);
     }
 
@@ -1512,7 +1512,6 @@ int main(int argc, char *argv[]){
         options.in_sylphide ? new SylphideIStream(in, PAGE_SIZE) : &in);
 
     processor_storage.push_back(stream_processor);
-    stream_processor = NULL;
   }
 
   if(processor_storage.empty()){
