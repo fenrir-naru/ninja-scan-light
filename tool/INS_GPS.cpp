@@ -663,10 +663,11 @@ struct StandardCalibration {
   static const char *get_value(const char *spec, const char *key){
     int offset(std::strlen(key));
     if(std::strncmp(spec, key, offset) != 0){return NULL;}
+    if((spec[offset] == '\0') || std::isgraph(spec[offset])){return NULL;} // no value or different key.
     while(spec[++offset] != '\0'){
       if(std::isgraph(spec[offset])){return &spec[offset];}
     }
-    return NULL;
+    return NULL; // no value
   }
 
   bool check_spec(const char *line){
