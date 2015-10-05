@@ -47,6 +47,7 @@
 #include <cstdio>
 #include <cmath>
 #include <cstring>
+#include <cctype>
 
 #include <vector>
 #include <utility>
@@ -659,42 +660,44 @@ struct StandardCalibration {
   };
   calibration_info_t<3> accel, gyro;
 
-  bool check_spec(const char *str){
-    using std::strstr;
-    using std::strlen;
-    using std::strcmp;
-    using std::atoi;
-    using std::atof;
-    char *spec(const_cast<char *>(str));
-    if(strstr(spec, "index_base") == spec){
-      spec += strlen("index_base");
-      index_base = atoi(spec);
+  static const char *get_value(const char *spec, const char *key){
+    int offset(std::strlen(key));
+    if(std::strncmp(spec, key, offset) != 0){return NULL;}
+    while(spec[++offset] != '\0'){
+      if(std::isgraph(spec[offset])){return &spec[offset];}
+    }
+    return NULL;
+  }
+
+  bool check_spec(const char *line){
+    const char *value;
+    if(value = get_value(line, "index_base")){
+      index_base = std::atoi(value);
       return true;
     }
-    if(strstr(spec, "index_temp_ch") == spec){
-      spec += strlen("index_temp_ch");
-      index_temp_ch = atoi(spec);
+    if(value = get_value(line, "index_temp_ch")){
+      index_temp_ch = std::atoi(value);
       return true;
     }
 #define TO_STRING(name) # name
 #define make_proc1(name, sensor, item) \
-if(strstr(spec, TO_STRING(name)) == spec){ \
-  spec += strlen(TO_STRING(name)); \
+if(value = get_value(line, TO_STRING(name))){ \
   std::cerr << TO_STRING(name) << ":"; \
+  char *spec(const_cast<char *>(value)); \
   for(int i(0); i < 3; i++){ \
-    sensor.item[i] = strtod(spec, &spec); \
+    sensor.item[i] = std::strtod(spec, &spec); \
     std::cerr << " " << sensor.item[i]; \
   } \
   std::cerr << std::endl; \
   return true; \
 }
 #define make_proc2(name, sensor, item) \
-if(strstr(spec, TO_STRING(name)) == spec){ \
-  spec += strlen(TO_STRING(name)); \
+if(value = get_value(line, TO_STRING(name))){ \
   std::cerr << TO_STRING(name) << ": {"; \
+  char *spec(const_cast<char *>(value)); \
   for(int i(0); i < 3; i++){ \
     for(int j(0); j < 3; j++){ \
-      sensor.item[i][j] = strtod(spec, &spec); \
+      sensor.item[i][j] = std::strtod(spec, &spec); \
     } \
     std::cerr \
         << std::endl << "{" \
