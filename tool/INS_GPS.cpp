@@ -909,9 +909,9 @@ class Status{
   private:
     bool initalized;
     NAV &nav;
-    deque<A_Packet> before_init_a_packets;
-    int before_init_counter;
-    int before_init_counter_min;
+    int min_a_packets_for_init; // must be greater than 0
+    deque<A_Packet> recent_a_packets;
+    unsigned int max_recent_a_packets;
 
   // Used for compensation of lever arm effect
   protected:
@@ -921,9 +921,8 @@ class Status{
 
   public:
     Status(NAV &_nav) : initalized(false), nav(_nav), gyro_index(0), gyro_init(false),
-        before_init_a_packets(),
-        before_init_counter(0),
-        before_init_counter_min(options.has_initial_attitude ? 1 : 0x10) {
+        min_a_packets_for_init(options.has_initial_attitude ? 1 : 0x10),
+        recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)) {
     }
   
   public:
@@ -1018,32 +1017,22 @@ class Status{
      * @param a_packet raw values of ADC
      */
     void time_update(const A_Packet &a_packet){
-      static A_Packet previous;
-      static bool has_previous(false);
-      
       Vector3<float_sylph_t>
           accel(current_processor->calibration.raw2accel(a_packet.ch)),
           gyro(current_processor->calibration.raw2gyro(a_packet.ch));
 
-#define pow2(x) ((x) * (x))
-      if(!initalized){
-        before_init_a_packets.push_back(a_packet);
-        if(++before_init_counter > before_init_counter_min){
-          before_init_a_packets.pop_front();
-        }
-        return;
-      }
+      if(initalized){
+        const A_Packet &previous(recent_a_packets.back());
       
-      // for LAE
-      {
-        gyro_storage[gyro_index++] = gyro;
-        if(gyro_index == (sizeof(gyro_storage) / sizeof(gyro_storage[0]))){
-          gyro_index = 0;
-          if(!gyro_init) gyro_init = true;
+        { // for LAE
+          gyro_storage[gyro_index++] = gyro;
+          if(gyro_index == (sizeof(gyro_storage) / sizeof(gyro_storage[0]))){
+            gyro_index = 0;
+            if(!gyro_init) gyro_init = true;
+          }
         }
-      }
-      
-      if(has_previous){ // Check interval from the last measurement update
+
+        // Check interval from the last time update
         float_sylph_t interval(previous.interval(a_packet));
 #define INTERVAL_THRESHOLD 10
 #define INTERVAL_FORCE_VALUE 0.01
@@ -1054,8 +1043,11 @@ class Status{
 
         nav.update(accel, gyro, interval);
       }
-      previous = a_packet;
-      has_previous = true;
+
+      recent_a_packets.push_back(a_packet);
+      if(recent_a_packets.size() > max_recent_a_packets){
+        recent_a_packets.pop_front();
+      }
     }
 
     /**
@@ -1089,8 +1081,8 @@ class Status{
           }
         }
       }else if((current_processor == processor_storage.front())
-          && (before_init_counter >= before_init_counter_min)
-          && (std::abs(before_init_a_packets.front().itow - g_packet.itow) < (0.1 * before_init_a_packets.size())) // time synchronization check
+          && (recent_a_packets.size() >= min_a_packets_for_init)
+          && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
           && (g_packet.acc_2d <= 20.) && (g_packet.acc_v <= 10.)){
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
@@ -1110,12 +1102,12 @@ class Status{
           
           // Normalization
           vec_t acc(0, 0, 0);
-          for(deque<A_Packet>::iterator it(before_init_a_packets.begin());
-              it != before_init_a_packets.end();
+          for(deque<A_Packet>::iterator it(recent_a_packets.begin());
+              it != recent_a_packets.end();
               ++it){
             acc += current_processor->calibration.raw2accel(it->ch);
           }
-          acc /= before_init_a_packets.size();
+          acc /= recent_a_packets.size();
           vec_t acc_reg(-acc / acc.abs());
           
           // Estimate pitch angle
