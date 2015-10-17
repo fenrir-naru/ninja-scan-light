@@ -89,6 +89,14 @@ struct GlobalOptions {
   bool out_sylphide;  ///< True when outputs is Sylphide formated
   typedef std::map<const char *, std::iostream *> iostream_pool_t;
   iostream_pool_t iostream_pool;
+
+  static const char *null_fname(){
+#if defined(_MSC_VER)
+    return "nul";
+#else
+    return "/dev/null";
+#endif
+  }
   
   GlobalOptions()
       : dump_update(true),
