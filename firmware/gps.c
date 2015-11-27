@@ -379,6 +379,7 @@ static void make_packet(packet_t *packet){
     static __xdata u32 ephemeris_received_gps = 0;
     static __xdata u8 svid;
     static __xdata gps_time_t time_buf;
+    static __xdata u8 num_of_sat_buf;
     
     u8 c = *(dst++);
     
@@ -462,6 +463,7 @@ static void make_packet(packet_t *packet){
                 memcpy(&gps_time, &time_buf, sizeof(gps_time_t));
                 gps_time_modified = TRUE;
               }
+              gps_num_of_sat = num_of_sat_buf;
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
               static __xdata u8 sv_eph_selector = 0;
               if((++sv_eph_selector) > UBX_GPS_MAX_ID){
@@ -528,7 +530,7 @@ static void make_packet(packet_t *packet){
                 *((u8 *)(((u8 *)&(time_buf.wn)) + (ubx_state.index - 11))) = c;
                 break;
               case 13:
-                gps_num_of_sat = c;
+                num_of_sat_buf = c;
                 break;
             }
             break;
@@ -546,7 +548,7 @@ static void make_packet(packet_t *packet){
                 *((u8 *)(((u8 *)&(time_buf.wn)) + (ubx_state.index - 15))) = c;
                 break;
               case 54:
-                gps_num_of_sat = c;
+                num_of_sat_buf = c;
                 break;
             }
             break;
