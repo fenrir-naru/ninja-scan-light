@@ -48,6 +48,10 @@
 #define FIFO_SIZE_T unsigned char
 #endif
 
+#ifndef NULL_CHECK
+#define NULL_CHECK 0
+#endif
+
 #ifndef FIFO_BUFFER_STORAGE
 #define FIFO_BUFFER_STORAGE
 #endif
@@ -59,8 +63,8 @@ typedef struct {
   FIFO_BUFFER_STORAGE FIFO_TYPE *follower;
 } FIFO_T(FIFO_TYPE);
 
-/* The mechanizm of the ring buffer.
- * 1) The "follower" can reach the "prius" , but not overtake it. 
+/* The rule of pointers in a ring buffer.
+ * 1) The "follower" can reach the "prius" , but can not overtake it.
  * 2) The "prius" can not reach the "follower" more than overtake it.
  */
 
@@ -73,22 +77,22 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, margin) (FIFO_T(FIFO_TYPE) *fifo);
 FIFO_T(FIFO_TYPE) * FIFO_METHOD(FIFO_TYPE,init) (FIFO_T(FIFO_TYPE) *fifo, FIFO_BUFFER_STORAGE FIFO_TYPE *buffer, FIFO_SIZE_T size);
 
 #define FIFO_DIRECT_PUT(fifo, value, res) { \
-  FIFO_BUFFER_STORAGE FIFO_TYPE *next = fifo.prius + 1; \
+  FIFO_BUFFER_STORAGE FIFO_TYPE *next = (fifo).prius + 1; \
   res = 0; \
-  if(next == (fifo.buffer + fifo.size)) next = fifo.buffer; \
-  if(next != fifo.follower){ \
-    *fifo.prius = value; \
-    fifo.prius = next; \
+  if(next == ((fifo).buffer + (fifo).size)){next = (fifo).buffer;} \
+  if(next != (fifo).follower){ \
+    *((fifo).prius) = value; \
+    (fifo).prius = next; \
     res = 1; \
   } \
 }
 
 #define FIFO_DIRECT_GET(fifo, buf, res) { \
   res = 0; \
-  if(fifo.follower != fifo.prius){ \
-    buf = *(fifo.follower++); \
-    if(fifo.follower == fifo.buffer + fifo.size){ \
-      fifo.follower = fifo.buffer; \
+  if((fifo).follower != (fifo).prius){ \
+    buf = *((fifo).follower++); \
+    if((fifo).follower == (fifo).buffer + (fifo).size){ \
+      (fifo).follower = (fifo).buffer; \
     } \
     res = 1; \
   } \

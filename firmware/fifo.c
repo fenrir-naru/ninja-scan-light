@@ -40,14 +40,12 @@
 #define max(x, y) (((x) > (y)) ? (x) : (y))
 #endif
 
-#define NULL_CHECK 0
-
 /**
- * FIFOを初期化します。
+ * Initialize FIFO
  * 
  * @param fifo
- * @param buffer
- * @param size 
+ * @param buffer buffer for FIFO
+ * @param size maximum number of data to be stored
  * @return ( FIFO_T(FIFO_TYPE) ) 
  */
 FIFO_T(FIFO_TYPE) * FIFO_METHOD(FIFO_TYPE, init) (
@@ -64,12 +62,12 @@ FIFO_T(FIFO_TYPE) * FIFO_METHOD(FIFO_TYPE, init) (
 }
 
 /**
- * FIFOに書き出します
+ * Write multiple data to FIFO
  * 
  * @param fifo 
- * @param data 
- * @param size 
- * @return (int)
+ * @param values data to be written
+ * @param size maximum number of data to be written
+ * @return (FIFO_SIZE_T) number of accepted data
  */
 FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, write) (
       FIFO_T(FIFO_TYPE) *fifo, 
@@ -77,13 +75,11 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, write) (
       FIFO_SIZE_T size){
   FIFO_SIZE_T _size;
   FIFO_BUFFER_STORAGE FIFO_TYPE *prius_next;
-#if NULL_CHECK
-  if(values == NULL){return 0;}
-#endif
+  if(NULL_CHECK && (values == NULL)){return 0;}
   size = min(FIFO_METHOD(FIFO_TYPE, margin)(fifo), size);
   _size = fifo->buffer + fifo->size - fifo->prius;
   if(_size <= size){
-    memcpy(fifo->prius, values, _size);
+    memcpy(fifo->prius, values, _size * sizeof(FIFO_TYPE));
     prius_next = fifo->buffer;
     values += _size;
     _size = size - _size;
@@ -92,7 +88,7 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, write) (
     _size = size;
   }
   if(_size > 0){
-    memcpy(prius_next, values, _size);
+    memcpy(prius_next, values, _size * sizeof(FIFO_TYPE));
     prius_next += _size;
   }
   fifo->prius = prius_next;
@@ -100,38 +96,29 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, write) (
 }
 
 /**
- * FIFOに書き出します
+ * Write single data to FIFO
  * 
  * @param fifo 
- * @param data 
- * @return (int)
+ * @param value data to be written
+ * @return (FIFO_SIZE_T) number of accepted data (1 or 0)
  */
 FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, put) (
       FIFO_T(FIFO_TYPE) *fifo, 
       FIFO_TYPE *value){
-#if NULL_CHECK
-  if(values == NULL){return 0;}
-#endif
-  {
-    FIFO_BUFFER_STORAGE FIFO_TYPE *next = fifo->prius + 1;
-    if(next == (fifo->buffer + fifo->size)) next = fifo->buffer;
-    if(next != fifo->follower){
-      *fifo->prius = *value;
-      fifo->prius = next;
-      return 1;
-    }else{
-      return 0;
-    }
+  FIFO_SIZE_T res = 0;
+  if((!NULL_CHECK) || (value != NULL)){
+    FIFO_DIRECT_PUT(*fifo, *value, res);
   }
+  return res;
 }
 
 /**
- * FIFOから読み込みます
+ * Read multiple data from FIFO
  * 
  * @param fifo 
- * @param buffer 
- * @param size 
- * @return (int) 
+ * @param buffer buffer to be loaded
+ * @param size size of buffer
+ * @return (FIFO_SIZE_T) number of loaded data
  */
 FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, read) (
       FIFO_T(FIFO_TYPE) *fifo, 
@@ -139,13 +126,11 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, read) (
       FIFO_SIZE_T size){
   FIFO_SIZE_T _size;
   FIFO_BUFFER_STORAGE FIFO_TYPE *follower_next;
-#if NULL_CHECK
-  if(buffer == NULL){return 0;}
-#endif
+  if(NULL_CHECK && (buffer == NULL)){return 0;}
   size = min(FIFO_METHOD(FIFO_TYPE, size)(fifo), size);
   _size = fifo->buffer + fifo->size - fifo->follower;
   if(_size <= size){
-    memcpy(buffer, fifo->follower, _size);
+    memcpy(buffer, fifo->follower, _size * sizeof(FIFO_TYPE));
     follower_next = fifo->buffer;
     buffer += _size;
     _size = size - _size;
@@ -154,7 +139,7 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, read) (
     _size = size;
   }
   if(_size > 0){
-    memcpy(buffer, follower_next, _size);
+    memcpy(buffer, follower_next, _size * sizeof(FIFO_TYPE));
     follower_next += _size;
   }
   fifo->follower = follower_next;
@@ -162,34 +147,27 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, read) (
 }
 
 /**
- * FIFOから読み込みます
+ * Read single data from FIFO
  * 
  * @param fifo 
- * @param buffer 
- * @return (int) 
+ * @param buffer buffer to be loaded
+ * @return (FIFO_SIZE_T) number of loaded data (1 or 0)
  */
 FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, get) (
       FIFO_T(FIFO_TYPE) *fifo, 
       FIFO_TYPE *buffer){
-#if NULL_CHECK
-  if(buffer == NULL){return 0;}
-#endif
-  if(fifo->follower != fifo->prius){
-    *buffer = *(fifo->follower++);
-    if(fifo->follower == fifo->buffer + fifo->size){
-      fifo->follower = fifo->buffer;
-    }
-    return 1;
-  }else{
-    return 0;
+  FIFO_SIZE_T res = 0;
+  if((!NULL_CHECK) || (buffer != NULL)){
+    FIFO_DIRECT_GET(*fifo, *buffer, res);
   }
+  return res;
 }
 
 /**
- * FIFOの書込み済みデータ大きさを返します
+ * Return size of used area in FIFO
  * 
  * @param fifo 
- * @return int 
+ * @return (FIFO_SIZE_T) used size
  */
 FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, size) (FIFO_T(FIFO_TYPE) *fifo){
   FIFO_BUFFER_STORAGE FIFO_TYPE *_prius = fifo->prius;
@@ -200,10 +178,10 @@ FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, size) (FIFO_T(FIFO_TYPE) *fifo){
 }
 
 /**
- * FIFOの空き領域の大きさを返します
+ * Return size of free area in FIFO
  * 
  * @param fifo 
- * @return int 
+ * @return (FIFO_SIZE_T) free size
  */
 FIFO_SIZE_T FIFO_METHOD(FIFO_TYPE, margin) (FIFO_T(FIFO_TYPE) *fifo){
   FIFO_BUFFER_STORAGE FIFO_TYPE *_prius = fifo->prius;
