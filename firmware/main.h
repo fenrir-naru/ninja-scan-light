@@ -64,15 +64,6 @@ extern volatile u8 timeout_10ms;
 #define PACKET_SIZE_EP2 0x0040
 #define PACKET_SIZE_EP3 0x0040
 
-#define CRITICAL_GLOBAL(func) \
-{ \
-  EA = 0; \
-  { \
-    func; \
-  } \
-  EA = 1; \
-}
-
 #if (defined(__SDCC_REVISION) && (__SDCC_REVISION > 4818)) \
     || (defined(SDCC_REVISION) && (SDCC_REVISION > 4818)) // upper than sdcc-2.7.0? 
 #define USE_ASM_FOR_SFR_MANIP
