@@ -34,6 +34,79 @@
  *
  */
 
+/*
+ * === Quick guide ===
+ *
+ * This program is used to analyze data gathered with NinjaScan logger
+ * by using Kalman filter based integrated navigation technology
+ * called INS/GPS, which stands for inertial navigation system (INS)
+ * and global positioning system (GPS).
+ * The program outputs position (longitude, latitude, and WGS84 altitude),
+ * velocity (north, east, and down), and attitude (true heading, roll and pitch angles)
+ * with GPS time.
+ *
+ * It is briefly technically noted that this program utilizes loosely-coupled INS/GPS algorithm,
+ * which implies at least four GPS satellites must be available to output the results.
+ * In addition, this program is not suitable to be used for real-time application.
+ * This is because its processing strategy is post-process, that is, the data is sorted
+ * in time-series order before application of the INS/GPS algorithm,
+ * in order to compensate for the output delay of a GPS receiver installed on the logger.
+ *
+ * Its usage is
+ *   INS_GPS [option] <log.dat>,
+ * where <log.dat> is mandatory value pointed to a log file gathered by a logger.
+ * There are some reserved values; If <log.dat> equals to - (hyphen),
+ * the program will try to read log data from the standard input.
+ * Or, when <log.dat> is COMx for Windows or /dev/ttyACMx for *NIX,
+ * the program will try to read data from the requested serial port.
+ *
+ * The [option] composed of optional values separated by space.
+ * Its representatives are the followings:
+ *
+ *   --start_gpst=(GPS time in week [sec])
+ *      specifies start GPS time for INS/GPS post-process.
+ *   --start_gpst=(GPS week):(GPS time in week [sec])
+ *      specifies start GPS week and time for INS/GPS post-process.
+ *
+ *   --end_gpst=(GPS time in week [sec])
+ *      specifies end GPS time for INS/GPS post-process.
+ *   --end_gpst=(GPS week):(GPS time in week [sec])
+ *      specifies end GPS week and time for INS/GPS post-process.
+ *
+ *   --dump_update=<on|off>
+ *      specifies whether the program outputs results when inertial information is obtained
+ *      (so called, results for time update), or not. Its default is on.
+ *   --dump_correct=<off|on>
+ *      specifies whether the program outputs results when information processed by a GPS receiver
+ *      is obtained, (so called, results for measurement update) or not. Its default is off.
+ *
+ *   --init_attitude_deg=(heading [deg]),(pitch [deg]),(roll [deg])
+ *      specifies initial true heading, pitch and roll angles. Their default values are
+ *      computed by using Earth magnetic force and gravity observed with magnetic sensor
+ *      and accelerometer, respectively, under the assumption that the logger may be stationary
+ *      at the beginning. While the default initial pitch and roll angles can be approximately
+ *      true because Earth's gravity is comparatively large, the default true heading is not
+ *      so reliable because magnetic field is easily disturbed by surrounding metal objects
+ *      or electric current. Therefore, to specify the initial heading angle is strongly
+ *      recommended. Please also check the next --init_yaw_deg option, which only specifies
+ *      the initial heading angle.
+ *   --init_yaw_deg=(heading [deg])
+ *      specifies initial true heading in degree. Please also refer the above explanation
+ *      about --init_attitude_deg.
+ *
+ *   --est_bias=<on|off>
+ *      specifies whether the mechanism to estimate sensor bias drift is utilized, or not.
+ *      The default is on.
+ *   --use_udkf=<off|on>
+ *      specifies whether the UD factorized Kalamn filter (UDKF), or the standard Kalman
+ *      filter is utilized. The default is off (standard KF).
+ *
+ *   --in_sylphide=<off|on>
+ *      specifies whether the format of the input log file follows Sylphide protocol or not.
+ *      The default is off. Please use this option with "on" value when the program directly read
+ *      data from the NinjaScan logger in USB CDC Mode.
+ */
+
 // Comment-In when QNAN DEBUG
 //#include <float.h>
 //unsigned int fp_control_state = _controlfp(_EM_INEXACT, _MCW_EM);
