@@ -57,6 +57,7 @@ typedef struct{
 #define USE_DIRECT_CONNECTION 1
 
 void data_hub_init();
+long data_hub_read_long(FIL *);
 void data_hub_load_config(char *fname, void (*func)(FIL *));
 payload_size_t data_hub_assign_page(void (*call_back)(packet_t *));
 void data_hub_send_telemetry(char buf[PAGE_SIZE]);

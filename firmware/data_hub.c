@@ -31,6 +31,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "main.h"
 #include "data_hub.h"
@@ -98,10 +99,19 @@ static void force_cdc(FIL *f){
   cdc_force = TRUE;
 }
 
+long data_hub_read_long(FIL *f){
+  // extract integer number from file
+  char buf[16];
+  u16 res;
+  if(f_read(f, buf, sizeof(buf) - 1, &res) != FR_OK){
+    return;
+  }
+  buf[res] = '\0';
+  return atol(buf);
+}
+
 static FIL file;
 FATFS __at (0x01D0) fs;
-
-static __bit log_file_opened;
 
 void data_hub_load_config(char *fname, void (* func)(FIL *)){
   if(f_mount(0, &fs) == FR_OK){
@@ -113,6 +123,7 @@ void data_hub_load_config(char *fname, void (* func)(FIL *)){
   }
 }
 
+static __bit log_file_opened;
 static __xdata u16 log_block_size; // Must be multiple number of PAGE_SIZE
 
 

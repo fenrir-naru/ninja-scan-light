@@ -31,7 +31,6 @@
 
 #include <stdio.h>
 #include <time.h>
-#include <stdlib.h>
 
 #include "main.h"
 #include "util.h"
@@ -89,13 +88,7 @@ static __xdata int standby_sec = 0;
 
 static void power_on_delay_check(FIL *f){
   // extract stanby time[s] from file
-  char buf[8];
-  u16 res;
-  if(f_read(f, buf, sizeof(buf) - 1, &res) != FR_OK){
-    return;
-  }
-  buf[res] = '\0';
-  standby_sec = atoi(buf);
+  standby_sec = (int)data_hub_read_long(f);
 }
 
 static void power_on_delay(){
