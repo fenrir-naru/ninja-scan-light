@@ -44,7 +44,6 @@
 #define MAX_SAT 16
 #define USE_GPS_STD_TIME 0
 #define GPS_TIME_FROM_RAW_DATA 0
-#define GPS_DIRECT 1
 
 void gps_init();
 void gps_polling();

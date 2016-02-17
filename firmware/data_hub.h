@@ -51,6 +51,11 @@ typedef struct{
  */
 #define CHECK_INCREMENT_LOG_DAT 1
 
+/* 1 is to use function of direct connection
+ * to UART.0(GPS), UART1(Telemetry), ...
+ */
+#define USE_DIRECT_CONNECTION 1
+
 void data_hub_init();
 void data_hub_load_config(char *fname, void (*func)(FIL *));
 payload_size_t data_hub_assign_page(void (*call_back)(packet_t *));
