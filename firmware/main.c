@@ -61,9 +61,9 @@ volatile u8 timeout_10ms = 0;
 
 __xdata void (*main_loop_prologue)() = NULL;
 
-void sysclk_init();
-void port_init();
-void timer_init();
+static void sysclk_init();
+static void port_init();
+static void timer_init();
 
 static __xdata int standby_sec = 0;
 
@@ -87,7 +87,7 @@ static __xdata int standby_sec = 0;
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
-void power_on_delay_check(FIL *f){
+static void power_on_delay_check(FIL *f){
   // extract stanby time[s] from file
   char buf[8];
   u16 res;
@@ -98,7 +98,7 @@ void power_on_delay_check(FIL *f){
   standby_sec = atoi(buf);
 }
 
-void power_on_delay(){
+static void power_on_delay(){
   /* How to standby with minimum power consumption
    * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P2.2, P2.3).
    * 1-2. Shutdown LTC3550 buck regulator
@@ -215,7 +215,7 @@ void main() {
 #define USB_EXT_OSC_DIV_3        0x40
 #define USB_EXT_OSC_DIV_4        0x50
 
-void sysclk_init(){
+static void sysclk_init(){
   REF0CN = 0x07;
   
   // Configure internal oscillator for its maximum frequency and enable missing clock detector
@@ -238,7 +238,7 @@ void sysclk_init(){
 }
 
 
-void port_init() {
+static void port_init() {
   
   // Default port state
   // Pn = 1 (High), PnMDIN = 1 (not analog), PnMDOUT = 0 (open-drain) => Hi-Z
@@ -286,7 +286,7 @@ void port_init() {
   XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
 }
 
-void timer_init(){
+static void timer_init(){
   TMR3CN = 0x00;    // Stop Timer3; Clear TF3;
   CKCON &= ~0xC0;   // Timer3 clocked based on T3XCLK;
   TMR3RL = (0x10000 - (SYSCLK/12/100));  // Re-initialize reload value (100Hz, 10ms)
