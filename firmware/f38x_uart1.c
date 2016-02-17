@@ -91,26 +91,26 @@ void uart1_init() {
 
   uart1_bauding(DEFAULT_BAUDRATE);
 
-  SCON1 &= ~0x08;   // TBX1は書込み中フラグは0(書込みしていない)
-  EIE2 |= 0x02;     // 割り込み有効
-  //EIP2 = 0x02;      // 優先度1
+  SCON1 &= ~0x08;   // SCON1.TBX1 is used for writing flag. '1' means writing, otherwise '0'.
+  EIE2 |= 0x02;     // Enable interrupt
+  //EIP2 = 0x02;      // Interrupt priority
 }
 
 /**
- * Register trasmitting data via UART1
+ * Register transmitting data via UART1
  * 
  * @param data pointer to data
  * @param size size of data
  * @return (FIFO_SIZE_T) the size of registered data to buffer
  */
 FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size){
-  // TB80は書込み中フラグとして使う
-  // 0(書込みしていない)だったら手動割り込みをかける
+  // SCON1.TBX1 is used for writing flag.
+  // if '0', which indicates not writing, interrupt must be invoked manually.
   if(size){
     size = fifo_char_write(&fifo_tx1, buf, size);
     CRITICAL_UART1(
       if(!(SCON1 & 0x0A)){ // !TBX1 && !TI1
-        SCON1 |= 0x02; // 手動で割込みをかける
+        SCON1 |= 0x02; // Manual interrupt
       }
     );
   }
@@ -118,7 +118,7 @@ FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size){
 }
 
 /**
- * Return the size of storable data which will be transfered via UART1
+ * Return the empty buffer size of data which will be transfered via UART1
  * 
  * @return (FIFO_SIZE_T) the size
  */

@@ -102,27 +102,26 @@ void uart0_init() {
 
   uart0_bauding(DEFAULT_BAUDRATE);
 
-  TB80 = 0;         // TB80は書込み中フラグは0(書込みしていない)
-  ES0 = 1;          // 割り込み有効
-  //PS0 = 1;          // 優先度1
+  TB80 = 0;         // TB80 is used for writing flag. '1' means writing, otherwise '0'.
+  ES0 = 1;          // Enable interrupt
+  //PS0 = 1;          // Interrupt priority
 }
 
 /**
- * Register trasmitting data via UART0
+ * Register transmitting data via UART0
  * 
  * @param data pointer to data
  * @param size size of data
  * @return (FIFO_SIZE_T) the size of registered data to buffer
  */
 FIFO_SIZE_T uart0_write(char *buf, FIFO_SIZE_T size){
-  // TB80は書込み中フラグとして使う
-  // 0(書込みしていない)だったら手動割り込みをかける
+  // TB80 is used for writing flag.
+  // if '0', which indicates not writing, interrupt must be invoked manually.
   if(size){
     size = fifo_char_write(&fifo_tx0, buf, size);
     CRITICAL_UART0(
       if(!(SCON0 & 0x0A)){ // !TB80 && !TI0
-        TI0 = 1;
-        //interrupt_uart0(); // 手動で割込みをかける
+        TI0 = 1; // Manual interrupt
       }
     );
   }
@@ -130,7 +129,7 @@ FIFO_SIZE_T uart0_write(char *buf, FIFO_SIZE_T size){
 }
 
 /**
- * Return the size of storable data which will be transfered via UART0
+ * Return the empty buffer size of data which will be transfered via UART0
  * 
  * @return (FIFO_SIZE_T) the size
  */
@@ -187,7 +186,7 @@ void interrupt_uart0 () __interrupt (INTERRUPT_UART0) {
 // stdio.h support
 
 /**
- * putchar - No blocking
+ * putchar - blocking
  */
 void putchar (char c){
   while(uart0_write(&c, 1) == 0);
