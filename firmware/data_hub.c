@@ -129,30 +129,37 @@ static __xdata u16 log_block_size; // Must be multiple number of PAGE_SIZE
 
 #if USE_DIRECT_CONNECTION
 
-static FIFO_SIZE_T (*uart_write)(char *buf, FIFO_SIZE_T size);
-static FIFO_SIZE_T (*uart_read)(char *buf, FIFO_SIZE_T size);
+static __xdata u8 direct_uart_port_num;
 static void direct_uart_loop(){
   char buf[32];
-  while(1){
-    cdc_tx(buf, (u16)uart_read(buf, sizeof(buf)));
-    uart_write(buf, (u8)cdc_rx(buf, sizeof(buf)));
-  }
-}
-
-static void direct_uart_init(u8 port_num){
-  if(port_num == 0){
+  FIFO_SIZE_T (*uart_write)(char *buf, FIFO_SIZE_T size);
+  FIFO_SIZE_T (*uart_read)(char *buf, FIFO_SIZE_T size);
+  if(direct_uart_port_num == 0){
     uart_write = uart0_write;
     uart_read = uart0_read;
   }else{
     uart_write = uart1_write;
     uart_read = uart1_read;
   }
+  while(1){
+    cdc_tx(buf, (u16)uart_read(buf, sizeof(buf)));
+    uart_write(buf, (u8)cdc_rx(buf, sizeof(buf)));
+  }
+}
+
+static void direct_uart_init(){
   cdc_force = TRUE;
   main_loop_prologue = direct_uart_loop;
 }
 
-static void direct_uart0_init(FIL *f){direct_uart_init(0);}
-static void direct_uart1_init(FIL *f){direct_uart_init(1);}
+static void direct_uart0_init(FIL *f){
+  direct_uart_port_num = 0;
+  direct_uart_init();
+}
+static void direct_uart1_init(FIL *f){
+  direct_uart_port_num = 1;
+  direct_uart_init();
+}
 
 #endif
 
