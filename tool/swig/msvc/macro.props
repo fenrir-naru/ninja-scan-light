@@ -1,0 +1,26 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ImportGroup Label="PropertySheets" />
+  <PropertyGroup Label="UserMacros">
+    <RUBY_ROOT>C:\Program Files (x86)\Ruby-2.3</RUBY_ROOT>
+    <RUBY_INC_DIR>$(RUBY_ROOT)\include\ruby-2.3.0;$(RUBY_ROOT)\include\ruby-2.3.0\i386-mswin32_100</RUBY_INC_DIR>
+    <RUBY_LIB_DIR>$(RUBY_ROOT)\lib</RUBY_LIB_DIR>
+    <RUBY_LIB>msvcr100-ruby230.lib</RUBY_LIB>
+  </PropertyGroup>
+  <PropertyGroup />
+  <ItemDefinitionGroup />
+  <ItemGroup>
+    <BuildMacro Include="RUBY_ROOT">
+      <Value>$(RUBY_ROOT)</Value>
+    </BuildMacro>
+    <BuildMacro Include="RUBY_INC_DIR">
+      <Value>$(RUBY_INC_DIR)</Value>
+    </BuildMacro>
+    <BuildMacro Include="RUBY_LIB_DIR">
+      <Value>$(RUBY_LIB_DIR)</Value>
+    </BuildMacro>
+    <BuildMacro Include="RUBY_LIB">
+      <Value>$(RUBY_LIB)</Value>
+    </BuildMacro>
+  </ItemGroup>
+</Project>
