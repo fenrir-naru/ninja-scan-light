@@ -4,9 +4,9 @@ language: cpp
 addons:
   apt:
     packages:
-    - sdcc
+    #- sdcc
 
 script:
-  - (cd ./firmware/ver1 && make clean all)
-  - (cd ./firmware/ver2 && make clean all)
+  #- (cd ./firmware/ver1 && make clean all)
+  #- (cd ./firmware/ver2 && make clean all)
   - (cd ./tool && make clean all)
