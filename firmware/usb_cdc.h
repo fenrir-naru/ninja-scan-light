@@ -100,7 +100,7 @@ typedef struct {
 #define DSC_SUBTYPE_CS_ABST_CNTRL   0x02
 #define DSC_SUBTYPE_CS_UNION_FUNC   0x06
 
-// CDC ACM class specifc requests
+// CDC ACM class specific requests
 #define SEND_ENCAPSULATED_COMMAND 0x00
 #define GET_ENCAPSULATED_RESPONSE 0x01
 #define SET_LINE_CODING           0x20
@@ -109,6 +109,7 @@ typedef struct {
 #define SEND_BREAK                0x23
 
 extern volatile __bit cdc_force;
+extern __xdata void (*cdc_change_line_spec)(cdc_line_coding_t *);
 
 void usb_CDC_req();
 void cdc_polling();

@@ -55,6 +55,7 @@
 #define CDC_CTS     0x80  // clear to send
 
 volatile __bit cdc_force = FALSE;
+__xdata void (*cdc_change_line_spec)(cdc_line_coding_t *) = NULL;
 
 static u16 cdc_rx_size();
 
@@ -106,12 +107,12 @@ static cdc_line_coding_t __xdata uart_line_coding = {
 
 static void set_line_coding(cdc_line_coding_t *setting){
 
-  // Copy setting
-  memcpy(&uart_line_coding, setting, sizeof(cdc_line_coding_t));
+  if(memcmp(&uart_line_coding, setting, sizeof(cdc_line_coding_t)) != 0){
+    memcpy(&uart_line_coding, setting, sizeof(cdc_line_coding_t));
 
-  // Apply setting to UART
-
-  // Flush COM buffers
+    // Flush COM buffers and apply setting to UART etc.
+    if(cdc_change_line_spec){cdc_change_line_spec(&uart_line_coding);}
+  }
 }
 
 static __xdata cdc_line_coding_t lc_buffer;
@@ -473,17 +474,37 @@ void usb_CDC_req(){
           break;
       }
       divisor += (ep0_setup.wValue.i & 0x3FFF) << 3;
-      uart_line_coding.baudrate.i = le_u32(24000000UL / divisor);
+      do{
+        u32 new_baudrate = le_u32(24000000UL / divisor);
+        if(new_baudrate == uart_line_coding.baudrate.i){break;}
+        uart_line_coding.baudrate.i = new_baudrate;
+        if(!cdc_change_line_spec){break;}
+        cdc_change_line_spec(&uart_line_coding);
+      }while(0);
       ep0_request_completed = TRUE;
       break;
     }
-    case SET_DATA:
+    case SET_DATA: {
       // USB is little endian
-      uart_line_coding.stopbit = (ep0_setup.wValue.c[MSB] >> 3) & 0x07;
-      uart_line_coding.parity = ep0_setup.wValue.c[MSB] & 0x07;
-      uart_line_coding.databit = ep0_setup.wValue.c[LSB];
+      u8 buf, changed = 0;
+      if((buf = (ep0_setup.wValue.c[MSB] >> 3) & 0x07) != uart_line_coding.stopbit){
+        uart_line_coding.stopbit = buf;
+        changed |= 1;
+      }
+      if((buf = (ep0_setup.wValue.c[MSB] & 0x07)) != uart_line_coding.parity){
+        uart_line_coding.parity = buf;
+        changed |= 1;
+      }
+      if((buf = (ep0_setup.wValue.c[LSB])) != uart_line_coding.databit){
+        uart_line_coding.databit = buf;
+        changed |= 1;
+      }
+      if(changed && cdc_change_line_spec){
+        cdc_change_line_spec(&uart_line_coding);
+      }
       ep0_request_completed = TRUE;
       break;
+    }
     case GET_MODEM_STATUS:
       if(ep0_setup.wLength.c[LSB] <= 2){
         ftdi_ep0_buf[0] = 0x70;
