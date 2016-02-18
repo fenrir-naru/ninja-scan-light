@@ -211,8 +211,6 @@ static const __code unsigned char ftdi_rom[] = {
   */
 };  // 128 (+ 128) bytes TODO: where is PnP flag?
 
-static __xdata ftdi_ep0_buf[2];
-
 // HEADER0 -- Modem Status
 #define HEADER0_SIGN  0x01      // 0.B0..B3 Reserved
 #define HEADER0_CTS   (1 << 4)  // 0.B4 Clear to Send (CTS)
@@ -502,9 +500,9 @@ void usb_CDC_req(){
     }
     case GET_MODEM_STATUS:
       if(ep0_setup.wLength.c[LSB] <= 2){
-        ftdi_ep0_buf[0] = 0x70;
-        ftdi_ep0_buf[1] = 0x00;
-        ep0_register_data((u8 *)ftdi_ep0_buf,
+        ep0_data_buf[0] = 0x70;
+        ep0_data_buf[1] = 0x00;
+        ep0_register_data(ep0_data_buf,
             ep0_setup.wLength.c[LSB]);
         usb_ep0_status = EP_TX;
         ep0_request_completed = TRUE;
