@@ -130,6 +130,15 @@ static __xdata u16 log_block_size; // Must be multiple number of PAGE_SIZE
 #if USE_DIRECT_CONNECTION
 
 static __xdata u8 direct_uart_port_num;
+
+static void direct_uart_change_spec(cdc_line_coding_t *spec){
+  if(direct_uart_port_num == 0){
+    uart0_bauding(spec->baudrate.i);
+  }else{
+    uart1_bauding(spec->baudrate.i);
+  }
+}
+
 static void direct_uart_loop(){
   char buf[32];
   FIFO_SIZE_T (*uart_write)(char *buf, FIFO_SIZE_T size);
@@ -141,6 +150,7 @@ static void direct_uart_loop(){
     uart_write = uart1_write;
     uart_read = uart1_read;
   }
+  cdc_change_line_spec = direct_uart_change_spec;
   while(1){
     cdc_tx(buf, (u16)uart_read(buf, sizeof(buf)));
     uart_write(buf, (u8)cdc_rx(buf, sizeof(buf)));
