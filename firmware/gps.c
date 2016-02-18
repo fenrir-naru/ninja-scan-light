@@ -340,11 +340,11 @@ static void make_packet(packet_t *packet){
   //if(size == 0){return;} // guranteed that size > 0
   
   *(dst++) = 'G';
-    
-  // packet‚Ö‚Ì“o˜^
+
+  // read data and store it into packet
   size = uart0_read(dst, --size);
     
-  // GPS‚Ìæ“¾, ‰Â‹‰q¯‚É‘Î‚·‚éƒGƒtƒFƒƒŠƒX‚Ì—v‹
+  // decode data in order to extract GPS time, request ephemeris, and so on.
   while(size-- > 0){
     
     static __xdata struct {
