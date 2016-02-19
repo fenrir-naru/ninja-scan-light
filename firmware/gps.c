@@ -43,8 +43,8 @@
 #include "gps.h"
 #include "util.h"
 
-void gps_write(char *buf, int size){
-  int written = 0;
+void gps_write(char *buf, u8 size){
+  u8 written = 0;
   while(TRUE){
     written = uart0_write(buf, size);
     size -= written;

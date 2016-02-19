@@ -47,7 +47,6 @@
 
 void gps_init();
 void gps_polling();
-void gps_write(char *buf, int size);
 #if USE_GPS_STD_TIME
 time_t gps_std_time(time_t *timeptr);
 #endif
