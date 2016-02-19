@@ -228,15 +228,6 @@ static void set_ubx_cfg_msg(u8 _class, u8 id, u8 rate){
   gps_packet_write(packet, sizeof(packet));
 }
 
-static void additional_config(FIL *f){
-  char buf[8];
-  u16 buf_filled;
-  while(f_read(f, buf, sizeof(buf), &buf_filled) == FR_OK){
-    gps_write(buf, buf_filled);
-    if(buf_filled < sizeof(buf)){break;}
-  }
-}
-
 #define GPS_SPEEDUP_BAUDRATE  115200
 
 void gps_init(){
@@ -273,7 +264,7 @@ void gps_init(){
   set_ubx_cfg_msg(0x02, 0x10, 1);  // RXM-RAW     // (8 + 24 * x) + 8 = 208 bytes (@8)
   set_ubx_cfg_msg(0x02, 0x11, 1);  // RXM-SFRB    // 42 + 8 = 50 bytes
   
-  data_hub_load_config("GPS.CFG", additional_config);
+  data_hub_send_config("GPS.CFG", uart0_write);
 }
 
 static void poll_aid_eph(u8 svid){

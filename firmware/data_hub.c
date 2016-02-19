@@ -113,14 +113,32 @@ long data_hub_read_long(FIL *f){
 static FIL file;
 FATFS __at (0x01D0) fs;
 
-void data_hub_load_config(char *fname, void (* func)(FIL *)){
-  if(f_mount(0, &fs) == FR_OK){
-    if(f_open(&file, fname, (FA_OPEN_EXISTING | FA_READ)) == FR_OK){
-      func(&file);
-      f_close(&file);
+void data_hub_send_config(char *fname, unsigned char (*send_func)(char *buf, unsigned char size)){
+  if((!send_func) || (f_mount(0, &fs) != FR_OK)){return;}
+  if(f_open(&file, fname, (FA_OPEN_EXISTING | FA_READ)) == FR_OK){
+    char buf[16], *_buf;
+    UINT buf_filled;
+    while(f_read(&file, buf, sizeof(buf), &buf_filled) == FR_OK){
+      char *_buf = buf;
+      if(buf_filled == 0){break;}
+      do{
+        unsigned char sent = send_func(_buf, buf_filled);
+        _buf += sent;
+        buf_filled -= sent;
+      }while(buf_filled > 0);
     }
-    f_mount(0, NULL);
+    f_close(&file);
   }
+  f_mount(0, NULL);
+}
+
+void data_hub_load_config(char *fname, void (*load_func)(FIL *file)){
+  if((!load_func) || (f_mount(0, &fs) != FR_OK)){return;}
+  if(f_open(&file, fname, (FA_OPEN_EXISTING | FA_READ)) == FR_OK){
+    load_func(&file);
+    f_close(&file);
+  }
+  f_mount(0, NULL);
 }
 
 static __bit log_file_opened;
