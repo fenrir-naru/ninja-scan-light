@@ -156,9 +156,7 @@ static void set_ubx_cfg_sbas(){
   gps_packet_write(packet, sizeof(packet));
 }
 
-#define UBX_CFG_PRT_BAUDRATE  115200
-
-static void set_ubx_cfg_prt(){
+static void set_ubx_cfg_prt(u32 baudrate){
   // UBX
 #if (defined(SDCC) && (SDCC < 270)) // lower than sdcc-2.7.0 ?
   unsigned char packet[20 + 6] = {
@@ -179,7 +177,11 @@ static void set_ubx_cfg_prt(){
     0x08, // packet[6 + 5]   // (M)00001000(L)
     0x00, // packet[6 + 6]   // (M)00000000(L)
     0x00, // packet[6 + 7]   //
-    expand_32(UBX_CFG_PRT_BAUDRATE), // packet[6 + 8]  
+#if (defined(SDCC) && (SDCC < 270)) // lower than sdcc-2.7.0 ?
+    expand_32(baudrate), // packet[6 + 8], baudrate
+#else
+    expand_32(0), // packet[6 + 8], baudrate
+#endif
     0x07, // packet[6 + 12]  // in - UBX,NMEA,RAW
     0x00, // packet[6 + 13] 
     0x01, // packet[6 + 14]  // out - UBX
@@ -191,6 +193,8 @@ static void set_ubx_cfg_prt(){
   };
 #if !(defined(SDCC) && (SDCC < 270)) // Not lower than sdcc-2.7.0?
   memcpy(packet, _packet, sizeof(packet));
+  baudrate = le_u32(baudrate);
+  memcpy(&packet[6 + 8], &baudrate, sizeof(baudrate));
 #endif
   
   {
@@ -201,7 +205,7 @@ static void set_ubx_cfg_prt(){
     }
   }
   
-  // NMEA
+  // Reference: NMEA
   /*const char code *str1 = "$PUBX,41,0,0007,0003,115200,1*1A\r\n";
   const char code *str2 = "$PUBX,41,1,0007,0003,115200,1*1B\r\n";
   const char code *str3 = "$PUBX,41,2,0007,0003,115200,1*18\r\n";  
@@ -233,15 +237,17 @@ static void additional_config(FIL *f){
   }
 }
 
+#define GPS_SPEEDUP_BAUDRATE  115200
+
 void gps_init(){
   
   // init wait
   wait_ms(100);
   
   // set U-blox configuration
-  set_ubx_cfg_prt();              // baudrate change
+  set_ubx_cfg_prt(GPS_SPEEDUP_BAUDRATE);  // baudrate change
   while(uart0_tx_active());
-  uart0_bauding(UBX_CFG_PRT_BAUDRATE);
+  uart0_bauding(GPS_SPEEDUP_BAUDRATE);
   
   // baudrate change wait
   wait_ms(100);
