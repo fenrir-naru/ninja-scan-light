@@ -29,43 +29,32 @@
  *
  */
 
-#include "telemeter.h"
-#include "config.h"
-#include "f38x_uart1.h"
-#include "util.h"
+#ifndef __CONFIG_H__
+#define __CONFIG_H__
 
-void telemeter_send(char buf[SYLPHIDE_PAGESIZE]){
-  static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, SYLPHIDE_PAGESIZE,
-      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(uart1_tx_margin() < (
-      sizeof(sylphide_protocol_header) + sizeof(sequence_num)
-        + SYLPHIDE_PAGESIZE + sizeof(crc))){
-    return;
-  }
-  uart1_write(sylphide_protocol_header, sizeof(sylphide_protocol_header));
-  uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
-  uart1_write(buf, SYLPHIDE_PAGESIZE);
-  uart1_write((u8 *)&crc, sizeof(crc));
-}
+#include "type.h"
+#include "gps.h"
 
-void telemeter_init(){
-  uart1_bauding(config.baudrate.telemeter);
+typedef struct {
+  struct {
+    u32 gps;
+    u32 telemeter;
+  } baudrate;
+  struct {
+    ubx_cfg_t message[16];
+  } gps;
+  struct {
+    u8 a_page;
+    u8 p_page;
+    u8 m_page;
+    struct {
+      ubx_cfg_t item[4];
+    } g_page;
+  } telemetry_truncate;
+} config_t;
 
-  data_hub_send_config("TLM.CFG", uart1_write);
-}
+#define CONFIG_ADDRESS 0xF000
 
-static void make_packet(packet_t *packet){
-  payload_t *dst = packet->current;
-  *(dst++) = 'C';
+extern const __code __at(CONFIG_ADDRESS) config_t config;
 
-  // read data and store it into packet
-  uart1_read(dst, packet->buf_end - dst);
-}
-
-void telemeter_polling(){
-  u8 buf_size = uart1_rx_size();
-  for(; buf_size >= (SYLPHIDE_PAGESIZE - 1); buf_size -= (SYLPHIDE_PAGESIZE - 1)){
-    if(!data_hub_assign_page(make_packet)){break;}
-  }
-}
+#endif /* __CONFIG_H__ */

@@ -38,6 +38,7 @@
 #include <string.h>
 
 #include "main.h"
+#include "config.h"
 #include "f38x_uart0.h"
 #include "data_hub.h"
 #include "gps.h"
@@ -215,21 +216,19 @@ static void set_ubx_cfg_prt(u32 baudrate){
   gps_write(str3, strlen(str3));*/
 }
 
-static void set_ubx_cfg_msg(u8 _class, u8 id, u8 rate){
+static void set_ubx_cfg_msg(ubx_cfg_t *message){
   unsigned char packet[6 + 3] = { // 3 byte payload CFG-MSG, which will change message rate for the current port.
     0xB5, // packet[0] 
     0x62, // packet[1] 
     0x06, // packet[2] 
     0x01, // packet[3] 
     expand_16(sizeof(packet) - 6), // packet[4 + 0]  
-    _class,   // packet[6 + 0]
-    id,       // packet[6 + 1]  
-    rate,     // packet[6 + 2]
+    message->msg_class, // packet[6 + 0]
+    message->msg_id,    // packet[6 + 1]
+    message->rate,      // packet[6 + 2]
   };
   gps_packet_write(packet, sizeof(packet));
 }
-
-#define GPS_SPEEDUP_BAUDRATE  115200
 
 void gps_init(){
   
@@ -237,9 +236,9 @@ void gps_init(){
   wait_ms(100);
   
   // set U-blox configuration
-  set_ubx_cfg_prt(GPS_SPEEDUP_BAUDRATE);  // baudrate change
+  set_ubx_cfg_prt(config.baudrate.gps);  // baudrate change
   while(uart0_tx_active());
-  uart0_bauding(GPS_SPEEDUP_BAUDRATE);
+  uart0_bauding(config.baudrate.gps);
   
   // baudrate change wait
   wait_ms(100);
@@ -254,16 +253,15 @@ void gps_init(){
   set_ubx_cfg_tp();
   set_ubx_cfg_sbas();
   
-  set_ubx_cfg_msg(0x01, 0x02, 1);  // NAV-POSLLH  // 28 + 8 = 36 bytes
-  set_ubx_cfg_msg(0x01, 0x03, 5);  // NAV-STATUS  // 16 + 8 = 24 bytes
-  set_ubx_cfg_msg(0x01, 0x04, 5);  // NAV-DOP     // 18 + 8 = 26 bytes
-  set_ubx_cfg_msg(0x01, 0x06, 1);  // NAV-SOL     // 52 + 8 = 60 bytes
-  set_ubx_cfg_msg(0x01, 0x12, 1);  // NAV-VELNED  // 36 + 8 = 44 bytes
-  set_ubx_cfg_msg(0x01, 0x20, 20);  // NAV-TIMEGPS  // 16 + 8 = 24 bytes
-  set_ubx_cfg_msg(0x01, 0x21, 20);  // NAV-TIMEUTC  // 20 + 8 = 28 bytes
-  set_ubx_cfg_msg(0x01, 0x30, 10);  // NAV-SVINFO  // (8 + 12 * x) + 8 = 112 bytes (@8)
-  set_ubx_cfg_msg(0x02, 0x10, 1);  // RXM-RAW     // (8 + 24 * x) + 8 = 208 bytes (@8)
-  set_ubx_cfg_msg(0x02, 0x11, 1);  // RXM-SFRB    // 42 + 8 = 50 bytes
+  {
+    u8 i;
+#define PROP config.gps.message
+    for(i = 0; i < sizeof(PROP) / sizeof(PROP[0]); ++i){
+      if((PROP[i].msg_class == 0) || (PROP[i].msg_id == 0)){continue;}
+      set_ubx_cfg_msg(&PROP[i]);
+    }
+#undef PROP
+  }
   
   data_hub_send_config("GPS.CFG", uart0_write);
 }
@@ -376,18 +374,25 @@ static void make_packet(packet_t *packet){
         ubx_state.ck_a = ubx_state.ck_b = c;
         continue; // jump to while loop.
       case 4:
+        {
+          u8 i;
+#define PROP config.telemetry_truncate.g_page.item
+          static __xdata unsigned char count[sizeof(PROP) / sizeof(PROP[0])] = {0};
+          for(i = 0; i < sizeof(PROP) / sizeof(PROP[0]); ++i){
+            if(PROP[i].msg_class != ubx_state.ck_a){continue;}
+            if(PROP[i].msg_id != c){continue;}
+            if((++(count[i])) >= PROP[i].rate){
+              make_telemetry = TRUE;
+              count[i] = 0;
+            }
+            break;
+          }
+#undef PROP
+        }
         switch(ubx_state.ck_a){
           case 0x01:
             switch(c){
-              case 0x06: {
-                static __xdata unsigned char count = 0;
-                if(++count >= 5){ // approximately 1Hz
-                  make_telemetry = TRUE;
-                  count = 0;
-                }
-                ubx_state.packet_type = NAV_SOL;
-                break;
-              }
+              case 0x06: ubx_state.packet_type = NAV_SOL; break;
               case 0x20: ubx_state.packet_type = NAV_TIMEGPS; break;
               case 0x21: ubx_state.packet_type = NAV_TIMEUTC; break;
               case 0x30: ubx_state.packet_type = NAV_SVINFO; break;

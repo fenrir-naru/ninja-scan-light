@@ -34,6 +34,7 @@
 #include <stdlib.h>
 
 #include "main.h"
+#include "config.h"
 #include "data_hub.h"
 #include "util.h"
 #include "usb_cdc.h"
@@ -86,9 +87,9 @@ if(*packet.buf_begin == page){ \
   if(++count < frequency){break;} \
   count = 0; \
 }
-    whether_send_telemetry('A', 20) // 'A' page : approximately 5 Hz
-    else whether_send_telemetry('P', 2) // 'P' page : approximately 1 Hz
-    else whether_send_telemetry('M', 2) // 'M' page : approximately 1 Hz
+    whether_send_telemetry('A', config.telemetry_truncate.a_page) // 'A' page : approximately 5 Hz
+    else whether_send_telemetry('P', config.telemetry_truncate.p_page) // 'P' page : approximately 1 Hz
+    else whether_send_telemetry('M', config.telemetry_truncate.m_page) // 'M' page : approximately 1 Hz
     else break;
     telemeter_send(packet.buf_begin);
   }while(0);

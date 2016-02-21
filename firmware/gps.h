@@ -62,4 +62,10 @@ extern __xdata u8 gps_num_of_sat;
 extern __bit gps_utc_valid;
 extern __xdata struct tm gps_utc;
 
+typedef struct {
+  u8 msg_class;
+  u8 msg_id;
+  u8 rate;
+} ubx_cfg_t;
+
 #endif /* __GPS_H__ */

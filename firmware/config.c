@@ -29,43 +29,39 @@
  *
  */
 
-#include "telemeter.h"
 #include "config.h"
-#include "f38x_uart1.h"
-#include "util.h"
+#include "f38x_flash.h"
 
-void telemeter_send(char buf[SYLPHIDE_PAGESIZE]){
-  static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, SYLPHIDE_PAGESIZE,
-      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(uart1_tx_margin() < (
-      sizeof(sylphide_protocol_header) + sizeof(sequence_num)
-        + SYLPHIDE_PAGESIZE + sizeof(crc))){
-    return;
-  }
-  uart1_write(sylphide_protocol_header, sizeof(sylphide_protocol_header));
-  uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
-  uart1_write(buf, SYLPHIDE_PAGESIZE);
-  uart1_write((u8 *)&crc, sizeof(crc));
-}
+#if (CONFIG_ADDRESS % FLASH_PAGESIZE) != 0
+#error "Variable(config) must be aligned at flash page boundary."
+#endif
 
-void telemeter_init(){
-  uart1_bauding(config.baudrate.telemeter);
+const __code __at(CONFIG_ADDRESS) config_t config = {
+  { // baudrate
+    115200, // gps
+    9600,}, // telemeter
+  { // gps_message
+    { // ubx_cfg
+      {0x01, 0x02, 1},  // NAV-POSLLH   // 28 + 8 = 36 bytes
+      {0x01, 0x03, 5},  // NAV-STATUS   // 16 + 8 = 24 bytes
+      {0x01, 0x04, 5},  // NAV-DOP      // 18 + 8 = 26 bytes
+      {0x01, 0x06, 1},  // NAV-SOL      // 52 + 8 = 60 bytes
+      {0x01, 0x12, 1},  // NAV-VELNED   // 36 + 8 = 44 bytes
+      {0x01, 0x20, 20}, // NAV-TIMEGPS  // 16 + 8 = 24 bytes
+      {0x01, 0x21, 20}, // NAV-TIMEUTC  // 20 + 8 = 28 bytes
+      {0x01, 0x30, 10}, // NAV-SVINFO   // (8 + 12 * x) + 8 = 112 bytes (@8)
+      {0x02, 0x10, 1},  // RXM-RAW      // (8 + 24 * x) + 8 = 208 bytes (@8)
+      {0x02, 0x11, 1},  // RXM-SFRB     // 42 + 8 = 50 bytes
+    },},
+  { // telemetry_truncate
+    20,     // a_page : approximately 5 Hz
+    2,      // p_page : approximately 1 Hz
+    2,      // m_page : approximately 1 Hz
+    {{ // g_page.items
+      {0x01, 0x06, 5}, // NAV-SOL: approximately 1 Hz
+    },},
+  },
+};
 
-  data_hub_send_config("TLM.CFG", uart1_write);
-}
-
-static void make_packet(packet_t *packet){
-  payload_t *dst = packet->current;
-  *(dst++) = 'C';
-
-  // read data and store it into packet
-  uart1_read(dst, packet->buf_end - dst);
-}
-
-void telemeter_polling(){
-  u8 buf_size = uart1_rx_size();
-  for(; buf_size >= (SYLPHIDE_PAGESIZE - 1); buf_size -= (SYLPHIDE_PAGESIZE - 1)){
-    if(!data_hub_assign_page(make_packet)){break;}
-  }
-}
+static const __code __at(CONFIG_ADDRESS + sizeof(config_t))
+    u8 page_padding[FLASH_PAGESIZE - sizeof(config_t)] = {0x00};
