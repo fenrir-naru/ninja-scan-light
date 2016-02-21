@@ -265,8 +265,8 @@ struct GlobalOptions {
       const char *spec, const char *key, const bool &accept_no_value = true){
     const char *key_head;
     unsigned int key_length(get_key(spec, &key_head));
-    if(key_length == 0){return NULL;}
-    if(std::strncmp(key, key_head, key_length) != 0){ // check same key?
+    if(key_length != std::strlen(key)){return NULL;} // key found? and same key_length?
+    if(std::strncmp(key, key_head, key_length) != 0){ // same key?
       return NULL;
     }
     return get_value(spec, key_length, accept_no_value);
@@ -293,8 +293,9 @@ struct GlobalOptions {
     bool key_checked(false);
 
 #define CHECK_KEY(name) \
-  (key_checked || \
-    (key_checked = (std::strncmp(key, #name, key_length) == 0)))
+  (key_checked \
+    || (key_checked = ((key_length == std::strlen(#name)) \
+        && (std::strncmp(key, #name, key_length) == 0))))
 #define CHECK_ALIAS(name) CHECK_KEY(name)
 #define CHECK_OPTION(name, novalue, operation, disp) { \
   if(CHECK_KEY(name)){ \
