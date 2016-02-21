@@ -203,7 +203,7 @@ static void make_packet(packet_t *packet){
   payload_t *dst = packet->current, *dst_end = packet->buf_end;
   
   // Check whether buffer size is sufficient
-  if((dst_end - dst) < PAGE_SIZE){
+  if((dst_end - dst) < SYLPHIDE_PAGESIZE){
     return;
   }
   

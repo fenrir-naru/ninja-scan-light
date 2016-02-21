@@ -36,7 +36,7 @@
 #include "data_hub.h"
 
 void telemeter_init();
-void telemeter_send(char buf[PAGE_SIZE]);
+void telemeter_send(char buf[SYLPHIDE_PAGESIZE]);
 void telemeter_polling();
 
 #endif /* __TELEMETER_H__ */

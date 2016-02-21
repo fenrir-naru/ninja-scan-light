@@ -44,7 +44,7 @@ typedef struct{
   payload_t *buf_end;
 } __xdata packet_t;
 
-#define PAGE_SIZE 32 // Do not change
+#define SYLPHIDE_PAGESIZE 32 // Do not change
 
 extern const u8 sylphide_protocol_header[2];
 

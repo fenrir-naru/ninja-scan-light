@@ -39,7 +39,7 @@
 
 #define I2C_ADDRESS_RW (0x77 << 1)
 
-static __xdata u8 pressure_data[PAGE_SIZE - 8];
+static __xdata u8 pressure_data[SYLPHIDE_PAGESIZE - 8];
 
 /*
  * P page design =>
@@ -78,7 +78,7 @@ static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
   
   // Check whether buffer size is sufficient
-  if((packet->buf_end - dst) < PAGE_SIZE){
+  if((packet->buf_end - dst) < SYLPHIDE_PAGESIZE){
     return;
   }
     

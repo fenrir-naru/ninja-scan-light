@@ -282,7 +282,7 @@ static void make_packet_inertial(packet_t *packet){
   payload_t *dst = packet->current, *dst_end = packet->buf_end;
   
   // Check whether buffer has sufficient margin
-  if((dst_end - dst) < PAGE_SIZE){
+  if((dst_end - dst) < SYLPHIDE_PAGESIZE){
     return;
   }
   
@@ -342,13 +342,13 @@ static void make_packet_inertial(packet_t *packet){
  * global_ms(4 bytes), // + 8
  * mag_XYZ[0-3](little endian, 2 * 3 bytes) // + 32
  */
-static __xdata u8 mag_data[PAGE_SIZE - 8];
+static __xdata u8 mag_data[SYLPHIDE_PAGESIZE - 8];
 
 static void make_packet_mag(packet_t *packet){
   payload_t *dst = packet->current;
 
   // Check whether buffer has sufficient margin
-  if((packet->buf_end - dst) < PAGE_SIZE){
+  if((packet->buf_end - dst) < SYLPHIDE_PAGESIZE){
     return;
   }
 

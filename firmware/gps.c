@@ -321,7 +321,7 @@ typedef enum {
 } packet_type_t;
 
 static void push_telemetry(char c){
-  static __xdata char buf[PAGE_SIZE] = {'G'};
+  static __xdata char buf[SYLPHIDE_PAGESIZE] = {'G'};
   static __xdata unsigned char index = 0;
   buf[++index] = c;
   if(index >= (sizeof(buf) - 1)){
@@ -569,7 +569,7 @@ static void make_packet(packet_t *packet){
 
 void gps_polling(){
   u8 buf_size = uart0_rx_size();
-  for(; buf_size >= (PAGE_SIZE - 1); buf_size -= (PAGE_SIZE - 1)){
+  for(; buf_size >= (SYLPHIDE_PAGESIZE - 1); buf_size -= (SYLPHIDE_PAGESIZE - 1)){
     if(!data_hub_assign_page(make_packet)){break;}
   }
 }

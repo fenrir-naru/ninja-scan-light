@@ -55,8 +55,8 @@ static void packet_init(
   p->buf_end = p->current + max_size;
 }
 
-#define BUFFER_SIZE (PAGE_SIZE * 16 * 2) // "*2" means double buffer
-#define PAGES (BUFFER_SIZE / PAGE_SIZE)
+#define BUFFER_SIZE (SYLPHIDE_PAGESIZE * 16 * 2) // "*2" means double buffer
+#define PAGES (BUFFER_SIZE / SYLPHIDE_PAGESIZE)
 
 static payload_t payload_buf[BUFFER_SIZE];
 
@@ -64,14 +64,14 @@ static payload_t * __xdata free_page;
 static payload_t * __xdata locked_page;
 
 payload_size_t data_hub_assign_page(void (* packet_maker)(packet_t *)){
-  payload_t *next_free_page = free_page + PAGE_SIZE;
+  payload_t *next_free_page = free_page + SYLPHIDE_PAGESIZE;
   if(next_free_page >= (payload_buf + sizeof(payload_buf))){
     next_free_page -= sizeof(payload_buf);
   }
   
   if(next_free_page == locked_page){return 0;}
   
-  packet_init(&packet, free_page, PAGE_SIZE);
+  packet_init(&packet, free_page, SYLPHIDE_PAGESIZE);
   packet_maker(&packet);
   if(packet.current == packet.buf_begin){
     return 0;
@@ -93,7 +93,7 @@ if(*packet.buf_begin == page){ \
     telemeter_send(packet.buf_begin);
   }while(0);
   
-  return PAGE_SIZE;
+  return SYLPHIDE_PAGESIZE;
 }
 
 static void force_cdc(FIL *f){
@@ -143,7 +143,7 @@ void data_hub_load_config(char *fname, void (*load_func)(FIL *file)){
 }
 
 static __bit log_file_opened;
-static __xdata u16 log_block_size; // Must be multiple number of PAGE_SIZE
+static __xdata u16 log_block_size; // Must be multiple number of SYLPHIDE_PAGESIZE
 
 
 #if USE_DIRECT_CONNECTION
@@ -195,7 +195,7 @@ static void direct_uart1_init(FIL *f){
 void data_hub_init(){
   log_file_opened = FALSE;
   free_page = locked_page = payload_buf;
-  log_block_size = PAGE_SIZE;
+  log_block_size = SYLPHIDE_PAGESIZE;
 
   disk_initialize(0);
 
@@ -281,8 +281,8 @@ void data_hub_polling() {
       log_func = log_to_file;
       break;
     case USB_CDC_ACTIVE:
-      if(log_block_size != PAGE_SIZE){
-        log_block_size = PAGE_SIZE;
+      if(log_block_size != SYLPHIDE_PAGESIZE){
+        log_block_size = SYLPHIDE_PAGESIZE;
         free_page = locked_page = payload_buf;
         return;
       }

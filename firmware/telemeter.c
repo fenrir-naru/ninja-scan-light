@@ -33,18 +33,18 @@
 #include "f38x_uart1.h"
 #include "util.h"
 
-void telemeter_send(char buf[PAGE_SIZE]){
+void telemeter_send(char buf[SYLPHIDE_PAGESIZE]){
   static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, PAGE_SIZE,
+  u16 crc = crc16(buf, SYLPHIDE_PAGESIZE,
       crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
   if(uart1_tx_margin() < (
       sizeof(sylphide_protocol_header) + sizeof(sequence_num)
-        + PAGE_SIZE + sizeof(crc))){
+        + SYLPHIDE_PAGESIZE + sizeof(crc))){
     return;
   }
   uart1_write(sylphide_protocol_header, sizeof(sylphide_protocol_header));
   uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
-  uart1_write(buf, PAGE_SIZE);
+  uart1_write(buf, SYLPHIDE_PAGESIZE);
   uart1_write((u8 *)&crc, sizeof(crc));
 }
 
