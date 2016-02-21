@@ -42,6 +42,7 @@
 #include "data_hub.h"
 #include "gps.h"
 #include "util.h"
+#include "telemeter.h"
 
 void gps_write(char *buf, u8 size){
   u8 written = 0;
@@ -324,7 +325,7 @@ static void push_telemetry(char c){
   static __xdata unsigned char index = 0;
   buf[++index] = c;
   if(index >= (sizeof(buf) - 1)){
-    data_hub_send_telemetry(buf);
+    telemeter_send(buf);
     index = 0;
   }
 }

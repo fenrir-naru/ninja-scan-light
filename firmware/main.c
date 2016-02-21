@@ -45,6 +45,7 @@
 #include "data_hub.h"
 
 #include "gps.h"
+#include "telemeter.h"
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
 #include "mpu9250.h"
 #else
@@ -166,6 +167,7 @@ void main() {
   EA = 1; // Global Interrupt enable
   
   gps_init();
+  telemeter_init();
 
   usb0_init();
 
@@ -180,6 +182,7 @@ void main() {
 
   while (1) {
     gps_polling();
+    telemeter_polling();
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
     mpu9250_polling();
 #else

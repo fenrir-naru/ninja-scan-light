@@ -42,6 +42,7 @@
 #include "diskio.h"
 #include "f38x_uart0.h"
 #include "f38x_uart1.h"
+#include "telemeter.h"
 
 static packet_t packet;
 
@@ -89,7 +90,7 @@ if(*packet.buf_begin == page){ \
     else whether_send_telemetry('P', 2) // 'P' page : approximately 1 Hz
     else whether_send_telemetry('M', 2) // 'M' page : approximately 1 Hz
     else break;
-    data_hub_send_telemetry(packet.buf_begin);
+    telemeter_send(packet.buf_begin);
   }while(0);
   
   return PAGE_SIZE;
@@ -223,33 +224,19 @@ static u16 log_to_file(){
   return accepted_bytes;
 }
 
-static const u8 protocol_header[] = {0xF7, 0xE0};
+const u8 sylphide_protocol_header[2] = {0xF7, 0xE0};
 
 static u16 log_to_host(){
   static __xdata u16 sequence_num = 0;
   u16 crc = crc16(locked_page, log_block_size, 
       crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(!(cdc_tx(protocol_header, sizeof(protocol_header))
+  if(!(cdc_tx(sylphide_protocol_header, sizeof(sylphide_protocol_header))
       && cdc_tx((u8 *)&sequence_num, sizeof(sequence_num))
       && (cdc_tx(locked_page, log_block_size) == log_block_size)
       && cdc_tx((u8 *)&crc, sizeof(crc)))){
     return 0;
   }
   return log_block_size;
-}
-
-void data_hub_send_telemetry(char buf[PAGE_SIZE]){
-  static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, PAGE_SIZE,
-      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(uart1_tx_margin() < (
-      sizeof(protocol_header) + sizeof(sequence_num) + PAGE_SIZE + sizeof(crc))){
-    return;
-  }
-  uart1_write(protocol_header, sizeof(protocol_header));
-  uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
-  uart1_write(buf, PAGE_SIZE);
-  uart1_write((u8 *)&crc, sizeof(crc));
 }
 
 static u8 open_file(){

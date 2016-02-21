@@ -46,13 +46,15 @@ typedef struct{
 
 #define PAGE_SIZE 32 // Do not change
 
+extern const u8 sylphide_protocol_header[2];
+
 /* 1 is to use function of incremental log file name
  * such as log.NNN (N is number) when "log.inc" file exists.
  */
 #define CHECK_INCREMENT_LOG_DAT 1
 
 /* 1 is to use function of direct connection
- * to UART.0(GPS), UART1(Telemetry), ...
+ * to UART.0(GPS), UART1(Telemeter), ...
  */
 #define USE_DIRECT_CONNECTION 1
 
@@ -61,7 +63,6 @@ long data_hub_read_long(FIL *);
 void data_hub_send_config(char *fname, unsigned char (*send_func)(char *buf, unsigned char size));
 void data_hub_load_config(char *fname, void (*load_func)(FIL *file));
 payload_size_t data_hub_assign_page(void (*call_back)(packet_t *));
-void data_hub_send_telemetry(char buf[PAGE_SIZE]);
 void data_hub_polling();
 
 #endif /* __DATA_HUB_H__ */
