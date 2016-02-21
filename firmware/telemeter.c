@@ -52,6 +52,17 @@ void telemeter_init(){
   data_hub_send_config("TLM.CFG", uart1_write);
 }
 
-void telemeter_polling(){
+static void make_packet(packet_t *packet){
+  payload_t *dst = packet->current;
+  *(dst++) = 'C';
 
+  // read data and store it into packet
+  uart1_read(dst, packet->buf_end - dst);
+}
+
+void telemeter_polling(){
+  u8 buf_size = uart1_rx_size();
+  for(; buf_size >= (SYLPHIDE_PAGESIZE - 1); buf_size -= (SYLPHIDE_PAGESIZE - 1)){
+    if(!data_hub_assign_page(make_packet)){break;}
+  }
 }
