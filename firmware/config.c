@@ -40,8 +40,8 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
   { // baudrate
     115200, // gps
     9600,}, // telemeter
-  { // gps_message
-    { // ubx_cfg
+  { // gps
+    { // message
       {0x01, 0x02, 1},  // NAV-POSLLH   // 28 + 8 = 36 bytes
       {0x01, 0x03, 5},  // NAV-STATUS   // 16 + 8 = 24 bytes
       {0x01, 0x04, 5},  // NAV-DOP      // 18 + 8 = 26 bytes
@@ -65,3 +65,7 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
 
 static const __code __at(CONFIG_ADDRESS + sizeof(config_t))
     u8 page_padding[FLASH_PAGESIZE - sizeof(config_t)] = {0x00};
+
+void config_renew(config_t *new_one){
+  flash_renew_page((flash_address_t)(&config), (u8 *)new_one, sizeof(config_t));
+}

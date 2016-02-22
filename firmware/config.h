@@ -56,5 +56,6 @@ typedef struct {
 #define CONFIG_ADDRESS 0xF000
 
 extern volatile __code __at(CONFIG_ADDRESS) config_t config;
+void config_renew(config_t *new_one);
 
 #endif /* __CONFIG_H__ */

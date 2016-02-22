@@ -101,6 +101,14 @@ static void force_cdc(FIL *f){
   cdc_force = TRUE;
 }
 
+static void set_new_config(FIL *f){
+  UINT buf_filled;
+  if((f_read(f, payload_buf, sizeof(config_t), &buf_filled) == FR_OK) // temporary sharing of payload_buf
+      && (sizeof(config_t) == buf_filled)){
+    config_renew((config_t *)payload_buf);
+  }
+}
+
 long data_hub_read_long(FIL *f){
   // extract integer number from file
   char buf[16];
@@ -200,6 +208,7 @@ void data_hub_init(){
 
   disk_initialize(0);
 
+  data_hub_load_config("RENEW.CFG", set_new_config);
   data_hub_load_config("FORCE.CDC", force_cdc);
 
 #if USE_DIRECT_CONNECTION
