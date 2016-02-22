@@ -41,6 +41,10 @@ typedef struct {
     u32 telemeter;
   } baudrate;
   struct {
+    struct {
+      u16 measurement_ms;
+      u16 navigation_cycles;
+    } rate;
     ubx_cfg_t message[16];
   } gps;
   struct {

@@ -96,21 +96,32 @@ static void gps_packet_write(char *packet, int packet_size){
 ((u32)(x) >> 16) & 0xFF, \
 ((u32)(x) >> 24) & 0xFF
 
-#define UBX_CFG_RATE_MEAS 200 // 5Hz
-#define UBX_CFG_RATE_NAV  1
-#define UBX_CFG_RAET_TIME 0
-
 static void set_ubx_cfg_rate(){
-  static const __code unsigned char packet[6 + 6] = {
+#if (defined(SDCC) && (SDCC < 270)) // lower than sdcc-2.7.0 ?
+  unsigned char packet[6 + 6] = {
+#else
+  unsigned char packet[6 + 6];
+  static const __code unsigned char _packet[sizeof(packet)] = {
+#endif
     0xB5, // packet[0]
     0x62, // packet[1]
     0x06, // packet[2]
     0x08, // packet[3]
     expand_16(sizeof(packet) - 6),   // packet[4 + 0]
-    expand_16(UBX_CFG_RATE_MEAS),     // packet[6 + 0]
-    expand_16(UBX_CFG_RATE_NAV),      // packet[6 + 2]
-    expand_16(UBX_CFG_RAET_TIME),     // packet[6 + 4]
+#if (defined(SDCC) && (SDCC < 270)) // lower than sdcc-2.7.0 ?
+    expand_16(config.gps.rate.measurement_ms),    // packet[6 + 0]
+    expand_16(config.gps.rate.navigation_cycles), // packet[6 + 2]
+#else
+    expand_16(0), // packet[6 + 0]
+    expand_16(0), // packet[6 + 2]
+#endif
+    expand_16(1), // packet[6 + 4], alignment to reference time (!0)
   };
+#if !(defined(SDCC) && (SDCC < 270)) // Not lower than sdcc-2.7.0?
+  memcpy(packet, _packet, sizeof(packet));
+  *(u16 *)(&packet[6 + 0]) = le_u16(config.gps.rate.measurement_ms);
+  *(u16 *)(&packet[6 + 2]) = le_u16(config.gps.rate.navigation_cycles);
+#endif
   gps_packet_write(packet, sizeof(packet));
 }
 
@@ -195,8 +206,7 @@ static void set_ubx_cfg_prt(u32 baudrate){
   };
 #if !(defined(SDCC) && (SDCC < 270)) // Not lower than sdcc-2.7.0?
   memcpy(packet, _packet, sizeof(packet));
-  baudrate = le_u32(baudrate);
-  memcpy(&packet[6 + 8], &baudrate, sizeof(baudrate));
+  *(u32 *)(&packet[6 + 8]) = le_u32(baudrate);
 #endif
   
   {

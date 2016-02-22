@@ -41,6 +41,9 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
     115200, // gps
     9600,}, // telemeter
   { // gps
+    { // rate
+      200,  // measurement_ms : 200ms = 5Hz
+      1,},  // navigation_cycles
     { // message
       {0x01, 0x02, 1},  // NAV-POSLLH   // 28 + 8 = 36 bytes
       {0x01, 0x03, 5},  // NAV-STATUS   // 16 + 8 = 24 bytes
