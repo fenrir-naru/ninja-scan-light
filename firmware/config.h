@@ -48,6 +48,10 @@ typedef struct {
     ubx_cfg_t message[16];
   } gps;
   struct {
+    u8 gyro_config;
+    u8 accel_config;
+  } inertial;
+  struct {
     u8 a_page;
     u8 p_page;
     u8 m_page;

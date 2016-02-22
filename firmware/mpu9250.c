@@ -30,6 +30,7 @@
  */
 #include "c8051f380.h"
 #include "main.h"
+#include "config.h"
 
 #include <string.h>
 
@@ -192,14 +193,20 @@ static void mpu9250_read(u8 *buf, u8 size){
   }
 }
 
-#define mpu9250_set(address, value) { \
-  static const __code u8 addr_value[2] = {address, value}; \
+#define _mpu9250_set(address, value, attr) { \
+  attr addr_value[2] = {address, value}; \
   cs_assert(); \
   cs_wait(); \
   mpu9250_write(addr_value, sizeof(addr_value)); \
   cs_deassert(); \
   cs_wait(); \
 }
+
+#define mpu9250_set(address, value) \
+    _mpu9250_set(address, value, static const __code u8)
+
+#define mpu9250_set2(address, value) \
+    _mpu9250_set(address, value, u8)
 
 #define mpu9250_get2(address, vp, size) { \
   static const __code u8 addr[1] = {0x80 | address}; \
@@ -230,8 +237,8 @@ void mpu9250_init(){
   mpu9250_set(USER_CTRL, 0x34); // Enable Master I2C, disable primary I2C I/F, and reset FIFO.
   mpu9250_set(SMPLRT_DIV, 9); // SMPLRT_DIV = 9, 100Hz sampling;
   mpu9250_set(CONFIG, (1 << 6) | (1 << 0)); // FIFO_mode = 1 (accept overflow), Use LPF, Bandwidth_gyro = 184 Hz, Bandwidth_temperature = 188 Hz,
-  mpu9250_set(GYRO_CONFIG, (3 << 3)); // FS_SEL = 3 (2000dps)
-  mpu9250_set(ACCEL_CONFIG, (2 << 3)); // AFS_SEL = 2 (8G)
+  mpu9250_set2(GYRO_CONFIG, config.inertial.gyro_config);
+  mpu9250_set2(ACCEL_CONFIG, config.inertial.accel_config);
 
   mpu9250_set(I2C_MST_CTRL, (0xC8 | 13)); // Multi-master, Wait for external sensor, I2C stop then start cond., clk 400KHz
 

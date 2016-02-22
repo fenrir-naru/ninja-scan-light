@@ -31,6 +31,7 @@
 
 #include "c8051f380.h"
 #include "main.h"
+#include "config.h"
 
 #include <string.h>
 
@@ -150,14 +151,20 @@ static void mpu6000_read(u8 *buf, u8 size){
   }
 }
 
-#define mpu6000_set(address, value) { \
-  static const __code u8 addr_value[2] = {address, value}; \
+#define _mpu6000_set(address, value, attr) { \
+  attr addr_value[2] = {address, value}; \
   cs_assert(); \
   cs_wait(); \
   mpu6000_write(addr_value, sizeof(addr_value)); \
   cs_deassert(); \
   cs_wait(); \
 }
+
+#define mpu6000_set(address, value) \
+    _mpu6000_set(address, value, static const __code u8)
+
+#define mpu6000_set2(address, value) \
+    _mpu6000_set(address, value, u8)
 
 #define mpu6000_get(address, value) { \
   static const __code u8 addr[1] = {0x80 | address}; \
@@ -183,8 +190,8 @@ void mpu6000_init(){
   mpu6000_set(USER_CTRL, 0x34); // Enable Master I2C, disable primary I2C I/F, and reset FIFO.
   mpu6000_set(SMPLRT_DIV, 79); // SMPLRT_DIV = 79, 100Hz sampling;
   // CONFIG = 0; // Disable FSYNC, No DLPF
-  mpu6000_set(GYRO_CONFIG, (3 << 3)); // FS_SEL = 3 (2000dps)
-  mpu6000_set(ACCEL_CONFIG, (2 << 3)); // AFS_SEL = 2 (8G)
+  mpu6000_set2(GYRO_CONFIG, config.inertial.gyro_config);
+  mpu6000_set2(ACCEL_CONFIG, config.inertial.accel_config);
   mpu6000_set(FIFO_EN, 0xF8); // FIFO enabled for temperature(2), gyro(2 * 3), accelerometer(2 * 3). Total 14 bytes.
   mpu6000_set(I2C_MST_CTRL, (0xC8 | 13)); // Multi-master, Wait for external sensor, I2C stop then start cond., clk 400KHz
   mpu6000_set(USER_CTRL, 0x70); // Enable FIFO with Master I2C enabled, and primary I2C I/F disabled.

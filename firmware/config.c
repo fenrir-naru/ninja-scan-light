@@ -56,6 +56,10 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
       {0x02, 0x10, 1},  // RXM-RAW      // (8 + 24 * x) + 8 = 208 bytes (@8)
       {0x02, 0x11, 1},  // RXM-SFRB     // 42 + 8 = 50 bytes
     },},
+  { // inertial
+    (3 << 3), // gyro_config(MPU-6000/9250) : FS_SEL = 3 (2000dps)
+    (2 << 3), // accel_config(MPU-6000/9250) : FS_SEL = 2 (8G)
+  },
   { // telemetry_truncate
     20,     // a_page : approximately 5 Hz
     2,      // p_page : approximately 1 Hz
