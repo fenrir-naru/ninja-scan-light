@@ -55,6 +55,6 @@ typedef struct {
 
 #define CONFIG_ADDRESS 0xF000
 
-extern const __code __at(CONFIG_ADDRESS) config_t config;
+extern volatile __code __at(CONFIG_ADDRESS) config_t config;
 
 #endif /* __CONFIG_H__ */

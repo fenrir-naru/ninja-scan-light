@@ -36,7 +36,7 @@
 #error "Variable(config) must be aligned at flash page boundary."
 #endif
 
-const __code __at(CONFIG_ADDRESS) config_t config = {
+volatile __code __at(CONFIG_ADDRESS) config_t config = {
   { // baudrate
     115200, // gps
     9600,}, // telemeter
