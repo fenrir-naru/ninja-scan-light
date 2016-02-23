@@ -331,11 +331,11 @@ typedef enum {
 static void push_telemetry(char c){
   static __xdata struct {
     char header;
-    char data[SYLPHIDE_PAGESIZE - 1];
+    char content[SYLPHIDE_PAGESIZE - 1];
   } buf = {{'G'}};
   static __xdata unsigned char index = 0;
-  buf.data[++index] = c;
-  if(index >= sizeof(buf.data)){
+  buf.content[++index] = c;
+  if(index >= sizeof(buf.content)){
     telemeter_send((char *)&buf);
     index = 0;
   }
