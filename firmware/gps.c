@@ -329,11 +329,14 @@ typedef enum {
 } packet_type_t;
 
 static void push_telemetry(char c){
-  static __xdata char buf[SYLPHIDE_PAGESIZE] = {'G'};
+  static __xdata struct {
+    char header;
+    char data[SYLPHIDE_PAGESIZE - 1];
+  } buf = {{'G'}};
   static __xdata unsigned char index = 0;
-  buf[++index] = c;
-  if(index >= (sizeof(buf) - 1)){
-    telemeter_send(buf);
+  buf.data[++index] = c;
+  if(index >= sizeof(buf.data)){
+    telemeter_send((char *)&buf);
     index = 0;
   }
 }
