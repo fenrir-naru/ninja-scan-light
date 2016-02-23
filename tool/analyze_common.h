@@ -401,6 +401,7 @@ if(key_checked){ \
       }
     }
     
+    CHECK_ALIAS(direct_sylphide);
     CHECK_OPTION_BOOL(in_sylphide);
 
     CHECK_OPTION_BOOL(out_sylphide);

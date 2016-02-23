@@ -168,10 +168,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       return true;
     }while(false);
 
-    CHECK_OPTION(direct_sylphide, true, // For compatibility; direct_sylphide is alias of in_sylphide.
-        in_sylphide = is_true(value),
-        (in_sylphide ? "on" : "off"));
-    CHECK_OPTION(debug, false, // For compatibility; direct_sylphide is alias of in_sylphide.
+    CHECK_OPTION(debug, false,
         debug_level = atoi(value),
         debug_level);
 #undef CHECK_OPTION

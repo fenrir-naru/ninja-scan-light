@@ -101,6 +101,7 @@
  *      specifies whether the UD factorized Kalamn filter (UDKF), or the standard Kalman
  *      filter is utilized. The default is off (standard KF).
  *
+ *   --direct_sylphide=<off|on>
  *   --in_sylphide=<off|on>
  *      specifies whether the format of the input log file follows Sylphide protocol or not.
  *      The default is off. Please use this option with "on" value when the program directly read
