@@ -60,7 +60,7 @@
  * Or, when <log.dat> is COMx for Windows or /dev/ttyACMx for *NIX,
  * the program will try to read data from the requested serial port.
  *
- * The [option] composed of optional values separated by space.
+ * The [option] is composed of optional values separated by space.
  * Its representatives are the followings:
  *
  *   --start_gpst=(GPS time in week [sec])
@@ -106,6 +106,14 @@
  *      specifies whether the format of the input log file follows Sylphide protocol or not.
  *      The default is off. Please use this option with "on" value when the program directly read
  *      data from the NinjaScan logger in USB CDC Mode.
+ *
+ *   --gps_init_acc_2d=(sigma [m])
+ *   --gps_init_acc_v=(sigma [m])
+ *   --gps_cont_acc_2d=(sigma [m])
+ *      specify initial measurement update threshold for GPS 2D estimated error,
+ *      initial measurement update threshold for GPS vertical estimated error,
+ *      and continual measurement update threshold for GPS 2D estimated error, respectively.
+ *      These default values are 20, 10, and 100, respectively.
  */
 
 // Comment-In when QNAN DEBUG
@@ -164,10 +172,21 @@ struct Options : public GlobalOptions<float_sylph_t> {
   
   bool gps_fake_lock; //< true when gps dummy date is used.
 
+  struct gps_threshold_t {
+    float_sylph_t init_acc_2d; ///< Initial measurement update threshold for GPS 2D estimated error
+    float_sylph_t init_acc_v;  ///< Initial measurement update threshold for GPS vertical estimated error
+    float_sylph_t cont_acc_2d; ///< Continual measurement update threshold for GPS 2D estimated error
+    gps_threshold_t()
+        : init_acc_2d(20.), init_acc_v(10.),
+        cont_acc_2d(100.) {}
+  } gps_threshold;
+
   Options()
       : super_t(),
       back_propagate(false), back_propagate_depth(0),
-      gps_fake_lock(false) {}
+      gps_fake_lock(false), gps_threshold() {
+
+  }
   ~Options(){}
   
   /**
@@ -195,6 +214,16 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(fake_lock,
         gps_fake_lock = is_true(value),
         (gps_fake_lock ? "on" : "off"));
+
+    CHECK_OPTION(gps_init_acc_2d,
+        gps_threshold.init_acc_2d = std::atof(value),
+        gps_threshold.init_acc_2d << " [m]");
+    CHECK_OPTION(gps_init_acc_v,
+        gps_threshold.init_acc_v = std::atof(value),
+        gps_threshold.init_acc_v << " [m]");
+    CHECK_OPTION(gps_cont_acc_2d,
+        gps_threshold.cont_acc_2d = std::atof(value),
+        gps_threshold.cont_acc_2d << " [m]");
 #undef CHECK_OPTION
     
     return super_t::check_spec(spec);
@@ -1131,7 +1160,9 @@ class Status{
      */
     void measurement_update(const G_Packet &g_packet){
       
-      if(g_packet.acc_2d >= 100.){return;} // When estimated accuracy is too big, skip.
+      if(g_packet.acc_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
+        return;
+      }
       if(initalized){
         cerr << "MU : " << setprecision(10) << g_packet.itow << endl;
         
@@ -1157,7 +1188,8 @@ class Status{
       }else if((current_processor == processor_storage.front())
           && (recent_a_packets.size() >= min_a_packets_for_init)
           && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
-          && (g_packet.acc_2d <= 20.) && (g_packet.acc_v <= 10.)){
+          && (g_packet.acc_2d <= options.gps_threshold.init_acc_2d)
+          && (g_packet.acc_v <= options.gps_threshold.init_acc_v)){
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
