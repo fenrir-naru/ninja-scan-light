@@ -30,7 +30,7 @@
  */
 
 // SFR declarations
-#include "c8051F380.h"
+#include "c8051f380.h"
 
 #include "f38x_spi.h"
 

@@ -32,7 +32,7 @@
 #ifndef __F38X_SPI_H__
 #define __F38X_SPI_H__
 
-#include "c8051F380.h"
+#include "c8051f380.h"
 #include "main.h"
 #include "type.h"
 

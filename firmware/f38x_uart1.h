@@ -43,7 +43,7 @@ void uart1_init();
 #define UART1_TX_BUFFER_SIZE 128
 #define UART1_RX_BUFFER_SIZE 64
 
-#include "c8051F380.h"
+#include "c8051f380.h"
 #include "fifo.h"
 
 FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size);

@@ -43,7 +43,7 @@ void uart0_init();
 #define UART0_TX_BUFFER_SIZE 32
 #define UART0_RX_BUFFER_SIZE (0x100 - 32)
 
-#include "c8051F380.h"
+#include "c8051f380.h"
 #include "fifo.h"
 
 FIFO_SIZE_T uart0_write(char *buf, FIFO_SIZE_T size);
