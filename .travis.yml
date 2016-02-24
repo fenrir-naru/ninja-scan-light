@@ -22,3 +22,17 @@ script:
   - (cd ./firmware/ver1 && make clean all)
   - (cd ./firmware/ver2 && make clean all)
   - (cd ./tool && make clean all)
+
+deploy:
+  provider: releases
+  api_key:
+    secure: $GITHUB_TOKEN
+  file: 
+    - ./firmware/ver1/build_by_sdcc/NinjaScanLight.hex
+    - ./firmware/ver1/build_by_sdcc/NinjaScanLight.omf
+    - ./firmware/ver2/build_by_sdcc/NinjaScanLight2.hex
+    - ./firmware/ver2/build_by_sdcc/NinjaScanLight2.omf
+  skip_cleanup: true
+  all_branches: true  # https://github.com/travis-ci/travis-ci/issues/1675
+  on:
+    tags: true
