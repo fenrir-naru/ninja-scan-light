@@ -4,9 +4,21 @@ language: cpp
 addons:
   apt:
     packages:
-    #- sdcc
+      - libboost-all-dev
+      #- sdcc
+    
+env:
+  - SDCC=3.3.0 SDCC_DIR=/tmp/sdcc330
+
+install:
+  - chmod +x ./scripts/build-sdcc.sh
+  - ./scripts/build-sdcc.sh
+
+before_script:
+  - export PATH=$PATH:$SDCC_DIR/bin
+  - sdcc --version
 
 script:
-  #- (cd ./firmware/ver1 && make clean all)
-  #- (cd ./firmware/ver2 && make clean all)
+  - (cd ./firmware/ver1 && make clean all)
+  - (cd ./firmware/ver2 && make clean all)
   - (cd ./tool && make clean all)
