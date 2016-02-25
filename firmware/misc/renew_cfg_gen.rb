@@ -4,21 +4,27 @@
 This is a generator of renew.cfg, which is used to change configuration of NinjaScan-Light.
 =end
 
-class U8
+class C_NUMBER
+  def C_NUMBER.to_str(v)
+    v.inspect
+  end
+end
+
+class U8 < C_NUMBER
   TYPENAME = :u8
   def U8.pack(v)
     [v].pack('C')
   end
 end
 
-class U16
+class U16 < C_NUMBER
   TYPENAME = :u16
   def U16.pack(v)
     [v].pack('v')
   end
 end
 
-class U32
+class U32 < C_NUMBER
   TYPENAME = :u32
   def U32.pack(v)
     [v].pack('V')
@@ -27,6 +33,9 @@ end
 
 class UBX_CFG
   TYPENAME = :ubx_cfg_t
+  def UBX_CFG.to_str(v)
+    sprintf("{0x%02X, 0x%02X, %d}", *v) 
+  end
   def UBX_CFG.pack(v)
     (v || [0, 0, 0]).pack('C3')
   end
@@ -40,27 +49,58 @@ class C_ARRAY
   end
 end
 
+class String
+  def pretty(level = 0)
+    '  ' * level + self + $/
+  end
+  
+end
+
 def get_struct(elm, level = 0, res = "")
   case elm[1]
   when Array
-    res += "#{'  ' * level}struct {#{$/}"
+    res += "struct {".pretty(level)
     elm[1..-1].each{|child|
       res = get_struct(child, level + 1, res)
     }
-    res += "#{'  ' * level}} #{elm[0]};#{$/}"
+    res += "} #{elm[0]};".pretty(level)
   when C_ARRAY
-    res += "#{'  ' * level}#{elm[1].type::TYPENAME} #{elm[0]}[#{elm[1].size}];#{$/}"
+    res += "#{elm[1].type::TYPENAME} #{elm[0]}[#{elm[1].size}];".pretty(level)
   else
-    res += "#{'  ' * level}#{elm[1]::TYPENAME} #{elm[0]};#{$/}"
+    res += "#{elm[1]::TYPENAME} #{elm[0]};".pretty(level)
   end
+  res.chomp!.slice!(-1) if level == 0
   return res
 end
 
-def get_value(elm, res = "")
+def get_value(elm, opt = {:verbose => true}, level = 0, res = "")
+  case elm[1]
+  when Array
+    res += "{#{" // #{elm[0]}" if opt[:verbose]}".pretty(level)
+    elm[1..-1].each{|child|
+      res = get_value(child, opt, level + 1, res)
+    }
+    res += "},".pretty(level)
+  when C_ARRAY
+    res += "{#{" // #{elm[0]}" if opt[:verbose]}".pretty(level)
+    elm[1].size.times{|i|
+      v = elm[2 + i]
+      next unless v
+      res += "#{elm[1].type.to_str(v)},".pretty(level + 1)
+    }
+    res += "},".pretty(level)
+  else
+    res += "#{elm[1].to_str(elm[2])},#{" // #{elm[0]}" if opt[:verbose]}".pretty(level)
+  end
+  res.chomp!.slice!(-1) if level == 0
+  return res
+end
+
+def get_binary(elm, res = "")
   case elm[1]
   when Array
     elm[1..-1].each{|child|
-      res = get_value(child, res)
+      res = get_binary(child, res)
     }   
   when C_ARRAY
     elm[1].size.times{|i|
@@ -111,10 +151,10 @@ config = [:config,
   ]
 ]
 
-$stderr.puts "Generate #{get_struct(config)}"
+$stderr.puts "Generate #{get_struct(config)} = #{get_value(config)};"
 
 OUTPUT_FNAME = 'renew.cfg'
-data = get_value(config)
+data = get_binary(config)
 $stderr.puts "Debug output: #{data.unpack("C*").collect{|v| sprintf('0x%02X', v)}.join(' ')}"
 open(OUTPUT_FNAME, 'w'){|io| io.print data}
 $stderr.puts "File(#{OUTPUT_FNAME}) saved."
