@@ -101,10 +101,20 @@ static void force_cdc(FIL *f){
   cdc_force = TRUE;
 }
 
+static const char renew_config_fname[] = "RENEW.CFG";
 static void set_new_config(FIL *f){
   UINT buf_filled;
-  if((f_read(f, payload_buf, sizeof(config_t), &buf_filled) == FR_OK) // temporary sharing of payload_buf
+  if((f_size(f) == sizeof(config_t))
+      && (f_read(f, payload_buf, sizeof(config_t), &buf_filled) == FR_OK) // temporary sharing of payload_buf
       && (sizeof(config_t) == buf_filled)){
+#if _FS_MINIMIZE < 1 // rename to another name for overwrite prevention
+    f_close(f); // intentionally procedure before f_close() in data_hub_load_config().
+    f_rename(renew_config_fname, "RENEWED.CFG");
+#else // set illegal size for overwrite prevention
+#define str_and_len(str) str, (sizeof(str) - 1)
+    f_write(f, str_and_len("!RENEWED!"), &buf_filled);
+#undef str_and_len
+#endif
     config_renew((config_t *)payload_buf);
   }
 }
@@ -144,7 +154,7 @@ void data_hub_send_config(char *fname, unsigned char (*send_func)(char *buf, uns
 
 void data_hub_load_config(char *fname, void (*load_func)(FIL *file)){
   if((!load_func) || (f_mount(0, &fs) != FR_OK)){return;}
-  if(f_open(&file, fname, (FA_OPEN_EXISTING | FA_READ)) == FR_OK){
+  if(f_open(&file, fname, (FA_OPEN_EXISTING | FA_WRITE | FA_READ)) == FR_OK){
     load_func(&file);
     f_close(&file);
   }
@@ -208,7 +218,7 @@ void data_hub_init(){
 
   disk_initialize(0);
 
-  data_hub_load_config("RENEW.CFG", set_new_config);
+  data_hub_load_config(renew_config_fname, set_new_config);
   data_hub_load_config("FORCE.CDC", force_cdc);
 
 #if USE_DIRECT_CONNECTION
