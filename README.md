@@ -17,7 +17,8 @@ It consists of
 **More information in [Wiki](https://github.com/fenrir-naru/ninja-scan-light/wiki).**
 
 ## Additional information
-* External links for [Compiled binaries](https://drive.google.com/folderview?id=0ByrAl6X3Khv2S3h3VGRMTkl1T1U&usp=sharing), and [Gerbers](https://drive.google.com/folderview?id=0ByrAl6X3Khv2TkJ5Wkp4RmhMWjg&usp=sharing).
+* Firmware binaries are released in [github](https://github.com/fenrir-naru/ninja-scan-light/releases).
+* External links for [related tools](https://drive.google.com/folderview?id=0ByrAl6X3Khv2R09zbWNPMm1QdFU&usp=sharing&tid=0ByrAl6X3Khv2S3h3VGRMTkl1T1U), and [Gerbers](https://drive.google.com/folderview?id=0ByrAl6X3Khv2TkJ5Wkp4RmhMWjg&usp=sharing).
 * The project owner's website is [Fenrir's BLog](http://fenrir.naruoka.org/).
 
 [![Build Status](https://travis-ci.org/fenrir-naru/ninja-scan-light.svg?branch=master)](https://travis-ci.org/fenrir-naru/ninja-scan-light)
