@@ -114,15 +114,15 @@ end
 
 config = [:config,
   [:baudrate,
-    [:gps, U32, 115200],
-    [:telemeter, U32, 9600],
+    [:gps, U32, 115200], # GPS baudrate [bps]
+    [:telemeter, U32, 9600], # UART1 device (called as telemeter) baudrate [bps]
   ],
   [:gps,
     [:rate,
-      [:measurement_ms, U16, 200],
-      [:navigation_cycles, U16, 1],
+      [:measurement_ms, U16, 200], # GPS update rate [ms]
+      [:navigation_cycles, U16, 1], # GPS navigation update rate; 1 [s] / (200 [ms] * 1 [cycle]) = 5 Hz
     ],
-    [:message, C_ARRAY::new(UBX_CFG, 16), 
+    [:message, C_ARRAY::new(UBX_CFG, 16), # GPS output selection
       [0x01, 0x02, 1],  # NAV-POSLLH   // 28 + 8 = 36 bytes
       [0x01, 0x03, 5],  # NAV-STATUS   // 16 + 8 = 24 bytes
       [0x01, 0x04, 5],  # NAV-DOP      // 18 + 8 = 26 bytes
@@ -136,15 +136,15 @@ config = [:config,
     ],
   ],
   [:inertial,
-    [:gyro_config, U8, (3 << 3)],
-    [:accel_config, U8, (2 << 3)],
+    [:gyro_config, U8, (3 << 3)], # (3 << 3) is full scale 2000 [dps]
+    [:accel_config, U8, (2 << 3)], # (2 << 3) is full scale 8 [G]
   ],
   [:telemetry_truncate,
-    [:a_page, U8, 20],
-    [:p_page, U8, 2],
-    [:m_page, U8, 2],
+    [:a_page, U8, 20], # a_page telemetry is approximate 5 Hz
+    [:p_page, U8, 2], # a_page telemetry is approximate 1 Hz
+    [:m_page, U8, 2], # a_page telemetry is approximate 1 Hz
     [:g_page,
-      [:item, C_ARRAY::new(UBX_CFG, 4),  
+      [:item, C_ARRAY::new(UBX_CFG, 4), # g_page telemetry selection
         [0x01, 0x06, 5], # NAV-SOL: approximately 1 Hz]
       ]
     ]
