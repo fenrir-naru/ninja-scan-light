@@ -31,6 +31,7 @@
 
 #include "config.h"
 #include "f38x_flash.h"
+#include <string.h>
 
 #if (CONFIG_ADDRESS % FLASH_PAGESIZE) != 0
 #error "Variable(config) must be aligned at flash page boundary."
@@ -74,5 +75,7 @@ static const __code __at(CONFIG_ADDRESS + sizeof(config_t))
     u8 page_padding[FLASH_PAGESIZE - sizeof(config_t)] = {0x00};
 
 void config_renew(config_t *new_one){
-  flash_renew_page((flash_address_t)(&config), (u8 *)new_one, sizeof(config_t));
+  if(memcmp(&config, new_one, sizeof(config_t)) != 0){
+    flash_renew_page((flash_address_t)(&config), (u8 *)new_one, sizeof(config_t));
+  }
 }
