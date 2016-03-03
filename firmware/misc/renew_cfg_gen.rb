@@ -156,5 +156,5 @@ $stderr.puts "Generate #{get_struct(config)} = #{get_value(config)};"
 OUTPUT_FNAME = 'renew.cfg'
 data = get_binary(config)
 $stderr.puts "Debug output: #{data.unpack("C*").collect{|v| sprintf('0x%02X', v)}.join(' ')}"
-open(OUTPUT_FNAME, 'w'){|io| io.print data}
+open(OUTPUT_FNAME, 'wb'){|io| io.print data}
 $stderr.puts "File(#{OUTPUT_FNAME}) saved."
