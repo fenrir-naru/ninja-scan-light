@@ -112,7 +112,7 @@ def get_binary(elm, res = "")
   return res
 end
 
-config = [:config,
+config = [:config, # The following is the default, please customize it!
   [:baudrate,
     [:gps, U32, 115200], # GPS baudrate [bps]
     [:telemeter, U32, 9600], # UART1 device (called as telemeter) baudrate [bps]
@@ -122,7 +122,7 @@ config = [:config,
       [:measurement_ms, U16, 200], # GPS update rate [ms]
       [:navigation_cycles, U16, 1], # GPS navigation update rate; 1 [s] / (200 [ms] * 1 [cycle]) = 5 Hz
     ],
-    [:message, C_ARRAY::new(UBX_CFG, 16), # GPS output selection
+    [:message, C_ARRAY::new(UBX_CFG, 16), # GPS output selection, maximum 16 slots, currently 10 slots have been occupied. 
       [0x01, 0x02, 1],  # NAV-POSLLH   // 28 + 8 = 36 bytes
       [0x01, 0x03, 5],  # NAV-STATUS   // 16 + 8 = 24 bytes
       [0x01, 0x04, 5],  # NAV-DOP      // 18 + 8 = 26 bytes
@@ -130,8 +130,8 @@ config = [:config,
       [0x01, 0x12, 1],  # NAV-VELNED   // 36 + 8 = 44 bytes
       [0x01, 0x20, 20], # NAV-TIMEGPS  // 16 + 8 = 24 bytes
       [0x01, 0x21, 20], # NAV-TIMEUTC  // 20 + 8 = 28 bytes
-      [0x01, 0x30, 10], # NAV-SVINFO   // (8 + 12 * x) + 8 = 112 bytes (@8)
-      [0x02, 0x10, 1],  # RXM-RAW      // (8 + 24 * x) + 8 = 208 bytes (@8)
+      [0x01, 0x30, 10], # NAV-SVINFO   // (8 + 12 * x) + 8 = 112 bytes (@ 8 satellites)
+      [0x02, 0x10, 1],  # RXM-RAW      // (8 + 24 * x) + 8 = 208 bytes (@ 8 satellites)
       [0x02, 0x11, 1],  # RXM-SFRB     // 42 + 8 = 50 bytes
     ],
   ],
@@ -144,7 +144,7 @@ config = [:config,
     [:p_page, U8, 2], # a_page telemetry is approximate 1 Hz
     [:m_page, U8, 2], # a_page telemetry is approximate 1 Hz
     [:g_page,
-      [:item, C_ARRAY::new(UBX_CFG, 4), # g_page telemetry selection
+      [:item, C_ARRAY::new(UBX_CFG, 4), # g_page telemetry selection, maximum 4 slots, currently 1 slot has been occupied.
         [0x01, 0x06, 5], # NAV-SOL: approximately 1 Hz]
       ]
     ]
