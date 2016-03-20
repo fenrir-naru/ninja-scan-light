@@ -188,7 +188,6 @@ static void direct_uart_loop(){
     uart_write = uart1_write;
     uart_read = uart1_read;
   }
-  cdc_change_line_spec = direct_uart_change_spec;
   while(1){
     cdc_tx(buf, (u16)uart_read(buf, sizeof(buf)));
     uart_write(buf, (u8)cdc_rx(buf, sizeof(buf)));
@@ -198,6 +197,7 @@ static void direct_uart_loop(){
 static void direct_uart_init(){
   cdc_force = TRUE;
   main_loop_prologue = direct_uart_loop;
+  cdc_change_line_spec = direct_uart_change_spec;
 }
 
 static void direct_uart0_init(FIL *f){
