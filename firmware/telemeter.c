@@ -36,16 +36,21 @@
 #include "f38x_uart1.h"
 #include "util.h"
 #include "ff.h"
+#include "main.h"
+
+static __bit telemeter_ready = 0;
 
 void telemeter_send(char buf[SYLPHIDE_PAGESIZE]){
   static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, SYLPHIDE_PAGESIZE,
-      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(uart1_tx_margin() < (
-      sizeof(sylphide_protocol_header) + sizeof(sequence_num)
-        + SYLPHIDE_PAGESIZE + sizeof(crc))){
+  u16 crc;
+  if((!telemeter_ready)
+      || (uart1_tx_margin() < (
+        sizeof(sylphide_protocol_header) + sizeof(sequence_num)
+          + SYLPHIDE_PAGESIZE + sizeof(crc)))){
     return;
   }
+  crc = crc16(buf, SYLPHIDE_PAGESIZE,
+      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
   uart1_write(sylphide_protocol_header, sizeof(sylphide_protocol_header));
   uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
   uart1_write(buf, SYLPHIDE_PAGESIZE);
@@ -63,6 +68,7 @@ static void expect(FIL *file){
     BEFORE_EXPECT,
     EXPECTING,
     EXPECT_FAILED,
+    EXPECT_TIMEOUT,
     IGNORE_LINE,
   } state = INIT;
 
@@ -71,7 +77,12 @@ static void expect(FIL *file){
   u8 buf_length, expect_index;
   u16 read_size;
 
-  while(f_read(file, &c, sizeof(c), &read_size) == FR_OK){
+  while(uart1_read(buf, sizeof(buf)) > 0);
+
+  telemeter_ready = 0;
+
+  while((f_read(file, &c, sizeof(c), &read_size) == FR_OK)
+      && (read_size > 0)){
     unsigned char is_endline = ((c == '\r') || (c == '\n'));
     switch(state){
       case INIT:
@@ -80,9 +91,14 @@ static void expect(FIL *file){
         }else if(c == '>'){
           state = BEFORE_EXPECT;
           buf_length = expect_index = 0;
+          timeout_10ms = 0;
           do{
             while(!uart1_read(&c, sizeof(c))){
               wait_us(10);
+              if(timeout_10ms > 100){
+                state = EXPECT_TIMEOUT;
+                return;
+              }
             }
             if(c == '\r' || c == '\n'){
               if(buf_length > 0){break;}
@@ -152,11 +168,14 @@ static void expect(FIL *file){
         break;
     }
   }
+
+  telemeter_ready = 1;
 }
 
 void telemeter_init(){
   uart1_bauding(config.baudrate.telemeter);
 
+  telemeter_ready = 1;
   data_hub_load_config("TLM.EXP", expect);
   data_hub_send_config("TLM.CFG", uart1_write);
 }
