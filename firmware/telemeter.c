@@ -136,8 +136,8 @@ static void expect(FIL *file){
           break;
         }
         switch(c){
-          case 'n': c = '\r'; break;
-          case 'r': c = '\n'; break;
+          case 'r': c = '\r'; break;
+          case 'n': c = '\n'; break;
           case '\\': c = '\\'; break;
         }
         uart1_write(&c, sizeof(c));
