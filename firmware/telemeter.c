@@ -30,6 +30,7 @@
  */
 
 #include <ctype.h>
+#include <stdlib.h>
 
 #include "telemeter.h"
 #include "config.h"
@@ -69,6 +70,8 @@ static void expect(FIL *file){
     EXPECTING,
     EXPECT_FAILED,
     EXPECT_TIMEOUT,
+    BEFORE_WAIT,
+    WAITING,
     IGNORE_LINE,
   } state = INIT;
 
@@ -106,6 +109,8 @@ static void expect(FIL *file){
               buf[buf_length++] = c;
             }
           }while(1);
+        }else if(c == '@'){
+          state = BEFORE_WAIT;
         }else if(!isspace(c)){
           state = IGNORE_LINE;
         }
@@ -161,6 +166,22 @@ static void expect(FIL *file){
         }else{
           state = EXPECT_FAILED;
           return;
+        }
+        break;
+      case BEFORE_WAIT:
+        if(is_endline){
+          state = INIT;
+          break;
+        }else if(isspace(c)){break;}
+        buf_length = 0;
+        state = WAITING;
+      case WAITING:
+        if(is_endline){
+          buf[buf_length] = '\0';
+          wait_ms((unsigned int)atol(buf));
+          state = INIT;
+        }else if(buf_length < (sizeof(buf) - 1)){
+          buf[buf_length++] = c;
         }
         break;
       case IGNORE_LINE:
