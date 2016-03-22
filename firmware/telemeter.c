@@ -80,8 +80,6 @@ static void expect(FIL *file){
   u8 buf_length, expect_index;
   u16 read_size;
 
-  while(uart1_read(buf, sizeof(buf)) > 0);
-
   telemeter_ready = 0;
 
   while((f_read(file, &c, sizeof(c), &read_size) == FR_OK)
@@ -90,20 +88,24 @@ static void expect(FIL *file){
     switch(state){
       case INIT:
         if(c == '$'){
+          while(uart1_read(buf, sizeof(buf)) > 0); // clear RX buffer
           state = BEFORE_SEND;
         }else if(c == '>'){
           state = BEFORE_EXPECT;
           buf_length = expect_index = 0;
-          timeout_10ms = 0;
           do{
+            u8 timeout = FALSE;
+            timeout_10ms = 0;
             while(!uart1_read(&c, sizeof(c))){
-              wait_us(10);
-              if(timeout_10ms > 100){
-                state = EXPECT_TIMEOUT;
-                return;
+              if(timeout_10ms >= 100){
+                timeout = TRUE;
+                break;
               }
             }
-            if(c == '\r' || c == '\n'){
+            if(timeout){
+              buf_length = 0;
+              break;
+            }else if(c == '\r' || c == '\n'){
               if(buf_length > 0){break;}
             }else if(buf_length < sizeof(buf)){
               buf[buf_length++] = c;
@@ -116,10 +118,10 @@ static void expect(FIL *file){
         }
         break;
       case BEFORE_SEND:
-        if(is_endline){
-          state = INIT;
+        if(isspace(c)){
+          if(is_endline){state = INIT;}
           break;
-        }else if(isspace(c)){break;}
+        }
         state = SENDING;
       case SENDING:
         if(is_endline){
@@ -153,10 +155,13 @@ static void expect(FIL *file){
         state = SENDING;
         break;
       case BEFORE_EXPECT:
-        if(is_endline){ // match any
-          state = INIT;
+        if(isspace(c)){
+          if(is_endline){state = INIT;} // match any including timeout(buf_length == 0)
           break;
-        }else if(isspace(c)){break;}
+        }else if(buf_length == 0){
+          state = EXPECT_TIMEOUT;
+          return;
+        }
         state = EXPECTING;
       case EXPECTING:
         if(is_endline){
@@ -169,10 +174,10 @@ static void expect(FIL *file){
         }
         break;
       case BEFORE_WAIT:
-        if(is_endline){
-          state = INIT;
+        if(isspace(c)){
+          if(is_endline){state = INIT;}
           break;
-        }else if(isspace(c)){break;}
+        }
         buf_length = 0;
         state = WAITING;
       case WAITING:
