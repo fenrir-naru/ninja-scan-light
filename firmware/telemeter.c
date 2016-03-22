@@ -161,11 +161,11 @@ static void expect(FIL *file){
       case EXPECTING:
         if(is_endline){
           state = INIT;
-        }else if((expect_index < buf_length) && (c == buf[expect_index])){
-          expect_index++;
-        }else{
-          state = EXPECT_FAILED;
-          return;
+        }else if(expect_index < buf_length){
+          if(c != buf[expect_index++]){
+            state = EXPECT_FAILED;
+            return;
+          }
         }
         break;
       case BEFORE_WAIT:
