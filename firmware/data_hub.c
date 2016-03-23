@@ -169,11 +169,11 @@ static __xdata u16 log_block_size; // Must be multiple number of SYLPHIDE_PAGESI
 
 static __xdata u8 direct_uart_port_num;
 
-static void direct_uart_change_spec(cdc_line_coding_t *spec){
+static void direct_uart_change_spec(){
   if(direct_uart_port_num == 0){
-    uart0_bauding(spec->baudrate.i);
+    uart0_bauding(cdc_line_coding.baudrate.i);
   }else{
-    uart1_bauding(spec->baudrate.i);
+    uart1_bauding(cdc_line_coding.baudrate.i);
   }
 }
 
@@ -202,10 +202,12 @@ static void direct_uart_init(){
 
 static void direct_uart0_init(FIL *f){
   direct_uart_port_num = 0;
+  cdc_line_coding.baudrate.i = le_u32(config.baudrate.gps);
   direct_uart_init();
 }
 static void direct_uart1_init(FIL *f){
   direct_uart_port_num = 1;
+  cdc_line_coding.baudrate.i = le_u32(config.baudrate.telemeter);
   direct_uart_init();
 }
 

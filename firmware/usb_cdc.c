@@ -55,7 +55,7 @@
 #define CDC_CTS     0x80  // clear to send
 
 volatile __bit cdc_force = FALSE;
-__xdata void (*cdc_change_line_spec)(cdc_line_coding_t *) = NULL;
+__xdata void (*cdc_change_line_spec)() = NULL;
 
 static u16 cdc_rx_size();
 
@@ -98,7 +98,7 @@ void cdc_polling(){
 }
 
 // line coding structure and its default value
-static cdc_line_coding_t __xdata uart_line_coding = {
+cdc_line_coding_t __xdata cdc_line_coding = {
   {le_u32(115200)}, // baudrate
   0,      // stop bit:  0-1, 1-1.5, 2-2
   0,      // parity:    0-none, 1-odd, 2-even, 3-mark, 4-space
@@ -109,11 +109,11 @@ static __xdata u8 ep0_data_buf[8];
 
 // called at the end of data stage
 static void set_line_coding_complete(){
-  if(memcmp(&uart_line_coding, ep0_data_buf, sizeof(cdc_line_coding_t)) != 0){
-    memcpy(&uart_line_coding, ep0_data_buf, sizeof(cdc_line_coding_t));
+  if(memcmp(&cdc_line_coding, ep0_data_buf, sizeof(cdc_line_coding_t)) != 0){
+    memcpy(&cdc_line_coding, ep0_data_buf, sizeof(cdc_line_coding_t));
 
     // Flush COM buffers and apply setting to UART etc.
-    if(cdc_change_line_spec){cdc_change_line_spec(&uart_line_coding);}
+    if(cdc_change_line_spec){cdc_change_line_spec();}
   }
 }
 
@@ -303,7 +303,7 @@ static void cdc_Get_Line_Coding(){
       && (ep0_setup.wValue.i == 0)
       && (ep0_setup.wLength.i == sizeof(cdc_line_coding_t))){
 
-    ep0_register_data((u8 *)(&uart_line_coding), sizeof(cdc_line_coding_t));
+    ep0_register_data((u8 *)(&cdc_line_coding), sizeof(cdc_line_coding_t));
     usb_ep0_status = EP_TX;
     ep0_request_completed = TRUE;
   }
@@ -469,10 +469,10 @@ void usb_CDC_req(){
       divisor += (ep0_setup.wValue.i & 0x3FFF) << 3;
       do{
         u32 new_baudrate = le_u32(24000000UL / divisor);
-        if(new_baudrate == uart_line_coding.baudrate.i){break;}
-        uart_line_coding.baudrate.i = new_baudrate;
+        if(new_baudrate == cdc_line_coding.baudrate.i){break;}
+        cdc_line_coding.baudrate.i = new_baudrate;
         if(!cdc_change_line_spec){break;}
-        cdc_change_line_spec(&uart_line_coding);
+        cdc_change_line_spec(&cdc_line_coding);
       }while(0);
       ep0_request_completed = TRUE;
       break;
@@ -480,20 +480,20 @@ void usb_CDC_req(){
     case SET_DATA: {
       // USB is little endian
       u8 buf, changed = 0;
-      if((buf = (ep0_setup.wValue.c[MSB] >> 3) & 0x07) != uart_line_coding.stopbit){
-        uart_line_coding.stopbit = buf;
+      if((buf = (ep0_setup.wValue.c[MSB] >> 3) & 0x07) != cdc_line_coding.stopbit){
+        cdc_line_coding.stopbit = buf;
         changed |= 1;
       }
-      if((buf = (ep0_setup.wValue.c[MSB] & 0x07)) != uart_line_coding.parity){
-        uart_line_coding.parity = buf;
+      if((buf = (ep0_setup.wValue.c[MSB] & 0x07)) != cdc_line_coding.parity){
+        cdc_line_coding.parity = buf;
         changed |= 1;
       }
-      if((buf = (ep0_setup.wValue.c[LSB])) != uart_line_coding.databit){
-        uart_line_coding.databit = buf;
+      if((buf = (ep0_setup.wValue.c[LSB])) != cdc_line_coding.databit){
+        cdc_line_coding.databit = buf;
         changed |= 1;
       }
       if(changed && cdc_change_line_spec){
-        cdc_change_line_spec(&uart_line_coding);
+        cdc_change_line_spec(&cdc_line_coding);
       }
       ep0_request_completed = TRUE;
       break;

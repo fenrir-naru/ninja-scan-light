@@ -109,7 +109,8 @@ typedef struct {
 #define SEND_BREAK                0x23
 
 extern volatile __bit cdc_force;
-extern __xdata void (*cdc_change_line_spec)(cdc_line_coding_t *);
+extern cdc_line_coding_t __xdata cdc_line_coding;
+extern __xdata void (*cdc_change_line_spec)();
 
 void usb_CDC_req();
 void cdc_polling();
