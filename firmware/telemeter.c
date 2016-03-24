@@ -29,29 +29,180 @@
  *
  */
 
+#include <ctype.h>
+#include <stdlib.h>
+
 #include "telemeter.h"
 #include "config.h"
 #include "f38x_uart1.h"
 #include "util.h"
+#include "ff.h"
+#include "main.h"
+
+static __bit telemeter_ready = 0;
 
 void telemeter_send(char buf[SYLPHIDE_PAGESIZE]){
   static __xdata u16 sequence_num = 0;
-  u16 crc = crc16(buf, SYLPHIDE_PAGESIZE,
-      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
-  if(uart1_tx_margin() < (
-      sizeof(sylphide_protocol_header) + sizeof(sequence_num)
-        + SYLPHIDE_PAGESIZE + sizeof(crc))){
+  u16 crc;
+  if((!telemeter_ready)
+      || (uart1_tx_margin() < (
+        sizeof(sylphide_protocol_header) + sizeof(sequence_num)
+          + SYLPHIDE_PAGESIZE + sizeof(crc)))){
     return;
   }
+  crc = crc16(buf, SYLPHIDE_PAGESIZE,
+      crc16((u8 *)&(++sequence_num), sizeof(sequence_num), 0));
   uart1_write(sylphide_protocol_header, sizeof(sylphide_protocol_header));
   uart1_write((u8 *)&sequence_num, sizeof(sequence_num));
   uart1_write(buf, SYLPHIDE_PAGESIZE);
   uart1_write((u8 *)&crc, sizeof(crc));
 }
 
+static void expect(FIL *file){
+  enum {
+    INIT,
+    BEFORE_SEND,
+    SENDING,
+    SENDING_ESCAPE,
+    SENDING_ESCAPE_HEX1,
+    SENDING_ESCAPE_HEX2,
+    BEFORE_EXPECT,
+    EXPECTING,
+    EXPECT_FAILED,
+    EXPECT_TIMEOUT,
+    BEFORE_WAIT,
+    WAITING,
+    IGNORE_LINE,
+  } state = INIT;
+
+  char c;
+  char buf[8];
+  u8 buf_length, expect_index;
+  u16 read_size;
+
+  telemeter_ready = 0;
+
+  while((f_read(file, &c, sizeof(c), &read_size) == FR_OK)
+      && (read_size > 0)){
+    unsigned char is_endline = ((c == '\r') || (c == '\n'));
+    switch(state){
+      case INIT:
+        if(c == '$'){
+          while(uart1_read(buf, sizeof(buf)) > 0); // clear RX buffer
+          state = BEFORE_SEND;
+        }else if(c == '>'){
+          state = BEFORE_EXPECT;
+          buf_length = expect_index = 0;
+          do{
+            u8 timeout = FALSE;
+            timeout_10ms = 0;
+            while(!uart1_read(&c, sizeof(c))){
+              if(timeout_10ms >= 100){
+                timeout = TRUE;
+                break;
+              }
+            }
+            if(timeout){
+              buf_length = 0;
+              break;
+            }else if(c == '\r' || c == '\n'){
+              if(buf_length > 0){break;}
+            }else if(buf_length < sizeof(buf)){
+              buf[buf_length++] = c;
+            }
+          }while(1);
+        }else if(c == '@'){
+          state = BEFORE_WAIT;
+        }else if(!isspace(c)){
+          state = IGNORE_LINE;
+        }
+        break;
+      case BEFORE_SEND:
+        if(isspace(c)){
+          if(is_endline){state = INIT;}
+          break;
+        }
+        state = SENDING;
+      case SENDING:
+        if(is_endline){
+          state = INIT;
+        }else if(c == '\\'){ // escape char
+          state = SENDING_ESCAPE;
+        }else{
+          uart1_write(&c, sizeof(c));
+        }
+        break;
+      case SENDING_ESCAPE:
+        if(c == 'x'){
+          state = SENDING_ESCAPE_HEX1;
+          break;
+        }
+        switch(c){
+          case 'r': c = '\r'; break;
+          case 'n': c = '\n'; break;
+          case '\\': c = '\\'; break;
+        }
+        uart1_write(&c, sizeof(c));
+        state = SENDING;
+        break;
+      case SENDING_ESCAPE_HEX1:
+        buf[0] = ((c & 0x0F) + (c >= 'A' ? 10 : 0)) << 4;
+        state = SENDING_ESCAPE_HEX2;
+        break;
+      case SENDING_ESCAPE_HEX2:
+        buf[0] += ((c & 0x0F) + (c >= 'A' ? 10 : 0));
+        uart1_write(buf, 1);
+        state = SENDING;
+        break;
+      case BEFORE_EXPECT:
+        if(isspace(c)){
+          if(is_endline){state = INIT;} // match any including timeout(buf_length == 0)
+          break;
+        }else if(buf_length == 0){
+          state = EXPECT_TIMEOUT;
+          return;
+        }
+        state = EXPECTING;
+      case EXPECTING:
+        if(is_endline){
+          state = INIT;
+        }else if(expect_index < buf_length){
+          if(c != buf[expect_index++]){
+            state = EXPECT_FAILED;
+            return;
+          }
+        }
+        break;
+      case BEFORE_WAIT:
+        if(isspace(c)){
+          if(is_endline){state = INIT;}
+          break;
+        }
+        buf_length = 0;
+        state = WAITING;
+      case WAITING:
+        if(is_endline){
+          buf[buf_length] = '\0';
+          wait_ms((unsigned int)atol(buf));
+          state = INIT;
+        }else if(buf_length < (sizeof(buf) - 1)){
+          buf[buf_length++] = c;
+        }
+        break;
+      case IGNORE_LINE:
+        if(is_endline){state = INIT;}
+        break;
+    }
+  }
+
+  telemeter_ready = 1;
+}
+
 void telemeter_init(){
   uart1_bauding(config.baudrate.telemeter);
 
+  telemeter_ready = 1;
+  data_hub_load_config("TLM.EXP", expect);
   data_hub_send_config("TLM.CFG", uart1_write);
 }
 

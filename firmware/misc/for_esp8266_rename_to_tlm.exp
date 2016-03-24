@@ -1,0 +1,20 @@
+@ 3000
+$ ATE0\r\n
+>
+>
+$ AT\r\n
+> OK
+$ AT+CWQAP\r\n
+@ 1000
+$ AT+CWMODE=3\r\n
+> OK
+$ AT+CWJAP="SSID","password"\r\n
+@ 5000
+$ AT+CIPSTART="TCP","192.168.100.1",28080\r\n
+@ 1000 
+> CONNECT
+> OK
+$ AT+CIPMODE=1\r\n
+> OK
+$ AT+CIPSEND\r\n
+> OK
