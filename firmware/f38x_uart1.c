@@ -63,13 +63,20 @@ static __xdata __at (0x100 + UART1_TX_BUFFER_SIZE)
  * Change UART1 baudrate
  * 
  */
-void uart1_bauding_config(u16 baudrate_register){
+static void uart1_bauding_config(u16 baudrate_register){
   SBCON1 = 0x03; // SB1PS[1:0] = 11;
   
   SBRLH1 = (u8)((baudrate_register >> 8) & 0xFF);
   SBRLL1 = (u8)(baudrate_register & 0xFF);
   
   SBCON1 |= 0x40; // SB1RUN = 1;
+}
+
+#define _uart1_bauding(baudrate) \
+  uart1_bauding_config((u16)(0x10000UL - (SYSCLK/2/baudrate)))
+
+void uart1_bauding(u32 baudrate){
+  _uart1_bauding(baudrate);
 }
 
 
@@ -89,7 +96,7 @@ void uart1_init() {
   fifo_char_init(&fifo_tx1, buffer_tx1, UART1_TX_BUFFER_SIZE); 
   fifo_char_init(&fifo_rx1, buffer_rx1, UART1_RX_BUFFER_SIZE); 
 
-  uart1_bauding(DEFAULT_BAUDRATE);
+  _uart1_bauding(DEFAULT_BAUDRATE);
 
   SCON1 &= ~0x08;   // SCON1.TBX1 is used for writing flag. '1' means writing, otherwise '0'.
   EIE2 |= 0x02;     // Enable interrupt

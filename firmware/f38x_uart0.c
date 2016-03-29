@@ -54,7 +54,7 @@ static __xdata __at (0x000 + UART0_TX_BUFFER_SIZE)
 /**
  * Change UART0 baudrate
  */
-void uart0_bauding_config(u16 baudrate_register){
+static void uart0_bauding_config(u16 baudrate_register){
   
   TR1 = 0;
   do{
@@ -88,6 +88,13 @@ void uart0_bauding_config(u16 baudrate_register){
   TR1 = 1;
 }
 
+#define _uart0_bauding(baudrate) \
+  uart0_bauding_config((u16)(SYSCLK/2/baudrate))
+
+void uart0_bauding(u32 baudrate){
+  _uart0_bauding(baudrate);
+}
+
 /**
  * Initialize UART0
  */
@@ -100,7 +107,7 @@ void uart0_init() {
   fifo_char_init(&fifo_tx0, buffer_tx0, UART0_TX_BUFFER_SIZE); 
   fifo_char_init(&fifo_rx0, buffer_rx0, UART0_RX_BUFFER_SIZE); 
 
-  uart0_bauding(DEFAULT_BAUDRATE);
+  _uart0_bauding(DEFAULT_BAUDRATE);
 
   TB80 = 0;         // TB80 is used for writing flag. '1' means writing, otherwise '0'.
   ES0 = 1;          // Enable interrupt

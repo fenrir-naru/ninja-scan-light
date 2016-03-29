@@ -35,9 +35,7 @@
 #include "type.h"
 #include "main.h"
 
-void uart0_bauding_config(u16 baudrate_register);
-#define uart0_bauding(baudrate) \
-  uart0_bauding_config((u16)(SYSCLK/2/baudrate))
+void uart0_bauding(u32 baudrate);
 void uart0_init();
 
 #define UART0_TX_BUFFER_SIZE 32
