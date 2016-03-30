@@ -63,14 +63,6 @@ void cdc_polling(){
   static __xdata u8 previous_frame_num = 0;
   u8 current_frame_num = usb_frame_num & 0xF0; // per 16 frames
 
-  u8 read_count;
-  char buf[CDC_DATA_EP_OUT_PACKET_SIZE + 1];
-  
-  buf[0] = 'D'; // debug
-  while(read_count = min(((u8)cdc_rx_size()), sizeof(buf) - 1)){
-    cdc_rx(buf + 1, read_count);
-  }
-
   if(previous_frame_num == current_frame_num){
     return;
   }

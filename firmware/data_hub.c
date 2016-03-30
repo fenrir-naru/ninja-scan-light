@@ -124,7 +124,7 @@ long data_hub_read_long(FIL *f){
   char buf[16];
   u16 res;
   if(f_read(f, buf, sizeof(buf) - 1, &res) != FR_OK){
-    return;
+    return 0;
   }
   buf[res] = '\0';
   return atol(buf);
@@ -189,6 +189,7 @@ static void direct_uart_loop(){
     uart_read = uart1_read;
   }
   while(1){
+    usb_polling();
     cdc_tx(buf, (u16)uart_read(buf, sizeof(buf)));
     uart_write(buf, (u8)cdc_rx(buf, sizeof(buf)));
   }
@@ -309,6 +310,11 @@ void data_hub_polling() {
         return;
       }
       log_func = log_to_host;
+      { // TODO provisional; CDC RX will be used for debug purpose, and currently thrown away.
+        u16 read_count;
+        u8 buf[8];
+        while(read_count = cdc_rx(buf, sizeof(buf)));
+      }
       break;
     case USB_MSC_ACTIVE:
       if(log_file_opened){
