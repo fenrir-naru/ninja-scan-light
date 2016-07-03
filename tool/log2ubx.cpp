@@ -100,7 +100,7 @@ typedef SylphideProcessor<> Processor_t;
 typedef Processor_t::G_Observer_t G_Observer_t;
 
 #define BUFFER_SIZE (PAGE_SIZE * 1) // 32
-#define OBSERVER_SIZE (PAGE_SIZE * 32) // 1024
+#define OBSERVER_SIZE (PAGE_SIZE * 64) // 2048
 
 int good_packet(0);
 int bad_packet(0);
