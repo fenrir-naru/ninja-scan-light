@@ -190,6 +190,8 @@ int main(int argc, char *argv[]){
   
   int log_index(1); // log file name is assumed to be given by argv[1]
 
+  options._out = NULL;
+
   // Check options
   for(int i(1); i < argc; i++){
     if(options.check_spec(argv[i])){continue;}
@@ -201,11 +203,9 @@ int main(int argc, char *argv[]){
     log_index = i;
   }
   
-  options._out = NULL;
-
-  // デフォルトの出力先の指定
+  // Setup default output if output is not specified
   if(!options._out){
-    string out_fname(argv[1]);
+    string out_fname(argv[log_index]);
     string::size_type index = out_fname.find_last_of('.');
     if(index != string::npos){
       out_fname.erase(index);
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]){
     options._out = &(options.spec2ostream(out_fname.c_str(), true));
   }
   
-  // SylphideProtocolで着ていた場合はそれに対応
+  // Input is in SylphideProtocol or log.dat
   if(options.in_sylphide){
     SylphideIStream sylphide_in(options.spec2istream(argv[log_index]), PAGE_SIZE);
     stream_processor(sylphide_in);
