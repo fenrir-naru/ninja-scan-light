@@ -21,4 +21,5 @@ It consists of
 * External links for [related tools](https://drive.google.com/folderview?id=0ByrAl6X3Khv2R09zbWNPMm1QdFU&usp=sharing&tid=0ByrAl6X3Khv2S3h3VGRMTkl1T1U), and [Gerbers](https://drive.google.com/folderview?id=0ByrAl6X3Khv2TkJ5Wkp4RmhMWjg&usp=sharing).
 * The project owner's website is [Fenrir's BLog](http://fenrir.naruoka.org/).
 
-[![Build Status](https://travis-ci.org/fenrir-naru/ninja-scan-light.svg?branch=master)](https://travis-ci.org/fenrir-naru/ninja-scan-light)
+[![Build Status (Firmware + Linux tools)](https://travis-ci.org/fenrir-naru/ninja-scan-light.svg?branch=master)](https://travis-ci.org/fenrir-naru/ninja-scan-light)
+[![Build status (Windows tools)](https://ci.appveyor.com/api/projects/status/6r6koh5rophe6yns?svg=true)](https://ci.appveyor.com/project/fenrir-naru/ninja-scan-light)
