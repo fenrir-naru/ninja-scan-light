@@ -29,13 +29,13 @@
 PACKAGES = log2ubx log_CSV INS_GPS
 
 BIN_PATH = /usr/bin:/usr/local/bin
-CXX = g++
+CXX ?= g++
 CPPFLAGS = 
 CFLAGS = $(CPPFLAGS) -O3 #-Wall
 LFLAGS =  
 INCLUDES = -I.
 LIBS = -lm #-L
-BUILD_DIR = build_GCC
+BUILD_DIR ?= build_GCC
 
 SRCS_COMMON = util/crc.cpp
 OBJS_COMMON = $(patsubst %.cpp,%.o,$(notdir $(SRCS_COMMON)))

@@ -8,8 +8,8 @@
         "name": "Latest"
     },
     "files": [{
-        "includePattern": "tool/build_GCC/(.*\\.tar\\.gz)",
-        "uploadPattern": "$1",
+        "includePattern": "tool/(build[^/]*)/(.*\\.tar\\.gz)",
+        "uploadPattern": "$2",
         "matrixParams": { "override": 1 }
     }],
     "publish": true
