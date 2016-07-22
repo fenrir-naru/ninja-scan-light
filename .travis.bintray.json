@@ -1,0 +1,16 @@
+{
+    "package": {
+        "name": "ninja-scan-light",
+        "repo": "github",
+        "subject": "fenrir-naru"
+    },
+    "version": {
+        "name": "Latest"
+    },
+    "files": [{
+        "includePattern": "tool/build_GCC/(.*\\.tar\\.gz)",
+        "uploadPattern": "$1",
+        "matrixParams": { "override": 1 }
+    }],
+    "publish": true
+}
