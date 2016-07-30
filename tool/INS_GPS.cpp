@@ -543,14 +543,13 @@ float_sylph_t fname() const {return INS_GPS::fname();}
           }
         }
     }; 
-    INS_GPS *_nav, &nav;
+    INS_GPS *nav;
   public:
     INS_GPS_NAV() 
         : NAV(), snapshots(), 
-        _nav(options.back_propagate ? new INS_GPS_back_propagate(snapshots) : new INS_GPS()),
-        nav(*_nav) {}
+        nav(options.back_propagate ? new INS_GPS_back_propagate(snapshots) : new INS_GPS()) {}
     ~INS_GPS_NAV() {
-      delete _nav;
+      delete nav;
     }
     back_propagated_list_t back_propagated() {
       back_propagated_list_t res;
@@ -576,7 +575,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
        *  6   : gravity variance [m/s^2]^2, normally set small value, such as 1E-6
        */
       {
-        Matrix<float_sylph_t> Q(nav.getFilter().getQ());
+        Matrix<float_sylph_t> Q(nav->getFilter().getQ());
         
         Q(0, 0) = pow(accel.getX(), 2);
         Q(1, 1) = pow(accel.getY(), 2);
@@ -586,7 +585,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         Q(5, 5) = pow(gyro.getZ(), 2);
         Q(6, 6) = 1E-6; //1E-14
         
-        nav.getFilter().setQ(Q);
+        nav->getFilter().setQ(Q);
       }
     }
 
@@ -601,9 +600,9 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         const float_sylph_t &pitch, 
         const float_sylph_t &roll){
       
-      nav.initPosition(latitude, longitude, height);
-      nav.initVelocity(v_north, v_east, v_down);
-      nav.initAttitude(yaw, pitch, roll);
+      nav->initPosition(latitude, longitude, height);
+      nav->initVelocity(v_north, v_east, v_down);
+      nav->initAttitude(yaw, pitch, roll);
 
       /**
        * Initialization of matrix P, system covariance matrix, of Kalman filter.
@@ -618,19 +617,19 @@ float_sylph_t fname() const {return INS_GPS::fname();}
        *        For instance, 1E-4 is a sufficiently big value.
        */
       {
-        Matrix<float_sylph_t> P(nav.getFilter().getP());
+        Matrix<float_sylph_t> P(nav->getFilter().getP());
 
         P(0, 0) = P(1, 1) = P(2, 2) = 1E+1;
         P(3, 3) = P(4, 4) = P(5, 5) = 1E-8;
         P(6, 6) = 1E+2;
         P(7, 7) = P(8, 8) = P(9, 9) = 1E-4;
 
-        nav.getFilter().setP(P);
+        nav->getFilter().setP(P);
       }
     }
 
 #define MAKE_COMMIT_FUNC(fname, rtype, attr) \
-rtype fname() attr {return nav.fname();}
+rtype fname() attr {return nav->fname();}
     MAKE_COMMIT_FUNC(longitude, float_sylph_t, const);
     MAKE_COMMIT_FUNC(latitude, float_sylph_t, const);
     MAKE_COMMIT_FUNC(height, float_sylph_t, const);
@@ -644,30 +643,30 @@ rtype fname() attr {return nav.fname();}
     MAKE_COMMIT_FUNC(azimuth, float_sylph_t, const);
 #undef MAKE_COMMIT_FUNC
     
-    float_sylph_t &operator[](unsigned index){return nav[index];}
+    float_sylph_t &operator[](unsigned index){return nav->operator[](index);}
     
     NAV &update(
         const Vector3<float_sylph_t> &accel, 
         const Vector3<float_sylph_t> &gyro, 
         const float_sylph_t &deltaT){
-      nav.update(accel, gyro, deltaT);
+      nav->update(accel, gyro, deltaT);
       return *this;
     }
   
   public:
     NAV &correct(const GPS_UBLOX_3D<float_sylph_t> &gps){
-      nav.correct(gps);
+      nav->correct(gps);
       return *this;
     }
     NAV &correct(
         const GPS_UBLOX_3D<float_sylph_t> &gps, 
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
-      nav.correct(gps, lever_arm_b, omega_b2i_4b);
+      nav->correct(gps, lever_arm_b, omega_b2i_4b);
       return *this;
     }
     NAV &correct_yaw(const float_sylph_t &delta_yaw){
-      nav.correct_yaw(delta_yaw, pow(deg2rad(options.mag_heading_accuracy_deg), 2));
+      nav->correct_yaw(delta_yaw, pow(deg2rad(options.mag_heading_accuracy_deg), 2));
       return *this;
     }
     
@@ -697,23 +696,23 @@ class INS_GPS_BE_NAV : public INS_GPS_NAV<INS_GPS_BE> {
       /**
        * Configuration for bias drift of accelerometer and gyro.
        */
-      super_t::nav.beta_accel() *= 0.1;
-      super_t::nav.beta_gyro() *= 0.1;
+      super_t::nav->beta_accel() *= 0.1;
+      super_t::nav->beta_gyro() *= 0.1;
       {
-        Matrix<float_sylph_t> P(super_t::nav.getFilter().getP());
+        Matrix<float_sylph_t> P(super_t::nav->getFilter().getP());
         P(10, 10) = P(11, 11) = P(12, 12) = 1E-4;
         P(13, 13) = P(14, 14) = P(15, 15) = 1E-6;
-        super_t::nav.getFilter().setP(P);
+        super_t::nav->getFilter().setP(P);
       }
       {
-        Matrix<float_sylph_t> Q(super_t::nav.getFilter().getQ());
+        Matrix<float_sylph_t> Q(super_t::nav->getFilter().getQ());
         Q(7, 7) = 1E-6;
         Q(8, 8) = 1E-6;
         Q(9, 9) = 1E-6;
         Q(10, 10) = 1E-8;
         Q(11, 11) = 1E-8;
         Q(12, 12) = 1E-8;
-        super_t::nav.getFilter().setQ(Q);
+        super_t::nav->getFilter().setQ(Q);
       }
     }
     ~INS_GPS_BE_NAV(){}
@@ -723,7 +722,7 @@ class INS_GPS_BE_NAV : public INS_GPS_NAV<INS_GPS_BE> {
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       return super_t::correct(
-          gps, lever_arm_b, omega_b2i_4b - super_t::nav.bias_gyro());
+          gps, lever_arm_b, omega_b2i_4b - super_t::nav->bias_gyro());
     }
     
     void label(std::ostream &out = std::cout) const {
@@ -739,8 +738,8 @@ class INS_GPS_BE_NAV : public INS_GPS_NAV<INS_GPS_BE> {
   protected:
     void dump(std::ostream &out) const {
       super_t::dump(out);
-      Vector3<float_sylph_t> &ba(super_t::nav.bias_accel());
-      Vector3<float_sylph_t> &bg(super_t::nav.bias_gyro());
+      Vector3<float_sylph_t> &ba(super_t::nav->bias_accel());
+      Vector3<float_sylph_t> &bg(super_t::nav->bias_gyro());
       out << ba.getX() << ", "     // Bias
            << ba.getY() << ", "
            << ba.getZ() << ", "
