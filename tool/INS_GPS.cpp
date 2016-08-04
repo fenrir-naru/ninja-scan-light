@@ -879,6 +879,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
      */
     void label(std::ostream &out = std::cout) const {
       NAV::label(out);
+      label_additional(out, ins_gps);
     }
   
   protected:
