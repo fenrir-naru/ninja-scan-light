@@ -714,7 +714,7 @@ class INS_GPS_NAV : public NAV {
        *  6   : initial altitude variance [m]^2
        *  7-9 : initial attitude variance represented by a delta quaternion
        *        composed of yaw, pitch, and roll angles.
-       *        For instance, 1E-4 is a sufficiently big value.
+       *        default values are sufficiently big.
        */
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
@@ -722,7 +722,8 @@ class INS_GPS_NAV : public NAV {
         P(0, 0) = P(1, 1) = P(2, 2) = 1E+1;
         P(3, 3) = P(4, 4) = P(5, 5) = 1E-8;
         P(6, 6) = 1E+2;
-        P(7, 7) = P(8, 8) = P(9, 9) = 1E-4;
+        P(7, 7) = P(8, 8) = 1E-4; // mainly for roll, pitch. 1-sigma about 1 deg.
+        P(9, 9) = 5E-3; // mainly for roll, pitch. 1-sigma about 7 deg.
 
         ins_gps->getFilter().setP(P);
       }
