@@ -185,14 +185,14 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
         {
 #define by_delta_r(i, j) A(i + 0, j + 3)
           {
-            by_delta_r(0, 0) =  dcm_e2n(0, 0) * dcm_e2n(1, 0) + dcm_e2n(0, 1) * dcm_e2n(2, 2) + dcm_e2n(0, 2) * dcm_e2n(2, 1);
-            by_delta_r(0, 1) = -dcm_e2n(0, 0) * dcm_e2n(2, 2) + dcm_e2n(0, 1) * dcm_e2n(1, 0) - dcm_e2n(0, 2) * dcm_e2n(2, 0);
+            by_delta_r(0, 0) =  dcm_e2n(0, 1) * dcm_e2n(2, 2) + dcm_e2n(0, 2) * dcm_e2n(2, 1);
+            by_delta_r(0, 1) = -dcm_e2n(0, 0) * dcm_e2n(2, 2) - dcm_e2n(0, 2) * dcm_e2n(2, 0);
             
-            by_delta_r(1, 0) =  pow2(dcm_e2n(1, 0)) + dcm_e2n(1, 1) * dcm_e2n(2, 2) + dcm_e2n(1, 2) * dcm_e2n(2, 1);
-            by_delta_r(1, 1) = -dcm_e2n(1, 0) * dcm_e2n(2, 2) - dcm_e2n(1, 1) * dcm_e2n(1, 0) - dcm_e2n(1, 2) * dcm_e2n(2, 0);
+            by_delta_r(1, 0) =  dcm_e2n(1, 1) * dcm_e2n(2, 2) + dcm_e2n(1, 2) * dcm_e2n(2, 1);
+            by_delta_r(1, 1) = -dcm_e2n(1, 0) * dcm_e2n(2, 2) - dcm_e2n(1, 2) * dcm_e2n(2, 0);
             
-            by_delta_r(2, 0) =  dcm_e2n(2, 0) * dcm_e2n(1, 0) + dcm_e2n(2, 1) * dcm_e2n(2, 2) + dcm_e2n(2, 2) * dcm_e2n(2, 1);
-            by_delta_r(2, 1) = -dcm_e2n(2, 0) * dcm_e2n(2, 2) - dcm_e2n(2, 1) * dcm_e2n(1, 0) - dcm_e2n(2, 2) * dcm_e2n(2, 0);
+            by_delta_r(2, 0) =  dcm_e2n(2, 1) * dcm_e2n(2, 2) + dcm_e2n(2, 2) * dcm_e2n(2, 1);
+            by_delta_r(2, 1) = -dcm_e2n(2, 0) * dcm_e2n(2, 2) - dcm_e2n(2, 2) * dcm_e2n(2, 0);
             
             FloatT coef(pow2(Earth::Omega_Earth) * 2 * Rn_1);
             by_delta_r(0, 0) *= coef;
