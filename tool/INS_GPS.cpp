@@ -4,7 +4,7 @@
  */
 
 /*
- * Copyright (c) 2015, M.Naruoka (fenrir)
+ * Copyright (c) 2016, M.Naruoka (fenrir)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -160,7 +160,11 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 #include "analyze_common.h"
 
 struct Options : public GlobalOptions<float_sylph_t> {
-  bool back_propagate;  //< true when use back_propagation, that is, smoothing.
+  enum {
+    INS_GPS_SYNC_OFFLINE,
+    INS_GPS_SYNC_BACK_PROPAGATION, //< a.k.a, smoothing
+    INS_GPS_SYNC_REALTIME,
+  } ins_gps_sync_strategy;
   
   typedef GlobalOptions<float_sylph_t> super_t;
 
@@ -170,6 +174,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
    */
   float_sylph_t back_propagate_depth;
   
+  enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; //< Algorithm selection for realtime
+
   bool gps_fake_lock; //< true when gps dummy date is used.
 
   struct gps_threshold_t {
@@ -185,7 +191,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
   Options()
       : super_t(),
-      back_propagate(false), back_propagate_depth(0),
+      ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
+      back_propagate_depth(0),
+      rt_mode(RT_LIGHT_WEIGHT),
       gps_fake_lock(false), gps_threshold(),
       debug_content(DEBUG_NONE) {
 
@@ -209,8 +217,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
   } \
 }
     CHECK_OPTION(back_propagate,
-        back_propagate = is_true(value),
-        (back_propagate ? "on" : "off"));
+        if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
+        (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
     CHECK_OPTION(bp_depth,
         back_propagate_depth = std::atof(value),
         back_propagate_depth);
@@ -560,6 +568,179 @@ float_sylph_t fname() const {return INS_GPS::fname();}
 };
 
 template <class INS_GPS>
+class INS_GPS_RealTime : public INS_GPS, public NAVData {
+  protected:
+    struct snapshot_content_t {
+      INS_GPS_RealTime *ins_gps;
+      Matrix<float_sylph_t> A;
+      Matrix<float_sylph_t> Phi_inv;
+      Matrix<float_sylph_t> GQGt;
+      float_sylph_t deltaT_update;
+      snapshot_content_t(
+          INS_GPS_RealTime *_ins_gps,
+          const Matrix<float_sylph_t> &_A,
+          const Matrix<float_sylph_t> &_Phi_inv,
+          const Matrix<float_sylph_t> &_GQGt,
+          const float_sylph_t &_deltaT)
+          : ins_gps(_ins_gps), A(_A), Phi_inv(_Phi_inv), GQGt(_GQGt),
+          deltaT_update(_deltaT){
+      }
+      snapshot_content_t &operator=(const snapshot_content_t &another){
+        ins_gps = another.ins_gps;
+        A = another.A;
+        Phi_inv = another.Phi_inv;
+        GQGt = another.GQGt;
+        deltaT_update = another.deltaT_update;
+        return *this;
+      }
+    };
+    typedef std::vector<snapshot_content_t> snapshots_t;
+    snapshots_t *_snapshots, &snapshots; // share snapshot among instances
+  public:
+    INS_GPS_RealTime()
+        : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
+    INS_GPS_RealTime(
+        const INS_GPS_RealTime &orig,
+        const bool deepcopy = false)
+        : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
+    INS_GPS_RealTime &operator=(const INS_GPS_RealTime &another){
+      _snapshots = NULL;
+      snapshots = another.snapshots;
+      INS_GPS::operator=(another);
+      return *this;
+    }
+    virtual ~INS_GPS_RealTime(){
+      delete _snapshots;
+    }
+#define MAKE_PROXY_FUNC(fname) \
+float_sylph_t fname() const {return INS_GPS::fname();}
+    MAKE_PROXY_FUNC(longitude);
+    MAKE_PROXY_FUNC(latitude);
+    MAKE_PROXY_FUNC(height);
+    MAKE_PROXY_FUNC(v_north);
+    MAKE_PROXY_FUNC(v_east);
+    MAKE_PROXY_FUNC(v_down);
+    MAKE_PROXY_FUNC(heading);
+    MAKE_PROXY_FUNC(euler_phi);
+    MAKE_PROXY_FUNC(euler_theta);
+    MAKE_PROXY_FUNC(euler_psi);
+    MAKE_PROXY_FUNC(azimuth);
+#undef MAKE_PROXY_FUNC
+
+  protected:
+    /**
+     * Call-back function for time update
+     *
+     * @param A matrix A
+     * @param B matrix B
+     * @patam deltaT interval time
+     */
+    void before_update_INS(
+        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
+        const float_sylph_t &deltaT){
+      Matrix<float_sylph_t> Phi(A * deltaT);
+      for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
+      Matrix<float_sylph_t> Gamma(B * deltaT);
+
+      snapshots.push_back(
+          snapshot_content_t(new INS_GPS_RealTime(*this),
+              A, Phi.inverse(), Gamma * INS_GPS::getFilter().getQ() * Gamma.transpose(),
+              deltaT));
+    }
+
+    /**
+     * Sort snapshots before correct
+     * to let a snapshot corresponding to the latest GPS information be first
+     *
+     * @param deltaT how old is the GPS infomation (negative value means old)
+     * @return bool true when successfully sorted
+     */
+    bool pre_correct_info(float_sylph_t deltaT){
+      if(deltaT > 0){return false;} // positive value (future) is odd
+
+      for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
+          it != snapshots.rend();
+          ++it){
+        deltaT += it->deltaT_update;
+        if(deltaT > float_sylph_t(-0.005)){ // Find the closest
+          if(it == snapshots.rbegin()){
+            // Keep at least one snapshot
+            it++;
+          }
+          for(typename snapshots_t::iterator it2(snapshots.begin());
+              it2 != it.base();
+              ++it2){
+            delete it2->ins_gps;
+          }
+          snapshots.erase(snapshots.begin(), it.base());
+          return true;
+        }
+      }
+
+      return false; // Too old
+    }
+
+    /**
+     * Perform correction with modified correct information
+     *
+     * @param info Correction information
+     */
+    void post_correct_info(CorrectInfo<float_sylph_t> &info){
+      Matrix<float_sylph_t> &H(info.H), &R(info.R);
+      switch(options.rt_mode){
+        case Options::RT_LIGHT_WEIGHT:
+          if(!snapshots.empty()){
+            Matrix<float_sylph_t> sum_A(H.columns(), H.columns());
+            Matrix<float_sylph_t> sum_GQGt(sum_A.rows(), sum_A.rows());
+            float_sylph_t bar_delteT(0);
+            for(typename snapshots_t::iterator it(snapshots.begin());
+                it != snapshots.end();
+                ++it){
+              sum_A += it->A;
+              sum_GQGt += it->GQGt;
+              bar_delteT += it->deltaT_update;
+            }
+            int n(snapshots.size());
+            bar_delteT /= n;
+            Matrix<float_sylph_t> sum_A_GQGt(sum_A * sum_GQGt);
+            R += H
+                * (sum_GQGt -= ((sum_A_GQGt + sum_A_GQGt.transpose()) *= (bar_delteT * (n + 1) / (2 * n))))
+                * H.transpose();
+            H *= (Matrix<float_sylph_t>::getI(sum_A.rows()) - sum_A * bar_delteT);
+          }
+          break;
+        default:
+          for(typename snapshots_t::iterator it(snapshots.begin());
+              it != snapshots.end();
+              ++it){
+            H *= it->Phi_inv;
+            R += H * it->GQGt * H.transpose();
+          }
+      }
+      INS_GPS::correct(info);
+    }
+
+    /*void correct(const GPS_UBLOX_3D<FloatT> &gps){
+      if(pre_correct_info(deltaT)){
+        CorrectInfo<float_sylph_t> info(
+            snapshots[0].ins_gps->correct_info(gps));
+        post_correct_info(info);
+      }
+      return *this;
+    }
+
+    void correct(const GPS_UBLOX_3D<FloatT> &gps,
+        const Vector3<FloatT> &lever_arm_b,
+        const Vector3<FloatT> &omega_b2i_4b){
+      if(pre_correct_info(deltaT)){
+        CorrectInfo<float_sylph_t> info(
+            snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
+        post_correct_info(info);
+      }
+    }*/
+};
+
+template <class INS_GPS>
 class INS_GPS_Debug : public INS_GPS {
   protected:
     enum {ACTION_LAST_NOP, ACTION_LAST_UPDATE, ACTION_LAST_CORRECT} last_action;
@@ -769,16 +950,20 @@ class INS_GPS_NAV : public NAV {
     template <class Calibration>
     static NAV *get_nav(const Calibration &calibration){
       if(options.debug_content == Options::DEBUG_NONE){
-        if(options.back_propagate){
-          return new INS_GPS_NAV<INS_GPS_Back_Propagate<INS_GPS> >(calibration);
-        }else{
-          return new INS_GPS_NAV<INS_GPS>(calibration);
+        switch(options.ins_gps_sync_strategy){
+          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+            return new INS_GPS_NAV<INS_GPS_Back_Propagate<INS_GPS> >(calibration);
+          default:
+            return new INS_GPS_NAV<INS_GPS>(calibration);
         }
       }else{
-        if(options.back_propagate){
-          return new INS_GPS_NAV<INS_GPS_Debug<INS_GPS_Back_Propagate<INS_GPS> > >(calibration);
-        }else{
-          return new INS_GPS_NAV<INS_GPS_Debug<INS_GPS> >(calibration);
+        switch(options.ins_gps_sync_strategy){
+          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+            return new INS_GPS_NAV<
+                INS_GPS_Debug<INS_GPS_Back_Propagate<INS_GPS> > >(calibration);
+          default:
+            return new INS_GPS_NAV<
+                INS_GPS_Debug<INS_GPS> >(calibration);
         }
       }
     }
@@ -831,13 +1016,13 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
 
     NAV &correct_ins_gps(
-            const GPS_UBLOX_3D<float_sylph_t> &gps,
-            const Vector3<float_sylph_t> &lever_arm_b,
-            const Vector3<float_sylph_t> &omega_b2i_4b,
-            void *){
-          ins_gps->correct(gps, lever_arm_b, omega_b2i_4b);
-          return *this;
-        }
+        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const Vector3<float_sylph_t> &lever_arm_b,
+        const Vector3<float_sylph_t> &omega_b2i_4b,
+        void *){
+      ins_gps->correct(gps, lever_arm_b, omega_b2i_4b);
+      return *this;
+    }
 
     template <class FloatT, class Filter, class FINS>
     NAV &correct_ins_gps(
@@ -1240,11 +1425,14 @@ class Status{
       switch(mode){
         case DUMP_UPDATE:
           if(!options.dump_update){return;}
-          if(options.back_propagate){return;} // When smoothing is activated, skip.
+          if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_BACK_PROPAGATION){
+            return; // When smoothing is activated, skip.
+          }
           dump("TU", itow, nav);
           break;
         case DUMP_CORRECT:
-          if(options.back_propagate){ // When smoothing is activated
+          if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_BACK_PROPAGATION){
+            // When smoothing is activated
             NAV::previous_items_t items(nav.previous_items());
             int index(0);
             for(NAV::previous_items_t::iterator it(items.begin());
