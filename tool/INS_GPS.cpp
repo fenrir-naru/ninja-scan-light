@@ -114,6 +114,16 @@
  *      initial measurement update threshold for GPS vertical estimated error,
  *      and continual measurement update threshold for GPS 2D estimated error, respectively.
  *      These default values are 20, 10, and 100, respectively.
+ *
+ * The followings are advanced (i.e., very experimental) options;
+ *   --back_propagate
+ *      apply Kalman filter smoothing to previously time-updated data
+ *      (exclusive with --realtime)
+ *   --realtime
+ *      change GPS synchronization strategy to support realtime applications.
+ *      It processes data without sorting and outputs calculation results as quick as possible.
+ *      (exclusive with --back_propagate)
+ *
  */
 
 // Comment-In when QNAN DEBUG
