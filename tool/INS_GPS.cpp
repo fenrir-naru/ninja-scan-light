@@ -215,6 +215,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(back_propagate,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
+    CHECK_OPTION(realtime,
+        if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_REALTIME;},
+        (ins_gps_sync_strategy == INS_GPS_SYNC_REALTIME ? "on" : "off"));
     CHECK_OPTION(bp_depth,
         back_propagate_depth = std::atof(value),
         back_propagate_depth);
@@ -1305,7 +1308,9 @@ class StreamProcessor
     struct AHandler : public A_Observer_t {
       bool previous_seek_next;
       deque<A_Packet> recent_packets;
-      AHandler() : A_Observer_t(buffer_size), recent_packets() {
+      bool packet_updated;
+      AHandler() : A_Observer_t(buffer_size),
+          recent_packets(), packet_updated(false) {
         previous_seek_next = A_Observer_t::ready();
       }
       ~AHandler(){}
@@ -1333,6 +1338,7 @@ class StreamProcessor
           recent_packets.pop_front();
         }
         recent_packets.push_back(packet);
+        packet_updated = true;
       }
     } a_handler;
 
@@ -1490,21 +1496,22 @@ class StreamProcessor
     Vector3<float_sylph_t> lever_arm;
     StandardCalibration calibration;
 
-    deque<A_Packet> &a_packet_deque;
+    deque<A_Packet> &a_packets;
+    bool &a_packet_updated;
     G_Packet &g_packet;
     bool &g_packet_updated;
     int &g_packet_wn;
-    deque<M_Packet> &m_packet_deque;
+    deque<M_Packet> &m_packets;
 
     StreamProcessor()
         : super_t(), _in(NULL), invoked(0),
         use_lever_arm(false), lever_arm(), calibration(),
         a_handler(),
-        a_packet_deque(a_handler.recent_packets),
+        a_packets(a_handler.recent_packets), a_packet_updated(a_handler.packet_updated),
         g_handler(),
         g_packet(g_handler.packet_latest), g_packet_updated(g_handler.packet_updated), g_packet_wn(g_handler.week_number),
         m_handler(),
-        m_packet_deque(m_handler.recent_packets) {
+        m_packets(m_handler.recent_packets) {
 
     }
     ~StreamProcessor(){}
@@ -1568,19 +1575,19 @@ class StreamProcessor
     }
 
     Vector3<float_sylph_t> get_mag() {
-      return m_packet_deque.empty()
+      return m_packets.empty()
           ? Vector3<float_sylph_t>(1, 0, 0) // heading is north
-          : m_packet_deque.back().mag;
+          : m_packets.back().mag;
     }
 
     Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
-      if(m_packet_deque.size() < 2){
+      if(m_packets.size() < 2){
         return Vector3<float_sylph_t>(1, 0, 0); // heading is north
       }
       deque<M_Packet>::iterator
-          previous_it(m_packet_deque.begin()),
-          next_it(m_packet_deque.begin() + 1);
-      for(int i(distance(previous_it, m_packet_deque.end()));
+          previous_it(m_packets.begin()),
+          next_it(m_packets.begin() + 1);
+      for(int i(distance(previous_it, m_packets.end()));
           i > 2;
           i--, previous_it++, next_it++){
         if(next_it->itow >= itow){break;}
@@ -1789,7 +1796,7 @@ class Status{
               g_packet.convert(),
               gps_advance);
         }
-        if(!current_processor->m_packet_deque.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
+        if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
               && (pow(g_packet.vel_ned[0], 2) + pow(g_packet.vel_ned[1], 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
             nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
@@ -1832,7 +1839,7 @@ class Status{
           roll = atan2(acc_reg[1], acc_reg[2]);
           
           // Estimate yaw when magnetic sensor is available
-          if(!current_processor->m_packet_deque.empty()){
+          if(!current_processor->m_packets.empty()){
             yaw = nav.get_mag_yaw(current_processor->get_mag(g_packet.itow), pitch, roll, latitude, longitude, g_packet.llh[2]);
           }
           
@@ -1883,6 +1890,39 @@ void loop(){
   
   Status status(*(nav_manager.nav));
   
+  if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
+    // Realtime mode supports only one stream.
+    current_processor = processors.front();
+    StreamProcessor &proc(*current_processor);
+    bool started(false);
+    while(proc.process_1page()){
+      if(proc.a_packet_updated){
+        proc.a_packet_updated = false;
+        A_Packet &packet(proc.a_packets.back());
+        status.time_update(packet);
+        status.dump(Status::DUMP_UPDATE, packet.itow);
+      }else if(current_processor->g_packet_updated){
+        proc.g_packet_updated = false;
+        G_Packet &packet(proc.g_packet);
+        if(!started){
+          if((options.start_gpswn > proc.g_packet_wn)
+              || (options.start_gpstime > packet.itow)){ // Time check
+            continue;
+          }else{
+            started = true;
+          }
+        }
+        status.measurement_update(packet);
+        status.dump(Status::DUMP_CORRECT, packet.itow);
+        if((packet.itow >= options.end_gpstime)
+            && (proc.g_packet_wn >= options.end_gpswn)){
+          break;
+        }
+      }
+    }
+    return;
+  }
+
   while(true){
     for(processors_t::iterator it(processors.begin()); it != processors.end(); ++it){
       while(!((*it)->g_packet_updated)){ // find new GPS data
@@ -1942,7 +1982,7 @@ void loop(){
         continue;
       }
       
-      deque<A_Packet> &a_packets(processors.front()->a_packet_deque);
+      deque<A_Packet> &a_packets(processors.front()->a_packets);
       deque<A_Packet>::iterator it_tu(a_packets.begin()), it_tu_end(a_packets.end());
       const bool a_packet_deque_has_item(it_tu != it_tu_end);
 
