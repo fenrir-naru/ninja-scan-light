@@ -140,10 +140,6 @@
 #include "SylphideProcessor.h"
 
 typedef double float_sylph_t;
-typedef SylphideProcessor<float_sylph_t> Processor_t;
-typedef Processor_t::A_Observer_t A_Observer_t;
-typedef Processor_t::G_Observer_t G_Observer_t;
-typedef Processor_t::M_Observer_t M_Observer_t;
 
 #include "param/matrix.h"
 #include "param/vector3.h"
@@ -1292,13 +1288,199 @@ if(value = get_value(line, TO_STRING(name))){ \
 
 using namespace std;
 
-void a_packet_handler(const A_Observer_t &);
-void g_packet_handler(const G_Observer_t &);
-void m_packet_handler(const M_Observer_t &);
+class StreamProcessor
+    : public AbstractSylphideProcessor<float_sylph_t> {
 
-bool require_switch_processor(false);
+  public:
+    static const unsigned int buffer_size;
+  protected:
+    typedef AbstractSylphideProcessor<float_sylph_t> super_t;
+    typedef A_Packet_Observer<float_sylph_t> A_Observer_t;
+    typedef G_Packet_Observer<float_sylph_t> G_Observer_t;
+    typedef M_Packet_Observer<float_sylph_t> M_Observer_t;
 
-class StreamProcessor : public Processor_t {
+    /**
+     * A page (ADC value)
+     */
+    struct AHandler : public A_Observer_t {
+      bool previous_seek_next;
+      deque<A_Packet> recent_packets;
+      AHandler() : A_Observer_t(buffer_size), recent_packets() {
+        previous_seek_next = A_Observer_t::ready();
+      }
+      ~AHandler(){}
+      void operator()(const A_Observer_t &observer){
+        if(!observer.validate()){return;}
+
+        A_Packet packet;
+        packet.itow = observer.fetch_ITOW();
+
+        A_Observer_t::values_t values(observer.fetch_values());
+        for(int i = 0; i < 8; i++){
+          packet.ch[i] = values.values[i];
+        }
+        packet.ch[8] = values.temperature;
+
+        while(options.reduce_1pps_sync_error){
+          if(recent_packets.empty()){break;}
+          float_sylph_t delta_t(packet.itow - recent_packets.back().itow);
+          if((delta_t < 1) || (delta_t >= 2)){break;}
+          packet.itow -= 1;
+          break;
+        }
+
+        while(recent_packets.size() >= 128){
+          recent_packets.pop_front();
+        }
+        recent_packets.push_back(packet);
+      }
+    } a_handler;
+
+    /**
+     * G page (u-blox)
+     *
+     * Extract the following data.
+     * {class, id} = {0x01, 0x02} : position
+     * {class, id} = {0x01, 0x03} : status
+     * {class, id} = {0x01, 0x06} : solution
+     * {class, id} = {0x01, 0x12} : velocity
+     */
+    struct GHandler : public G_Observer_t  {
+      bool previous_seek_next;
+      G_Packet packet_latest;
+      bool packet_updated;
+      unsigned int itow_ms_0x0102, itow_ms_0x0112;
+      unsigned int gps_status;
+      int week_number;
+
+      GHandler()
+          : G_Observer_t(buffer_size),
+          packet_latest(), packet_updated(false),
+          itow_ms_0x0102(0), itow_ms_0x0112(0),
+          gps_status(status_t::NO_FIX), week_number(0) {
+        previous_seek_next = G_Observer_t::ready();
+      }
+      ~GHandler(){}
+      void operator()(const G_Observer_t &observer){
+        if(!observer.validate()){return;}
+
+        bool change_itow(false);
+        G_Observer_t::packet_type_t
+            packet_type(observer.packet_type());
+        switch(packet_type.mclass){
+          case 0x01: {
+            switch(packet_type.mid){
+              case 0x02: { // NAV-POSLLH
+                G_Observer_t::position_t
+                  position(observer.fetch_position());
+                G_Observer_t::position_acc_t
+                  position_acc(observer.fetch_position_acc());
+
+                //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
+
+                itow_ms_0x0102 = observer.fetch_ITOW_ms();
+                change_itow = true;
+
+                packet_latest.llh[0] = position.latitude;
+                packet_latest.llh[1] = position.longitude;
+                packet_latest.llh[2] = position.altitude;
+                packet_latest.acc_2d = position_acc.horizontal;
+                packet_latest.acc_v = position_acc.vertical;
+
+                break;
+              }
+              case 0x03: { // NAV-STATUS
+                G_Observer_t::status_t status(observer.fetch_status());
+                gps_status = status.fix_type;
+                break;
+              }
+              case 0x06: { // NAV-SOL
+                G_Observer_t::solution_t solution(observer.fetch_solution());
+                if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
+                  week_number = solution.week;
+                }
+                break;
+              }
+              case 0x12: { // NAV-VELNED
+                G_Observer_t::velocity_t
+                    velocity(observer.fetch_velocity());
+                G_Observer_t::velocity_acc_t
+                    velocity_acc(observer.fetch_velocity_acc());
+
+                //cerr << "G_Arrive 0x12 : " << current_itow << " =? " << packet.itow << endl;
+
+                itow_ms_0x0112 = observer.fetch_ITOW_ms();
+                change_itow = true;
+
+                packet_latest.vel_ned[0] = velocity.north;
+                packet_latest.vel_ned[1] = velocity.east;
+                packet_latest.vel_ned[2] = velocity.down;
+                packet_latest.acc_vel = velocity_acc.acc;
+
+                break;
+              }
+            }
+            break;
+          }
+          case 0x02: {
+            break;
+          }
+          default:
+            break;
+        }
+
+        if(change_itow && (itow_ms_0x0102 == itow_ms_0x0112)){
+          packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
+          packet_updated = true;
+        }
+      }
+    } g_handler;
+
+    struct MHandler : public M_Observer_t {
+      bool previous_seek_next;
+      deque<M_Packet> recent_packets;
+      MHandler() : M_Observer_t(buffer_size), recent_packets() {
+        previous_seek_next = M_Observer_t::ready();
+      }
+      ~MHandler(){}
+      void operator()(const M_Observer_t &observer){
+        if(!observer.validate()){return;}
+
+        M_Observer_t::values_t values(observer.fetch_values());
+
+        // Check value to remove outlier
+        short *targets[] = {values.x, values.y, values.z};
+        static const int threshold(200);
+        for(int j(0); j < sizeof(targets) / sizeof(targets[0]); j++){
+          for(int i(0); i < 3; i++){
+            int diff_abs(abs(targets[j][i] - targets[j][3]));
+            if((diff_abs > threshold) && (diff_abs < (4096 * 2 - threshold))){
+              return;
+            }
+          }
+        }
+
+        // TODO: magnetic sensor axes must correspond to ones of accelerometer and gyro.
+        Vector3<float_sylph_t> mag(values.x[3], values.y[3], values.z[3]);
+        M_Packet m_packet;
+        m_packet.itow = observer.fetch_ITOW();
+        m_packet.mag = mag;
+
+        while(options.reduce_1pps_sync_error){
+          if(recent_packets.empty()){break;}
+          float_sylph_t delta_t(m_packet.itow - recent_packets.back().itow);
+          if((delta_t < 1) || (delta_t >= 2)){break;}
+          m_packet.itow -= 1;
+          break;
+        }
+
+        while(recent_packets.size() > 0x40){
+          recent_packets.pop_front();
+        }
+        recent_packets.push_back(m_packet);
+      }
+    } m_handler;
+
   protected:
     int invoked;
     istream *_in;
@@ -1307,17 +1489,22 @@ class StreamProcessor : public Processor_t {
     bool use_lever_arm;
     Vector3<float_sylph_t> lever_arm;
     StandardCalibration calibration;
-    deque<A_Packet> a_packet_deque;
-    G_Packet g_packet;
-    bool g_packet_updated;
-    int g_packet_wn;
-    deque<M_Packet> m_packet_deque;
+
+    deque<A_Packet> &a_packet_deque;
+    G_Packet &g_packet;
+    bool &g_packet_updated;
+    int &g_packet_wn;
+    deque<M_Packet> &m_packet_deque;
+
     StreamProcessor()
-        : Processor_t(), _in(NULL), invoked(0),
+        : super_t(), _in(NULL), invoked(0),
         use_lever_arm(false), lever_arm(), calibration(),
-        a_packet_deque(),
-        g_packet(), g_packet_updated(false), g_packet_wn(0),
-        m_packet_deque() {
+        a_handler(),
+        a_packet_deque(a_handler.recent_packets),
+        g_handler(),
+        g_packet(g_handler.packet_latest), g_packet_updated(g_handler.packet_updated), g_packet_wn(g_handler.week_number),
+        m_handler(),
+        m_packet_deque(m_handler.recent_packets) {
 
     }
     ~StreamProcessor(){}
@@ -1358,7 +1545,25 @@ class StreamProcessor : public Processor_t {
 #endif
       }
       
-      process(buffer, read_count);
+      switch(buffer[0]){
+        case 'A':
+          super_t::process_packet(
+              buffer, read_count,
+              a_handler, a_handler.previous_seek_next, a_handler);
+          break;
+        case 'G':
+          super_t::process_packet(
+              buffer, read_count,
+              g_handler, g_handler.previous_seek_next, g_handler);
+          break;
+        case 'M':
+          if(!options.use_magnet){break;}
+          super_t::process_packet(
+              buffer, read_count,
+              m_handler, m_handler.previous_seek_next, m_handler);
+          break;
+      }
+
       return true;
     }
 
@@ -1398,8 +1603,10 @@ class StreamProcessor : public Processor_t {
     }
 } *current_processor;
 
-typedef vector<StreamProcessor *> processor_storage_t;
-processor_storage_t processor_storage;
+const unsigned int StreamProcessor::buffer_size = PAGE_SIZE * 64;
+
+typedef vector<StreamProcessor *> processors_t;
+processors_t processors;
 
 class Status{
   private:
@@ -1588,7 +1795,7 @@ class Status{
             nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
           }
         }
-      }else if((current_processor == processor_storage.front())
+      }else if((current_processor == processors.front())
           && (recent_a_packets.size() >= min_a_packets_for_init)
           && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
           && (g_packet.acc_2d <= options.gps_threshold.init_acc_2d)
@@ -1650,154 +1857,11 @@ class Status{
     bool is_initalized(){return initalized;}
 };
 
-/**
- * A page (ADC value)
- * 
- * @param observer
- */
-void a_packet_handler(const A_Observer_t &observer){
-  if(!observer.validate()){return;}
-  
-  A_Packet packet;
-  packet.itow = observer.fetch_ITOW();
-  
-  A_Observer_t::values_t values(observer.fetch_values());
-  for(int i = 0; i < 8; i++){
-    packet.ch[i] = values.values[i];
-  }
-  packet.ch[8] = values.temperature;
-  
-  deque<A_Packet> &a_packet_deque(
-      current_processor->a_packet_deque);
-
-  while(options.reduce_1pps_sync_error){
-    if(a_packet_deque.empty()){break;}
-    float_sylph_t delta_t(packet.itow - a_packet_deque.back().itow);
-    if((delta_t < 1) || (delta_t >= 2)){break;}
-    packet.itow -= 1;
-    break;
-  }
-
-  while(a_packet_deque.size() >= 128){
-    a_packet_deque.pop_front();
-  }
-  a_packet_deque.push_back(packet);
-}
-
-/**
- * G page (u-blox)
- * 
- * Extract the following data.
- * {class, id} = {0x01, 0x02} : position
- * {class, id} = {0x01, 0x12} : velocity
- * 
- * @param observer
- */
-void g_packet_handler(const G_Observer_t &observer){
-  if(!observer.validate()){return;}
-  
-  G_Packet &packet(current_processor->g_packet);
-  
-  G_Observer_t::packet_type_t
-      packet_type(observer.packet_type());
-  switch(packet_type.mclass){
-    case 0x01: {
-      switch(packet_type.mid){
-        case 0x02: { // NAV-POSLLH
-          G_Observer_t::position_t 
-            position(observer.fetch_position());
-          G_Observer_t::position_acc_t
-            position_acc(observer.fetch_position_acc());
-          
-          packet.itow = observer.fetch_ITOW();
-          packet.llh[0] = position.latitude;
-          packet.llh[1] = position.longitude;
-          packet.llh[2] = position.altitude;
-          packet.acc_2d = position_acc.horizontal;
-          packet.acc_v = position_acc.vertical;
-          
-          break;
-        }
-        case 0x06: { // NAV-SOL
-          G_Observer_t::solution_t solution(observer.fetch_solution());
-          if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
-            current_processor->g_packet_wn = solution.week;
-          }
-          break;
-        }
-        case 0x12: { // NAV-VELNED
-          G_Observer_t::velocity_t
-            velocity(observer.fetch_velocity());
-          G_Observer_t::velocity_acc_t
-            velocity_acc(observer.fetch_velocity_acc());
-          
-          if(std::abs(packet.itow - observer.fetch_ITOW()) < 1E-3){
-            packet.vel_ned[0] = velocity.north;
-            packet.vel_ned[1] = velocity.east;
-            packet.vel_ned[2] = velocity.down;
-            packet.acc_vel = velocity_acc.acc;
-            
-            current_processor->g_packet_updated = true;
-            
-            require_switch_processor = true;
-          }
-            
-          break;
-        }
-      }
-      break;
-    }
-    case 0x02: { 
-      break;
-    }
-    default:
-      break;
-  }
-}
-
-void m_packet_handler(const M_Observer_t &observer){
-  if(!observer.validate()){return;}
-  
-  M_Observer_t::values_t values(observer.fetch_values());
-        
-  // Check value to remove outlier
-  short *targets[] = {values.x, values.y, values.z};
-  static const int threshold(200);
-  for(int j(0); j < sizeof(targets) / sizeof(targets[0]); j++){
-    for(int i(0); i < 3; i++){
-      int diff_abs(abs(targets[j][i] - targets[j][3]));
-      if((diff_abs > threshold) && (diff_abs < (4096 * 2 - threshold))){
-        return;
-      }
-    }
-  }
-  
-  while(current_processor->m_packet_deque.size() > 0x40){
-    current_processor->m_packet_deque.pop_front();
-  }
-
-  // TODO: magnetic sensor axes must correspond to ones of accelerometer and gyro.
-  Vector3<float_sylph_t> mag(values.x[3], values.y[3], values.z[3]);
-  M_Packet m_packet;
-  m_packet.itow = observer.fetch_ITOW();
-  m_packet.mag = mag;
-
-  while(options.reduce_1pps_sync_error){
-    if(current_processor->m_packet_deque.empty()){break;}
-    float_sylph_t delta_t(m_packet.itow - current_processor->m_packet_deque.back().itow);
-    if((delta_t < 1) || (delta_t >= 2)){break;}
-    m_packet.itow -= 1;
-    break;
-  }
-
-  current_processor->m_packet_deque.push_back(m_packet);
-}
-
 void loop(){
   struct NAV_Manager {
     NAV *nav;
     NAV_Manager(){
-      const StandardCalibration &calibration(processor_storage.front()->calibration);
+      const StandardCalibration &calibration(processors.front()->calibration);
       if(options.use_udkf){
         if(options.est_bias){
           nav = INS_GPS_NAV<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
@@ -1820,19 +1884,14 @@ void loop(){
   Status status(*(nav_manager.nav));
   
   while(true){
-    for(processor_storage_t::iterator it(processor_storage.begin());
-        it != processor_storage.end();
-        ++it){
-      if((*it)->g_packet_updated){continue;}
-      current_processor = *it;
-      require_switch_processor = false;
-      while(!require_switch_processor){
-        if(!current_processor->process_1page()){
-          if(it == processor_storage.begin()){
-            return;
-          }else{
-            break;
-          }
+    for(processors_t::iterator it(processors.begin()); it != processors.end(); ++it){
+      while(!((*it)->g_packet_updated)){ // find new GPS data
+        if((*it)->process_1page()){continue;}
+        // when stream read failed
+        if(it == processors.begin()){ // no more GPS data in front processor
+          return;
+        }else{
+          break;
         }
       }
     }
@@ -1841,17 +1900,17 @@ void loop(){
     typedef vector<StreamProcessor *> mu_queue_t;
     mu_queue_t mu_queue;
     
-    mu_queue.push_back(*processor_storage.begin());
+    mu_queue.push_back(processors.front());
     bool require_search_again(false);
-    for(processor_storage_t::iterator it(processor_storage.begin() + 1);
-        it != processor_storage.end();
-        ++it){
+    for(processors_t::iterator it(processors.begin() + 1); it != processors.end(); ++it){
+      // check GPS data synchronization between multiple streams
       if(!((*it)->g_packet_updated)){continue;}
       float_sylph_t itow((*it)->g_packet.itow);
       float_sylph_t interval(
-          itow - processor_storage.front()->g_packet.itow);
+          itow - processors.front()->g_packet.itow);
       
       if(std::abs(interval) <= 0.2){ // When the observation times are near, use the data
+        // mu_queue is chronologically sorted
         mu_queue_t::iterator it2(mu_queue.begin());
         while(it2 != mu_queue.end()){
           if((*it2)->g_packet.itow > itow){break;}
@@ -1865,10 +1924,11 @@ void loop(){
       }
     }
     
-    if(require_search_again){continue;}
+    if(require_search_again){continue;} // find another GPS data
     
     float_sylph_t latest_measurement_update_itow(0);
     int latest_measurement_update_gpswn(0);
+
     for(mu_queue_t::iterator it_mu(mu_queue.begin());
         it_mu != mu_queue.end();
         ++it_mu){
@@ -1882,9 +1942,8 @@ void loop(){
         continue;
       }
       
-      deque<A_Packet> &a_packet_deque(
-          processor_storage.front()->a_packet_deque);
-      deque<A_Packet>::iterator it_tu(a_packet_deque.begin()), it_tu_end(a_packet_deque.end());
+      deque<A_Packet> &a_packets(processors.front()->a_packet_deque);
+      deque<A_Packet>::iterator it_tu(a_packets.begin()), it_tu_end(a_packets.end());
       const bool a_packet_deque_has_item(it_tu != it_tu_end);
 
       if(options.gps_fake_lock){
@@ -1897,7 +1956,7 @@ void loop(){
         g_packet.acc_vel = 1;
       }
     
-      // Time update to the last sample before GPS observation
+      // Time update up to the last sample before GPS observation
       for(; 
           (it_tu != it_tu_end) && (it_tu->itow < g_packet.itow);
           ++it_tu){
@@ -1905,22 +1964,22 @@ void loop(){
         status.dump(Status::DUMP_UPDATE, it_tu->itow);
       }
       
-      // Time update to the GPS observation
+      // Time update up to the GPS observation
       if(a_packet_deque_has_item){
         A_Packet interpolation((it_tu != it_tu_end) ? *it_tu : *(it_tu - 1));
         interpolation.itow = g_packet.itow;
         status.time_update(interpolation);
       }
       
-      a_packet_deque.erase(a_packet_deque.begin(), it_tu);
+      a_packets.erase(a_packets.begin(), it_tu);
       
       // Measurement update
       status.measurement_update(g_packet);
+      status.dump(Status::DUMP_CORRECT, latest_measurement_update_itow);
+
       latest_measurement_update_itow = g_packet.itow;
       latest_measurement_update_gpswn = current_processor->g_packet_wn;
     }
-    
-    status.dump(Status::DUMP_CORRECT, latest_measurement_update_itow);
     
     if((latest_measurement_update_itow >= options.end_gpstime)
         && (latest_measurement_update_gpswn >= options.end_gpswn)){
@@ -1995,15 +2054,9 @@ int main(int argc, char *argv[]){
 
     if(options.check_spec(argv[arg_index])){continue;}
     
-    if(!processor_storage.empty()){
+    if(!processors.empty()){
       cerr << "(error!) Unknown option or too many log." << endl;
       exit(-1);
-    }
-
-    stream_processor->set_a_handler(a_packet_handler);  // Register A page handler
-    stream_processor->set_g_handler(g_packet_handler);  // Register G page handler
-    if(options.use_magnet){
-      stream_processor->set_m_handler(m_packet_handler);  // Register M page handler
     }
     
     cerr << "Log file: ";
@@ -2011,10 +2064,10 @@ int main(int argc, char *argv[]){
     stream_processor->set_stream(
         options.in_sylphide ? new SylphideIStream(in, PAGE_SIZE) : &in);
 
-    processor_storage.push_back(stream_processor);
+    processors.push_back(stream_processor);
   }
 
-  if(processor_storage.empty()){
+  if(processors.empty()){
     cerr << "(error!) No log file." << endl;
     exit(-1);
   }
@@ -2027,8 +2080,8 @@ int main(int argc, char *argv[]){
 
   loop();
   
-  for(processor_storage_t::iterator it(processor_storage.begin());
-      it != processor_storage.end();
+  for(processors_t::iterator it(processors.begin());
+      it != processors.end();
       ++it){
     delete *it;
   }
