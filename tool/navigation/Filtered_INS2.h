@@ -537,6 +537,74 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * @return (Filter &) フィルター
      */
     Filter &getFilter(){return m_filter;}
+
+    struct StandardDeviations {
+      FloatT v_north_ms, v_east_ms, v_down_ms;
+      FloatT longitude_rad, latitude_rad, height_m;
+      FloatT heading_rad, pitch_rad, roll_rad;
+    };
+
+    /**
+     * 標準偏差を馴染みの形で求めます。
+     *
+     * @return (StandardDeviations) [北/東/下方向速度、経/緯度、高度、ヘディング、ピッチ、ロール]
+     * で構成された標準偏差
+     */
+    StandardDeviations getSigma() const {
+      StandardDeviations sigma;
+
+      Matrix<FloatT> &P(const_cast<Matrix<FloatT> &>(
+          const_cast<Filtered_INS2 *>(this)->getFilter().getP()));
+
+      { // 速度
+        sigma.v_north_ms = std::sqrt(P(0, 0));
+        sigma.v_east_ms = std::sqrt(P(1, 1));
+        sigma.v_down_ms = std::sqrt(P(2, 2));
+      }
+
+      { // 位置
+        FloatT cl(std::cos(INS<FloatT>::lambda)), sl(std::sin(INS<FloatT>::lambda));
+
+        Matrix<FloatT> M(2, 3);
+
+        M(0, 0) = 0;
+        M(0, 1) = 0;
+        M(0, 2) = 1;
+
+        M(1, 0) = - sl * cl * 2;
+        M(1, 1) = cl * cl * 2 - 1;
+        M(1, 2) = 0;
+
+        Matrix<FloatT> P_euler_e2n(M * P.partial(3, 3, 3, 3) * M.transpose());
+
+        sigma.longitude_rad = std::sqrt(P_euler_e2n(0, 0)) * 2; // 経度
+        sigma.latitude_rad = std::sqrt(P_euler_e2n(1, 1)) * 2; // 緯度
+
+        sigma.height_m = std::sqrt(P(6, 6)); // 高度
+      }
+
+      { // 姿勢
+        FloatT psi(INS<FloatT>::euler_psi()), theta(INS<FloatT>::euler_theta()), phi(INS<FloatT>::euler_phi());
+
+        // 最小二乗法(事前計算)
+        FloatT cpsi(std::cos(psi)), spsi(std::sin(psi));
+        FloatT ctheta(std::cos(theta)), ttheta(std::tan(theta));
+        Matrix<FloatT> M_conv(3, 3);
+        {
+          M_conv(0, 0) =  cpsi * ttheta; M_conv(0, 1) = spsi * ttheta; M_conv(0, 2) = 1;
+          M_conv(1, 0) = -spsi;          M_conv(1, 1) = cpsi;          M_conv(1, 2) = 0;
+          M_conv(2, 0) =  cpsi / ctheta; M_conv(2, 1) = spsi / ctheta; M_conv(2, 2) = 0;
+        }
+
+        Matrix<FloatT> P_euler_n2b(M_conv * P.partial(3, 3, 7, 7) * M_conv.transpose());
+
+        sigma.heading_rad = std::sqrt(P_euler_n2b(0, 0)) * 2; // ヨー
+        sigma.pitch_rad = std::sqrt(P_euler_n2b(1, 1)) * 2; // ピッチ
+        sigma.roll_rad = std::sqrt(P_euler_n2b(2, 2)) * 2; // ロール
+      }
+
+      return sigma;
+    }
 };
 
 #endif /* __FILTERED_INS2_H__ */

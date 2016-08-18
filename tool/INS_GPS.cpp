@@ -166,13 +166,15 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 #include "analyze_common.h"
 
 struct Options : public GlobalOptions<float_sylph_t> {
+  typedef GlobalOptions<float_sylph_t> super_t;
+
+  bool dump_stddev; ///< True for dumping standard deviations
+
   enum {
     INS_GPS_SYNC_OFFLINE,
-    INS_GPS_SYNC_BACK_PROPAGATION, //< a.k.a, smoothing
+    INS_GPS_SYNC_BACK_PROPAGATION, ///< a.k.a, smoothing
     INS_GPS_SYNC_REALTIME,
   } ins_gps_sync_strategy;
-  
-  typedef GlobalOptions<float_sylph_t> super_t;
 
   /**
    * Number of snapshots to be back-propagated.
@@ -180,9 +182,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
    */
   float_sylph_t back_propagate_depth;
   
-  enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; //< Algorithm selection for realtime
+  enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; ///< Algorithm selection for realtime
 
-  bool gps_fake_lock; //< true when gps dummy date is used.
+  bool gps_fake_lock; ///< true when gps dummy date is used.
 
   struct gps_threshold_t {
     float_sylph_t init_acc_2d; ///< Initial measurement update threshold for GPS 2D estimated error
@@ -197,6 +199,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
   Options()
       : super_t(),
+      dump_stddev(false),
       ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
       back_propagate_depth(0),
       rt_mode(RT_LIGHT_WEIGHT),
@@ -222,6 +225,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
     return true; \
   } \
 }
+    CHECK_OPTION(dump_stddev,
+        dump_stddev = is_true(value),
+        (dump_stddev ? "on" : "off"));
     CHECK_OPTION(back_propagate,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
@@ -1115,6 +1121,14 @@ float_sylph_t fname() const {return ins_gps->fname();}
           << "bias_gyro(X)" << ','
           << "bias_gyro(Y)" << ','
           << "bias_gyro(Z)" << ',';
+      if(options.dump_stddev){
+        out << "s1(bias_accel(X))" << ','
+            << "s1(bias_accel(Y))" << ','
+            << "s1(bias_accel(Z))" << ','
+            << "s1(bias_gyro(X))" << ','
+            << "s1(bias_gyro(Y))" << ','
+            << "s1(bias_gyro(Z))" << ',';
+      }
     }
 
     /**
@@ -1122,6 +1136,17 @@ float_sylph_t fname() const {return ins_gps->fname();}
      */
     void label(std::ostream &out = std::cout) const {
       NAV::label(out);
+      if(options.dump_stddev){
+        out << "s1(longitude)" << ','
+            << "s1(latitude)" << ','
+            << "s1(height)" << ','
+            << "s1(v_north)" << ','
+            << "s1(v_east)" << ','
+            << "s1(v_down)" << ','
+            << "s1(psi)" << ','
+            << "s1(theta)" << ','
+            << "s1(phi)" << ',';
+      }
       label_additional(out, ins_gps);
     }
   
@@ -1139,6 +1164,14 @@ float_sylph_t fname() const {return ins_gps->fname();}
          << bg.getX() << ','
          << bg.getY() << ','
          << bg.getZ() << ',';
+     if(options.dump_stddev){
+       Matrix<float_sylph_t> &P(
+           const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
+       static const int base_i(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::P_SIZE);
+       for(int i(base_i - 6); i < base_i; ++i){
+         out << sqrt(P(i, i)) << ',';
+       }
+     }
    }
 
     /**
@@ -1148,6 +1181,18 @@ float_sylph_t fname() const {return ins_gps->fname();}
      */
     void dump(std::ostream &out) const {
       NAV::dump(out);
+      if(options.dump_stddev){
+        typename INS_GPS::StandardDeviations sigma(ins_gps->getSigma());
+        out << rad2deg(sigma.longitude_rad) << ','
+            << rad2deg(sigma.latitude_rad) << ','
+            << sigma.height_m << ','
+            << sigma.v_north_ms << ','
+            << sigma.v_east_ms << ','
+            << sigma.v_down_ms << ','
+            << rad2deg(sigma.heading_rad) << ','
+            << rad2deg(sigma.pitch_rad) << ','
+            << rad2deg(sigma.roll_rad) << ',';
+      }
       dump_additional(out, ins_gps);
     }
 };
