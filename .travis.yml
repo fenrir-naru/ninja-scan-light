@@ -26,8 +26,14 @@ before_script:
 script:
   - (cd ./firmware/ver1 && make clean all)
   - (cd ./firmware/ver2 && make clean all)
-  - (cd ./tool && make clean all && (cd build_GCC && tar zvcf ubuntu.$TRAVIS_BRANCH.tar.gz *.out) )
-  - (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all && (cd build_GCC_ARM && tar zvcf raspi.$TRAVIS_BRANCH.tar.gz *.out) )
+  - (cd ./tool && make clean all 
+    && (cd build_GCC 
+      && touch ${TRAVIS_COMMIT}.commit 
+      && tar zvcf ubuntu.$TRAVIS_BRANCH.tar.gz *.out *.commit) )
+  - (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all 
+    && (cd build_GCC_ARM 
+      && touch ${TRAVIS_COMMIT}.commit 
+      && tar zvcf raspi.$TRAVIS_BRANCH.tar.gz *.out *.commit) )
 
 deploy:
   - provider: releases
