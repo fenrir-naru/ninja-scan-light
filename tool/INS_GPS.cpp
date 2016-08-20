@@ -1421,14 +1421,14 @@ class StreamProcessor
       bool previous_seek_next;
       G_Packet packet_latest;
       bool packet_updated;
-      unsigned int itow_ms_0x0102, itow_ms_0x0112;
+      int itow_ms_0x0102, itow_ms_0x0112;
       unsigned int gps_status;
       int week_number;
 
       GHandler()
           : G_Observer_t(buffer_size),
           packet_latest(), packet_updated(false),
-          itow_ms_0x0102(0), itow_ms_0x0112(0),
+          itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0) {
         previous_seek_next = G_Observer_t::ready();
       }
