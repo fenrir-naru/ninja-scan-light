@@ -195,7 +195,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
         cont_acc_2d(100.) {}
   } gps_threshold;
 
-  enum {DEBUG_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_content;
+  enum {DEBUG_KF_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_KF;
 
   Options()
       : super_t(),
@@ -204,11 +204,35 @@ struct Options : public GlobalOptions<float_sylph_t> {
       back_propagate_depth(0),
       rt_mode(RT_LIGHT_WEIGHT),
       gps_fake_lock(false), gps_threshold(),
-      debug_content(DEBUG_NONE) {
+      debug_KF(DEBUG_KF_NONE) {
 
   }
   ~Options(){}
   
+  bool check_debug_target(const char *spec){
+    if(std::strcmp(spec, "KF_P") == 0){
+      debug_KF = DEBUG_KF_P;
+    }else if(std::strcmp(spec, "KF_FULL") == 0){
+      debug_KF = DEBUG_KF_FULL;
+    }else{
+      return false;
+    }
+    return true;
+  }
+
+  struct show_debug_target_t {
+    const Options &options;
+    show_debug_target_t(const Options &opt) : options(opt) {}
+    friend std::ostream &operator<<(std::ostream &out, const show_debug_target_t &_this){
+      switch(_this.options.debug_KF){
+        case Options::DEBUG_KF_NONE: break;
+        case Options::DEBUG_KF_P: out << "KF_P"; break;
+        case Options::DEBUG_KF_FULL: out << "KF_FULL"; break;
+      }
+      return out;
+    }
+  };
+
   /**
    * Check spec
    * 
@@ -219,7 +243,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
 #define CHECK_OPTION(name, operation, disp) { \
   const char *value(get_value(spec, #name)); \
-  if(value){ \
+  while(value){ \
     {operation;} \
     std::cerr << #name << ": " << disp << std::endl; \
     return true; \
@@ -250,6 +274,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(gps_cont_acc_2d,
         gps_threshold.cont_acc_2d = std::atof(value),
         gps_threshold.cont_acc_2d << " [m]");
+
+    CHECK_OPTION(debug,
+        if(!check_debug_target(value)){break;},
+        show_debug_target_t(*this));
 #undef CHECK_OPTION
     
     return super_t::check_spec(spec);
@@ -277,6 +305,11 @@ class NAV : public NAVData {
   public:
     virtual previous_items_t previous_items(){
       return previous_items_t();
+    }
+    virtual void inspect(std::ostream &out) const {}
+    friend std::ostream &operator<<(std::ostream &out, const NAV &nav){
+      nav.inspect(out);
+      return out;
     }
     virtual void init(
         const float_sylph_t &latitude, 
@@ -810,7 +843,7 @@ class INS_GPS_Debug : public INS_GPS {
       inspect_matrix(out, mat);
     }
     void inspect(std::ostream &out) const {
-      switch(options.debug_content){
+      switch(options.debug_KF){
         case Options::DEBUG_KF_P:
           inspect_matrix(out, const_cast<INS_GPS_Debug *>(this)->getFilter().getP());
           break;
@@ -972,7 +1005,7 @@ class INS_GPS_NAV : public NAV {
 
     template <class Calibration>
     static NAV *get_nav(const Calibration &calibration){
-      if(options.debug_content == Options::DEBUG_NONE){
+      if(options.debug_KF == Options::DEBUG_KF_NONE){
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
             return new INS_GPS_NAV<INS_GPS_Back_Propagate<INS_GPS> >(calibration);
@@ -994,6 +1027,15 @@ class INS_GPS_NAV : public NAV {
                 INS_GPS_Debug<INS_GPS> >(calibration);
         }
       }
+    }
+
+    void inspect(std::ostream &out, void *) const {}
+    template <class INS_GPS_base>
+    void inspect(std::ostream &out, INS_GPS_Debug<INS_GPS_base> *) const {
+      ins_gps->inspect(out);
+    }
+    void inspect(std::ostream &out) const {
+      inspect(out, ins_gps);
     }
 
     previous_items_t previous_items(void *){
@@ -1698,7 +1740,7 @@ class Status{
   public:
     Status(NAV &_nav) : initalized(false), nav(_nav), gyro_index(0), gyro_init(false),
         min_a_packets_for_init(options.has_initial_attitude ? 1 : 0x10),
-        recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)) {
+        recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)){
     }
   
   public:
@@ -1788,6 +1830,8 @@ class Status{
         default:
           return;
       }
+
+      options.out_debug() << itow << ',' << nav << endl;
     }
     
     /**
@@ -2183,6 +2227,7 @@ int main(int argc, char *argv[]){
   }else{
     options.out() << setprecision(10);
   }
+  options.out_debug() << setprecision(16);
 
   loop();
   
