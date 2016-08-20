@@ -927,7 +927,7 @@ class INS_GPS_NAV : public NAV {
         P(3, 3) = P(4, 4) = P(5, 5) = 1E-8;
         P(6, 6) = 1E+2;
         P(7, 7) = P(8, 8) = 1E-4; // mainly for roll, pitch. 1-sigma about 1 deg.
-        P(9, 9) = 5E-3; // mainly for roll, pitch. 1-sigma about 7 deg.
+        P(9, 9) = 5E-3; // mainly for heading. 1-sigma about 7 deg.
 
         ins_gps->getFilter().setP(P);
       }
