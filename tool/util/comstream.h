@@ -50,7 +50,7 @@
 #endif
 
 /**
- * Brocking streambuf for serial/tty port
+ * Blocking streambuf for serial/tty port
  * 
  */
 template<
