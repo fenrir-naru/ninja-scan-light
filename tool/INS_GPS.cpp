@@ -2081,7 +2081,7 @@ void loop(){
       
       // Measurement update
       status.measurement_update(g_packet);
-      status.dump(Status::DUMP_CORRECT, latest_measurement_update_itow);
+      status.dump(Status::DUMP_CORRECT, g_packet.itow);
 
       latest_measurement_update_itow = g_packet.itow;
       latest_measurement_update_gpswn = current_processor->g_packet_wn;
