@@ -47,6 +47,7 @@
 #endif
 
 #include "util/comstream.h"
+#include "util/nullstream.h"
 #include "util/endian.h"
 
 /**
@@ -68,7 +69,6 @@ FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
 template <class FloatT>
 struct GlobalOptions {
-  
   bool dump_update; ///< True for dumping states at time updates
   bool dump_correct; ///< True for dumping states at measurement updates
   bool has_initial_attitude; ///< Whether initial attitude is given.
@@ -84,7 +84,9 @@ struct GlobalOptions {
   FloatT yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
   bool out_is_N_packet; ///< True for NPacket formatted outputs
   bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated
+  NullStream blackhole;
   std::ostream *_out; ///< Pointer for output stream
+  std::ostream *_out_debug; ///< Pointer for debug output stream
   bool in_sylphide;   ///< True when inputs is Sylphide formated
   bool out_sylphide;  ///< True when outputs is Sylphide formated
   typedef std::map<const char *, std::iostream *> iostream_pool_t;
@@ -111,7 +113,9 @@ struct GlobalOptions {
       yaw_correct_with_mag_when_speed_less_than_ms(5),
       out_is_N_packet(false),
       reduce_1pps_sync_error(true),
+      blackhole(),
       _out(&(std::cout)),
+      _out_debug(&blackhole),
       in_sylphide(false), out_sylphide(false),
       iostream_pool() {};
   virtual ~GlobalOptions(){
@@ -226,6 +230,7 @@ struct GlobalOptions {
   }
   
   std::ostream &out() const {return *_out;}
+  std::ostream &out_debug() const {return *_out_debug;}
 
   /**
    * @param spec check target
@@ -392,14 +397,12 @@ if(key_checked){ \
     
     CHECK_OPTION_BOOL(reduce_1pps_sync_error);
     
-    if(CHECK_KEY(out)){
-      const char *value(get_value(spec, key_length, false));
-      if(value){
-        cerr << "out: ";
-        _out = &(spec2ostream(value));
-        return true;
-      }
-    }
+    CHECK_OPTION(out, false,
+        {cerr << "out: "; _out = &(spec2ostream(value)); return true;},
+        "");
+    CHECK_OPTION(out_debug, false,
+        {cerr << "out_debug: "; _out_debug = &(spec2ostream(value)); return true;},
+        "");
     
     CHECK_ALIAS(direct_sylphide);
     CHECK_OPTION_BOOL(in_sylphide);
