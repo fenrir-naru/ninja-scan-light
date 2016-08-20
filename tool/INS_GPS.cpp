@@ -996,6 +996,17 @@ class INS_GPS_NAV : public NAV {
       }
     }
 
+    previous_items_t previous_items(void *){
+      return NAV::previous_items();
+    }
+    template <class INS_GPS_base>
+    previous_items_t previous_items(INS_GPS_Back_Propagate<INS_GPS_base> *){
+      return ins_gps->previous_items();
+    }
+    previous_items_t previous_items(){
+      return previous_items(ins_gps);
+    }
+
     void init(
         const float_sylph_t &latitude, 
         const float_sylph_t &longitude, 
