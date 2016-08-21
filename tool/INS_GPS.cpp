@@ -168,24 +168,29 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 struct Options : public GlobalOptions<float_sylph_t> {
   typedef GlobalOptions<float_sylph_t> super_t;
 
+  // Output
+  bool dump_update; ///< True for dumping states at time updates
+  bool dump_correct; ///< True for dumping states at measurement updates
   bool dump_stddev; ///< True for dumping standard deviations
+  bool out_is_N_packet; ///< True for NPacket formatted outputs
 
+  // Navigation strategies
   enum {
     INS_GPS_SYNC_OFFLINE,
     INS_GPS_SYNC_BACK_PROPAGATION, ///< a.k.a, smoothing
     INS_GPS_SYNC_REALTIME,
   } ins_gps_sync_strategy;
-
+  bool est_bias; ///< True for performing bias estimation
+  bool use_udkf; ///< True for UD Kalman filtering
   /**
    * Number of snapshots to be back-propagated.
    * Zero means the last snapshot to be corrected, and negative values mean deeper.
    */
   float_sylph_t back_propagate_depth;
-  
   enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; ///< Algorithm selection for realtime
 
+  // GPS options
   bool gps_fake_lock; ///< true when gps dummy date is used.
-
   struct gps_threshold_t {
     float_sylph_t init_acc_2d; ///< Initial measurement update threshold for GPS 2D estimated error
     float_sylph_t init_acc_v;  ///< Initial measurement update threshold for GPS vertical estimated error
@@ -195,17 +200,35 @@ struct Options : public GlobalOptions<float_sylph_t> {
         cont_acc_2d(100.) {}
   } gps_threshold;
 
+  // Magnetic sensor
+  bool use_magnet; ///< True for utilizing magnetic sensor
+  float_sylph_t mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
+  float_sylph_t yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
+
+  // Attitude
+  bool has_initial_attitude; ///< Whether initial attitude is given.
+  float_sylph_t init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
+
+  // Debug
   enum {DEBUG_KF_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_KF;
 
   Options()
       : super_t(),
-      dump_stddev(false),
+      dump_update(true), dump_correct(false), dump_stddev(false),
+      out_is_N_packet(false),
       ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
+      est_bias(true), use_udkf(false),
       back_propagate_depth(0),
       rt_mode(RT_LIGHT_WEIGHT),
       gps_fake_lock(false), gps_threshold(),
+      use_magnet(false),
+      mag_heading_accuracy_deg(3),
+      yaw_correct_with_mag_when_speed_less_than_ms(5),
+      has_initial_attitude(false),
       debug_KF(DEBUG_KF_NONE) {
-
+    for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
+      init_attitude_deg[i] = 0;
+    }
   }
   ~Options(){}
   
@@ -241,30 +264,51 @@ struct Options : public GlobalOptions<float_sylph_t> {
    */
   bool check_spec(const char *spec){
 
+    const char *key;
+    const unsigned int key_length(get_key(spec, &key));
+    if(key_length == 0){return super_t::check_spec(spec);}
+
+    bool key_checked(false);
+
+#define CHECK_KEY(name) \
+  (key_checked \
+    || (key_checked = ((key_length == std::strlen(#name)) \
+        && (std::strncmp(key, #name, key_length) == 0))))
+#define CHECK_ALIAS(name) CHECK_KEY(name)
 #define CHECK_OPTION(name, operation, disp) { \
-  const char *value(get_value(spec, #name)); \
-  while(value){ \
+  while(CHECK_KEY(name)){ \
+    key_checked = false; \
+    const char *value(get_value(spec, key_length)); \
     {operation;} \
     std::cerr << #name << ": " << disp << std::endl; \
     return true; \
   } \
 }
-    CHECK_OPTION(dump_stddev,
-        dump_stddev = is_true(value),
-        (dump_stddev ? "on" : "off"));
+#define CHECK_OPTION_BOOL(target) \
+CHECK_OPTION(target, target = is_true(value), (target ? "on" : "off"));
+
+    CHECK_ALIAS(dump-update);
+    CHECK_OPTION_BOOL(dump_update);
+    CHECK_ALIAS(dump-correct);
+    CHECK_OPTION_BOOL(dump_correct);
+    CHECK_OPTION_BOOL(dump_stddev);
+    CHECK_ALIAS(out_N_packet);
+    CHECK_OPTION_BOOL(out_is_N_packet);
+
     CHECK_OPTION(back_propagate,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
     CHECK_OPTION(realtime,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_REALTIME;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_REALTIME ? "on" : "off"));
+    CHECK_OPTION_BOOL(est_bias);
+    CHECK_OPTION_BOOL(use_udkf);
     CHECK_OPTION(bp_depth,
         back_propagate_depth = std::atof(value),
         back_propagate_depth);
-    CHECK_OPTION(fake_lock,
-        gps_fake_lock = is_true(value),
-        (gps_fake_lock ? "on" : "off"));
 
+    CHECK_ALIAS(fake_lock);
+    CHECK_OPTION_BOOL(gps_fake_lock);
     CHECK_OPTION(gps_init_acc_2d,
         gps_threshold.init_acc_2d = std::atof(value),
         gps_threshold.init_acc_2d << " [m]");
@@ -274,6 +318,33 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(gps_cont_acc_2d,
         gps_threshold.cont_acc_2d = std::atof(value),
         gps_threshold.cont_acc_2d << " [m]");
+
+    CHECK_OPTION_BOOL(use_magnet);
+    CHECK_OPTION(mag_heading_accuracy_deg,
+        mag_heading_accuracy_deg = std::atof(value),
+        mag_heading_accuracy_deg << " [deg]");
+    CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms,
+        yaw_correct_with_mag_when_speed_less_than_ms = std::atof(value),
+        yaw_correct_with_mag_when_speed_less_than_ms << " [m/s]");
+
+    CHECK_ALIAS(init-attitude-deg);
+    if(CHECK_KEY(init_attitude_deg)){
+      const char *value(get_value(spec, key_length, false));
+      if(!value){return false;}
+      int converted(std::sscanf(value, "%lf,%lf,%lf",
+        &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
+      has_initial_attitude = true;
+      std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args:"
+          << converted << "): "
+          << init_attitude_deg[0] << ", "
+          << init_attitude_deg[1] << ", "
+          << init_attitude_deg[2] << std::endl;
+      return true;
+    }
+    CHECK_ALIAS(init-yaw-deg);
+    CHECK_OPTION(init_yaw_deg,
+        init_attitude_deg[0] = atof(value),
+        init_attitude_deg[0] << " [deg]");
 
     CHECK_OPTION(debug,
         if(!check_debug_target(value)){break;},

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, M.Naruoka (fenrir)
+ * Copyright (c) 2016, M.Naruoka (fenrir)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -69,20 +69,10 @@ FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
 template <class FloatT>
 struct GlobalOptions {
-  bool dump_update; ///< True for dumping states at time updates
-  bool dump_correct; ///< True for dumping states at measurement updates
-  bool has_initial_attitude; ///< Whether initial attitude is given.
-  FloatT init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
   FloatT start_gpstime;  ///< Start GPS time
   int start_gpswn; ///< Start GPS week
   FloatT end_gpstime;    ///< End GPS time
   int end_gpswn; ///< End GPS week
-  bool est_bias; ///< True for performing bias estimation
-  bool use_udkf; ///< True for UD Kalman filtering
-  bool use_magnet; ///< True for utilizing magnetic sensor
-  FloatT mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
-  FloatT yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
-  bool out_is_N_packet; ///< True for NPacket formatted outputs
   bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated
   NullStream blackhole;
   std::ostream *_out; ///< Pointer for output stream
@@ -101,17 +91,8 @@ struct GlobalOptions {
   }
   
   GlobalOptions()
-      : dump_update(true),
-      dump_correct(false),
-      has_initial_attitude(false),
-      start_gpstime(0), end_gpstime(DBL_MAX),
+      : start_gpstime(0), end_gpstime(DBL_MAX),
       start_gpswn(0), end_gpswn(0),
-      est_bias(true),
-      use_udkf(false),
-      use_magnet(false),
-      mag_heading_accuracy_deg(3),
-      yaw_correct_with_mag_when_speed_less_than_ms(5),
-      out_is_N_packet(false),
       reduce_1pps_sync_error(true),
       blackhole(),
       _out(&(std::cout)),
@@ -119,9 +100,6 @@ struct GlobalOptions {
       in_sylphide(false), out_sylphide(false),
       iostream_pool() {};
   virtual ~GlobalOptions(){
-    for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
-      init_attitude_deg[i] = 0;
-    }
     for(iostream_pool_t::iterator it(iostream_pool.begin());
         it != iostream_pool.end();
         ++it){
@@ -351,49 +329,6 @@ if(key_checked){ \
     CHECK_OPTION(end_gpswn, false,
         end_gpswn = std::atoi(value),
         end_gpswn);
-
-    CHECK_ALIAS(dump-update);
-    CHECK_OPTION_BOOL(dump_update);
-
-    CHECK_ALIAS(dump-correct);
-    CHECK_OPTION_BOOL(dump_correct);
-
-    CHECK_ALIAS(init-attitude-deg);
-    if(CHECK_KEY(init_attitude_deg)){
-      const char *value(get_value(spec, key_length, false));
-      if(!value){return false;}
-      int converted(std::sscanf(value, "%lf,%lf,%lf",
-        &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
-      has_initial_attitude = true;
-      std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args:"
-          << converted << "): "
-          << init_attitude_deg[0] << ", "
-          << init_attitude_deg[1] << ", "
-          << init_attitude_deg[2] << std::endl;
-      return true;
-    }
-
-    CHECK_ALIAS(init-yaw-deg);
-    CHECK_OPTION(init_yaw_deg, false,
-        init_attitude_deg[0] = atof(value),
-        init_attitude_deg[0] << " [deg]");
-
-    CHECK_OPTION_BOOL(est_bias);
-    
-    CHECK_OPTION_BOOL(use_udkf);
-    
-    CHECK_OPTION_BOOL(use_magnet);
-
-    CHECK_OPTION(mag_heading_accuracy_deg, false,
-        mag_heading_accuracy_deg = std::atof(value),
-        mag_heading_accuracy_deg << " [deg]");
-
-    CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms, false,
-        yaw_correct_with_mag_when_speed_less_than_ms = std::atof(value),
-        yaw_correct_with_mag_when_speed_less_than_ms << " [m/s]");
-
-    CHECK_ALIAS(out_N_packet);
-    CHECK_OPTION_BOOL(out_is_N_packet);
     
     CHECK_OPTION_BOOL(reduce_1pps_sync_error);
     
