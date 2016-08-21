@@ -208,6 +208,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   // Manual initialization
   bool has_initial_attitude; ///< Whether initial attitude is given.
   float_sylph_t init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
+  const char *init_misc_fname; ///< other manual initialization
 
   // Debug
   enum {DEBUG_KF_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_KF;
@@ -224,7 +225,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       use_magnet(false),
       mag_heading_accuracy_deg(3),
       yaw_correct_with_mag_when_speed_less_than_ms(5),
-      has_initial_attitude(false),
+      has_initial_attitude(false), init_misc_fname(NULL),
       debug_KF(DEBUG_KF_NONE) {
     for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
       init_attitude_deg[i] = 0;
@@ -346,6 +347,9 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION(init_yaw_deg, false,
         init_attitude_deg[0] = atof(value),
         init_attitude_deg[0] << " [deg]");
+    CHECK_OPTION(init_misc_fname, false,
+        init_misc_fname = value,
+        init_misc_fname);
 
     CHECK_OPTION(debug, false,
         if(!check_debug_target(value)){break;},
