@@ -187,7 +187,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
    * Zero means the last snapshot to be corrected, and negative values mean deeper.
    */
   float_sylph_t back_propagate_depth;
-  enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; ///< Algorithm selection for realtime
+  enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; ///< Algorithm selection for realtime mode
 
   // GPS options
   bool gps_fake_lock; ///< true when gps dummy date is used.
@@ -205,7 +205,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   float_sylph_t mag_heading_accuracy_deg; ///< Accuracy of magnetic sensor in degrees
   float_sylph_t yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
 
-  // Attitude
+  // Manual initialization
   bool has_initial_attitude; ///< Whether initial attitude is given.
   float_sylph_t init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
 
@@ -275,17 +275,18 @@ struct Options : public GlobalOptions<float_sylph_t> {
     || (key_checked = ((key_length == std::strlen(#name)) \
         && (std::strncmp(key, #name, key_length) == 0))))
 #define CHECK_ALIAS(name) CHECK_KEY(name)
-#define CHECK_OPTION(name, operation, disp) { \
+#define CHECK_OPTION(name, accept_no_value, operation, disp) { \
   while(CHECK_KEY(name)){ \
     key_checked = false; \
-    const char *value(get_value(spec, key_length)); \
+    const char *value(get_value(spec, key_length, accept_no_value)); \
+    if((!accept_no_value) && (!value)){return false;} \
     {operation;} \
     std::cerr << #name << ": " << disp << std::endl; \
     return true; \
   } \
 }
 #define CHECK_OPTION_BOOL(target) \
-CHECK_OPTION(target, target = is_true(value), (target ? "on" : "off"));
+CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
 
     CHECK_ALIAS(dump-update);
     CHECK_OPTION_BOOL(dump_update);
@@ -295,35 +296,35 @@ CHECK_OPTION(target, target = is_true(value), (target ? "on" : "off"));
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
 
-    CHECK_OPTION(back_propagate,
+    CHECK_OPTION(back_propagate, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
-    CHECK_OPTION(realtime,
+    CHECK_OPTION(realtime, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_REALTIME;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_REALTIME ? "on" : "off"));
     CHECK_OPTION_BOOL(est_bias);
     CHECK_OPTION_BOOL(use_udkf);
-    CHECK_OPTION(bp_depth,
+    CHECK_OPTION(bp_depth, false,
         back_propagate_depth = std::atof(value),
         back_propagate_depth);
 
     CHECK_ALIAS(fake_lock);
     CHECK_OPTION_BOOL(gps_fake_lock);
-    CHECK_OPTION(gps_init_acc_2d,
+    CHECK_OPTION(gps_init_acc_2d, false,
         gps_threshold.init_acc_2d = std::atof(value),
         gps_threshold.init_acc_2d << " [m]");
-    CHECK_OPTION(gps_init_acc_v,
+    CHECK_OPTION(gps_init_acc_v, false,
         gps_threshold.init_acc_v = std::atof(value),
         gps_threshold.init_acc_v << " [m]");
-    CHECK_OPTION(gps_cont_acc_2d,
+    CHECK_OPTION(gps_cont_acc_2d, false,
         gps_threshold.cont_acc_2d = std::atof(value),
         gps_threshold.cont_acc_2d << " [m]");
 
     CHECK_OPTION_BOOL(use_magnet);
-    CHECK_OPTION(mag_heading_accuracy_deg,
+    CHECK_OPTION(mag_heading_accuracy_deg, false,
         mag_heading_accuracy_deg = std::atof(value),
         mag_heading_accuracy_deg << " [deg]");
-    CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms,
+    CHECK_OPTION(yaw_correct_with_mag_when_speed_less_than_ms, false,
         yaw_correct_with_mag_when_speed_less_than_ms = std::atof(value),
         yaw_correct_with_mag_when_speed_less_than_ms << " [m/s]");
 
@@ -332,7 +333,7 @@ CHECK_OPTION(target, target = is_true(value), (target ? "on" : "off"));
       const char *value(get_value(spec, key_length, false));
       if(!value){return false;}
       int converted(std::sscanf(value, "%lf,%lf,%lf",
-        &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
+          &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
       has_initial_attitude = true;
       std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args:"
           << converted << "): "
@@ -342,11 +343,11 @@ CHECK_OPTION(target, target = is_true(value), (target ? "on" : "off"));
       return true;
     }
     CHECK_ALIAS(init-yaw-deg);
-    CHECK_OPTION(init_yaw_deg,
+    CHECK_OPTION(init_yaw_deg, false,
         init_attitude_deg[0] = atof(value),
         init_attitude_deg[0] << " [deg]");
 
-    CHECK_OPTION(debug,
+    CHECK_OPTION(debug, false,
         if(!check_debug_target(value)){break;},
         show_debug_target_t(*this));
 #undef CHECK_OPTION
