@@ -350,8 +350,8 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
         init_attitude_deg[0] = atof(value),
         init_attitude_deg[0] << " [deg]");
     CHECK_OPTION(init_misc, false,
-        {init_misc_buf << value << std::endl;},
-        value);
+        {init_misc_buf << value << std::endl; return true;},
+        "");
     CHECK_OPTION(init_misc_fname, false,
         {std::cerr << "Checking... "; init_misc = &spec2istream(value);},
         value);
@@ -1130,10 +1130,60 @@ class INS_GPS_NAV : public NAV {
       return previous_items(ins_gps);
     }
 
-    bool init_misc(const char *spec){
-      if(std::strlen(spec) == 0){return;}
-      // TODO
-      std::cerr << "init_misc: " << spec << std::endl;
+    bool init_misc(const char *line){
+      if(std::strlen(line) == 0){return true;}
+
+      const char *value;
+      bool checked(false);
+
+      while(!checked){
+        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        if(value = Options::get_value2(line, "P")){
+          char *spec(const_cast<char *>(value));
+          for(int i(0); i < P.rows(); i++){
+            for(int j(0); j < P.columns(); j++){
+              P(i, j) = std::strtod(spec, &spec);
+            }
+          }
+        }else if(value = Options::get_value2(line, "P_diag")){
+          char *spec(const_cast<char *>(value));
+          for(int i(0); i < P.rows(); i++){
+            P(i, i) = std::strtod(spec, &spec);
+          }
+        }else if(value = Options::get_value2(line, "P_elm")){
+          char *spec(const_cast<char *>(value));
+          int i((int)std::strtol(spec, &spec, 10));
+          int j((int)std::strtol(spec, &spec, 10));
+          P(i, j) = std::strtod(spec, &spec);
+        }else{break;}
+        ins_gps->getFilter().setP(P);
+        checked = true;
+        break;
+      }
+
+      while(!checked){
+        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        if(value = Options::get_value2(line, "Q")){
+          char *spec(const_cast<char *>(value));
+          for(int i(0); i < Q.rows(); i++){
+            for(int j(0); j < Q.columns(); j++){
+              Q(i, j) = std::strtod(spec, &spec);
+            }
+          }
+        }else if(value = Options::get_value2(line, "Q_elm")){
+          char *spec(const_cast<char *>(value));
+          int i((int)std::strtol(spec, &spec, 10));
+          int j((int)std::strtol(spec, &spec, 10));
+          Q(i, j) = std::strtod(spec, &spec);
+        }else{break;}
+        ins_gps->getFilter().setQ(Q);
+        checked = true;
+        break;
+      }
+
+      if(!checked){return false;}
+
+      std::cerr << "Init (misc): " << line << std::endl;
       return true;
     }
 
