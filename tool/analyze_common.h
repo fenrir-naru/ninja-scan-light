@@ -226,6 +226,12 @@ struct GlobalOptions {
     return offset - 2;
   }
 
+  /**
+   * get leading pointer of values in format of --key[=value] string
+   * @param spec string to be checked
+   * @param key_length length of key; if zero, key is automatically searched
+   * @param accept_no_value when true, return true even if the value is omitted, otherwise, return NULL
+   */
   static const char *get_value(
       const char *spec,
       const unsigned int &key_length = 0, const bool &accept_no_value = true){
@@ -244,6 +250,12 @@ struct GlobalOptions {
     }
   }
 
+  /**
+   * get leading pointer of values in format of --key[=value] string
+   * @param spec string to be checked
+   * @param key key to be checked
+   * @param accept_no_value when true, return true even if the value is omitted, otherwise, return NULL
+   */
   static const char *get_value(
       const char *spec, const char *key, const bool &accept_no_value = true){
     const char *key_head;
@@ -253,6 +265,21 @@ struct GlobalOptions {
       return NULL;
     }
     return get_value(spec, key_length, accept_no_value);
+  }
+
+  /**
+   * get leading pointer of values in format of "key value1 value2 ..." string
+   * @param spec string to be checked
+   * @param key
+   */
+  static const char *get_value2(const char *spec, const char *key){
+    int offset(std::strlen(key));
+    if(std::strncmp(spec, key, offset) != 0){return NULL;}
+    if((spec[offset] == '\0') || std::isgraph(spec[offset])){return NULL;} // no value or different key.
+    while(spec[++offset] != '\0'){
+      if(std::isgraph(spec[offset])){return &spec[offset];}
+    }
+    return NULL; // no value
   }
 
   static bool is_true(const char *value){
