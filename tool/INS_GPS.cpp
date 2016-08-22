@@ -1001,7 +1001,7 @@ class INS_GPS_NAV : public NAV {
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
         P(10, 10) = P(11, 11) = P(12, 12) = 1E-4;
-        P(13, 13) = P(14, 14) = P(15, 15) = 1E-6;
+        P(13, 13) = P(14, 14) = P(15, 15) = 1E-7;
         ins_gps->getFilter().setP(P);
       }
 
