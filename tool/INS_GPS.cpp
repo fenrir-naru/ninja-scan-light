@@ -2252,14 +2252,10 @@ int main(int argc, char *argv[]){
     const char *value;
     if(value = Options::get_value(argv[arg_index], "calib_file", false)){ // calibration file
       cerr << "IMU Calibration file (" << value << ") reading..." << endl;
-      fstream fin(value);
-      if(fin.fail()){
-        cerr << "(error!) Calibration file not found: " << value << endl;
-        return -1;
-      }
+      istream &in(options.spec2istream(value));
       char buf[1024];
-      while(!fin.eof()){
-        fin.getline(buf, sizeof(buf));
+      while(!in.eof()){
+        in.getline(buf, sizeof(buf));
         stream_processor->calibration.check_spec(buf);
       }
       continue;
