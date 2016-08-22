@@ -1130,6 +1130,29 @@ class INS_GPS_NAV : public NAV {
       return previous_items(ins_gps);
     }
 
+  protected:
+    static void set_matrix_full(Matrix<float_sylph_t> &mat, const char *spec){
+      char *_spec(const_cast<char *>(spec));
+      for(int i(0); i < mat.rows(); i++){
+        for(int j(0); j < mat.columns(); j++){
+          mat(i, j) = std::strtod(_spec, &_spec);
+        }
+      }
+    }
+    static void set_matrix_diagonal(Matrix<float_sylph_t> &mat, const char *spec){
+      char *_spec(const_cast<char *>(spec));
+      for(int i(0); i < mat.rows(); i++){
+        mat(i, i) = std::strtod(_spec, &_spec);
+      }
+    }
+    static void set_matrix_1element(Matrix<float_sylph_t> &mat, const char *spec){
+      char *_spec(const_cast<char *>(spec));
+      int i((int)std::strtol(_spec, &_spec, 10));
+      int j((int)std::strtol(_spec, &_spec, 10));
+      mat(i, j) = std::strtod(_spec, &_spec);
+    }
+
+  public:
     bool init_misc(const char *line){
       if(std::strlen(line) == 0){return true;}
 
@@ -1139,22 +1162,11 @@ class INS_GPS_NAV : public NAV {
       while(!checked){
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
         if(value = Options::get_value2(line, "P")){
-          char *spec(const_cast<char *>(value));
-          for(int i(0); i < P.rows(); i++){
-            for(int j(0); j < P.columns(); j++){
-              P(i, j) = std::strtod(spec, &spec);
-            }
-          }
+          set_matrix_full(P, value);
         }else if(value = Options::get_value2(line, "P_diag")){
-          char *spec(const_cast<char *>(value));
-          for(int i(0); i < P.rows(); i++){
-            P(i, i) = std::strtod(spec, &spec);
-          }
+          set_matrix_diagonal(P, value);
         }else if(value = Options::get_value2(line, "P_elm")){
-          char *spec(const_cast<char *>(value));
-          int i((int)std::strtol(spec, &spec, 10));
-          int j((int)std::strtol(spec, &spec, 10));
-          P(i, j) = std::strtod(spec, &spec);
+          set_matrix_1element(P, value);
         }else{break;}
         ins_gps->getFilter().setP(P);
         checked = true;
@@ -1164,17 +1176,11 @@ class INS_GPS_NAV : public NAV {
       while(!checked){
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
         if(value = Options::get_value2(line, "Q")){
-          char *spec(const_cast<char *>(value));
-          for(int i(0); i < Q.rows(); i++){
-            for(int j(0); j < Q.columns(); j++){
-              Q(i, j) = std::strtod(spec, &spec);
-            }
-          }
+          set_matrix_full(Q, value);
+        }else if(value = Options::get_value2(line, "Q_diag")){
+          set_matrix_diagonal(Q, value);
         }else if(value = Options::get_value2(line, "Q_elm")){
-          char *spec(const_cast<char *>(value));
-          int i((int)std::strtol(spec, &spec, 10));
-          int j((int)std::strtol(spec, &spec, 10));
-          Q(i, j) = std::strtod(spec, &spec);
+          set_matrix_1element(Q, value);
         }else{break;}
         ins_gps->getFilter().setQ(Q);
         checked = true;
