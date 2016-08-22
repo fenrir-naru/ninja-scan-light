@@ -131,7 +131,7 @@
 //unsigned int fp_control_state = _controlfp(_EM_INEXACT, _MCW_EM);
 
 #include <iostream>
-#include <fstream>
+#include <sstream>
 #include <iomanip>
 #include <string>
 #include <exception>
@@ -208,7 +208,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
   // Manual initialization
   bool has_initial_attitude; ///< Whether initial attitude is given.
   float_sylph_t init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
-  const char *init_misc_fname; ///< other manual initialization
+  std::istream *init_misc; ///< other manual initialization
+  std::stringstream init_misc_buf; ///< buffer for init_misc string
 
   // Debug
   enum {DEBUG_KF_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_KF;
@@ -225,7 +226,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
       use_magnet(false),
       mag_heading_accuracy_deg(3),
       yaw_correct_with_mag_when_speed_less_than_ms(5),
-      has_initial_attitude(false), init_misc_fname(NULL),
+      has_initial_attitude(false),
+      init_misc_buf(), init_misc(&init_misc_buf),
       debug_KF(DEBUG_KF_NONE) {
     for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
       init_attitude_deg[i] = 0;
@@ -347,9 +349,12 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION(init_yaw_deg, false,
         init_attitude_deg[0] = atof(value),
         init_attitude_deg[0] << " [deg]");
+    CHECK_OPTION(init_misc, false,
+        {init_misc_buf << value << std::endl;},
+        value);
     CHECK_OPTION(init_misc_fname, false,
-        init_misc_fname = value,
-        init_misc_fname);
+        {std::cerr << "Checking... "; init_misc = &spec2istream(value);},
+        value);
 
     CHECK_OPTION(debug, false,
         if(!check_debug_target(value)){break;},
@@ -1125,6 +1130,13 @@ class INS_GPS_NAV : public NAV {
       return previous_items(ins_gps);
     }
 
+    bool init_misc(const char *spec){
+      if(std::strlen(spec) == 0){return;}
+      // TODO
+      std::cerr << "init_misc: " << spec << std::endl;
+      return true;
+    }
+
     void init(
         const float_sylph_t &latitude, 
         const float_sylph_t &longitude, 
@@ -1139,6 +1151,11 @@ class INS_GPS_NAV : public NAV {
       ins_gps->initPosition(latitude, longitude, height);
       ins_gps->initVelocity(v_north, v_east, v_down);
       ins_gps->initAttitude(yaw, pitch, roll);
+
+      for(char buf[0x4000]; !options.init_misc->eof(); ){ // Miscellaneous setup
+        options.init_misc->getline(buf, sizeof(buf));
+        init_misc(buf);
+      }
     }
 
 #define MAKE_PROXY_FUNC(fname) \
@@ -1339,29 +1356,19 @@ struct StandardCalibration {
   };
   calibration_info_t<3> accel, gyro;
 
-  static const char *get_value(const char *spec, const char *key){
-    int offset(std::strlen(key));
-    if(std::strncmp(spec, key, offset) != 0){return NULL;}
-    if((spec[offset] == '\0') || std::isgraph(spec[offset])){return NULL;} // no value or different key.
-    while(spec[++offset] != '\0'){
-      if(std::isgraph(spec[offset])){return &spec[offset];}
-    }
-    return NULL; // no value
-  }
-
   bool check_spec(const char *line){
     const char *value;
-    if(value = get_value(line, "index_base")){
+    if(value = Options::get_value2(line, "index_base")){
       index_base = std::atoi(value);
       return true;
     }
-    if(value = get_value(line, "index_temp_ch")){
+    if(value = Options::get_value2(line, "index_temp_ch")){
       index_temp_ch = std::atoi(value);
       return true;
     }
 #define TO_STRING(name) # name
 #define make_proc1(name, sensor, item) \
-if(value = get_value(line, TO_STRING(name))){ \
+if(value = Options::get_value2(line, TO_STRING(name))){ \
   std::cerr << TO_STRING(name) << ":"; \
   char *spec(const_cast<char *>(value)); \
   for(int i(0); i < 3; i++){ \
@@ -1372,7 +1379,7 @@ if(value = get_value(line, TO_STRING(name))){ \
   return true; \
 }
 #define make_proc2(name, sensor, item) \
-if(value = get_value(line, TO_STRING(name))){ \
+if(value = Options::get_value2(line, TO_STRING(name))){ \
   std::cerr << TO_STRING(name) << ": {"; \
   char *spec(const_cast<char *>(value)); \
   for(int i(0); i < 3; i++){ \
