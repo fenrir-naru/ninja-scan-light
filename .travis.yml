@@ -10,17 +10,22 @@ addons:
       - g++-arm-linux-gnueabihf
     
 env:
-  - SDCC=3.3.0
+  global:
+    - SDCC=3.3.0
+    - SDCC_DIR=/tmp/sdcc-$SDCC
+
+cache:
+  directories:
+    - $SDCC_DIR
 
 before_install:
-  - export SDCC_DIR=/tmp/sdcc-$SDCC
+  - export PATH=$PATH:$SDCC_DIR/bin
   - chmod +x ./scripts/build-sdcc.sh
 
 install:
   - ./scripts/build-sdcc.sh
 
 before_script:
-  - export PATH=$PATH:$SDCC_DIR/bin
   - sdcc --version
 
 script:
