@@ -69,10 +69,14 @@ FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
 template <class FloatT>
 struct GlobalOptions {
-  FloatT start_gpstime;  ///< Start GPS time
-  int start_gpswn; ///< Start GPS week
-  FloatT end_gpstime;    ///< End GPS time
-  int end_gpswn; ///< End GPS week
+  struct gps_time_t {
+    FloatT sec; ///< GPS time
+    int wn; ///< GPS week number
+    gps_time_t(const FloatT &_sec, const int &_wn)
+        : sec(_sec), wn(_wn) {}
+  };
+  gps_time_t start_gpstime;  ///< Start GPS time
+  gps_time_t end_gpstime;    ///< End GPS time
   bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated
   NullStream blackhole;
   std::ostream *_out; ///< Pointer for output stream
@@ -91,8 +95,7 @@ struct GlobalOptions {
   }
   
   GlobalOptions()
-      : start_gpstime(0), end_gpstime(DBL_MAX),
-      start_gpswn(0), end_gpswn(0),
+      : start_gpstime(0, 0), end_gpstime(DBL_MAX, 0),
       reduce_1pps_sync_error(true),
       blackhole(),
       _out(&(std::cout)),
@@ -110,7 +113,7 @@ struct GlobalOptions {
   
   template <class T>
   bool is_time_in_range(const T &time){
-    return (time >= start_gpstime) && (time <= end_gpstime);
+    return (time >= start_gpstime.sec) && (time <= end_gpstime.sec);
   }
   
   void set_baudrate(ComportStream &com, const char *baudrate_spec){
@@ -326,14 +329,14 @@ if(key_checked){ \
   int dummy_i; \
   double dummy_d; \
   if(std::sscanf(value, "%i:%lf", &dummy_i, &dummy_d) == 2){ \
-    prefix ## _gpstime = dummy_d; \
-    prefix ## _gpswn = dummy_i; \
+    prefix ## _gpstime.sec = dummy_d; \
+    prefix ## _gpstime.wn = dummy_i; \
     std::cerr.write(key, key_length) << ": " \
-        << prefix ## _gpswn << ":" \
-        << prefix ## _gpstime << std::endl; \
+        << prefix ## _gpstime.wn << ":" \
+        << prefix ## _gpstime.sec << std::endl; \
   }else{ \
-    prefix ## _gpstime = atof(value); \
-    std::cerr.write(key, key_length) << ": " << prefix ## _gpstime << std::endl; \
+    prefix ## _gpstime.sec = atof(value); \
+    std::cerr.write(key, key_length) << ": " << prefix ## _gpstime.sec << std::endl; \
   } \
   return true; \
 }
@@ -349,13 +352,13 @@ if(key_checked){ \
 
     CHECK_ALIAS(start-gpswn);
     CHECK_OPTION(start_gpswn, false,
-        start_gpswn = std::atof(value),
-        start_gpswn);
+        start_gpstime.wn = std::atof(value),
+        start_gpstime.wn);
 
     CHECK_ALIAS(end-gpswn);
     CHECK_OPTION(end_gpswn, false,
-        end_gpswn = std::atoi(value),
-        end_gpswn);
+        end_gpstime.wn = std::atoi(value),
+        end_gpstime.wn);
     
     CHECK_OPTION_BOOL(reduce_1pps_sync_error);
     

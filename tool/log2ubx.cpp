@@ -133,13 +133,13 @@ void g_packet_handler(const G_Observer_t &observer){
     if(solution.status_flags & G_Observer_t::solution_t::TOW_VALID){
       itow_0x0106 = observer.fetch_ITOW();
     }
-    if(itow_0x0106 >= options.end_gpstime){
+    if(itow_0x0106 >= options.end_gpstime.sec){
       read_continue = false;
       return;
     }
   }
 
-  if(itow_0x0106 < options.start_gpstime){return;}
+  if(itow_0x0106 < options.start_gpstime.sec){return;}
   good_packet++;
   for(int i = 0; i < observer.current_packet_size(); i++){
     options.out() << observer[i];
