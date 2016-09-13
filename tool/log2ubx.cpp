@@ -105,7 +105,7 @@ typedef Processor_t::G_Observer_t G_Observer_t;
 int good_packet(0);
 int bad_packet(0);
 
-double itow_0x0106(0);
+Options::gps_time_t gps_time_0x0106(0, 0);
 bool read_continue(true);
 
 /**
@@ -131,15 +131,20 @@ void g_packet_handler(const G_Observer_t &observer){
   if((packet_type.mclass == 0x01) && (packet_type.mid == 0x06)){
     G_Observer_t::solution_t solution(observer.fetch_solution());
     if(solution.status_flags & G_Observer_t::solution_t::TOW_VALID){
-      itow_0x0106 = observer.fetch_ITOW();
+      gps_time_0x0106.sec = observer.fetch_ITOW();
     }
-    if(itow_0x0106 >= options.end_gpstime.sec){
+    if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
+      gps_time_0x0106.wn = solution.week;
+    }
+    if((gps_time_0x0106.sec >= options.end_gpstime.sec)
+        && (gps_time_0x0106.wn >= options.end_gpstime.wn)){
       read_continue = false;
       return;
     }
   }
 
-  if(itow_0x0106 < options.start_gpstime.sec){return;}
+  if((gps_time_0x0106.wn < options.start_gpstime.wn)
+      || (gps_time_0x0106.sec < options.start_gpstime.sec)){return;}
   good_packet++;
   for(int i = 0; i < observer.current_packet_size(); i++){
     options.out() << observer[i];
