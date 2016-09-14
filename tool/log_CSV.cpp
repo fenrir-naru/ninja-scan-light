@@ -31,7 +31,7 @@
 
 #if defined(_MSC_VER) && _MSC_VER >= 1400
 #define _USE_MATH_DEFINES
-//#define _CRT_SECURE_NO_WARNINGS // sprintf_s等への推奨を止める
+//#define _CRT_SECURE_NO_WARNINGS // stop warning recommending secure functions such as sprintf_s
 typedef __int64 int64_t;
 #endif
 
@@ -111,10 +111,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
   }
 
   /**
-   * コマンドに与えられた設定を読み解く
+   * Check command argument
    * 
-   * @param spec コマンド
-   * @return (bool) 解読にヒットした場合はtrue、さもなければfalse
+   * @param spec Command
+   * @return (bool) If recognized, true; otherwise false
    */
   bool check_spec(const char *spec){
 #define CHECK_OPTION(name, novalue, operation, disp) { \
@@ -197,16 +197,15 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
   
   public:
     /**
-     * Aページ(AD変換結果)の処理用関数
-     * Aページの内容が正しいかvalidateで確認した後、実処理を行うこと。
+     * Check A page (AD converted values)
      * 
-     * @param obsrever Aページのオブザーバー
+     * @param observer A page observer
      */
     struct HandlerA {
       int count;
       HandlerA() : count(0) {}
       void operator()(const super_t::A_Observer_t &observer){
-        if(!observer.validate()){return;}
+        if(!observer.validate()){return;} // check validity
         
         float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
@@ -224,12 +223,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     } handler_A;
     
     /**
-     * Gページ(u-bloxのGPS)の処理用関数
-     * Gページの内容が正しいかvalidateで確認した後、実処理を行うこと。
-     * {class, id} = {0x01, 0x02}のとき位置情報が得られる
-     * {class, id} = {0x01, 0x12}のとき速度情報が得られる
+     * Check G page (u-blox GPS receiver output)
      * 
-     * @param obsrever Gページのオブザーバー
+     * @param observer G page observer
      */
     struct HandlerG {
       unsigned int itow_ms_0x0102, itow_ms_0x0112;
@@ -325,10 +321,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     } handler_G;
     
     /**
-     * Fページ(FPGAサブシステムからの情報)の処理用関数
-     * Fページの内容が正しいかvalidateで確認した後、実処理を行うこと。
+     * check F page (FPGA output), which is not used for NinjaScan
      * 
-     * @param obsrever Fページのオブザーバー
+     * @param observer F page observer
      */
     struct HandlerF {
       int count;
@@ -345,10 +340,10 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         F_Observer_t::values_t values(observer.fetch_values());
         for(int i = 0; i < 8; i++){
           //if(values.servo_in[i] < 1000){values.servo_in[i] += 1000;}
-          if(options.page_F_mode & 0x01){ // ビット0が入力を表示
+          if(options.page_F_mode & 0x01){ // bit 0 for input
             options.out() << ", " << values.servo_in[i];
           }
-          if(options.page_F_mode & 0x02){ // ビット1が出力を表示
+          if(options.page_F_mode & 0x02){ // bit 1 for output
             options.out() << ", " << values.servo_out[i];
           }
         }
@@ -390,10 +385,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       }
 
       /**
-       * Pページ(エアデータセンサからの情報)の処理用関数
-       * Pページの内容が正しいかvalidateで確認した後、実処理を行うこと。
+       * check P page (pressure sensor)
        * 
-       * @param obsrever Fページのオブザーバー
+       * @param observer F page observer
        */
       void operator()(const P_Observer_t &observer){
         if(!observer.validate()){return;}
@@ -432,10 +426,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     } handler_P;
     
     /**
-     * Mページ(磁気センサからの情報)の処理用関数
-     * Mページの内容が正しいかvalidateで確認した後、実処理を行うこと。
+     * check M page (magnetic sensor)
      * 
-     * @param obsrever Mページのオブザーバー
+     * @param observer M page observer
      */
     struct HandlerM {
       void operator()(const M_Observer_t &observer){
@@ -467,10 +460,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     } handler_M;
     
     /**
-     * Nページ(航法情報)の処理用関数
-     * Nページの内容が正しいかvalidateで確認した後、実処理を行うこと。
+     * check N page (navigation information), which is not used for NinjaScan
      * 
-     * @param obsrever Nページのオブザーバー
+     * @param observer M page observer
      */
     struct HandlerN {
       void operator()(const N_Observer_t &observer){
@@ -503,7 +495,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     
 #if 0
     /**
-     * SylphideProtocol形式で入ってくるCページ用の処理器
+     * checker for C page in SylphideProtocol format
      * 
      */
     class SylphideStreamHandler 
@@ -520,7 +512,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         ~SylphideStreamHandler() {}
         
         /**
-         * パケットが見つかった際に呼び出される関数
+         * callback function when packet is found
          * 
          */
         void operator()(const self_t &observer){
@@ -538,10 +530,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     ~StreamProcessor(){}
     
     /**
-     * ファイル等のストリームから1ページ単位で処理を行う関数
+     * Extract packet from stream until the end of stream is found
      * 
-     * @param in ストリーム
-     * @return (bool) 処理が成功したかどうか
+     * @param in stream
      */
     void process(istream &in){
       char buffer[PAGE_SIZE];
