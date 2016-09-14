@@ -40,6 +40,7 @@
 #include <cstring>
 #include <cmath>
 #include <cstdlib>
+#include <climits>
 #include <cfloat>
 #if defined(_MSC_VER)
 #include <io.h>
@@ -72,8 +73,17 @@ struct GlobalOptions {
   struct gps_time_t {
     FloatT sec; ///< GPS time
     int wn; ///< GPS week number
+    gps_time_t() : sec(0), wn(0) {}
     gps_time_t(const FloatT &_sec, const int &_wn)
         : sec(_sec), wn(_wn) {}
+    template <class T1, class T2>
+    bool is_before(const T1 &base_sec, const T2 &base_wn) const {
+      return (base_wn > wn) || ((base_wn == wn) && (base_sec >= sec));
+    }
+    template <class T1, class T2>
+    bool is_after(const T1 &base_sec, const T2 &base_wn) const {
+      return (base_wn < wn) || ((base_wn == wn) && (base_sec <= sec));
+    }
   };
   gps_time_t start_gpstime;  ///< Start GPS time
   gps_time_t end_gpstime;    ///< End GPS time
@@ -95,7 +105,7 @@ struct GlobalOptions {
   }
   
   GlobalOptions()
-      : start_gpstime(0, 0), end_gpstime(DBL_MAX, 0),
+      : start_gpstime(0, 0), end_gpstime(DBL_MAX, INT_MAX),
       reduce_1pps_sync_error(true),
       blackhole(),
       _out(&(std::cout)),
@@ -111,11 +121,21 @@ struct GlobalOptions {
     }
   }
   
-  template <class T>
-  bool is_time_in_range(const T &time){
-    return (time >= start_gpstime.sec) && (time <= end_gpstime.sec);
+  template <class T1, class T2>
+  bool is_time_after_start(const T1 &sec, const T2 &wn) const {
+    return start_gpstime.is_before(sec, wn);
   }
-  
+
+  template <class T1, class T2>
+  bool is_time_before_end(const T1 &sec, const T2 &wn) const {
+    return end_gpstime.is_after(sec, wn);
+  }
+
+  template <class T1, class T2>
+  bool is_time_in_range(const T1 &sec, const T2 &wn) const {
+    return is_time_after_start(sec, wn) && is_time_before_end(sec, wn);
+  }
+
   void set_baudrate(ComportStream &com, const char *baudrate_spec){
     int baudrate(std::atoi(baudrate_spec));
     if(baudrate != com.buffer().set_baudrate(baudrate)){

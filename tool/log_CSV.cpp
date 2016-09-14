@@ -66,7 +66,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   struct {
     bool valid;
     time_t utc_time;
-    unsigned int itow_sec;
+    super_t::gps_time_t gps_time;
   } gps_utc;
   bool use_calendar_time;
   int localtime_correction_in_seconds;
@@ -91,7 +91,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
     ss.precision(10);
     if(use_calendar_time){ // year, month, mday, hour, min, sec
       if(gps_utc.valid){
-        T interval(itow - gps_utc.itow_sec);
+        T interval(itow - gps_utc.gps_time.sec);
         time_t interval_time(interval);
         time_t current(gps_utc.utc_time + interval_time + localtime_correction_in_seconds);
         tm *current_tm(gmtime(&current));
@@ -108,6 +108,11 @@ struct Options : public GlobalOptions<float_sylph_t> {
       ss << itow;
     }
     return ss.str();
+  }
+
+  template <class T>
+  bool is_time_in_range(const T &sec) const {
+    return super_t::is_time_in_range(sec, gps_utc.gps_time.wn);
   }
 
   /**
@@ -257,7 +262,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         switch(packet_type.mclass){
           case 0x01: {
             switch(packet_type.mid){
-              case 0x02: {
+              case 0x02: { // NAV-POSLLH
                 position = observer.fetch_position();
                 position_acc = observer.fetch_position_acc();
                 
@@ -266,7 +271,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 
                 break;
               }
-              case 0x12: {
+              case 0x12: { // NAV-VELNED
                 velocity = observer.fetch_velocity();
                 velocity_acc = observer.fetch_velocity_acc();
                 
@@ -275,7 +280,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 
                 break;
               }
-              case 0x20: {
+              case 0x20: { // NAV-TIMEGPS
                 if(!options.use_calendar_time){break;}
                 char buf[2];
                 observer.inspect(buf, sizeof(buf), 6 + 10);
@@ -283,10 +288,11 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 char leap_seconds(buf[0]);
                 observer.inspect(buf, sizeof(buf), 6 + 8);
                 unsigned short gps_week(le_char2_2_num<unsigned short>(*buf));
-                options.gps_utc.itow_sec = (observer.fetch_ITOW_ms() / 1000);
+                options.gps_utc.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
+                options.gps_utc.gps_time.wn = gps_week;
                 options.gps_utc.utc_time = gpstime_zero
-                    + (7u * 24 * 60 * 60) * gps_week
-                    + options.gps_utc.itow_sec
+                    + (7u * 24 * 60 * 60) * options.gps_utc.gps_time.wn
+                    + options.gps_utc.gps_time.sec
                     - leap_seconds; // POSIX time ignores leap seconds.
                 options.gps_utc.valid = true;
                 break;

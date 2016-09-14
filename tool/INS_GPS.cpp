@@ -2154,8 +2154,7 @@ void loop(){
         proc.g_packet_updated = false;
         G_Packet &packet(proc.g_packet);
         if(!started){
-          if((options.start_gpstime.wn > proc.g_packet_wn)
-              || (options.start_gpstime.sec > packet.itow)){ // Time check
+          if(!options.is_time_after_start(packet.itow, proc.g_packet_wn)){ // Time check
             continue;
           }else{
             started = true;
@@ -2163,8 +2162,7 @@ void loop(){
         }
         status.measurement_update(packet);
         status.dump(Status::DUMP_CORRECT, packet.itow);
-        if((packet.itow >= options.end_gpstime.sec)
-            && (proc.g_packet_wn >= options.end_gpstime.wn)){
+        if(!options.is_time_before_end(packet.itow, proc.g_packet_wn)){
           break;
         }
       }
@@ -2226,8 +2224,7 @@ void loop(){
       G_Packet g_packet(current_processor->g_packet);
       current_processor->g_packet_updated = false;
 
-      if((options.start_gpstime.wn > current_processor->g_packet_wn) // Week number check
-          || (options.start_gpstime.sec > g_packet.itow)){ // Time check
+      if(!options.is_time_after_start(g_packet.itow, current_processor->g_packet_wn)){ // Time check
         continue;
       }
       
@@ -2270,8 +2267,7 @@ void loop(){
       latest_measurement_update_gpswn = current_processor->g_packet_wn;
     }
     
-    if((latest_measurement_update_itow >= options.end_gpstime.sec)
-        && (latest_measurement_update_gpswn >= options.end_gpstime.wn)){
+    if(!options.is_time_before_end(latest_measurement_update_itow, latest_measurement_update_gpswn)){
       break;
     }
   }
