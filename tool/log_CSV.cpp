@@ -281,7 +281,6 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 break;
               }
               case 0x20: { // NAV-TIMEGPS
-                if(!options.use_calendar_time){break;}
                 char buf[2];
                 observer.inspect(buf, sizeof(buf), 6 + 10);
                 if(!((unsigned char)buf[1] & 0x04)){break;}// Invalid UTC
