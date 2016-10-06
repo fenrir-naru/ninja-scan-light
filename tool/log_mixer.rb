@@ -200,29 +200,25 @@ class IMU_CSV < A_Packet_Converter
   end
 end
 
-$log_mix = proc{|readers, opt|
-  opt ||= {}
+$log_mix = proc{|prop|
+  readers = prop[:readers]
   
-  out = opt[:out] || $stdout
+  out = prop[:out] || $stdout
   out.binmode # for Windows
-    
-  chunks = {}
+  
+  chunks = []
+  readers.each_with_index{|reader, i|
+    chunk = reader.read_chunk
+    chunks << [chunk, i] if chunk
+  }
+  
   $stderr.print "Processing "
   loop = 0
-  while true
-    (readers.keys - chunks.keys).each{|k|
-      chunk = readers[k].read_chunk
-      if chunk
-        chunks[k] = chunk
-      else
-        readers.delete(k)
-      end
-    }
-    break if chunks.empty?
-    k, chunk_out = chunks.to_a.sort{|a, b| a[1][:itow] <=> b[1][:itow]}[0]
-    out.print(chunk_out[:data])
-    chunks.delete(k)
+  while !chunks.empty?
+    chunks.sort!{|a, b| [a[0][:itow], a[1]] <=> [b[0][:itow], b[1]]}
+    out.print(chunks[0][0][:data])
     $stderr.print '.' if ((loop += 1) % 10000 == 0)
+    chunks.shift unless (chunks[0][0] = readers[chunks[0][1]].read_chunk)
   end
   $stderr.puts " Done." 
 }
@@ -252,9 +248,9 @@ src = {
   :gps => ARGV.shift,
   :imu => ARGV.shift,
 }
-$log_mix.call({
-  :gps => GPS_UBX::new(open(src[:gps])),
-  :imu => IMU_CSV::new(open(src[:imu])),
-})
+$log_mix.call({:readers => [
+  IMU_CSV::new(open(src[:imu])),
+  GPS_UBX::new(open(src[:gps])), 
+]})
 
 end
