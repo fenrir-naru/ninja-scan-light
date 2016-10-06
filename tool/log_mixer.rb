@@ -149,7 +149,7 @@ class A_Packet_Converter
       [0, ((info[:t_s] || 0) * 1E3).to_i].pack('CV')
     }#{
       A_Packet_Converter::packN24([
-        (info[:acc_ms2] || [0, 0, 0]).zip(@acc_sf, @acc_bias).collect{|v, sf, bias|
+        (info[:accel_ms2] || [0, 0, 0]).zip(@acc_sf, @acc_bias).collect{|v, sf, bias|
           (v * sf) + bias
         },
         (info[:omega_rads] || [0, 0, 0]).zip(@gyro_sf, @gyro_bias).collect{|v, sf, bias|
@@ -171,9 +171,9 @@ class IMU_CSV < A_Packet_Converter
     :t_scale => 1.0, # s
     :t_offset => 0,
     :acc_index => [1, 2, 3],
-    :acc_scale => 1.0, # m/s^2
-    :omega_index => [4, 5, 6],
-    :omega_scale => Math::PI / 180, # rad/s
+    :acc_units => [1.0] * 3, # m/s^2
+    :gyro_index => [4, 5, 6],
+    :gyro_units => [Math::PI / 180] * 3, # rad/s
   }
   def initialize(io, opt = {})
     super(opt)
@@ -191,8 +191,8 @@ class IMU_CSV < A_Packet_Converter
         :itow => t,
         :data => a_packet({
           :t_s => t,
-          :acc_ms2 => items.values_at(*@acc_index).collect{|v| v * @acc_scale},
-          :omega_rads => items.values_at(*@omega_index).collect{|v| v * @omega_scale},
+          :accel_ms2 => items.values_at(*@acc_index).zip(@acc_units).collect{|v, sf| v * sf},
+          :omega_rads => items.values_at(*@gyro_index).zip(@gyro_units).collect{|v, sf| v * sf},
         }),
       }
     end
