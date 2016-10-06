@@ -200,6 +200,33 @@ class IMU_CSV < A_Packet_Converter
   end
 end
 
+$log_mix = proc{|readers, opt|
+  opt ||= {}
+  
+  out = opt[:out] || $stdout
+  out.binmode # for Windows
+    
+  chunks = {}
+  $stderr.print "Processing "
+  loop = 0
+  while true
+    (readers.keys - chunks.keys).each{|k|
+      chunk = readers[k].read_chunk
+      if chunk
+        chunks[k] = chunk
+      else
+        readers.delete(k)
+      end
+    }
+    break if chunks.empty?
+    k, chunk_out = chunks.to_a.sort{|a, b| a[1][:itow] <=> b[1][:itow]}[0]
+    out.print(chunk_out[:data])
+    chunks.delete(k)
+    $stderr.print '.' if ((loop += 1) % 10000 == 0)
+  end
+  $stderr.puts " Done." 
+}
+
 if $0 == __FILE__ then
 
 $stderr.puts "Log mixer"
@@ -225,31 +252,9 @@ src = {
   :gps => ARGV.shift,
   :imu => ARGV.shift,
 }
-readers = {
+$log_mix.call({
   :gps => GPS_UBX::new(open(src[:gps])),
   :imu => IMU_CSV::new(open(src[:imu])),
-}
-chunks = {}
-
-$stdout.binmode # for Windows
-
-$stderr.print "Processing "
-loop = 0
-while true
-  (readers.keys - chunks.keys).each{|k|
-    chunk = readers[k].read_chunk
-    if chunk
-      chunks[k] = chunk
-    else
-      readers.delete(k)
-    end
-  }
-  break if chunks.empty?
-  k, chunk_out = chunks.to_a.sort{|a, b| a[1][:itow] <=> b[1][:itow]}[0]
-  print chunk_out[:data]
-  chunks.delete(k)
-  $stderr.print '.' if ((loop += 1) % 10000 == 0)
-end
-$stderr.puts " Done." 
+})
 
 end
