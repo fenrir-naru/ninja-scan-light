@@ -52,7 +52,7 @@
 
 #include "std.h"
 
-#define PAGE_SIZE 32
+#define SYLPHIDE_PAGE_SIZE 32
 
 template <class Container = char>
 class Packet_Observer : public FIFO<Container>{
@@ -80,7 +80,7 @@ class Packet_Observer : public FIFO<Container>{
 template <class FloatType = double>
 class A_Packet_Observer : public Packet_Observer<>{
   public:
-    static const unsigned int a_packet_size = PAGE_SIZE - 1;
+    static const unsigned int a_packet_size = SYLPHIDE_PAGE_SIZE - 1;
     A_Packet_Observer(const unsigned int &buffer_size) 
         : Packet_Observer<>(buffer_size){
       
@@ -138,7 +138,7 @@ class A_Packet_Observer : public Packet_Observer<>{
 template <class FloatType = double>
 class F_Packet_Observer : public Packet_Observer<>{
   public:
-    static const unsigned int f_packet_size = PAGE_SIZE - 1;
+    static const unsigned int f_packet_size = SYLPHIDE_PAGE_SIZE - 1;
     F_Packet_Observer(const unsigned int &buffer_size) 
         : Packet_Observer<>(buffer_size){
       
@@ -195,7 +195,7 @@ class F_Packet_Observer : public Packet_Observer<>{
 template <class FloatType = double>
 class Data24Bytes_Packet_Observer : public Packet_Observer<>{
   public:
-    static const unsigned int packet_size = PAGE_SIZE - 1;
+    static const unsigned int packet_size = SYLPHIDE_PAGE_SIZE - 1;
     Data24Bytes_Packet_Observer(const unsigned int &buffer_size) 
         : Packet_Observer<>(buffer_size){
       
@@ -866,7 +866,7 @@ class G_Packet_Observer : public Packet_Observer<>{
 template <class FloatType = double>
 class N_Packet_Observer : public Packet_Observer<>{
   public:
-    static const unsigned int n_packet_size = PAGE_SIZE - 1;
+    static const unsigned int n_packet_size = SYLPHIDE_PAGE_SIZE - 1;
     N_Packet_Observer(const unsigned int &buffer_size) 
         : Packet_Observer<>(buffer_size){
       
@@ -884,7 +884,7 @@ class N_Packet_Observer : public Packet_Observer<>{
       return true;
     }
     unsigned int current_packet_size() const {
-      return PAGE_SIZE;
+      return SYLPHIDE_PAGE_SIZE;
     }
     
     unsigned int sequence_num() const {return this->operator[](0);}
@@ -1042,7 +1042,7 @@ protected: \
 observer_ ## type(observer_buffer_size), \
 packet_handler_ ## type(NULL), \
 previous_seek_next_ ## type(observer_ ## type.ready())
-    SylphideProcessor(const int &observer_buffer_size = PAGE_SIZE * 32)
+    SylphideProcessor(const int &observer_buffer_size = SYLPHIDE_PAGE_SIZE * 32)
       : assign_initializer(A),
         assign_initializer(G),
         assign_initializer(F),

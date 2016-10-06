@@ -42,7 +42,7 @@
 #include <cstdlib>
 #include <climits>
 #include <cfloat>
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) || defined(__CYGWIN__)
 #include <io.h>
 #include <fcntl.h>
 #endif
@@ -157,8 +157,8 @@ struct GlobalOptions {
       if(strcmp(spec, "-") == 0){
         // '-' stands for standard inputs
         std::cerr << "[std::cin]" << std::endl;
-#if defined(_MSC_VER)
-      setmode(fileno(stdin), O_BINARY);
+#if defined(_MSC_VER) || defined(__CYGWIN__)
+        setmode(fileno(stdin), O_BINARY);
 #endif
         return std::cin;
       }else if(strstr(spec, COMPORT_PREFIX) == spec){
@@ -199,8 +199,8 @@ struct GlobalOptions {
       if(std::strcmp(spec, "-") == 0){
         // '-' stands for standard outputs
         std::cerr << "[std::cout]" << std::endl;
-#if defined(_MSC_VER)
-      setmode(fileno(stdout), O_BINARY);
+#if defined(_MSC_VER) || defined(__CYGWIN__)
+        setmode(fileno(stdout), O_BINARY);
 #endif
         return std::cout;
       }else if(std::strstr(spec, COMPORT_PREFIX) == spec){

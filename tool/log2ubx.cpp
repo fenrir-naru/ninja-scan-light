@@ -99,8 +99,7 @@ using namespace std;
 typedef SylphideProcessor<> Processor_t;
 typedef Processor_t::G_Observer_t G_Observer_t;
 
-#define BUFFER_SIZE (PAGE_SIZE * 1) // 32
-#define OBSERVER_SIZE (PAGE_SIZE * 64) // 2048
+#define OBSERVER_SIZE (SYLPHIDE_PAGE_SIZE * 64) // 2048
 
 int good_packet(0);
 int bad_packet(0);
@@ -155,7 +154,7 @@ void g_packet_handler(const G_Observer_t &observer){
  * @param in ÉXÉgÉäÅ[ÉÄ
  */
 void stream_processor(istream &in){
-  char buffer[PAGE_SIZE];
+  char buffer[SYLPHIDE_PAGE_SIZE];
   char *buffer_head(buffer);
   int read_count_max(sizeof(buffer));
   
@@ -220,7 +219,7 @@ int main(int argc, char *argv[]){
   
   // Input is in SylphideProtocol or log.dat
   if(options.in_sylphide){
-    SylphideIStream sylphide_in(options.spec2istream(argv[log_index]), PAGE_SIZE);
+    SylphideIStream sylphide_in(options.spec2istream(argv[log_index]), SYLPHIDE_PAGE_SIZE);
     stream_processor(sylphide_in);
   }else{
     stream_processor(options.spec2istream(argv[log_index]));

@@ -1772,10 +1772,10 @@ class StreamProcessor
      * @return (bool) true when success, otherwise false.
      */
     bool process_1page(){
-      char buffer[PAGE_SIZE];
+      char buffer[SYLPHIDE_PAGE_SIZE];
       
       int read_count;
-      _in->read(buffer, PAGE_SIZE);
+      _in->read(buffer, SYLPHIDE_PAGE_SIZE);
       read_count = static_cast<int>(_in->gcount());
       if(_in->fail() || (read_count == 0)){return false;}
       invoked++;
@@ -1793,7 +1793,7 @@ class StreamProcessor
       cerr << endl;
 #endif
     
-      if(read_count < PAGE_SIZE){
+      if(read_count < SYLPHIDE_PAGE_SIZE){
 #if DEBUG
         cerr << "--skipped-- : " << invoked << " page ; count = " << read_count << endl;
 #endif
@@ -1857,7 +1857,7 @@ class StreamProcessor
     }
 } *current_processor;
 
-const unsigned int StreamProcessor::buffer_size = PAGE_SIZE * 64;
+const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
 
 typedef vector<StreamProcessor *> processors_t;
 processors_t processors;
@@ -1909,7 +1909,7 @@ class Status{
     static void dump(const char *label, const float_sylph_t &itow, const NAVData &target){
       
       if(options.out_is_N_packet){
-        char buf[PAGE_SIZE];
+        char buf[SYLPHIDE_PAGE_SIZE];
         target.encode_N0(itow, buf);
         options.out().write(buf, sizeof(buf));
         return;
@@ -2343,7 +2343,7 @@ int main(int argc, char *argv[]){
     cerr << "Log file: ";
     istream &in(options.spec2istream(argv[arg_index]));
     stream_processor->set_stream(
-        options.in_sylphide ? new SylphideIStream(in, PAGE_SIZE) : &in);
+        options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
 
     processors.push_back(stream_processor);
   }
@@ -2354,7 +2354,7 @@ int main(int argc, char *argv[]){
   }
 
   if(options.out_sylphide){
-    options._out = new SylphideOStream(options.out(), PAGE_SIZE);
+    options._out = new SylphideOStream(options.out(), SYLPHIDE_PAGE_SIZE);
   }else{
     options.out() << setprecision(10);
   }

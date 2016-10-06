@@ -512,7 +512,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         bool previous_seek;
         unsigned int invoked;
         SylphideStreamHandler() 
-            : super_t(PAGE_SIZE),
+            : super_t(SYLPHIDE_PAGE_SIZE),
             previous_seek(false), invoked(0) {}
         ~SylphideStreamHandler() {}
         
@@ -540,11 +540,11 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
      * @param in stream
      */
     void process(istream &in){
-      char buffer[PAGE_SIZE];
+      char buffer[SYLPHIDE_PAGE_SIZE];
       
       while(true){
         int read_count;
-        in.read(buffer, PAGE_SIZE);
+        in.read(buffer, SYLPHIDE_PAGE_SIZE);
         read_count = in.gcount();
         if(in.fail() || (read_count == 0)){return;}
         invoked++;
@@ -560,7 +560,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           cerr << dec;
           cerr << endl;
           
-          if(read_count < PAGE_SIZE){
+          if(read_count < SYLPHIDE_PAGE_SIZE){
             cerr << "--skipped-- : " << invoked << " page ; count = " << read_count << endl;
           }
         }
@@ -645,7 +645,7 @@ int main(int argc, char *argv[]){
   
   options.out().precision(10);
   if(options.in_sylphide){
-    SylphideIStream sylph_in(options.spec2istream(argv[log_index]), PAGE_SIZE);
+    SylphideIStream sylph_in(options.spec2istream(argv[log_index]), SYLPHIDE_PAGE_SIZE);
     processor.process(sylph_in);
   }else{
     processor.process(options.spec2istream(argv[log_index]));
