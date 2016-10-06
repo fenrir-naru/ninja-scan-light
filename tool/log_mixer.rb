@@ -31,30 +31,6 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-$stderr.puts "Log mixer"
-$stderr.puts "Usage: #{__FILE__} [options] gps_data imu_data > log.dat"
-
-options = {}
-ARGV.reject{|arg|
-  if arg =~ /--([^=]+)=?/ then
-    k, v = [$1.to_sym, $']
-    options[k] = v
-    true
-  else
-    false
-  end
-}
-
-if ARGV.size < 2
-  $stderr.puts "Minimum arguments error!"
-  exit(-1)
-end
-
-src = {
-  :gps => ARGV.shift,
-  :imu => ARGV.shift,
-}
-
 class G_Packet_Converter
   DATA_PER_PACKET = 31
   def G_Packet_Converter.g_packet(binary)
@@ -184,7 +160,7 @@ class A_Packet_Converter
   end
   def dump_conf
     DEFAULT_CONV_PARAMS.keys.collect{|k|
-      "#{k} #{eval("@#{k}").join(' ')}"
+      "#{k} #{[eval("@#{k}")].flatten.join(' ')}"
     }.join("\n")
   end
 end
@@ -193,6 +169,7 @@ class IMU_CSV < A_Packet_Converter
   DEFAULT_PARAMS = {
     :t_index => 0,
     :t_scale => 1.0, # s
+    :t_offset => 0,
     :acc_index => [1, 2, 3],
     :acc_scale => 1.0, # m/s^2
     :omega_index => [4, 5, 6],
@@ -209,7 +186,7 @@ class IMU_CSV < A_Packet_Converter
     while !@io.eof?
       items = @io.readline.split(/[,\s]+/) # space, tab or comma
       items.collect!{|v| Float(v)} rescue next
-      t = items[@t_index] * @t_scale
+      t = items[@t_index] * @t_scale + @t_offset
       return {
         :itow => t,
         :data => a_packet({
@@ -223,7 +200,31 @@ class IMU_CSV < A_Packet_Converter
   end
 end
 
+if $0 == __FILE__ then
 
+$stderr.puts "Log mixer"
+$stderr.puts "Usage: #{__FILE__} [options] gps_data imu_data > log.dat"
+
+options = {}
+ARGV.reject{|arg|
+  if arg =~ /--([^=]+)=?/ then
+    k, v = [$1.to_sym, $']
+    options[k] = v
+    true
+  else
+    false
+  end
+}
+
+if ARGV.size < 2
+  $stderr.puts "Minimum arguments error!"
+  exit(-1)
+end
+
+src = {
+  :gps => ARGV.shift,
+  :imu => ARGV.shift,
+}
 readers = {
   :gps => GPS_UBX::new(open(src[:gps])),
   :imu => IMU_CSV::new(open(src[:imu])),
@@ -250,3 +251,5 @@ while true
   $stderr.print '.' if ((loop += 1) % 10000 == 0)
 end
 $stderr.puts " Done." 
+
+end
