@@ -140,13 +140,13 @@ class A_Packet_Converter
     }
   end
   def A_Packet_Converter.packN24(v)
-    (v.kind_of?(Array) ? v : [v]).collect{|i|
-      [[[i.to_i, 0].max, (1 << 24 - 1)].min].pack('N')[1..3]
+    (v.kind_of?(Array) ? v : [v]).collect{|num|
+      [[[num.to_i, 0].max, ((1 << 24) - 1)].min].pack('N')[1..3]
     }.join
   end
   def a_packet(info = {})
     "A#{
-      [0, ((info[:t_s] || 0) * 1E3).to_i].pack('CN')
+      [0, ((info[:t_s] || 0) * 1E3).to_i].pack('CV')
     }#{
       A_Packet_Converter::packN24([
         (info[:acc_ms2] || [0, 0, 0]).zip(@acc_sf, @acc_bias).collect{|v, sf, bias|
@@ -186,13 +186,13 @@ class IMU_CSV < A_Packet_Converter
     while !@io.eof?
       items = @io.readline.split(/[,\s]+/) # space, tab or comma
       items.collect!{|v| Float(v)} rescue next
-      t = items[@t_index] * @t_scale + @t_offset
+      t = (items[@t_index] * @t_scale) + @t_offset
       return {
         :itow => t,
         :data => a_packet({
           :t_s => t,
-          :acc_ms2 => items.values_at(*@acc_index).each{|v| v * @acc_scale},
-          :omega_rads => items.values_at(*@omega_index).each{|v| v * @omega_scale},
+          :acc_ms2 => items.values_at(*@acc_index).collect{|v| v * @acc_scale},
+          :omega_rads => items.values_at(*@omega_index).collect{|v| v * @omega_scale},
         }),
       }
     end
