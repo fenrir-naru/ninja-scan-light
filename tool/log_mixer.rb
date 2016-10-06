@@ -104,7 +104,7 @@ class GPS_UBX < G_Packet_Converter
       @buf = @buf[(len + 8)..-1]
       
       # when same time stamp data or data without time stamp, append it to current chuck
-      if res[:itow] and 
+      if res[:itow] then
         if itow_new and (res[:itow] != itow_new) then
           @cache = {:itow => itow_new, :data => data_new}
           res[:data] = G_Packet_Converter::g_packet(res[:data])
