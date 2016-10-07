@@ -53,6 +53,7 @@ class GPS_UBX < G_Packet_Converter
     @io = io
     @buf = []
     @cache = {:itow => nil, :data => ""}
+    @filter = opt[:filter] || proc{|packet| packet}
   end
   def read_chunk
     res = @cache.clone
@@ -89,19 +90,16 @@ class GPS_UBX < G_Packet_Converter
         next
       end
       
-      data_new = @buf[0..(len + 7)].pack('C*')
-      itow_new = nil
-      {
+      packet = @buf[0..(len + 7)]
+      @buf = @buf[(len + 8)..-1]
+      
+      next unless (packet = @filter.call(packet))
+      
+      data_new = packet.pack('C*')
+      itow_new = ((1E-3 * data_new[6..9].unpack('V')[0]) if {
         0x01 => [0x01, 0x02, 0x03, 0x04, 0x06, 0x08, 0x11, 0x12, 0x20, 0x21, 0x22, 0x30, 0x31, 0x32], 
         0x02 => [0x10, 0x20]
-      }.each{|_class, _id|
-        if (@buf[2] == _class) && _id.include?(@buf[3]) then
-          itow_new = 1E-3 * data_new[6..9].unpack('V')[0]
-          break
-        end
-      }
-      
-      @buf = @buf[(len + 8)..-1]
+      }[packet[2]].include?(packet[3])) rescue nil
       
       # when same time stamp data or data without time stamp, append it to current chuck
       if res[:itow] then
