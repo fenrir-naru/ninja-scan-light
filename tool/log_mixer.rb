@@ -170,6 +170,7 @@ class IMU_CSV < A_Packet_Converter
     :t_index => 0,
     :t_scale => 1.0, # s
     :t_offset => 0,
+    :filter => proc{|t, accel, omega| [t, accel, omega]},
     :acc_index => [1, 2, 3],
     :acc_units => [1.0] * 3, # m/s^2
     :gyro_index => [4, 5, 6],
@@ -187,13 +188,13 @@ class IMU_CSV < A_Packet_Converter
       items = @io.readline.split(/[,\s]+/) # space, tab or comma
       items.collect!{|v| Float(v)} rescue next
       t = (items[@t_index] * @t_scale) + @t_offset
+      accel = items.values_at(*@acc_index).zip(@acc_units).collect{|v, sf| v * sf}
+      omega = items.values_at(*@gyro_index).zip(@gyro_units).collect{|v, sf| v * sf}
+      t, accel, omega = @filter.call(t, accel, omega)
+      next unless t
       return {
         :itow => t,
-        :data => a_packet({
-          :t_s => t,
-          :accel_ms2 => items.values_at(*@acc_index).zip(@acc_units).collect{|v, sf| v * sf},
-          :omega_rads => items.values_at(*@gyro_index).zip(@gyro_units).collect{|v, sf| v * sf},
-        }),
+        :data => a_packet({:t_s => t, :accel_ms2 => accel, :omega_rads => omega}),
       }
     end
     return nil
