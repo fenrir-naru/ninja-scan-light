@@ -31,6 +31,10 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+UTIL_DIR = File::join(File::dirname(__FILE__), 'misc')
+$: << UTIL_DIR unless $:.include?(UTIL_DIR)
+require 'ubx'
+
 class G_Packet_Converter
   DATA_PER_PACKET = 31
   def G_Packet_Converter.g_packet(binary)
@@ -50,50 +54,15 @@ end
 
 class GPS_UBX < G_Packet_Converter
   def initialize(io, opt = {})
-    @io = io
-    @buf = []
+    @ubx = UBX::new(io)
     @cache = {:itow => nil, :data => ""}
     @filter = opt[:filter] || proc{|packet| packet}
     @delay = opt[:delay] || 0
   end
   def read_chunk
     res = @cache.clone
-    while !@io.eof?
-      if @buf.size < 8 then
-        @buf += @io.read(8 - @buf.size).unpack('C*')
-        return nil if @buf.size < 8
-      end
-      
-      if @buf[0] != 0xB5 then
-        @buf.shift
-        next
-      elsif @buf[1] != 0x62 then
-        @buf = @buf[2..-1]
-        next
-      end
-      
-      len = (@buf[5] << 8) + @buf[4]
-      if @buf.size < len + 8 then
-        @buf += @io.read(len + 8 - @buf.size).unpack('C*')
-        return nil if @buf.size < len + 8
-      end
-      
-      ck_a, ck_b = [0, 0]
-      @buf[2..(len + 5)].each{|b|
-        ck_a += b
-        ck_b += ck_a
-      }
-      ck_a &= 0xFF
-      ck_b &= 0xFF
-      
-      if (@buf[len + 6] != ck_a) || (@buf[len + 7] != ck_b) then
-        @buf = @buf[2..-1]
-        next
-      end
-      
-      packet = @buf[0..(len + 7)]
-      @buf = @buf[(len + 8)..-1]
-      
+    while true
+      break unless (packet = @ubx.read_packet)
       next unless (packet = @filter.call(packet))
       
       data_new = packet.pack('C*')
