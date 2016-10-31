@@ -1,0 +1,28 @@
+version: 1.0.{build}.{branch}
+configuration: AppVeyor
+install:
+  - set PATH=C:\Ruby21\bin;%PATH%
+  - gem install ocra
+build:
+  project: tool\NinjaScanLight_tools.sln
+  verbosity: minimal
+after_build:
+  - type nul > %APPVEYOR_REPO_COMMIT%.commit
+  - 7z a windows.%APPVEYOR_REPO_BRANCH%.zip %APPVEYOR_BUILD_FOLDER%\tool\build_VC\%CONFIGURATION%\*.exe %APPVEYOR_REPO_COMMIT%.commit
+artifacts:
+  - path: windows.*.zip
+    name: x86 binary
+deploy:
+  - provider: BinTray
+    username: fenrir-naru
+    api_key:
+      secure: 9aElrrL3YTy/8XlhblScghgwtorv/6LRNnBkvz5v3OWPoAss903yzMQ9VfsjHzMk
+    subject: fenrir-naru
+    repo: github
+    package: ninja-scan-light
+    version: Latest
+    publish: true
+    override: true
+    explode: false
+    on:
+      branch: master
