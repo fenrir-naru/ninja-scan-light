@@ -27,7 +27,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='AppVeyor|Win32'">
-    <NMakeBuildCommandLine>ocra --version &amp;&amp; ocra --verbose %APPVEYOR_BUILD_FOLDER%log_mixer.rb --output $(OutputPath)\$(TargetName).exe</NMakeBuildCommandLine>
+    <NMakeBuildCommandLine>ocra --version &amp;&amp; ocra --verbose $(ProjectDir)log_mixer.rb --output $(OutDir)$(TargetName).exe</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>
     </NMakeReBuildCommandLine>
     <NMakeOutput>
