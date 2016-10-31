@@ -7,24 +7,37 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log_CSV", "log_CSV.vcxproj"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "INS_GPS", "INS_GPS.vcxproj", "{584A0295-087A-46AA-A3C6-E31E2D76EBF8}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log_mixer", "log_mixer.vcxproj", "{3503DACF-2EA9-4617-9381-BD40B42A4DA1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		AppVeyor|Win32 = AppVeyor|Win32
 		Debug|Win32 = Debug|Win32
 		Release|Win32 = Release|Win32
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
 		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Debug|Win32.ActiveCfg = Debug|Win32
 		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Debug|Win32.Build.0 = Debug|Win32
 		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Release|Win32.ActiveCfg = Release|Win32
 		{855BC1B5-DB8C-4D69-9AEA-A85194620608}.Release|Win32.Build.0 = Release|Win32
+		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
 		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Debug|Win32.ActiveCfg = Debug|Win32
 		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Debug|Win32.Build.0 = Debug|Win32
 		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Release|Win32.ActiveCfg = Release|Win32
 		{D5B410B6-719A-4ABC-ACE2-1304143B7A17}.Release|Win32.Build.0 = Release|Win32
+		{584A0295-087A-46AA-A3C6-E31E2D76EBF8}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{584A0295-087A-46AA-A3C6-E31E2D76EBF8}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
 		{584A0295-087A-46AA-A3C6-E31E2D76EBF8}.Debug|Win32.ActiveCfg = Debug|Win32
 		{584A0295-087A-46AA-A3C6-E31E2D76EBF8}.Debug|Win32.Build.0 = Debug|Win32
 		{584A0295-087A-46AA-A3C6-E31E2D76EBF8}.Release|Win32.ActiveCfg = Release|Win32
 		{584A0295-087A-46AA-A3C6-E31E2D76EBF8}.Release|Win32.Build.0 = Release|Win32
+		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
+		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.Debug|Win32.ActiveCfg = AppVeyor|Win32
+		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.Release|Win32.ActiveCfg = AppVeyor|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
