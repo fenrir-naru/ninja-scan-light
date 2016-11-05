@@ -399,19 +399,20 @@ if(key_checked){ \
   }
 };
 
+template <class FloatT>
 class NAVData {
   public:
-    virtual float_sylph_t longitude() const = 0;
-    virtual float_sylph_t latitude() const = 0;
-    virtual float_sylph_t height() const = 0;
-    virtual float_sylph_t v_north() const = 0;
-    virtual float_sylph_t v_east() const = 0;
-    virtual float_sylph_t v_down() const = 0;
-    virtual float_sylph_t heading() const = 0;
-    virtual float_sylph_t euler_phi() const = 0;
-    virtual float_sylph_t euler_theta() const = 0;
-    virtual float_sylph_t euler_psi() const = 0;
-    virtual float_sylph_t azimuth() const = 0;
+    virtual FloatT longitude() const = 0;
+    virtual FloatT latitude() const = 0;
+    virtual FloatT height() const = 0;
+    virtual FloatT v_north() const = 0;
+    virtual FloatT v_east() const = 0;
+    virtual FloatT v_down() const = 0;
+    virtual FloatT heading() const = 0;
+    virtual FloatT euler_phi() const = 0;
+    virtual FloatT euler_theta() const = 0;
+    virtual FloatT euler_psi() const = 0;
+    virtual FloatT azimuth() const = 0;
     
     /**
      * Print label
@@ -455,7 +456,7 @@ class NAVData {
      * 
      * @param itow Time stamp
      */
-    friend std::ostream &operator<<(std::ostream &out, const NAVData &nav){
+    friend std::ostream &operator<<(std::ostream &out, const NAVData<FloatT> &nav){
       nav.dump(out);
       return out;
     }
@@ -465,7 +466,7 @@ class NAVData {
      * 
      */
     void encode_N0(
-        const float_sylph_t &itow,
+        const FloatT &itow,
         char buf[32]) const {
       typedef unsigned int v_u32_t;
       typedef int v_s32_t;

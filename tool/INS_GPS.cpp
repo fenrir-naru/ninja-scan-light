@@ -365,14 +365,14 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
-class NAV : public NAVData {
+class NAV : public NAVData<float_sylph_t> {
   public:
     struct previous_item_t {
       float_sylph_t elapsedT_from_last_correct;
-      NAVData &nav;
+      NAVData<float_sylph_t> &nav;
       previous_item_t(
           const float_sylph_t &_elapsedT,
-          NAVData &_nav) : elapsedT_from_last_correct(_elapsedT), nav(_nav) {}
+          NAVData<float_sylph_t> &_nav) : elapsedT_from_last_correct(_elapsedT), nav(_nav) {}
       ~previous_item_t(){}
       previous_item_t &operator=(const previous_item_t &another){
         elapsedT_from_last_correct = another.elapsedT_from_last_correct;
@@ -558,7 +558,7 @@ struct M_Packet : Packet {
 };
 
 template <class INS_GPS>
-class INS_GPS_Back_Propagate : public INS_GPS, public NAVData {
+class INS_GPS_Back_Propagate : public INS_GPS, public NAVData<float_sylph_t> {
   protected:
     struct snapshot_content_t {
       INS_GPS_Back_Propagate *ins_gps;
@@ -709,7 +709,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
 };
 
 template <class INS_GPS>
-class INS_GPS_RealTime : public INS_GPS, public NAVData {
+class INS_GPS_RealTime : public INS_GPS, public NAVData<float_sylph_t> {
   protected:
     struct snapshot_content_t {
       INS_GPS_RealTime *ins_gps;
@@ -1906,7 +1906,9 @@ class Status{
      * @param itow current time
      * @param target NAV to be outputted
      */
-    static void dump(const char *label, const float_sylph_t &itow, const NAVData &target){
+    static void dump(
+        const char *label, const float_sylph_t &itow,
+        const NAVData<float_sylph_t> &target){
       
       if(options.out_is_N_packet){
         char buf[SYLPHIDE_PAGE_SIZE];
