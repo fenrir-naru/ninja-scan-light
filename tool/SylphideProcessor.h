@@ -636,6 +636,46 @@ class G_Packet_Observer : public Packet_Observer<>{
       return raw;
     }
     
+    struct subframe_t {
+      unsigned int sv_number;
+      unsigned int subframe_no, sv_or_page_id;
+      v8_t buffer[40];
+
+      u8_t bits2u8_align(
+          const unsigned int &index,
+          const unsigned int &length) const {
+        return ((u8_t)(buffer[((index / 30) * 4) + (2 - ((index % 30) / 8))])
+            & ((0xFF & (0xFF << (8 - length))) >> ((index % 30) % 8)))
+              >> (8 - (length + (index % 30) % 8));
+      }
+      subframe_t() : subframe_no(0), sv_or_page_id(0) {}
+    };
+    subframe_t fetch_subframe() const {
+      //if(!packet_type().equals(0x02, 0x11)){}
+
+      subframe_t subframe;
+      {
+        v8_t buf;
+        this->inspect(&buf, sizeof(buf), 6 + 1); // SVID
+        subframe.sv_number = buf;
+      }
+
+      this->inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 2); // buffer
+      if(subframe.sv_number <= 32){
+        subframe.subframe_no = subframe.bits2u8_align(49, 3);
+        switch(subframe.subframe_no){
+          case 4:
+          case 5:
+            subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
+            // subframe.4 page.2-10 correspond to SV 25-32
+            // subframe.5 page.1-24 correspond to SV 1-24
+            break;
+        }
+      }
+
+      return subframe;
+    }
+
     struct ephemeris_t {
       unsigned int sv_number, how;
       bool valid;
@@ -673,7 +713,7 @@ class G_Packet_Observer : public Packet_Observer<>{
 #define bits2s8(index) (s8_t)(bits2u8(index))
 #define bits2u8_align(index, length) \
 ((bits2u8(index) \
-  & ((0xFF << (8 - length)) >> ((index % 30) % 8)) ) \
+  & ((0xFF & (0xFF << (8 - length))) >> ((index % 30) % 8)) ) \
     >> (8 - (length + (index % 30) % 8)))
 #define bytes2u16(a, b) \
 ((((u16_t)a) << 8) | b)
