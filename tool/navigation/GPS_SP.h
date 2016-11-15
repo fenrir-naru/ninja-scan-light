@@ -346,7 +346,7 @@ class GPS_SinglePositioning {
 
           // Calculate satellite velocity
           xyz_t sat_vel(const_cast<space_node_t *>(&_space_node)->satellite(prn)
-              .velocity(target_time - receiver_error, it->second.first));
+              .velocity(target_time - receiver_error / space_node_t::light_speed, it->second.first));
 
           // Update range rate by subtracting LOS satellite velocity with design matrix G
           range_rate(i, 0) = it->second.second
