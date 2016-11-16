@@ -111,8 +111,8 @@ class GPS_SinglePositioning {
         FloatT &receiver_error,
         bool is_coarse_mode = true) throw (std::exception){
 
-      gps_time_t target_time_est(target_time);
-      target_time_est -= (receiver_error / space_node_t::light_speed);
+      gps_time_t target_time_est(
+          target_time - (receiver_error / space_node_t::light_speed));
 
       matrix_t G(sat_range_rate.size(), 4);
       matrix_t W(matrix_t::getI(sat_range_rate.size()));;
@@ -152,12 +152,10 @@ class GPS_SinglePositioning {
         if(!is_coarse_mode){
           enu_t relative_pos(enu_t::relative(sat_position, user_position));
           // Ionospheric
-          FloatT iono_delta_r(_space_node.iono_correction(relative_pos, usr_llh, target_time_est));
-          delta_r(i, 0) += iono_delta_r;
+          delta_r(i, 0) += _space_node.iono_correction(relative_pos, usr_llh, target_time_est);
 
           // Tropospheric
-          FloatT tropo_delta_r(_space_node.tropo_correction(relative_pos, usr_llh));
-          delta_r(i, 0) += tropo_delta_r;
+          delta_r(i, 0) += _space_node.tropo_correction(relative_pos, usr_llh);
 
           // Setup weight
           if(delta_r(i, 0) > 30.0){
@@ -358,7 +356,7 @@ class GPS_SinglePositioning {
         try{
           matrix_t sol((res.design_matrix_G.transpose() * res.weight_matrix_W * res.design_matrix_G).inverse()
               * res.design_matrix_G.transpose() * res.weight_matrix_W * range_rate);
-          xyz_t usr_vel(sol(0, 0), sol(1, 0), sol(2, 0));
+          xyz_t usr_vel(sol.partial(3, 1, 0, 0));
 
           res.user_velocity_enu = enu_t::relative_rel(usr_vel, res.user_position_llh);
           res.receiver_error_rate = sol(3, 0);
