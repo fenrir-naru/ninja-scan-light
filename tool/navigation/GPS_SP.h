@@ -60,10 +60,23 @@ class GPS_SinglePositioning {
     typedef typename space_node_t::llh_t llh_t;
     typedef typename space_node_t::enu_t enu_t;
 
-    typedef std::vector<std::pair<int, FloatT> > sat_range_t;
-    typedef std::vector<std::pair<int, std::pair<FloatT, FloatT> > > sat_range_rate_t;
     typedef std::map<int, std::vector<ephemeris_t> > sat_eph_list_t;
     typedef std::pair<FloatT, gps_time_t> range_time_t;
+
+    struct sat_range_t : public std::vector<std::pair<int, FloatT> > {
+        typedef std::vector<std::pair<int, FloatT> > super_t;
+        sat_range_t() : super_t() {}
+        void push_back(const int &sat, const FloatT &range){
+          push_back(super_t::value_type(sat, range));
+        }
+    };
+    struct sat_range_rate_t : public std::vector<std::pair<int, std::pair<FloatT, FloatT> > > {
+        typedef std::vector<std::pair<int, std::pair<FloatT, FloatT> > > super_t;
+        sat_range_rate_t() : super_t() {}
+        void push_back(const int &sat, const FloatT &range, const FloatT &rate){
+          push_back(super_t::value_type(sat, super_t::value_type::second_type(range, rate)));
+        }
+    };
 
   protected:
     space_node_t _space_node;
@@ -117,7 +130,7 @@ class GPS_SinglePositioning {
           target_time - (receiver_error / space_node_t::light_speed));
 
       matrix_t G(sat_range_rate.size(), 4);
-      matrix_t W(matrix_t::getI(sat_range_rate.size()));;
+      matrix_t W(matrix_t::getI(sat_range_rate.size()));
       matrix_t delta_r(sat_range_rate.size(), 1);
 
       llh_t usr_llh(user_position.llh());
@@ -242,7 +255,7 @@ class GPS_SinglePositioning {
         const gps_time_t &target_time,
         const xyz_t &user_position_init,
         const FloatT &receiver_error_init,
-        const bool &good_init = false,
+        const bool &good_init = true,
         const bool &with_velocity = true) const {
 
       user_pvt_t res;
@@ -372,6 +385,19 @@ class GPS_SinglePositioning {
     }
 
     /**
+     * Calculate User position/velocity without hint
+     *
+     * @param sat_range_rate PRN, pseudo-range, pseudo-range rate list
+     * @param target_time time at measurement
+     * @return calculation results and matrices used for calculation
+     */
+    user_pvt_t solve_user_pvt(
+        const sat_range_rate_t &sat_range_rate,
+        const gps_time_t &target_time) const {
+      return solve_user_pvt(sat_range_rate, target_time, xyz_t(), 0, false);
+    }
+
+    /**
      * Calculate User position with hint
      *
      * @param sat_range PRN, pseudo-range list
@@ -386,13 +412,11 @@ class GPS_SinglePositioning {
         const gps_time_t &target_time,
         const xyz_t &user_position_init,
         const FloatT &receiver_error_init,
-        const bool &good_init = false) const {
+        const bool &good_init = true) const {
 
       sat_range_rate_t sat_range_rate;
       for(typename sat_range_t::const_iterator it(sat_range.begin()); it != sat_range.end(); ++it){
-        sat_range_rate.push_back(
-            sat_range_t::value_type(it->first,
-                sat_range_t::value_type::second_type(it->second, 0)));
+        sat_range_rate.push_back(it->first, it->second, 0);
       }
       return solve_user_pvt(sat_range_rate, target_time, user_position_init, receiver_error_init, good_init, false);
     }
