@@ -52,20 +52,22 @@ class GPS_SinglePositioning {
     typedef Matrix<FloatT> matrix_t;
 
     typedef GPS_SpaceNode<FloatT> space_node_t;
-    typedef space_node_t::gps_time_t gps_time_t;
+    typedef typename space_node_t::gps_time_t gps_time_t;
+    typedef typename space_node_t::Satellite satellite_t;
+    typedef typename satellite_t::Ephemeris ephemeris_t;
 
-    typedef space_node_t::xyz_t xyz_t;
-    typedef space_node_t::llh_t llh_t;
-    typedef space_node_t::enu_t enu_t;
+    typedef typename space_node_t::xyz_t xyz_t;
+    typedef typename space_node_t::llh_t llh_t;
+    typedef typename space_node_t::enu_t enu_t;
 
     typedef std::vector<std::pair<int, FloatT> > sat_range_t;
     typedef std::vector<std::pair<int, std::pair<FloatT, FloatT> > > sat_range_rate_t;
-    typedef std::map<int, std::vector<space_node_t::Satellite::Ephemeris> > sat_ephemeris_list_t;
+    typedef std::map<int, std::vector<ephemeris_t> > sat_eph_list_t;
     typedef std::pair<FloatT, gps_time_t> range_time_t;
 
   protected:
     space_node_t _space_node;
-    sat_ephemeris_list_t sat_eph_list;
+    sat_eph_list_t sat_eph_list;
 
     bool _ephemeris_lock;
     bool _valid_iono_param;
@@ -121,12 +123,12 @@ class GPS_SinglePositioning {
       llh_t usr_llh(user_position.llh());
 
       unsigned i(0);
-      for(sat_range_rate_t::const_iterator it(sat_range_rate.begin());
+      for(typename sat_range_rate_t::const_iterator it(sat_range_rate.begin());
           it != sat_range_rate.end();
           ++it, ++i){
 
         FloatT range(it->second.first);
-        space_node_t::Satellite &sat(
+        satellite_t &sat(
             const_cast<space_node_t *>(&_space_node)->satellite(it->first));
 
         // Temporal geometry range
@@ -194,8 +196,8 @@ class GPS_SinglePositioning {
       const gps_time_t &_t;
       ephemeris_comparator(const gps_time_t &t) : _t(t) {}
       bool operator()(
-          const space_node_t::Satellite::Ephemeris &eph1,
-          const space_node_t::Satellite::Ephemeris &eph2){
+          const ephemeris_t &eph1,
+          const ephemeris_t &eph2){
         return std::fabs(eph1.period_from_time_of_clock(_t)) < std::fabs(eph2.period_from_time_of_clock(_t));
       }
     };
@@ -252,7 +254,7 @@ class GPS_SinglePositioning {
 
       sat_range_rate_t available_sat_range_rate;
 
-      for(sat_range_rate_t::const_iterator it(sat_range_rate.begin());
+      for(typename sat_range_rate_t::const_iterator it(sat_range_rate.begin());
           it != sat_range_rate.end();
           ++it){
 
@@ -336,7 +338,7 @@ class GPS_SinglePositioning {
       if(with_velocity){ // Calculate velocity
         matrix_t range_rate(available_sat_range_rate.size(), 1);
         int i(0);
-        for(sat_range_rate_t::const_iterator it(available_sat_range_rate.begin());
+        for(typename sat_range_rate_t::const_iterator it(available_sat_range_rate.begin());
             it != available_sat_range_rate.end();
             ++it, ++i){
 
@@ -387,7 +389,7 @@ class GPS_SinglePositioning {
         const bool &good_init = false) const {
 
       sat_range_rate_t sat_range_rate;
-      for(sat_range_t::const_iterator it(sat_range.begin()); it != sat_range.end(); ++it){
+      for(typename sat_range_t::const_iterator it(sat_range.begin()); it != sat_range.end(); ++it){
         sat_range_rate.push_back(
             sat_range_t::value_type(it->first,
                 sat_range_t::value_type::second_type(it->second, 0)));
@@ -413,8 +415,7 @@ class GPS_SinglePositioning {
      *
      * @param eph ephemeris
      */
-    void register_epehemris(
-        const space_node_t::Satellite::Ephemeris &eph){
+    void register_epehemris(const ephemeris_t &eph){
 
       if(_ephemeris_lock){return;}
 
@@ -422,7 +423,7 @@ class GPS_SinglePositioning {
       if(sat_eph_list[eph.svid].empty()){
         sat_eph_list[eph.svid].push_back(eph);
       }else{
-        for(sat_eph_list_t::mapped_type::reverse_iterator it(sat_eph_list[eph.svid].rbegin());
+        for(typename sat_eph_list_t::mapped_type::reverse_iterator it(sat_eph_list[eph.svid].rbegin());
             it != sat_eph_list[eph.svid].rend();
             ++it){
           if(gps_time_t(eph.WN, eph.t_oc) >= gps_time_t(it->WN, it->t_oc)){

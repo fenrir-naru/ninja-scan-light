@@ -39,6 +39,8 @@
 #include <map>
 #include <bitset>
 #include <ctime>
+#define _USE_MATH_DEFINES
+#include <cmath>
 
 #include "WGS84.h"
 
@@ -341,8 +343,8 @@ class GPS_SpaceNode {
     static const FloatT SC2RAD;
     
   protected:
-    static FloatT rad2sc(const FloatT &rad) {return rad / PI;}
-    static FloatT sc2rad(const FloatT &sc)  {return sc * PI;}
+    static FloatT rad2sc(const FloatT &rad) {return rad / M_PI;}
+    static FloatT sc2rad(const FloatT &sc)  {return sc * M_PI;}
     
   public:
     typedef GPS_SpaceNode<FloatT> self_t;
@@ -694,8 +696,8 @@ class GPS_SpaceNode {
             u16_t a_f0;         ///< Clock corr. param. (-20, s)
             u16_t a_f1;         ///< Clock corr. param. (-38, s)
             
-            Almanach convert() const {
-              Almanach converted;
+            Almanac convert() const {
+              Almanac converted;
 #define CONVERT(TARGET, SF) \
 {converted.TARGET = SF * TARGET;}
 #define POWER_2(n) \
@@ -978,11 +980,11 @@ class GPS_SpaceNode {
       // Obliquity factor
       FloatT F(1.0 + 16.0 * pow((0.53 - sc_el), 3));
       
-      FloatT x(PI * 2 * (lt - 50400) / per);
-      if(x > PI){
-        do{x -= PI * 2;}while(x > PI);
-      }else if(x < -PI){
-        do{x += PI * 2;}while(x < -PI);
+      FloatT x(M_PI * 2 * (lt - 50400) / per);
+      if(x > M_PI){
+        do{x -= M_PI * 2;}while(x > M_PI);
+      }else if(x < -M_PI){
+        do{x += M_PI * 2;}while(x < -M_PI);
       }
       
       FloatT T_iono(5E-9);
