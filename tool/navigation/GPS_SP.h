@@ -159,10 +159,13 @@ class GPS_SinglePositioning {
         mat.G(i, 0) = -(sat_position.x() - user_position.x()) / range_est;
         mat.G(i, 1) = -(sat_position.y() - user_position.y()) / range_est;
         mat.G(i, 2) = -(sat_position.z() - user_position.z()) / range_est;
-        mat.G(i, 3) = 1.0;
+        mat.G(i, 3) = 1;
 
-        // Perform more correction
-        if(!is_coarse_mode){
+        if(is_coarse_mode){
+
+          mat.W(i, i) = 1;
+        }else{ // Perform more correction
+
           enu_t relative_pos(enu_t::relative(sat_position, user_position));
           // Ionospheric
           mat.delta_r(i, 0) += _space_node.iono_correction(relative_pos, usr_llh, target_time_est);
