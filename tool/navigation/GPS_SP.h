@@ -102,36 +102,34 @@ class GPS_SinglePositioning {
     }
 
   protected:
-    struct solve_1step_res_t {
+    struct geometric_matrices_t {
       matrix_t G; ///< Design matrix, whose component order corresponds to sat_range_rate.iterator().
       matrix_t W; ///< Weight matrix, whose component order corresponds to sat_range_rate.iterator().
-      xyz_t delta_user_position;
-      FloatT delta_receiver_error;
+      matrix_t delta_r; ///< Residual matrix, whose component order corresponds to sat_range_rate.iterator().
+      geometric_matrices_t(const unsigned int &size)
+          : G(size, 4), W(size, size), delta_r(size, 1) {}
     };
 
     /**
-     * Iteration single step of user position calculation
+     * Get geometric matrices in accordance with current status
      *
      * @param sat_range_rate PRN, pseudo-range, pseudo-range rate list (rate is not used in this function)
      * @param target_time time at measurement
-     * @param user_position temporal solution of user position in meters
-     * @param receiver_error temporal solution of receiver clock error in meters
+     * @param user_position (temporal solution of) user position in meters
+     * @param receiver_error (temporal solution of) receiver clock error in meters
+     * @param mat matrices to be stored, already initialized with appropriate size
      * @param is_coarse_mode if true, precise correction will be skipped.
-     * @return correction values and matrices used for calculation
      */
-    solve_1step_res_t solve_1step(
+    void get_geometric_matrices(
         const sat_range_rate_t &sat_range_rate,
         const gps_time_t &target_time,
-        xyz_t &user_position,
-        FloatT &receiver_error,
-        bool is_coarse_mode = true) throw (std::exception){
+        const xyz_t &user_position,
+        const FloatT &receiver_error,
+        geometric_matrices_t &mat,
+        bool is_coarse_mode = true) const {
 
       gps_time_t target_time_est(
           target_time - (receiver_error / space_node_t::light_speed));
-
-      matrix_t G(sat_range_rate.size(), 4);
-      matrix_t W(matrix_t::getI(sat_range_rate.size()));
-      matrix_t delta_r(sat_range_rate.size(), 1);
 
       llh_t usr_llh(user_position.llh());
 
@@ -145,63 +143,44 @@ class GPS_SinglePositioning {
             const_cast<space_node_t *>(&_space_node)->satellite(it->first));
 
         // Temporal geometry range
-        delta_r(i, 0) = range - receiver_error;
+        mat.delta_r(i, 0) = range - receiver_error;
 
         // Clock error correction
-        delta_r(i, 0) += sat.clock_error(target_time_est, delta_r(i, 0)) * space_node_t::light_speed;
+        mat.delta_r(i, 0) += sat.clock_error(target_time_est, mat.delta_r(i, 0)) * space_node_t::light_speed;
 
         // Calculate satellite position
-        xyz_t sat_position(sat.whereis(target_time_est, delta_r(i, 0)));
+        xyz_t sat_position(sat.whereis(target_time_est, mat.delta_r(i, 0)));
         FloatT range_est(user_position.dist(sat_position));
 
         // Calculate residual
-        delta_r(i, 0) -= range_est;
+        mat.delta_r(i, 0) -= range_est;
 
         // Setup design matrix
-        G(i, 0) = -(sat_position.x() - user_position.x()) / range_est;
-        G(i, 1) = -(sat_position.y() - user_position.y()) / range_est;
-        G(i, 2) = -(sat_position.z() - user_position.z()) / range_est;
-        G(i, 3) = 1.0;
+        mat.G(i, 0) = -(sat_position.x() - user_position.x()) / range_est;
+        mat.G(i, 1) = -(sat_position.y() - user_position.y()) / range_est;
+        mat.G(i, 2) = -(sat_position.z() - user_position.z()) / range_est;
+        mat.G(i, 3) = 1.0;
 
         // Perform more correction
         if(!is_coarse_mode){
           enu_t relative_pos(enu_t::relative(sat_position, user_position));
           // Ionospheric
-          delta_r(i, 0) += _space_node.iono_correction(relative_pos, usr_llh, target_time_est);
+          mat.delta_r(i, 0) += _space_node.iono_correction(relative_pos, usr_llh, target_time_est);
 
           // Tropospheric
-          delta_r(i, 0) += _space_node.tropo_correction(relative_pos, usr_llh);
+          mat.delta_r(i, 0) += _space_node.tropo_correction(relative_pos, usr_llh);
 
           // Setup weight
-          if(delta_r(i, 0) > 30.0){
+          if(mat.delta_r(i, 0) > 30.0){
             // If residual is too big, exclude it by decreasing its weight.
-            W(i, i) = 1E-8;
+            mat.W(i, i) = 1E-8;
           }else{
             // elevation weight based on "GPS実用プログラミング"
-            W(i, i) *= pow2(sin(relative_pos.elevation())/0.8);
-            if(W(i, i) < 1E-3){W(i, i) = 1E-3;}
+            mat.W(i, i) = pow2(sin(relative_pos.elevation())/0.8);
+            if(mat.W(i, i) < 1E-3){mat.W(i, i) = 1E-3;}
           }
         }
       }
-
-      try{
-        // Least square
-        matrix_t delta_x(
-            (G.transpose() * W * G).inverse() * G.transpose() * W * delta_r);
-
-        solve_1step_res_t res;
-        {
-          res.G = G;
-          res.W = W;
-          res.delta_user_position = xyz_t(delta_x.partial(3, 1, 0, 0));
-          res.delta_receiver_error = delta_x(3, 0);
-        }
-
-        user_position += res.delta_user_position;
-        receiver_error += res.delta_receiver_error;
-
-        return res;
-      }catch(std::exception &e){throw e;}
     }
 
   protected:
@@ -228,15 +207,12 @@ class GPS_SinglePositioning {
       FloatT receiver_error;
       enu_t user_velocity_enu;
       FloatT receiver_error_rate;
-
-      matrix_t design_matrix_G, weight_matrix_W;
       FloatT gdop, pdop, hdop, vdop, tdop;
 
       user_pvt_t()
           : error_code(ERROR_NO),
             user_position_llh(), receiver_error(0),
-            user_velocity_enu(), receiver_error_rate(0),
-            design_matrix_G(), weight_matrix_W() {}
+            user_velocity_enu(), receiver_error_rate(0) {}
     };
 
     /**
@@ -313,22 +289,31 @@ class GPS_SinglePositioning {
       xyz_t user_position(user_position_init);
       FloatT receiver_error(receiver_error_init);
 
+      geometric_matrices_t mat(sat_range_rate.size());
+      matrix_t &G(mat.G), &W(mat.W);
+
       // Navigation calculation
       try{
         // If initialization is not appropriate, more iteration will be performed.
         for(int i(good_init ? 0 : -2); i < 10; i++){
-          solve_1step_res_t res_1step(
-              solve_1step(
-                available_sat_range_rate,
-                target_time,
-                user_position, receiver_error,
-                i <= 0));
+          get_geometric_matrices(
+              available_sat_range_rate,
+              target_time,
+              user_position, receiver_error,
+              mat,
+              i <= 0);
 
-          if(res_1step.delta_user_position.dist() <= 1E-6){
-            res.design_matrix_G = res_1step.G;
-            res.weight_matrix_W = res_1step.W;
+          // Least square
+          matrix_t delta_x((G.transpose() * W * G).inverse() * G.transpose() * W * mat.delta_r);
 
-            matrix_t C((res_1step.G.transpose() * res_1step.G).inverse());
+          xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
+          FloatT delta_receiver_error(delta_x(3, 0));
+
+          user_position += delta_user_position;
+          receiver_error += delta_receiver_error;
+
+          if(delta_user_position.dist() <= 1E-6){
+            matrix_t C((G.transpose() * G).inverse());
 
             // Calculate DOP
             res.gdop = std::sqrt(C.trace());
@@ -363,17 +348,16 @@ class GPS_SinglePositioning {
 
           // Update range rate by subtracting LOS satellite velocity with design matrix G
           range_rate(i, 0) = it->second.second
-              + res.design_matrix_G(i, 0) * sat_vel.x()
-              + res.design_matrix_G(i, 1) * sat_vel.y()
-              + res.design_matrix_G(i, 2) * sat_vel.z();
+              + G(i, 0) * sat_vel.x()
+              + G(i, 1) * sat_vel.y()
+              + G(i, 2) * sat_vel.z();
         }
 
         try{
-          matrix_t sol((res.design_matrix_G.transpose() * res.weight_matrix_W * res.design_matrix_G).inverse()
-              * res.design_matrix_G.transpose() * res.weight_matrix_W * range_rate);
-          xyz_t usr_vel(sol.partial(3, 1, 0, 0));
+          // Least square
+          matrix_t sol((G.transpose() * W * G).inverse() * G.transpose() * W * range_rate);
 
-          res.user_velocity_enu = enu_t::relative_rel(usr_vel, res.user_position_llh);
+          res.user_velocity_enu = enu_t::relative_rel(xyz_t(sol.partial(3, 1, 0, 0)), res.user_position_llh);
           res.receiver_error_rate = sol(3, 0);
         }catch(std::exception &e){
           res.error_code = user_pvt_t::ERROR_VELOCITY;
