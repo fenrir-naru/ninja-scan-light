@@ -126,7 +126,7 @@ class GPS_SinglePositioning {
         const xyz_t &user_position,
         const FloatT &receiver_error,
         geometric_matrices_t &mat,
-        bool is_coarse_mode = true) const {
+        const bool &is_coarse_mode = false) const {
 
       gps_time_t target_time_est(
           target_time - (receiver_error / space_node_t::light_speed));
@@ -195,6 +195,39 @@ class GPS_SinglePositioning {
     };
 
   public:
+    /**
+     * Select appropriate ephemeris within registered ones.
+     *
+     * @param prn satellite prn
+     * @param target_time time at measurement
+     * @return if true, appropriate ephemeris is selected, otherwise, not selected.
+     */
+    bool update_ephemeris(const int &prn, const gps_time_t &target_time){
+
+      // If no previous ephemeris, or possibility of newer one, then update.
+      bool available(false);
+      bool search_ephemeris(true);
+      if(_space_node.has_satellite(prn)){
+        available = true;
+        if(!_space_node.satellite(prn).ephemeris().maybe_newer_one_avilable(target_time)){
+          search_ephemeris = false;
+        }
+      }
+
+      // Check ephemeris
+      if(search_ephemeris && (sat_eph_list.find(prn) != sat_eph_list.end())){
+
+        // Select appropriate ephemeris
+        _space_node.satellite(prn).ephemeris()
+            = *std::min_element(sat_eph_list[prn].begin(), sat_eph_list[prn].end(),
+                ephemeris_comparator(target_time));
+
+        available = true;
+      }
+
+      return available;
+    }
+
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
@@ -225,6 +258,7 @@ class GPS_SinglePositioning {
      * @param good_init if true, initial position and clock error are goodly guessed.
      * @param with_velocity if true, perform velocity estimation.
      * @return calculation results and matrices used for calculation
+     * @see update_ephemeris(), register_ephemeris
      */
     user_pvt_t solve_user_pvt(
         const sat_range_rate_t &sat_range_rate,
@@ -248,37 +282,12 @@ class GPS_SinglePositioning {
           ++it){
 
         int prn(it->first);
+        if(_space_node.has_satellite(prn)
+            && _space_node.satellite(prn).ephemeris().is_valid(target_time)){
 
-        // If no previous ephemeris, or possibility of newer one, then update.
-        bool available(false);
-        bool search_ephemeris(true);
-        if(_space_node.has_satellite(prn)){
-          available = true;
-          if(!_space_node.satellite(prn).ephemeris().maybe_newer_one_avilable(target_time)){
-            search_ephemeris = false;
-          }
+          // Select satellite only when its ephemeris is available and valid.
+          available_sat_range_rate.push_back(*it);
         }
-
-        // Check ephemeris
-        while(search_ephemeris){
-
-          // Ephemeris available?
-          if(sat_eph_list.find(prn) == sat_eph_list.end()){break;}
-
-          // Search ephemeris
-          _space_node.satellite(prn).ephemeris()
-              = *std::min_element(sat_eph_list[prn].begin(), sat_eph_list[prn].end(),
-                  ephemeris_comparator(target_time));
-
-          available = true;
-          break;
-        }
-
-        // Skip when ephemeris unavailable
-        if(!available){continue;}
-
-        // Reconfigure pseudo-range
-        available_sat_range_rate.push_back(*it);
       }
 
       if(available_sat_range_rate.size() < 4){
