@@ -211,21 +211,22 @@ class GPS_SinglePositioning {
       bool available(false);
       bool search_ephemeris(true);
       if(_space_node.has_satellite(prn)){
-        available = true;
-        if(!_space_node.satellite(prn).ephemeris().maybe_newer_one_avilable(target_time)){
+        satellite_t &sat(_space_node.satellite(prn));
+        available = sat.ephemeris().is_valid();
+        if(!sat.ephemeris().maybe_newer_one_avilable(target_time)){
           search_ephemeris = false;
         }
       }
 
       // Check ephemeris
       if(search_ephemeris && (sat_eph_list.find(prn) != sat_eph_list.end())){
+        ephemeris_t &eph(_space_node.satellite(prn).ephemeris());
 
         // Select appropriate ephemeris
-        _space_node.satellite(prn).ephemeris()
-            = *std::min_element(sat_eph_list[prn].begin(), sat_eph_list[prn].end(),
-                ephemeris_comparator(target_time));
+        eph = *std::min_element(
+            sat_eph_list[prn].begin(), sat_eph_list[prn].end(), ephemeris_comparator(target_time));
 
-        available = true;
+        available = eph.is_valid();
       }
 
       return available;
