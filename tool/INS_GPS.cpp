@@ -1000,21 +1000,22 @@ class INS_GPS_NAV : public NAV {
     void setup_filter_additional(
         const Calibration &calibration,
         INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) {
+
+      setup_filter_additional(calibration, (FINS *)ins_gps);
+
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
-        P(10, 10) = P(11, 11) = P(12, 12) = 1E-4;
-        P(13, 13) = P(14, 14) = P(15, 15) = 1E-7;
+        static const unsigned NP(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::P_SIZE);
+        P(NP - 6, NP - 6) = P(NP - 5, NP - 5) = P(NP - 4, NP - 4) = 1E-4; // for accelerometer bias drift
+        P(NP - 3, NP - 3) = P(NP - 2, NP - 2) = P(NP - 1, NP - 1) = 1E-7; // for gyro bias drift
         ins_gps->getFilter().setP(P);
       }
 
       {
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
-        Q(7, 7) = 1E-6;
-        Q(8, 8) = 1E-6;
-        Q(9, 9) = 1E-6;
-        Q(10, 10) = 1E-8;
-        Q(11, 11) = 1E-8;
-        Q(12, 12) = 1E-8;
+        static const unsigned NQ(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::Q_SIZE);
+        Q(NQ - 6, NQ - 6) = Q(NQ - 5, NQ - 5) = Q(NQ - 4, NQ - 4) = 1E-6; // for accelerometer bias drift
+        Q(NQ - 3, NQ - 3) = Q(NQ - 2, NQ - 2) = Q(NQ - 1, NQ - 1) = 1E-8; // for gyro bias drift
         ins_gps->getFilter().setQ(Q);
       }
 
