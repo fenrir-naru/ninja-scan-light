@@ -365,6 +365,8 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
+struct G_Packet;
+
 class NAV : public NAVData<float_sylph_t> {
   public:
     struct previous_item_t {
@@ -408,20 +410,20 @@ class NAV : public NAVData<float_sylph_t> {
         const Vector3<float_sylph_t> &gyro, 
         const float_sylph_t &elapsedT) = 0;
     
-    virtual NAV &correct(const GPS_UBLOX_3D<float_sylph_t> &gps) = 0;
+    virtual NAV &correct(const G_Packet &gps) = 0;
     virtual NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps, 
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       return correct(gps);
     }
     virtual NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const float_sylph_t &advanceT){
       return correct(gps);
     }
     virtual NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         const float_sylph_t &advanceT){
@@ -531,9 +533,9 @@ struct G_Packet : Packet {
   float_sylph_t acc_vel;
 
   /**
-   * convert to a structured data required by INS/GPS routine
+   * cast to a structured data required by Loosely-coupled INS/GPS routine
    */
-  GPS_UBLOX_3D<float_sylph_t> convert() const {
+  operator GPS_UBLOX_3D<float_sylph_t>() const {
     GPS_UBLOX_3D<float_sylph_t> packet;
     {
       packet.v_n = vel_ned[0];
@@ -864,12 +866,12 @@ float_sylph_t fname() const {return INS_GPS::fname();}
     }
 
   public:
-    void correct(const GPS_UBLOX_3D<float_sylph_t> &gps){
+    void correct(const G_Packet &gps){
       CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps));
       correct_with_info(info);
     }
 
-    void correct(const GPS_UBLOX_3D<float_sylph_t> &gps,
+    void correct(const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
@@ -1240,14 +1242,14 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
   
   public:
-    NAV &correct(const GPS_UBLOX_3D<float_sylph_t> &gps){
+    NAV &correct(const G_Packet &gps){
       ins_gps->correct(gps);
       return *this;
     }
 
   protected:
     NAV &correct_ins_gps(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         void *){
@@ -1257,7 +1259,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
     template <class FloatT, class Filter, class FINS>
     NAV &correct_ins_gps(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *){
@@ -1267,7 +1269,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
   public:
     NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       return correct_ins_gps(gps, lever_arm_b, omega_b2i_4b, ins_gps);
@@ -1286,7 +1288,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
   public:
     NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const float_sylph_t &advanceT){
       if(setup_correct(advanceT, ins_gps)){
         return correct(gps);
@@ -1296,7 +1298,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
 
     NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         const float_sylph_t &advanceT){
@@ -2038,13 +2040,13 @@ class Status{
           }
           omega_b2i_4n /= (sizeof(gyro_storage) / sizeof(gyro_storage[0]));
           nav.correct(
-              g_packet.convert(), 
+              g_packet,
               current_processor->lever_arm,
               omega_b2i_4n,
               gps_advance);
         }else{ // When do not use lever arm effect.
           nav.correct(
-              g_packet.convert(),
+              g_packet,
               gps_advance);
         }
         if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
