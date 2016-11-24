@@ -365,6 +365,8 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
+struct G_Packet;
+
 class NAV : public NAVData<float_sylph_t> {
   public:
     struct previous_item_t {
@@ -408,20 +410,20 @@ class NAV : public NAVData<float_sylph_t> {
         const Vector3<float_sylph_t> &gyro, 
         const float_sylph_t &elapsedT) = 0;
     
-    virtual NAV &correct(const GPS_UBLOX_3D<float_sylph_t> &gps) = 0;
+    virtual NAV &correct(const G_Packet &gps) = 0;
     virtual NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps, 
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       return correct(gps);
     }
     virtual NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const float_sylph_t &advanceT){
       return correct(gps);
     }
     virtual NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         const float_sylph_t &advanceT){
@@ -531,9 +533,9 @@ struct G_Packet : Packet {
   float_sylph_t acc_vel;
 
   /**
-   * convert to a structured data required by INS/GPS routine
+   * cast to a structured data required by Loosely-coupled INS/GPS routine
    */
-  GPS_UBLOX_3D<float_sylph_t> convert() const {
+  operator GPS_UBLOX_3D<float_sylph_t>() const {
     GPS_UBLOX_3D<float_sylph_t> packet;
     {
       packet.v_n = vel_ned[0];
@@ -864,12 +866,12 @@ float_sylph_t fname() const {return INS_GPS::fname();}
     }
 
   public:
-    void correct(const GPS_UBLOX_3D<float_sylph_t> &gps){
+    void correct(const G_Packet &gps){
       CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps));
       correct_with_info(info);
     }
 
-    void correct(const GPS_UBLOX_3D<float_sylph_t> &gps,
+    void correct(const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
@@ -998,21 +1000,22 @@ class INS_GPS_NAV : public NAV {
     void setup_filter_additional(
         const Calibration &calibration,
         INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) {
+
+      setup_filter_additional(calibration, (FINS *)ins_gps);
+
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
-        P(10, 10) = P(11, 11) = P(12, 12) = 1E-4;
-        P(13, 13) = P(14, 14) = P(15, 15) = 1E-7;
+        static const unsigned NP(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::P_SIZE);
+        P(NP - 6, NP - 6) = P(NP - 5, NP - 5) = P(NP - 4, NP - 4) = 1E-4; // for accelerometer bias drift
+        P(NP - 3, NP - 3) = P(NP - 2, NP - 2) = P(NP - 1, NP - 1) = 1E-7; // for gyro bias drift
         ins_gps->getFilter().setP(P);
       }
 
       {
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
-        Q(7, 7) = 1E-6;
-        Q(8, 8) = 1E-6;
-        Q(9, 9) = 1E-6;
-        Q(10, 10) = 1E-8;
-        Q(11, 11) = 1E-8;
-        Q(12, 12) = 1E-8;
+        static const unsigned NQ(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::Q_SIZE);
+        Q(NQ - 6, NQ - 6) = Q(NQ - 5, NQ - 5) = Q(NQ - 4, NQ - 4) = 1E-6; // for accelerometer bias drift
+        Q(NQ - 3, NQ - 3) = Q(NQ - 2, NQ - 2) = Q(NQ - 1, NQ - 1) = 1E-8; // for gyro bias drift
         ins_gps->getFilter().setQ(Q);
       }
 
@@ -1240,14 +1243,14 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
   
   public:
-    NAV &correct(const GPS_UBLOX_3D<float_sylph_t> &gps){
+    NAV &correct(const G_Packet &gps){
       ins_gps->correct(gps);
       return *this;
     }
 
   protected:
     NAV &correct_ins_gps(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         void *){
@@ -1257,7 +1260,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
     template <class FloatT, class Filter, class FINS>
     NAV &correct_ins_gps(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *){
@@ -1267,7 +1270,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
   public:
     NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       return correct_ins_gps(gps, lever_arm_b, omega_b2i_4b, ins_gps);
@@ -1286,7 +1289,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
   public:
     NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const float_sylph_t &advanceT){
       if(setup_correct(advanceT, ins_gps)){
         return correct(gps);
@@ -1296,7 +1299,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
 
     NAV &correct(
-        const GPS_UBLOX_3D<float_sylph_t> &gps,
+        const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         const float_sylph_t &advanceT){
@@ -1591,12 +1594,6 @@ class StreamProcessor
 
     /**
      * G page (u-blox)
-     *
-     * Extract the following data.
-     * {class, id} = {0x01, 0x02} : position
-     * {class, id} = {0x01, 0x03} : status
-     * {class, id} = {0x01, 0x06} : solution
-     * {class, id} = {0x01, 0x12} : velocity
      */
     struct GHandler : public G_Observer_t  {
       bool previous_seek_next;
@@ -1614,77 +1611,100 @@ class StreamProcessor
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
+
+      /**
+       * Extract the following data.
+       * {class, id} = {0x01, 0x02} : position
+       * {class, id} = {0x01, 0x03} : status
+       * {class, id} = {0x01, 0x06} : solution
+       * {class, id} = {0x01, 0x12} : velocity
+       */
+      void check_nav(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        switch(packet_type.mid){
+          case 0x02: { // NAV-POSLLH
+            G_Observer_t::position_t
+              position(observer.fetch_position());
+            G_Observer_t::position_acc_t
+              position_acc(observer.fetch_position_acc());
+
+            //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
+
+            itow_ms_0x0102 = observer.fetch_ITOW_ms();
+
+            packet_latest.llh[0] = position.latitude;
+            packet_latest.llh[1] = position.longitude;
+            packet_latest.llh[2] = position.altitude;
+            packet_latest.acc_2d = position_acc.horizontal;
+            packet_latest.acc_v = position_acc.vertical;
+
+            break;
+          }
+          case 0x03: { // NAV-STATUS
+            G_Observer_t::status_t status(observer.fetch_status());
+            gps_status = status.fix_type;
+            return;
+          }
+          case 0x06: { // NAV-SOL
+            G_Observer_t::solution_t solution(observer.fetch_solution());
+            if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
+              week_number = solution.week;
+            }
+            return;
+          }
+          case 0x12: { // NAV-VELNED
+            G_Observer_t::velocity_t
+                velocity(observer.fetch_velocity());
+            G_Observer_t::velocity_acc_t
+                velocity_acc(observer.fetch_velocity_acc());
+
+            //cerr << "G_Arrive 0x12 : " << current_itow << " =? " << packet.itow << endl;
+
+            itow_ms_0x0112 = observer.fetch_ITOW_ms();
+
+            packet_latest.vel_ned[0] = velocity.north;
+            packet_latest.vel_ned[1] = velocity.east;
+            packet_latest.vel_ned[2] = velocity.down;
+            packet_latest.acc_vel = velocity_acc.acc;
+
+            break;
+          }
+          default: return;
+        }
+
+        // this flow is only available when 0x0102 or 0x0112
+        if(itow_ms_0x0102 == itow_ms_0x0112){
+          packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
+          packet_updated = true;
+        }
+      }
+      /**
+       * Extract the following data.
+       * {class, id} = {0x02, 0x10} : raw measurement (pseudorange, carrier, doppler)
+       * {class, id} = {0x02, 0x11} : subframe
+       * {class, id} = {0x02, 0x31} : ephemeris
+       */
+      void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        switch(packet_type.mid){
+          case 0x10: { // RXM-RAW
+            return;
+          }
+          case 0x11: { // RXM-SFRB
+            return;
+          }
+          case 0x31: { // RXM-EPH
+            return;
+          }
+          default: return;
+        }
+      }
+
       void operator()(const G_Observer_t &observer){
         if(!observer.validate()){return;}
 
-        bool change_itow(false);
-        G_Observer_t::packet_type_t
-            packet_type(observer.packet_type());
+        G_Observer_t::packet_type_t packet_type(observer.packet_type());
         switch(packet_type.mclass){
-          case 0x01: {
-            switch(packet_type.mid){
-              case 0x02: { // NAV-POSLLH
-                G_Observer_t::position_t
-                  position(observer.fetch_position());
-                G_Observer_t::position_acc_t
-                  position_acc(observer.fetch_position_acc());
-
-                //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
-
-                itow_ms_0x0102 = observer.fetch_ITOW_ms();
-                change_itow = true;
-
-                packet_latest.llh[0] = position.latitude;
-                packet_latest.llh[1] = position.longitude;
-                packet_latest.llh[2] = position.altitude;
-                packet_latest.acc_2d = position_acc.horizontal;
-                packet_latest.acc_v = position_acc.vertical;
-
-                break;
-              }
-              case 0x03: { // NAV-STATUS
-                G_Observer_t::status_t status(observer.fetch_status());
-                gps_status = status.fix_type;
-                break;
-              }
-              case 0x06: { // NAV-SOL
-                G_Observer_t::solution_t solution(observer.fetch_solution());
-                if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
-                  week_number = solution.week;
-                }
-                break;
-              }
-              case 0x12: { // NAV-VELNED
-                G_Observer_t::velocity_t
-                    velocity(observer.fetch_velocity());
-                G_Observer_t::velocity_acc_t
-                    velocity_acc(observer.fetch_velocity_acc());
-
-                //cerr << "G_Arrive 0x12 : " << current_itow << " =? " << packet.itow << endl;
-
-                itow_ms_0x0112 = observer.fetch_ITOW_ms();
-                change_itow = true;
-
-                packet_latest.vel_ned[0] = velocity.north;
-                packet_latest.vel_ned[1] = velocity.east;
-                packet_latest.vel_ned[2] = velocity.down;
-                packet_latest.acc_vel = velocity_acc.acc;
-
-                break;
-              }
-            }
-            break;
-          }
-          case 0x02: {
-            break;
-          }
-          default:
-            break;
-        }
-
-        if(change_itow && (itow_ms_0x0102 == itow_ms_0x0112)){
-          packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
-          packet_updated = true;
+          case 0x01: check_nav(observer, packet_type); break;
+          case 0x02: check_rxm(observer, packet_type); break;
         }
       }
     } g_handler;
@@ -2038,13 +2058,13 @@ class Status{
           }
           omega_b2i_4n /= (sizeof(gyro_storage) / sizeof(gyro_storage[0]));
           nav.correct(
-              g_packet.convert(), 
+              g_packet,
               current_processor->lever_arm,
               omega_b2i_4n,
               gps_advance);
         }else{ // When do not use lever arm effect.
           nav.correct(
-              g_packet.convert(),
+              g_packet,
               gps_advance);
         }
         if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
