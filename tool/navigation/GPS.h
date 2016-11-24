@@ -767,32 +767,36 @@ class GPS_SpaceNode {
          */
         bool select_ephemeris(const gps_time_t &target_time){
 
-          // check possibility of more appropriate one
-          if(!(eph_current->maybe_newer_one_avilable(target_time))){return true;}
+          bool is_valid(eph_current->is_valid(target_time));
+
+          // check both validity and possibility of more appropriate one
+          if(is_valid){
+            if(!(eph_current->maybe_newer_one_avilable(target_time))){return true;}
+          }
+
+          typename eph_list_t::iterator it, it_last;
 
           if(gps_time_t(eph_current->WN, eph_current->t_oc) >= target_time){
             // find newer
-            for(typename eph_list_t::iterator it(eph_current.advance());
-                it != eph_list.end();
-                ++it){
-              if(!(it->maybe_newer_one_avilable(target_time))){
-                eph_current = it;
-                break;
-              }
-            }
+            it = eph_current.advance();
+            it_last = eph_list.end();
           }else{
             // find older
-            for(typename eph_list_t::reverse_iterator it(eph_current);
-                it != eph_list.rend();
-                ++it){
+            it = eph_list.begin();
+            it_last = eph_current;
+          }
+
+          for( ; it != it_last; ++it){
+            if(it->is_valid(target_time)){
+              eph_current = it; // select the latest even if it is not the best.
+              is_valid = true;
               if(!(it->maybe_newer_one_avilable(target_time))){
-                eph_current = it;
                 break;
               }
             }
           }
 
-          return eph_current->is_valid();
+          return is_valid;
         }
 
         const Ephemeris &ephemeris() {return *eph_current;}
