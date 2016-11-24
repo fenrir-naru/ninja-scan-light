@@ -34,10 +34,8 @@
  *
  */
 
-#include <algorithm>
 #include <utility>
 #include <vector>
-#include <map>
 #include <exception>
 
 #include <cmath>
@@ -60,7 +58,6 @@ class GPS_SinglePositioning {
     typedef typename space_node_t::llh_t llh_t;
     typedef typename space_node_t::enu_t enu_t;
 
-    typedef std::map<int, std::vector<ephemeris_t> > sat_eph_list_t;
     typedef std::pair<FloatT, gps_time_t> range_time_t;
 
     struct sat_range_t : public std::vector<std::pair<int, FloatT> > {
@@ -80,22 +77,16 @@ class GPS_SinglePositioning {
 
   protected:
     space_node_t _space_node;
-    sat_eph_list_t sat_eph_list;
 
-    bool _ephemeris_lock;
     bool _valid_iono_param;
 
   public:
     GPS_SinglePositioning()
-        : _space_node(), sat_eph_list(),
-          _ephemeris_lock(false), _valid_iono_param(false) {}
+        : _space_node(),
+          _valid_iono_param(false) {}
     ~GPS_SinglePositioning(){}
 
     space_node_t &space_node(){return _space_node;}
-
-    bool lock_ephemeris(bool flag){
-      return _ephemeris_lock = flag;
-    }
 
     bool valid_iono_param(bool flag){
       return _valid_iono_param = flag;
@@ -184,52 +175,6 @@ class GPS_SinglePositioning {
           }
         }
       }
-    }
-
-  protected:
-    struct ephemeris_comparator {
-      const gps_time_t &_t;
-      ephemeris_comparator(const gps_time_t &t) : _t(t) {}
-      bool operator()(
-          const ephemeris_t &eph1,
-          const ephemeris_t &eph2){
-        return std::fabs(eph1.period_from_time_of_clock(_t)) < std::fabs(eph2.period_from_time_of_clock(_t));
-      }
-    };
-
-  public:
-    /**
-     * Select appropriate ephemeris within registered ones.
-     *
-     * @param prn satellite prn
-     * @param target_time time at measurement
-     * @return if true, appropriate ephemeris is selected, otherwise, not selected.
-     */
-    bool update_ephemeris(const int &prn, const gps_time_t &target_time){
-
-      // If no previous ephemeris, or possibility of newer one, then update.
-      bool available(false);
-      bool search_ephemeris(true);
-      if(_space_node.has_satellite(prn)){
-        satellite_t &sat(_space_node.satellite(prn));
-        available = sat.ephemeris().is_valid();
-        if(!sat.ephemeris().maybe_newer_one_avilable(target_time)){
-          search_ephemeris = false;
-        }
-      }
-
-      // Check ephemeris
-      if(search_ephemeris && (sat_eph_list.find(prn) != sat_eph_list.end())){
-        ephemeris_t &eph(_space_node.satellite(prn).ephemeris());
-
-        // Select appropriate ephemeris
-        eph = *std::min_element(
-            sat_eph_list[prn].begin(), sat_eph_list[prn].end(), ephemeris_comparator(target_time));
-
-        available = eph.is_valid();
-      }
-
-      return available;
     }
 
     struct user_pvt_t {
@@ -429,33 +374,5 @@ class GPS_SinglePositioning {
             const sat_range_t &sat_range,
             const gps_time_t &target_time) const {
       return solve_user_position(sat_range, target_time, xyz_t(), 0, false);
-    }
-
-    /**
-     * Add new ephemeris
-     *
-     * @param eph ephemeris
-     */
-    void register_epehemris(const ephemeris_t &eph){
-
-      if(_ephemeris_lock){return;}
-
-      // sort in accordance with PRN, time
-      if(sat_eph_list[eph.svid].empty()){
-        sat_eph_list[eph.svid].push_back(eph);
-      }else{
-        for(typename sat_eph_list_t::mapped_type::reverse_iterator it(sat_eph_list[eph.svid].rbegin());
-            it != sat_eph_list[eph.svid].rend();
-            ++it){
-          if(gps_time_t(eph.WN, eph.t_oc) >= gps_time_t(it->WN, it->t_oc)){
-            if(eph.t_oc != it->t_oc){
-              sat_eph_list[eph.svid].insert(it.base(), eph);
-            }else{
-              (*it) = eph;
-            }
-            break;
-          }
-        }
-      }
     }
 };
