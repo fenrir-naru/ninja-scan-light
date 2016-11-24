@@ -76,6 +76,11 @@ class GPS_SinglePositioning {
         void push_back(const int &sat, const FloatT &range, const FloatT &rate){
           push_back(super_t::value_type(sat, super_t::value_type::second_type(range, rate)));
         }
+        sat_range_rate_t(const sat_range_t &sat_range) : super_t() {
+          for(typename sat_range_t::const_iterator it(sat_range.begin()); it != sat_range.end(); ++it){
+            push_back(it->first, it->second, 0);
+          }
+        }
     };
 
   protected:
@@ -359,11 +364,10 @@ class GPS_SinglePositioning {
         const FloatT &receiver_error_init,
         const bool &good_init = true) const {
 
-      sat_range_rate_t sat_range_rate;
-      for(typename sat_range_t::const_iterator it(sat_range.begin()); it != sat_range.end(); ++it){
-        sat_range_rate.push_back(it->first, it->second, 0);
-      }
-      return solve_user_pvt(sat_range_rate, target_time, user_position_init, receiver_error_init, good_init, false);
+      return solve_user_pvt(
+          sat_range_rate_t(sat_range), target_time,
+          user_position_init, receiver_error_init,
+          good_init, false);
     }
 
     /**
