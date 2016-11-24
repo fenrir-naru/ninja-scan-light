@@ -1594,12 +1594,6 @@ class StreamProcessor
 
     /**
      * G page (u-blox)
-     *
-     * Extract the following data.
-     * {class, id} = {0x01, 0x02} : position
-     * {class, id} = {0x01, 0x03} : status
-     * {class, id} = {0x01, 0x06} : solution
-     * {class, id} = {0x01, 0x12} : velocity
      */
     struct GHandler : public G_Observer_t  {
       bool previous_seek_next;
@@ -1617,77 +1611,100 @@ class StreamProcessor
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
+
+      /**
+       * Extract the following data.
+       * {class, id} = {0x01, 0x02} : position
+       * {class, id} = {0x01, 0x03} : status
+       * {class, id} = {0x01, 0x06} : solution
+       * {class, id} = {0x01, 0x12} : velocity
+       */
+      void check_nav(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        switch(packet_type.mid){
+          case 0x02: { // NAV-POSLLH
+            G_Observer_t::position_t
+              position(observer.fetch_position());
+            G_Observer_t::position_acc_t
+              position_acc(observer.fetch_position_acc());
+
+            //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
+
+            itow_ms_0x0102 = observer.fetch_ITOW_ms();
+
+            packet_latest.llh[0] = position.latitude;
+            packet_latest.llh[1] = position.longitude;
+            packet_latest.llh[2] = position.altitude;
+            packet_latest.acc_2d = position_acc.horizontal;
+            packet_latest.acc_v = position_acc.vertical;
+
+            break;
+          }
+          case 0x03: { // NAV-STATUS
+            G_Observer_t::status_t status(observer.fetch_status());
+            gps_status = status.fix_type;
+            return;
+          }
+          case 0x06: { // NAV-SOL
+            G_Observer_t::solution_t solution(observer.fetch_solution());
+            if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
+              week_number = solution.week;
+            }
+            return;
+          }
+          case 0x12: { // NAV-VELNED
+            G_Observer_t::velocity_t
+                velocity(observer.fetch_velocity());
+            G_Observer_t::velocity_acc_t
+                velocity_acc(observer.fetch_velocity_acc());
+
+            //cerr << "G_Arrive 0x12 : " << current_itow << " =? " << packet.itow << endl;
+
+            itow_ms_0x0112 = observer.fetch_ITOW_ms();
+
+            packet_latest.vel_ned[0] = velocity.north;
+            packet_latest.vel_ned[1] = velocity.east;
+            packet_latest.vel_ned[2] = velocity.down;
+            packet_latest.acc_vel = velocity_acc.acc;
+
+            break;
+          }
+          default: return;
+        }
+
+        // this flow is only available when 0x0102 or 0x0112
+        if(itow_ms_0x0102 == itow_ms_0x0112){
+          packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
+          packet_updated = true;
+        }
+      }
+      /**
+       * Extract the following data.
+       * {class, id} = {0x02, 0x10} : raw measurement (pseudorange, carrier, doppler)
+       * {class, id} = {0x02, 0x11} : subframe
+       * {class, id} = {0x02, 0x31} : ephemeris
+       */
+      void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        switch(packet_type.mid){
+          case 0x10: { // RXM-RAW
+            return;
+          }
+          case 0x11: { // RXM-SFRB
+            return;
+          }
+          case 0x31: { // RXM-EPH
+            return;
+          }
+          default: return;
+        }
+      }
+
       void operator()(const G_Observer_t &observer){
         if(!observer.validate()){return;}
 
-        bool change_itow(false);
-        G_Observer_t::packet_type_t
-            packet_type(observer.packet_type());
+        G_Observer_t::packet_type_t packet_type(observer.packet_type());
         switch(packet_type.mclass){
-          case 0x01: {
-            switch(packet_type.mid){
-              case 0x02: { // NAV-POSLLH
-                G_Observer_t::position_t
-                  position(observer.fetch_position());
-                G_Observer_t::position_acc_t
-                  position_acc(observer.fetch_position_acc());
-
-                //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
-
-                itow_ms_0x0102 = observer.fetch_ITOW_ms();
-                change_itow = true;
-
-                packet_latest.llh[0] = position.latitude;
-                packet_latest.llh[1] = position.longitude;
-                packet_latest.llh[2] = position.altitude;
-                packet_latest.acc_2d = position_acc.horizontal;
-                packet_latest.acc_v = position_acc.vertical;
-
-                break;
-              }
-              case 0x03: { // NAV-STATUS
-                G_Observer_t::status_t status(observer.fetch_status());
-                gps_status = status.fix_type;
-                break;
-              }
-              case 0x06: { // NAV-SOL
-                G_Observer_t::solution_t solution(observer.fetch_solution());
-                if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
-                  week_number = solution.week;
-                }
-                break;
-              }
-              case 0x12: { // NAV-VELNED
-                G_Observer_t::velocity_t
-                    velocity(observer.fetch_velocity());
-                G_Observer_t::velocity_acc_t
-                    velocity_acc(observer.fetch_velocity_acc());
-
-                //cerr << "G_Arrive 0x12 : " << current_itow << " =? " << packet.itow << endl;
-
-                itow_ms_0x0112 = observer.fetch_ITOW_ms();
-                change_itow = true;
-
-                packet_latest.vel_ned[0] = velocity.north;
-                packet_latest.vel_ned[1] = velocity.east;
-                packet_latest.vel_ned[2] = velocity.down;
-                packet_latest.acc_vel = velocity_acc.acc;
-
-                break;
-              }
-            }
-            break;
-          }
-          case 0x02: {
-            break;
-          }
-          default:
-            break;
-        }
-
-        if(change_itow && (itow_ms_0x0102 == itow_ms_0x0112)){
-          packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
-          packet_updated = true;
+          case 0x01: check_nav(observer, packet_type); break;
+          case 0x02: check_rxm(observer, packet_type); break;
         }
       }
     } g_handler;
