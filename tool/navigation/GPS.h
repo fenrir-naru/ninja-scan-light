@@ -370,14 +370,8 @@ class GPS_SpaceNode {
      * 
      */
     struct IonosphericDelayCoef {
-      FloatT alpha0;       ///< Ionospheric parameter (s)
-      FloatT alpha1;       ///< Ionospheric parameter (s/sc)
-      FloatT alpha2;       ///< Ionospheric parameter (s/sc^2)
-      FloatT alpha3;       ///< Ionospheric parameter (s/sc^3)
-      FloatT beta0;        ///< Ionospheric parameter (s)
-      FloatT beta1;        ///< Ionospheric parameter (s/sc)
-      FloatT beta2;        ///< Ionospheric parameter (s/sc^2)
-      FloatT beta3;        ///< Ionospheric parameter (s/sc^3)
+      FloatT alpha[4];     ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
+      FloatT beta[4];      ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
       FloatT A1;           ///< UTC parameter (s/s)
       FloatT A0;           ///< UTC parameter (s)
       FloatT t_ot;         ///< Epoch time (UTC) (s)
@@ -409,19 +403,21 @@ class GPS_SpaceNode {
           IonosphericDelayCoef converted;
 #define CONVERT(TARGET, SF) \
 {converted.TARGET = SF * TARGET;}
+#define CONVERT2(dst, src, sf) \
+{converted.dst = sf * src;}
 #define POWER_2(n) \
 (((n) >= 0) \
   ? (FloatT)(1 << (n)) \
   : (((FloatT)1) / (1 << (-(n) >= 30 ? 30 : -(n))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
-            CONVERT(alpha0,     POWER_2(-30));
-            CONVERT(alpha1,     POWER_2(-27));
-            CONVERT(alpha2,     POWER_2(-24));
-            CONVERT(alpha3,     POWER_2(-24));
-            CONVERT(beta0,      POWER_2( 11));
-            CONVERT(beta1,      POWER_2( 14));
-            CONVERT(beta2,      POWER_2( 16));
-            CONVERT(beta3,      POWER_2( 16));
+            CONVERT2(alpha[0], alpha0, POWER_2(-30));
+            CONVERT2(alpha[1], alpha1, POWER_2(-27));
+            CONVERT2(alpha[2], alpha2, POWER_2(-24));
+            CONVERT2(alpha[3], alpha3, POWER_2(-24));
+            CONVERT2(beta[0],  beta0,  POWER_2( 11));
+            CONVERT2(beta[1],  beta1,  POWER_2( 14));
+            CONVERT2(beta[2],  beta2,  POWER_2( 16));
+            CONVERT2(beta[3],  beta3,  POWER_2( 16));
             CONVERT(A1,         POWER_2(-50));
             CONVERT(A0,         POWER_2(-30));
             CONVERT(t_ot,       12E0);
@@ -1034,16 +1030,10 @@ class GPS_SpaceNode {
       
       // Period and amplitude of cosine function
       FloatT amp(0), per(0);
-      const FloatT *alpha[] = {
-          &(_iono_coef.alpha0), &(_iono_coef.alpha1),
-          &(_iono_coef.alpha2), &(_iono_coef.alpha3)};
-      const FloatT *beta[] = {
-          &(_iono_coef.beta0), &(_iono_coef.beta1),
-          &(_iono_coef.beta2), &(_iono_coef.beta3)};
       FloatT phi_mn(1.);
       for(int i(0); i < 4; i++){
-        amp += *(alpha[i]) * phi_mn;
-        per += *(beta[i]) * phi_mn;
+        amp += _iono_coef.alpha[i] * phi_mn;
+        per += _iono_coef.beta[i] * phi_mn;
         phi_mn *= phi_m;
       }
       if(amp < 0){amp = 0;}
