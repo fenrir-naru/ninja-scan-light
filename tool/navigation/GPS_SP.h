@@ -55,7 +55,6 @@ class GPS_SinglePositioning {
     typedef GPS_SpaceNode<FloatT> space_node_t;
     typedef typename space_node_t::gps_time_t gps_time_t;
     typedef typename space_node_t::Satellite satellite_t;
-    typedef typename satellite_t::Ephemeris ephemeris_t;
 
     typedef typename space_node_t::xyz_t xyz_t;
     typedef typename space_node_t::llh_t llh_t;
@@ -84,21 +83,15 @@ class GPS_SinglePositioning {
     };
 
   protected:
-    space_node_t _space_node;
-
-    bool _valid_iono_param;
+    const space_node_t &_space_node;
 
   public:
-    GPS_SinglePositioning()
-        : _space_node(),
-          _valid_iono_param(false) {}
+    GPS_SinglePositioning(const space_node_t &sn)
+        : _space_node(sn) {}
+
     ~GPS_SinglePositioning(){}
 
-    space_node_t &space_node(){return _space_node;}
-
-    bool valid_iono_param(bool flag){
-      return _valid_iono_param = flag;
-    }
+    const space_node_t &space_node(){return _space_node;}
 
   protected:
     struct geometric_matrices_t {
@@ -138,8 +131,7 @@ class GPS_SinglePositioning {
           ++it, ++i){
 
         FloatT range(it->second.first);
-        satellite_t &sat(
-            const_cast<space_node_t *>(&_space_node)->satellite(it->first));
+        const satellite_t &sat(_space_node.satellite(it->first));
 
         // Temporal geometry range
         mat.delta_r(i, 0) = range - receiver_error;
@@ -188,7 +180,6 @@ class GPS_SinglePositioning {
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
-        ERROR_INVALID_IONO_PARAMS,
         ERROR_INSUFFICIENT_SATELLITES,
         ERROR_POSITION,
         ERROR_VELOCITY,
@@ -226,11 +217,6 @@ class GPS_SinglePositioning {
         const bool &with_velocity = true) const {
 
       user_pvt_t res;
-
-      if(!_valid_iono_param){
-        res.error_code = user_pvt_t::ERROR_INVALID_IONO_PARAMS;
-        return res;
-      }
 
       sat_range_rate_t available_sat_range_rate;
 
@@ -309,8 +295,8 @@ class GPS_SinglePositioning {
           int prn(it->first);
 
           // Calculate satellite velocity
-          xyz_t sat_vel(const_cast<space_node_t *>(&_space_node)->satellite(prn)
-              .velocity(target_time - receiver_error / space_node_t::light_speed, it->second.first));
+          xyz_t sat_vel(_space_node.satellite(prn).velocity(
+              target_time - receiver_error / space_node_t::light_speed, it->second.first));
 
           // Update range rate by subtracting LOS satellite velocity with design matrix G
           range_rate(i, 0) = it->second.second
