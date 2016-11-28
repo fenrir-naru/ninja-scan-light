@@ -180,6 +180,7 @@ class GPS_SinglePositioning {
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
+        ERROR_IONO_PARAMS_INVALID,
         ERROR_INSUFFICIENT_SATELLITES,
         ERROR_POSITION,
         ERROR_VELOCITY,
@@ -217,6 +218,11 @@ class GPS_SinglePositioning {
         const bool &with_velocity = true) const {
 
       user_pvt_t res;
+
+      if(!_space_node.is_valid_iono_utc()){
+        res.error_code = user_pvt_t::ERROR_IONO_PARAMS_INVALID;
+        return res;
+      }
 
       sat_range_rate_t available_sat_range_rate;
 
