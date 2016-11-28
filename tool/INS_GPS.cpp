@@ -1349,15 +1349,40 @@ class StreamProcessor
             G_Observer_t::subframe_t subframe(observer.fetch_subframe());
             if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
               G_Packet::iono_utc_t::raw_t raw;
-              raw.alpha0 = (signed char)subframe.bits2u8_align( 68, 8);
-              raw.alpha1 = (signed char)subframe.bits2u8_align( 76, 8);
-              raw.alpha2 = (signed char)subframe.bits2u8_align( 90, 8);
-              raw.alpha3 = (signed char)subframe.bits2u8_align( 98, 8);
-              raw.beta0  = (signed char)subframe.bits2u8_align(106, 8);
-              raw.beta1  = (signed char)subframe.bits2u8_align(120, 8);
-              raw.beta2  = (signed char)subframe.bits2u8_align(128, 8);
-              raw.beta3  = (signed char)subframe.bits2u8_align(136, 8);
-              // TODO UTC parameter extraction
+#define get8(index) (subframe.bits2u8_align(index, 8))
+              { // IONO parameter
+                raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
+                raw.alpha1 = (G_Observer_t::s8_t)get8( 76);
+                raw.alpha2 = (G_Observer_t::s8_t)get8( 90);
+                raw.alpha3 = (G_Observer_t::s8_t)get8( 98);
+                raw.beta0  = (G_Observer_t::s8_t)get8(106);
+                raw.beta1  = (G_Observer_t::s8_t)get8(120);
+                raw.beta2  = (G_Observer_t::s8_t)get8(128);
+                raw.beta3  = (G_Observer_t::s8_t)get8(136);
+              }
+              { // UTC parameter
+                {
+                  G_Observer_t::u32_t buf(get8(150));
+                  if(buf & 0x80){buf |= 0xFF00;}
+                  buf <<= 8; buf |= get8(158);
+                  buf <<= 8; buf |= get8(166);
+                  raw.A1 = (G_Observer_t::s32_t)buf;
+                }
+                {
+                  G_Observer_t::u32_t buf(get8(180)); buf <<= 8;
+                  buf |= get8(188); buf <<= 8;
+                  buf |= get8(196); buf <<= 8;
+                  buf |= get8(210);
+                  raw.A0 = (G_Observer_t::s32_t)buf;
+                }
+                raw.t_ot = get8(218);
+                raw.WN_t = get8(226);
+                raw.delte_t_LS = (G_Observer_t::s8_t)get8(240);
+                raw.WN_LSF = get8(248);
+                raw.DN = get8(256);
+                raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
+              }
+#undef get8
             }
             return;
           }

@@ -374,12 +374,12 @@ class GPS_SpaceNode {
       FloatT beta[4];      ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
       FloatT A1;           ///< UTC parameter (s/s)
       FloatT A0;           ///< UTC parameter (s)
-      FloatT t_ot;         ///< Epoch time (UTC) (s)
+      uint_t t_ot;         ///< Epoch time (UTC) (s)
       uint_t WN_t;         ///< Epoch time (UTC) (weeks)
-      FloatT delte_t_LS;   ///< Current leap seconds (s)
+      int_t delte_t_LS;   ///< Current leap seconds (s)
       uint_t WN_LSF;       ///< Last leap second update week (weeks)
       uint_t DN;           ///< Last leap second update day (days)
-      uint_t delta_t_LSF;  ///< Updated leap seconds (s)
+      int_t delta_t_LSF;  ///< Updated leap seconds (s)
 
       struct raw_t {
         s8_t  alpha0;       ///< Ionospheric parameter (-30, s)
@@ -394,10 +394,10 @@ class GPS_SpaceNode {
         s32_t A0;           ///< UTC parameter (-30, s)
         u8_t  t_ot;         ///< Epoch time (UTC) (12, s)
         u8_t  WN_t;         ///< Epoch time (UTC) (weeks)
-        u8_t  delte_t_LS;   ///< Current leap seconds (s)
+        s8_t  delte_t_LS;   ///< Current leap seconds (s)
         u8_t  WN_LSF;       ///< Last leap second update week (weeks)
         u8_t  DN;           ///< Last leap second update day (days)
-        u8_t  delta_t_LSF;  ///< Updated leap seconds (s)
+        s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
         
         operator Ionospheric_UTC_Parameters() const {
           Ionospheric_UTC_Parameters converted;
@@ -422,7 +422,7 @@ class GPS_SpaceNode {
             CONVERT(A0,         POWER_2(-30));
             CONVERT(t_ot,       POWER_2(12));
             converted.WN_t = WN_t;
-            CONVERT(delte_t_LS, 1E0)
+            converted.delte_t_LS = delte_t_LS;
             converted.WN_LSF = WN_LSF;
             converted.DN = DN;
             converted.delta_t_LSF = delta_t_LSF;
