@@ -140,7 +140,7 @@ class GPS_SinglePositioning {
         mat.delta_r(i, 0) += sat.clock_error(target_time_est, mat.delta_r(i, 0)) * space_node_t::light_speed;
 
         // Calculate satellite position
-        xyz_t sat_position(sat.whereis(target_time_est, mat.delta_r(i, 0)));
+        xyz_t sat_position(sat.position(target_time_est, mat.delta_r(i, 0)));
         FloatT range_est(user_position.dist(sat_position));
 
         // Calculate residual

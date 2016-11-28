@@ -366,21 +366,21 @@ class GPS_SpaceNode {
     typedef unsigned int uint_t;
   public:
     /**
-     * GPS Ionospheric correction parameters
+     * GPS Ionospheric correction and UTC parameters
      * 
      */
-    struct IonosphericDelayCoef {
+    struct Ionospheric_UTC_Parameters {
       FloatT alpha[4];     ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
       FloatT beta[4];      ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
       FloatT A1;           ///< UTC parameter (s/s)
       FloatT A0;           ///< UTC parameter (s)
       FloatT t_ot;         ///< Epoch time (UTC) (s)
-      uint_t wn_t;         ///< Epoch time (UTC) (weeks)
+      uint_t WN_t;         ///< Epoch time (UTC) (weeks)
       FloatT delte_t_LS;   ///< Current leap seconds (s)
-      uint_t wn_LSF;       ///< Last leap second update week (weeks)
+      uint_t WN_LSF;       ///< Last leap second update week (weeks)
       uint_t DN;           ///< Last leap second update day (days)
       uint_t delta_t_LSF;  ///< Updated leap seconds (s)
-      
+
       struct raw_t {
         s8_t  alpha0;       ///< Ionospheric parameter (-30, s)
         s8_t  alpha1;       ///< Ionospheric parameter (-27, s/sc)
@@ -392,15 +392,15 @@ class GPS_SpaceNode {
         s8_t  beta3;        ///< Ionospheric parameter (16, s/sc^3)
         s32_t A1;           ///< UTC parameter (-50, s/s)
         s32_t A0;           ///< UTC parameter (-30, s)
-        u8_t  t_ot;         ///< Epoch time (UTC) (12E0, s)
+        u8_t  t_ot;         ///< Epoch time (UTC) (12, s)
         u8_t  WN_t;         ///< Epoch time (UTC) (weeks)
         u8_t  delte_t_LS;   ///< Current leap seconds (s)
         u8_t  WN_LSF;       ///< Last leap second update week (weeks)
         u8_t  DN;           ///< Last leap second update day (days)
         u8_t  delta_t_LSF;  ///< Updated leap seconds (s)
         
-        IonosphericDelayCoef convert() const {
-          IonosphericDelayCoef converted;
+        operator Ionospheric_UTC_Parameters() const {
+          Ionospheric_UTC_Parameters converted;
 #define CONVERT(TARGET, SF) \
 {converted.TARGET = SF * TARGET;}
 #define CONVERT2(dst, src, sf) \
@@ -420,7 +420,7 @@ class GPS_SpaceNode {
             CONVERT2(beta[3],  beta3,  POWER_2( 16));
             CONVERT(A1,         POWER_2(-50));
             CONVERT(A0,         POWER_2(-30));
-            CONVERT(t_ot,       12E0);
+            CONVERT(t_ot,       POWER_2(12));
             converted.WN_t = WN_t;
             CONVERT(delte_t_LS, 1E0)
             converted.WN_LSF = WN_LSF;
@@ -566,7 +566,7 @@ class GPS_SpaceNode {
               }
             }
 
-            Ephemeris convert() const {
+            operator Ephemeris() const {
               Ephemeris converted;
 #define CONVERT(TARGET, SF) \
 {converted.TARGET = SF * TARGET;}
@@ -694,7 +694,7 @@ class GPS_SpaceNode {
             u16_t a_f0;         ///< Clock corr. param. (-20, s)
             u16_t a_f1;         ///< Clock corr. param. (-38, s)
             
-            Almanac convert() const {
+            operator Almanac() const {
               Almanac converted;
 #define CONVERT(TARGET, SF) \
 {converted.TARGET = SF * TARGET;}
@@ -849,8 +849,8 @@ class GPS_SpaceNode {
         }
         
         struct constellation_t {
-          xyz_t pos;
-          xyz_t vel;
+          xyz_t position;
+          xyz_t velocity;
         };
         
         constellation_t constellation(
@@ -924,9 +924,9 @@ class GPS_SpaceNode {
           FloatT ik_sin(sin(ik)),
                  ik_cos(cos(ik));
           
-          res.pos.x() = xk * Omegak_cos - yk * Omegak_sin * ik_cos;
-          res.pos.y() = xk * Omegak_sin + yk * Omegak_cos * ik_cos;
-          res.pos.z() = yk * ik_sin; 
+          res.position.x() = xk * Omegak_cos - yk * Omegak_sin * ik_cos;
+          res.position.y() = xk * Omegak_sin + yk * Omegak_cos * ik_cos;
+          res.position.z() = yk * ik_sin;
           
           // Velocity calculation => GPS solution vol.8 (3) http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
           if(with_velocity){
@@ -947,38 +947,47 @@ class GPS_SpaceNode {
             
             FloatT Omegak_dot(eph_current->dot_Omega0 - WGS84::Omega_Earth_IAU);
             
-            res.vel.x() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_cos
+            res.velocity.x() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_cos
                 - (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_sin;
-            res.vel.y() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_sin
+            res.velocity.y() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_sin
                 + (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_cos;
-            res.vel.z() = yk_dot * ik_sin + yk * ik_cos * ik_dot;
+            res.velocity.z() = yk_dot * ik_sin + yk * ik_cos * ik_dot;
           }
           
           return res;
         }
         
-        xyz_t whereis(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
-          return constellation(t, pseudo_range, false).pos;
+        xyz_t position(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+          return constellation(t, pseudo_range, false).position;
         }
         
         xyz_t velocity(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
-          return constellation(t, pseudo_range, true).vel;
+          return constellation(t, pseudo_range, true).velocity;
         }
     };
   public:
     typedef std::map<int, Satellite> satellites_t;
   protected:
-    IonosphericDelayCoef _iono_coef;
+    Ionospheric_UTC_Parameters _iono_utc;
+    bool _iono_utc_initialized;
     satellites_t _satellites;
   public:
-    GPS_SpaceNode() : _satellites() {
+    GPS_SpaceNode() : _iono_utc_initialized(false), _satellites() {
     }
     ~GPS_SpaceNode(){
       _satellites.clear();
     }
-    IonosphericDelayCoef &iono_coef() {
-      return _iono_coef;
+    const Ionospheric_UTC_Parameters &iono_utc() const {
+      return _iono_utc;
     }
+    bool is_valid_iono_utc() const {
+      return _iono_utc_initialized;
+    }
+    const Ionospheric_UTC_Parameters &update_iono_utc(const Ionospheric_UTC_Parameters &params) {
+      _iono_utc_initialized = true;
+      return (_iono_utc = params);
+    }
+
     satellites_t &satellites() {
       return _satellites;
     }
@@ -1032,8 +1041,8 @@ class GPS_SpaceNode {
       FloatT amp(0), per(0);
       FloatT phi_mn(1.);
       for(int i(0); i < 4; i++){
-        amp += _iono_coef.alpha[i] * phi_mn;
-        per += _iono_coef.beta[i] * phi_mn;
+        amp += _iono_utc.alpha[i] * phi_mn;
+        per += _iono_utc.beta[i] * phi_mn;
         phi_mn *= phi_m;
       }
       if(amp < 0){amp = 0;}
