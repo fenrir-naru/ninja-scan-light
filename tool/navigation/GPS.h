@@ -420,7 +420,7 @@ class GPS_SpaceNode {
             CONVERT2(beta[3],  beta3,  POWER_2( 16));
             CONVERT(A1,         POWER_2(-50));
             CONVERT(A0,         POWER_2(-30));
-            CONVERT(t_ot,       POWER_2(12));
+            converted.t_ot = ((uint_t)t_ot) << 12;
             converted.WN_t = WN_t;
             converted.delte_t_LS = delte_t_LS;
             converted.WN_LSF = WN_LSF;
