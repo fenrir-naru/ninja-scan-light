@@ -162,6 +162,7 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 #include "navigation/INS_GPS_Synchronization.h"
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/BiasEstimation.h"
+#include "navigation/GPS.h"
 
 #include "navigation/MagneticField.h"
 
@@ -500,6 +501,9 @@ struct G_Packet : public Packet {
   operator GPS_Solution<float_sylph_t>() const {
     return solution;
   }
+
+  typedef GPS_SpaceNode<float_sylph_t> space_node_t;
+  typedef GPS_SpaceNode<float_sylph_t>::Ionospheric_UTC_Parameters iono_utc_t;
 };
 
 /**
@@ -1342,9 +1346,24 @@ class StreamProcessor
             return;
           }
           case 0x11: { // RXM-SFRB
+            G_Observer_t::subframe_t subframe(observer.fetch_subframe());
+            if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
+              G_Packet::iono_utc_t::raw_t raw;
+              raw.alpha0 = (signed char)subframe.bits2u8_align( 68, 8);
+              raw.alpha1 = (signed char)subframe.bits2u8_align( 76, 8);
+              raw.alpha2 = (signed char)subframe.bits2u8_align( 90, 8);
+              raw.alpha3 = (signed char)subframe.bits2u8_align( 98, 8);
+              raw.beta0  = (signed char)subframe.bits2u8_align(106, 8);
+              raw.beta1  = (signed char)subframe.bits2u8_align(120, 8);
+              raw.beta2  = (signed char)subframe.bits2u8_align(128, 8);
+              raw.beta3  = (signed char)subframe.bits2u8_align(136, 8);
+              // TODO UTC parameter extraction
+            }
             return;
           }
           case 0x31: { // RXM-EPH
+            G_Observer_t::ephemeris_t ephemeris(observer.fetch_ephemeris());
+            if(ephemeris.valid){}
             return;
           }
           default: return;
