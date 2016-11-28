@@ -1343,6 +1343,14 @@ class StreamProcessor
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
         switch(packet_type.mid){
           case 0x10: { // RXM-RAW
+            observer.fetch_ITOW();
+            const unsigned int num_of_sv(observer[6 + 6]);
+            for(int i(0); i < num_of_sv; i++){
+              G_Observer_t::raw_measurement_t raw(observer.fetch_raw(i));
+              raw.sv_number;
+              raw.pseudo_range;
+              raw.doppler;
+            }
             return;
           }
           case 0x11: { // RXM-SFRB
@@ -1369,10 +1377,10 @@ class StreamProcessor
                   raw.A1 = (G_Observer_t::s32_t)buf;
                 }
                 {
-                  G_Observer_t::u32_t buf(get8(180)); buf <<= 8;
-                  buf |= get8(188); buf <<= 8;
-                  buf |= get8(196); buf <<= 8;
-                  buf |= get8(210);
+                  G_Observer_t::u32_t buf(get8(180));
+                  buf <<= 8; buf |= get8(188);
+                  buf <<= 8; buf |= get8(196);
+                  buf <<= 8; buf |= get8(210);
                   raw.A0 = (G_Observer_t::s32_t)buf;
                 }
                 raw.t_ot = get8(218);
