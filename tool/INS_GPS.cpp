@@ -1674,6 +1674,12 @@ class StreamProcessor
         // this flow is only available when 0x0102 or 0x0112
         if(itow_ms_0x0102 == itow_ms_0x0112){
           packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
+          if(options.gps_fake_lock){
+            packet_latest.llh[0] = packet_latest.llh[1] = packet_latest.llh[2] = 0;
+            packet_latest.acc_2d = packet_latest.acc_v = 1E+1;
+            packet_latest.vel_ned[0] = packet_latest.vel_ned[1] = packet_latest.vel_ned[2] = 0;
+            packet_latest.acc_vel = 1;
+          }
           packet_updated = true;
         }
       }
@@ -2243,7 +2249,7 @@ void loop(){
         ++it_mu){
       
       current_processor = *it_mu;
-      G_Packet g_packet(current_processor->g_packet);
+      G_Packet &g_packet(current_processor->g_packet);
       current_processor->g_packet_updated = false;
 
       if(!options.is_time_after_start(g_packet.itow, current_processor->g_packet_wn)){ // Time check
@@ -2253,16 +2259,6 @@ void loop(){
       deque<A_Packet> &a_packets(processors.front()->a_packets);
       deque<A_Packet>::iterator it_tu(a_packets.begin()), it_tu_end(a_packets.end());
       const bool a_packet_deque_has_item(it_tu != it_tu_end);
-
-      if(options.gps_fake_lock){
-        if(a_packet_deque_has_item){
-          g_packet.itow = (it_tu_end - 1)->itow;
-        }
-        g_packet.llh[0] = g_packet.llh[1] = g_packet.llh[2] = 0;
-        g_packet.acc_2d = g_packet.acc_v = 1E+1;
-        g_packet.vel_ned[0] = g_packet.vel_ned[1] = g_packet.vel_ned[2] = 0;
-        g_packet.acc_vel = 1;
-      }
     
       // Time update up to the last sample before GPS observation
       for(; 
