@@ -503,7 +503,11 @@ struct G_Packet : public Packet {
   }
 
   typedef GPS_SpaceNode<float_sylph_t> space_node_t;
-  typedef GPS_SpaceNode<float_sylph_t>::Ionospheric_UTC_Parameters iono_utc_t;
+  const space_node_t &space_node;
+
+  G_Packet(const space_node_t &_space_node)
+      : space_node(_space_node) {}
+  ~G_Packet(){}
 };
 
 /**
@@ -1248,6 +1252,11 @@ class StreamProcessor
      */
     struct GHandler : public G_Observer_t  {
       bool previous_seek_next;
+
+      static G_Packet::space_node_t space_node_shared;
+      G_Packet::space_node_t space_node_inidividual;
+      G_Packet::space_node_t &space_node;
+
       G_Packet packet_latest;
       bool packet_updated;
       int itow_ms_0x0102, itow_ms_0x0112;
@@ -1256,7 +1265,10 @@ class StreamProcessor
 
       GHandler()
           : G_Observer_t(buffer_size),
-          packet_latest(), packet_updated(false),
+          space_node_inidividual(),
+          space_node(true ? space_node_inidividual : space_node_shared),
+          packet_latest(space_node),
+          packet_updated(false),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0) {
         previous_seek_next = G_Observer_t::ready();
@@ -1334,6 +1346,91 @@ class StreamProcessor
           packet_updated = true;
         }
       }
+
+      static G_Packet::space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
+          const G_Observer_t::subframe_t &subframe){
+
+        G_Packet::space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
+#define get8(index) (subframe.bits2u8_align(index, 8))
+        { // IONO parameter
+          raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
+          raw.alpha1 = (G_Observer_t::s8_t)get8( 76);
+          raw.alpha2 = (G_Observer_t::s8_t)get8( 90);
+          raw.alpha3 = (G_Observer_t::s8_t)get8( 98);
+          raw.beta0  = (G_Observer_t::s8_t)get8(106);
+          raw.beta1  = (G_Observer_t::s8_t)get8(120);
+          raw.beta2  = (G_Observer_t::s8_t)get8(128);
+          raw.beta3  = (G_Observer_t::s8_t)get8(136);
+        }
+        { // UTC parameter
+          {
+            G_Observer_t::u32_t buf(get8(150));
+            if(buf & 0x80){buf |= 0xFF00;}
+            buf <<= 8; buf |= get8(158);
+            buf <<= 8; buf |= get8(166);
+            raw.A1 = (G_Observer_t::s32_t)buf;
+          }
+          {
+            G_Observer_t::u32_t buf(get8(180));
+            buf <<= 8; buf |= get8(188);
+            buf <<= 8; buf |= get8(196);
+            buf <<= 8; buf |= get8(210);
+            raw.A0 = (G_Observer_t::s32_t)buf;
+          }
+          raw.t_ot = get8(218);
+          raw.WN_t = get8(226); // truncated
+          raw.delte_t_LS = (G_Observer_t::s8_t)get8(240);
+          raw.WN_LSF = get8(248);
+          raw.DN = get8(256); // truncated
+          raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
+        }
+#undef get8
+        return (G_Packet::space_node_t::Ionospheric_UTC_Parameters)raw;
+      }
+
+      static G_Packet::space_node_t::Satellite::Ephemeris convert_ephemeris(
+          const G_Observer_t::ephemeris_t &eph_rxm){
+
+        typedef G_Packet::space_node_t::Satellite::Ephemeris eph_t;
+        eph_t eph;
+#define copy(dst, src) eph.dst = eph_rxm.src;
+        // Subframe.1
+        copy(svid,    sv_number);
+        copy(WN,      wn);          // Week number
+        copy(URA,     ura);         // User range accuracy
+        copy(SV_health, sv_health); // Health status
+        copy(iodc,    iodc);        // Issue of clock data
+        copy(t_GD,    t_gd);        // Group delay (s)
+        copy(t_oc,    t_oc);        // Clock data reference time
+        copy(a_f2,    a_f2);        // Clock correction parameter (s/s^2)
+        copy(a_f1,    a_f1);        // Clock correction parameter (s/s)
+        copy(a_f0,    a_f0);        // Clock correction parameter (s)
+
+        // Subframe.2
+        copy(iode,    iode);        // Issue of ephemeris data
+        copy(c_rs,    c_rs);        // Sine correction, orbit (m)
+        copy(delta_n, delta_n);     // Mean motion difference (rad/s)
+        copy(m0,      m_0);         // Mean anomaly (rad)
+        copy(c_uc,    c_uc);        // Cosine correction, latitude (rad)
+        copy(e,       e);           // Eccentricity
+        copy(c_us,    c_us);        // Sine correction, latitude (rad)
+        copy(sqrt_A,  root_a);      // Square root of semi-major axis (sqrt(m))
+        copy(t_oe,    t_oe);        // Reference time ephemeris (s)
+        eph.fit_interval = eph_t::raw_t::fit_interval(eph_rxm.fit, eph_rxm.iodc); // Fit interval
+
+        // Subframe.3
+        copy(c_ic,    c_ic);        // Cosine correction, inclination (rad)
+        copy(Omega0,  omega_0);     // Longitude of ascending node (rad)
+        copy(c_is,    c_is);        // Sine correction, inclination (rad)
+        copy(i0,      i_0);         // Inclination angle (rad)
+        copy(c_rc,    c_rc);        // Cosine correction, orbit (m)
+        copy(omega,   omega);       // Argument of perigee (rad)
+        copy(dot_Omega0, omega_0_dot); // Rate of right ascension (rad/s)
+        copy(dot_i0,  i_0_dot);      // Rate of inclination angle (rad/s)
+#undef copy
+        return eph;
+      }
+
       /**
        * Extract the following data.
        * {class, id} = {0x02, 0x10} : raw measurement (pseudorange, carrier, doppler)
@@ -1356,47 +1453,21 @@ class StreamProcessor
           case 0x11: { // RXM-SFRB
             G_Observer_t::subframe_t subframe(observer.fetch_subframe());
             if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-              G_Packet::iono_utc_t::raw_t raw;
-#define get8(index) (subframe.bits2u8_align(index, 8))
-              { // IONO parameter
-                raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
-                raw.alpha1 = (G_Observer_t::s8_t)get8( 76);
-                raw.alpha2 = (G_Observer_t::s8_t)get8( 90);
-                raw.alpha3 = (G_Observer_t::s8_t)get8( 98);
-                raw.beta0  = (G_Observer_t::s8_t)get8(106);
-                raw.beta1  = (G_Observer_t::s8_t)get8(120);
-                raw.beta2  = (G_Observer_t::s8_t)get8(128);
-                raw.beta3  = (G_Observer_t::s8_t)get8(136);
-              }
-              { // UTC parameter
-                {
-                  G_Observer_t::u32_t buf(get8(150));
-                  if(buf & 0x80){buf |= 0xFF00;}
-                  buf <<= 8; buf |= get8(158);
-                  buf <<= 8; buf |= get8(166);
-                  raw.A1 = (G_Observer_t::s32_t)buf;
-                }
-                {
-                  G_Observer_t::u32_t buf(get8(180));
-                  buf <<= 8; buf |= get8(188);
-                  buf <<= 8; buf |= get8(196);
-                  buf <<= 8; buf |= get8(210);
-                  raw.A0 = (G_Observer_t::s32_t)buf;
-                }
-                raw.t_ot = get8(218);
-                raw.WN_t = get8(226);
-                raw.delte_t_LS = (G_Observer_t::s8_t)get8(240);
-                raw.WN_LSF = get8(248);
-                raw.DN = get8(256);
-                raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
-              }
-#undef get8
+              G_Packet::space_node_t::Ionospheric_UTC_Parameters iono_utc(
+                  convert_iono_utc(subframe));
+              /*{ // TODO taking account for truncation
+                iono_utc.WN_t;
+                iono_utc.WN_LSF;
+              }*/
+              space_node.update_iono_utc(iono_utc);
             }
             return;
           }
           case 0x31: { // RXM-EPH
-            G_Observer_t::ephemeris_t ephemeris(observer.fetch_ephemeris());
-            if(ephemeris.valid){}
+            G_Observer_t::ephemeris_t eph_rxm(observer.fetch_ephemeris());
+            if(eph_rxm.valid){
+              space_node.satellite(eph_rxm.sv_number).register_epehemris(convert_ephemeris(eph_rxm));
+            }
             return;
           }
           default: return;
@@ -1592,6 +1663,7 @@ class StreamProcessor
 } *current_processor;
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
+G_Packet::space_node_t StreamProcessor::GHandler::space_node_shared = G_Packet::space_node_t();
 
 typedef vector<StreamProcessor *> processors_t;
 processors_t processors;
