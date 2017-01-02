@@ -408,7 +408,7 @@ class GPS_SpaceNode {
 #define POWER_2(n) \
 (((n) >= 0) \
   ? (FloatT)(1 << (n)) \
-  : (((FloatT)1) / (1 << (-(n) >= 30 ? 30 : -(n))) \
+  : (((FloatT)1) / (1 << (-(n) >= 30 ? 30 : ((n) < 0 ? -(n) : 0))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
             CONVERT2(alpha[0], alpha0, POWER_2(-30));
             CONVERT2(alpha[1], alpha1, POWER_2(-27));
