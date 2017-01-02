@@ -393,9 +393,9 @@ class GPS_SpaceNode {
         s32_t A1;           ///< UTC parameter (-50, s/s)
         s32_t A0;           ///< UTC parameter (-30, s)
         u8_t  t_ot;         ///< Epoch time (UTC) (12, s)
-        u8_t  WN_t;         ///< Epoch time (UTC) (weeks)
+        u8_t  WN_t;         ///< Epoch time (UTC) (weeks, truncated)
         s8_t  delte_t_LS;   ///< Current leap seconds (s)
-        u8_t  WN_LSF;       ///< Last leap second update week (weeks)
+        u8_t  WN_LSF;       ///< Last leap second update week (weeks, truncated)
         u8_t  DN;           ///< Last leap second update day (days)
         s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
         
