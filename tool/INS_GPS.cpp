@@ -142,6 +142,7 @@
 #include <cctype>
 
 #include <vector>
+#include <map>
 #include <utility>
 #include <deque>
 
@@ -163,6 +164,7 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/BiasEstimation.h"
 #include "navigation/GPS.h"
+#include "navigation/GPS_SP.h"
 
 #include "navigation/MagneticField.h"
 
@@ -501,13 +503,40 @@ struct G_Packet : public Packet {
   operator GPS_Solution<float_sylph_t>() const {
     return solution;
   }
+};
 
+struct G_Packet_Raw : public G_Packet {
   typedef GPS_SpaceNode<float_sylph_t> space_node_t;
   const space_node_t &space_node;
 
-  G_Packet(const space_node_t &_space_node)
-      : space_node(_space_node) {}
-  ~G_Packet(){}
+  typedef GPS_SinglePositioning<float_sylph_t> solver_t;
+  const solver_t solver;
+
+  enum {
+    L1_PSEUDORANGE,
+    L1_RANGERATE,
+    L1_CARRIER_PHASE,
+  };
+  typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
+  typedef std::map<int, prn_obs_t> raw_measurement_t;
+  raw_measurement_t raw_measurement;
+
+  bool update_solution(){
+    solver_t::user_pvt_t pvt(solver.solve_user_pvt(
+        raw_measurement[L1_PSEUDORANGE],
+        raw_measurement[L1_RANGERATE],
+        space_node_t::gps_time_t(0, this->itow)));
+    if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
+      return false;
+    }
+    // TODO update solution
+    return true;
+  }
+
+  G_Packet_Raw(const space_node_t &_space_node)
+      : G_Packet(), space_node(_space_node),
+      solver(space_node), raw_measurement() {}
+  ~G_Packet_Raw(){}
 };
 
 /**
@@ -1252,25 +1281,25 @@ class StreamProcessor
      */
     struct GHandler : public G_Observer_t  {
       bool previous_seek_next;
-
-      static G_Packet::space_node_t space_node_shared;
-      G_Packet::space_node_t space_node_inidividual;
-      G_Packet::space_node_t &space_node;
-
       G_Packet packet_latest;
       bool packet_updated;
       int itow_ms_0x0102, itow_ms_0x0112;
       unsigned int gps_status;
       int week_number;
 
+      static G_Packet_Raw::space_node_t space_node_shared;
+      G_Packet_Raw::space_node_t space_node_inidividual;
+      G_Packet_Raw::space_node_t &space_node;
+      G_Packet_Raw packet_raw_latest;
+
       GHandler()
           : G_Observer_t(buffer_size),
+          packet_latest(), packet_updated(false),
+          itow_ms_0x0102(-1), itow_ms_0x0112(-1),
+          gps_status(status_t::NO_FIX), week_number(0),
           space_node_inidividual(),
           space_node(true ? space_node_inidividual : space_node_shared),
-          packet_latest(space_node),
-          packet_updated(false),
-          itow_ms_0x0102(-1), itow_ms_0x0112(-1),
-          gps_status(status_t::NO_FIX), week_number(0) {
+          packet_raw_latest(space_node) {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
@@ -1347,10 +1376,10 @@ class StreamProcessor
         }
       }
 
-      static G_Packet::space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
+      static G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
           const G_Observer_t::subframe_t &subframe){
 
-        G_Packet::space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
+        G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
 #define get8(index) (subframe.bits2u8_align(index, 8))
         { // IONO parameter
           raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
@@ -1385,13 +1414,13 @@ class StreamProcessor
           raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
         }
 #undef get8
-        return (G_Packet::space_node_t::Ionospheric_UTC_Parameters)raw;
+        return (G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters)raw;
       }
 
-      static G_Packet::space_node_t::Satellite::Ephemeris convert_ephemeris(
+      static G_Packet_Raw::space_node_t::Satellite::Ephemeris convert_ephemeris(
           const G_Observer_t::ephemeris_t &eph_rxm){
 
-        typedef G_Packet::space_node_t::Satellite::Ephemeris eph_t;
+        typedef G_Packet_Raw::space_node_t::Satellite::Ephemeris eph_t;
         eph_t eph;
 #define copy(dst, src) eph.dst = eph_rxm.src;
         // Subframe.1
@@ -1440,20 +1469,27 @@ class StreamProcessor
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
         switch(packet_type.mid){
           case 0x10: { // RXM-RAW
-            observer.fetch_ITOW();
             const unsigned int num_of_sv(observer[6 + 6]);
+            if(num_of_sv == 0){return;}
+            packet_raw_latest.itow = observer.fetch_ITOW();
+            packet_raw_latest.raw_measurement.clear();
             for(int i(0); i < num_of_sv; i++){
               G_Observer_t::raw_measurement_t raw(observer.fetch_raw(i));
-              raw.sv_number;
-              raw.pseudo_range;
-              raw.doppler;
+              int prn(raw.sv_number);
+              packet_raw_latest.raw_measurement[G_Packet_Raw::L1_PSEUDORANGE].push_back(
+                  G_Packet_Raw::prn_obs_t::value_type(prn, raw.pseudo_range));
+              packet_raw_latest.raw_measurement[G_Packet_Raw::L1_CARRIER_PHASE].push_back(
+                  G_Packet_Raw::prn_obs_t::value_type(prn, raw.carrier_phase));
+              packet_raw_latest.raw_measurement[G_Packet_Raw::L1_RANGERATE].push_back(
+                  G_Packet_Raw::prn_obs_t::value_type(prn, raw.doppler));
             }
+            packet_raw_latest.update_solution();
             return;
           }
           case 0x11: { // RXM-SFRB
             G_Observer_t::subframe_t subframe(observer.fetch_subframe());
             if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-              G_Packet::space_node_t::Ionospheric_UTC_Parameters iono_utc(
+              G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters iono_utc(
                   convert_iono_utc(subframe));
               /*{ // TODO taking account for truncation
                 iono_utc.WN_t;
@@ -1663,7 +1699,7 @@ class StreamProcessor
 } *current_processor;
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
-G_Packet::space_node_t StreamProcessor::GHandler::space_node_shared = G_Packet::space_node_t();
+G_Packet_Raw::space_node_t StreamProcessor::GHandler::space_node_shared = G_Packet_Raw::space_node_t();
 
 typedef vector<StreamProcessor *> processors_t;
 processors_t processors;
