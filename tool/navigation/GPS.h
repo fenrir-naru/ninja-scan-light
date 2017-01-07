@@ -491,7 +491,7 @@ class GPS_SpaceNode {
            * @param t GPS time
            */
           bool is_valid(const gps_time_t &t) const {
-            return _abs(t.interval(WN, t_oc)) <= (fit_interval / 2);
+            return std::abs(t.interval(WN, t_oc)) <= (fit_interval / 2);
           }
           
           /**
@@ -795,7 +795,7 @@ class GPS_SpaceNode {
           return is_valid;
         }
 
-        const Ephemeris &ephemeris() {return *eph_current;}
+        const Ephemeris &ephemeris() const {return *eph_current;}
         
         FloatT eccentric_anomaly(const FloatT &period_from_toe) const {
           // Kepler's Equation for Eccentric Anomaly M(Mk)
@@ -810,7 +810,7 @@ class GPS_SpaceNode {
 #endif 
           for(int loop(0); loop < 10; loop++){
             FloatT Ek2(Mk + eph_current->e * sin(Ek));
-            if(_abs(Ek2 - Ek) < KEPLER_DELTA_LIMIT){break;}
+            if(std::abs(Ek2 - Ek) < KEPLER_DELTA_LIMIT){break;}
             Ek = Ek2;
           }
           
@@ -988,13 +988,13 @@ class GPS_SpaceNode {
       return (_iono_utc = params);
     }
 
-    satellites_t &satellites() {
+    const satellites_t &satellites() const {
       return _satellites;
     }
-    Satellite &satellite(int prn) {
+    Satellite &satellite(const int &prn) {
       return _satellites[prn];
     }
-    bool has_satellite(int prn) const {
+    bool has_satellite(const int &prn) const {
       return _satellites.find(prn) !=  _satellites.end();
     }
 
@@ -1059,7 +1059,7 @@ class GPS_SpaceNode {
       }
       
       FloatT T_iono(5E-9);
-      if(_abs(x) < 1.57){
+      if(std::abs(x) < 1.57){
         T_iono += amp * (1. - pow2(x) * (1.0 / 2 - pow2(x) / 24)); // ICD p.148
       }
       T_iono *= F;
