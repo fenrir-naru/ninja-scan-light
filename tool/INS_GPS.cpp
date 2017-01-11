@@ -530,6 +530,16 @@ struct G_Packet_Raw : public G_Packet {
       return false;
     }
     // TODO update solution
+    itow -= (pvt.receiver_error / space_node_t::light_speed);
+    solution.v_n = pvt.user_velocity_enu.north();
+    solution.v_e = pvt.user_velocity_enu.east();
+    solution.v_d = -pvt.user_velocity_enu.up();
+    //solution.sigma_vel;
+    solution.latitude = pvt.user_position_llh.latitude();
+    solution.longitude = pvt.user_position_llh.longitude();
+    solution.height = pvt.user_position_llh.height();
+    //solution.sigma_2d;
+    //solution.sigma_height;
     return true;
   }
 
