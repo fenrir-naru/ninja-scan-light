@@ -35,8 +35,6 @@
 #include "param/quaternion.h"
 #include "WGS84.h"
 
-typedef WGS84 Earth; ///< 地球モデル
-
 #ifdef pow2
 #define POW2_ALREADY_DEFINED
 #else
@@ -74,6 +72,7 @@ class INS{
     Vector3<FloatT> omega_n2e_4n; ///< @f$ \vec{\omega}_{n/e}^{n} @f$
     
   public:
+    typedef WGS84Generic<FloatT> Earth; ///< 地球モデル
     static const unsigned STATE_VALUES = 12; ///< 状態量の数
     virtual unsigned state_values() const {return STATE_VALUES;}
     

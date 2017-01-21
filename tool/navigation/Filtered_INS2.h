@@ -115,6 +115,8 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
 #define ALREADY_POW2_DEFINED
 #endif
 
+      typedef typename INS<FloatT>::Earth Earth;
+
       //çsóÒAÇÃåvéZ
       FloatT A_serialized[P_SIZE][P_SIZE] = {{FloatT(0)}};
 #define A(i, j) A_serialized[i][j]
