@@ -5,11 +5,11 @@
         "subject": "fenrir-naru"
     },
     "version": {
-        "name": "Latest"
+        "name": "@TIMESTAMP@"
     },
     "files": [{
         "includePattern": "tool/(build[^/]*)/(.*\\.tar\\.gz)",
-        "uploadPattern": "$2",
+        "uploadPattern": "@TIMESTAMP@/$2",
         "matrixParams": { "override": 1 }
     }],
     "publish": true

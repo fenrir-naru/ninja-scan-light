@@ -12,6 +12,10 @@ after_build:
 artifacts:
   - path: windows.*.zip
     name: x86 binary
+before_deploy:
+  - echo on
+    & for /f "usebackq delims=" %%a in (`git log --pretty^=format:%%cd -n 1`) do set TIMESTAMP="%%a"
+    & for /f "usebackq delims=" %%a in (`ruby -e 'require "time"^; print Time::parse^(ENV["TIMESTAMP"]^).strftime^("%%Y%%m%%d_%%H%%M%%S"^)'`) do set TIMESTAMP=%%a
 deploy:
   - provider: BinTray
     username: fenrir-naru
@@ -20,7 +24,7 @@ deploy:
     subject: fenrir-naru
     repo: github
     package: ninja-scan-light
-    version: Latest
+    version: $(TIMESTAMP)/$(TIMESTAMP)
     publish: true
     override: true
     explode: false
