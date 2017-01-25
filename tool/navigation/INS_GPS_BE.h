@@ -25,7 +25,7 @@
 
 template <
   class FloatT, 
-  typename Filter = KalmanFilterUD<FloatT>,
+  template <class> class Filter = KalmanFilterUD,
   typename BaseFINS = Filtered_INS_BiasEstimated<FloatT, Filter>
 >
 class INS_GPS2_BiasEstimated

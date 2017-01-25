@@ -138,7 +138,7 @@ const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS>
 
 template <
     class FloatT,
-    typename Filter = KalmanFilterUD<FloatT>,
+    template <class> class Filter = KalmanFilterUD,
     typename BaseFINS = Filtered_INS2<FloatT, Filter, INS_BiasEstimated<FloatT, INS<FloatT> > > >
 class Filtered_INS_BiasEstimated : public BaseFINS{
   protected:

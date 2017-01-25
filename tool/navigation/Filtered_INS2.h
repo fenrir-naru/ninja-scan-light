@@ -79,7 +79,7 @@ const unsigned Filtered_INS2_Property<FloatT, BaseINS>::Q_SIZE = INS<FloatT>::ST
  */
 template <
     class FloatT,
-    typename Filter = KalmanFilterUD<FloatT>,
+    template <class> class Filter = KalmanFilterUD,
     typename BaseINS = INS<FloatT> >
 class Filtered_INS2
     : public BaseINS,
@@ -91,7 +91,7 @@ class Filtered_INS2
     using property_t::Q_SIZE;
     
   protected:
-    Filter m_filter;  ///< カルマンフィルタ本体
+    Filter<FloatT> m_filter;  ///< カルマンフィルタ本体
     
 #define R_STRICT ///< 曲率半径を厳密に計算するかのスイッチ、この場合計算する
     
@@ -501,7 +501,7 @@ class Filtered_INS2
      * 
      * @return (Filter &) フィルター
      */
-    Filter &getFilter(){return m_filter;}
+    Filter<FloatT> &getFilter(){return m_filter;}
 
     struct StandardDeviations {
       FloatT v_north_ms, v_east_ms, v_down_ms;

@@ -975,16 +975,16 @@ class INS_GPS_Debug : public INS_GPS {
 
 typedef INS_GPS2<
     float_sylph_t,
-    KalmanFilter<float_sylph_t> > ins_gps_ekf_t;
+    KalmanFilter> ins_gps_ekf_t;
 typedef INS_GPS2<
     float_sylph_t,
-    KalmanFilterUD<float_sylph_t> > ins_gps_ekf_ud_t;
+    KalmanFilterUD> ins_gps_ekf_ud_t;
 typedef INS_GPS2_BiasEstimated<
     float_sylph_t,
-    KalmanFilter<float_sylph_t> > ins_gps_bias_ekf_t;
+    KalmanFilter> ins_gps_bias_ekf_t;
 typedef INS_GPS2_BiasEstimated<
     float_sylph_t,
-    KalmanFilterUD<float_sylph_t> > ins_gps_bias_ekf_ud_t;
+    KalmanFilterUD> ins_gps_bias_ekf_ud_t;
 
 template <class INS_GPS>
 class INS_GPS_NAV : public NAV {
@@ -996,7 +996,8 @@ class INS_GPS_NAV : public NAV {
     template <class Calibration>
     void setup_filter_additional(const Calibration &calibration, void *){}
 
-    template <class Calibration, class FloatT, class Filter, class FINS>
+    template <class Calibration,
+        class FloatT, template <class> class Filter, class FINS>
     void setup_filter_additional(
         const Calibration &calibration,
         INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) {
@@ -1258,7 +1259,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return *this;
     }
 
-    template <class FloatT, class Filter, class FINS>
+    template <class FloatT, template <class> class Filter, class FINS>
     NAV &correct_ins_gps(
         const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
@@ -1318,7 +1319,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
   protected:
     void label_additional(std::ostream &out, void *) const {}
 
-    template <class FloatT, class Filter, class FINS>
+    template <class FloatT, template <class> class Filter, class FINS>
     void label_additional(std::ostream &out, INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) const {
       out << "bias_accel(X)" << ','  //Bias
           << "bias_accel(Y)" << ','
@@ -1358,7 +1359,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
   protected:
     void dump_additional(std::ostream &out, void *) const {}
 
-   template <class FloatT, class Filter, class FINS>
+   template <class FloatT, template <class> class Filter, class FINS>
    void dump_additional(std::ostream &out,
        INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) const {
      Vector3<float_sylph_t> &ba(ins_gps->bias_accel());

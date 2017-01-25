@@ -113,7 +113,7 @@ struct CorrectInfo {
  */
 template <
   class FloatT, 
-  typename Filter = KalmanFilterUD<FloatT>,
+  template <class> class Filter = KalmanFilterUD,
   typename BaseFINS = Filtered_INS2<FloatT, Filter, INS<FloatT> >
 >
 class INS_GPS2 : public BaseFINS{
