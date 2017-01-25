@@ -32,24 +32,27 @@
 #include "param/matrix.h"
 #include "algorithm/kalman.h"
 
+template <class FloatT, class BaseINS>
 class Filtered_INS2_Property {
   public:
     static const unsigned P_SIZE
 #if defined(_MSC_VER)
-        = 10
+        = INS<FloatT>::STATE_VALUES - 2
 #endif
         ; ///< P行列(システム誤差共分散行列)の大きさ
     static const unsigned Q_SIZE
 #if defined(_MSC_VER)
-        = 7
+        = INS<FloatT>::STATE_VALUES - 5
 #endif
         ; ///< Q行列(入力誤差共分散行列)の大きさ
 };
 
 #if !defined(_MSC_VER)
-const unsigned Filtered_INS2_Property::P_SIZE = 10;
+template <class FloatT, class BaseINS>
+const unsigned Filtered_INS2_Property<FloatT, BaseINS>::P_SIZE = INS<FloatT>::STATE_VALUES - 2;
 
-const unsigned Filtered_INS2_Property::Q_SIZE = 7;
+template <class FloatT, class BaseINS>
+const unsigned Filtered_INS2_Property<FloatT, BaseINS>::Q_SIZE = INS<FloatT>::STATE_VALUES - 5;
 #endif
 
 /**
@@ -74,37 +77,79 @@ const unsigned Filtered_INS2_Property::Q_SIZE = 7;
  * @param FloatT 演算精度
  * @param Filter カルマンフィルタ
  */
-template <class FloatT, typename Filter = KalmanFilterUD<FloatT> >
-class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
+template <
+    class FloatT,
+    typename Filter = KalmanFilterUD<FloatT>,
+    typename BaseINS = INS<FloatT> >
+class Filtered_INS2
+    : public BaseINS,
+      public Filtered_INS2_Property<FloatT, BaseINS> {
   public:
-    using Filtered_INS2_Property::P_SIZE;
-    using Filtered_INS2_Property::Q_SIZE;
+    typedef BaseINS ins_t;
+    typedef Filtered_INS2_Property<FloatT, BaseINS> property_t;
+    using property_t::P_SIZE;
+    using property_t::Q_SIZE;
     
   protected:
     Filter m_filter;  ///< カルマンフィルタ本体
     
 #define R_STRICT ///< 曲率半径を厳密に計算するかのスイッチ、この場合計算する
     
-    using INS<FloatT>::get;
+    using BaseINS::get;
     
+    struct getAB_res {
+      FloatT A[P_SIZE][P_SIZE];
+      FloatT B[P_SIZE][Q_SIZE];
+      getAB_res(){
+        for(int i(0); i < sizeof(A) / sizeof(A[0]); ++i){
+          for(int j(0); j < sizeof(A[0]) / sizeof(A[0][0]); ++j){
+            A[i][j] = FloatT(0);
+          }
+        }
+        for(int i(0); i < sizeof(B) / sizeof(B[0]); ++i){
+          for(int j(0); j < sizeof(B[0]) / sizeof(B[0][0]); ++j){
+            B[i][j] = FloatT(0);
+          }
+        }
+      }
+      Matrix<FloatT> getA() const {
+        return Matrix<FloatT>(
+            sizeof(A) / sizeof(A[0]),
+            sizeof(A[0]) / sizeof(A[0][0]),
+            (FloatT *)&A);
+      }
+      Matrix<FloatT> getB() const {
+        return Matrix<FloatT>(
+            sizeof(B) / sizeof(B[0]),
+            sizeof(B[0]) / sizeof(B[0][0]),
+            (FloatT *)&B);
+      }
+    };
+
     /**
      * 慣性航法方程式(所謂システム方程式)において、
      * その状態量の誤差に対して線形化した場合の式、
-     * すなわち誤差システム方程式における行列 Aを返します。
-     * 詳しくはgetA(const Vector3<FloatT> &, const Vector3<FloatT> &)を参照してください。  
+     * すなわち誤差システム方程式
+     * @f[
+     *    \frac{d}{dt} \Bar{x} = A \Bar{x} + B \Bar{u}
+     * @f]
+     * における行列 A, Bを返します。
+     * この式において @f$ \Bar{x} @f$は状態量、つまり速度・位置・姿勢、の誤差、
+     * @f$ \Bar{u} @f$は入力、すなわち加速度や角速度(、加えてここでは重力も)、の誤差を表します。
      * 
      * @param accel 加速度
      * @param gyro 角速度
-     * @param dcm_e2n @f$ \mathrm{DCM} \left( \Tilde{q}_{e}^{n} \right) @f$
-     * @param dcm_n2b @f$ \mathrm{DCM} \left( \Tilde{q}_{n}^{b} \right) @f$
-     * @return (Matrix<FloatT>) A行列
-     * @see getA(const Vector3<FloatT> &, const Vector3<FloatT> &)
+     * @param res 計算値を格納するスペース
+     * @return (getAB_res) A,B行列
      */
-    Matrix<FloatT> getA(
+    virtual void getAB(
         const Vector3<FloatT> &accel, 
-        const Vector3<FloatT> &gyro, 
-        const Matrix<FloatT> &dcm_e2n, 
-        const Matrix<FloatT> &dcm_n2b) const {
+        const Vector3<FloatT> &gyro,
+        getAB_res &res) const {
+
+      // 回転行列の計算
+      Matrix<FloatT> dcm_e2n((this->q_e2n).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{e}^{n} \right) @f$
+      Matrix<FloatT> dcm_n2b((this->q_n2b).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{n}^{b} \right) @f$
       
 #define dcm_e2n(r, c) (const_cast<Matrix<FloatT> *>(&dcm_e2n)->operator()(r, c))
 #define dcm_n2b(r, c) (const_cast<Matrix<FloatT> *>(&dcm_n2b)->operator()(r, c))
@@ -115,13 +160,11 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
 #define ALREADY_POW2_DEFINED
 #endif
 
-      typedef typename INS<FloatT>::Earth Earth;
+      typedef typename BaseINS::Earth Earth;
 
-      //行列Aの計算
-      FloatT A_serialized[P_SIZE][P_SIZE] = {{FloatT(0)}};
-#define A(i, j) A_serialized[i][j]
-      {
-       
+      { //行列Aの計算
+#define A(i, j) res.A[i][j]
+
         Vector3<FloatT> omega_1(this->omega_e2i_4n * 2 + this->omega_n2e_4n);
 
 #ifdef R_STRICT
@@ -271,6 +314,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
           A(9, 7) =  omega_2[1];
           A(9, 8) = -omega_2[0];
         }
+#undef A
       }
 #ifdef ALREADY_POW2_DEFINED
 #undef ALREADY_POW2_DEFINED
@@ -278,60 +322,9 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
 #undef pow2
 #endif
 
-#undef dcm_e2n
-#undef dcm_n2b
-#undef A
+      { //行列Bの計算
+#define B(i, j) res.B[i][j]
 
-      return Matrix<FloatT>(
-          sizeof(A_serialized) / sizeof(A_serialized[0]),
-          sizeof(A_serialized[0]) / sizeof(A_serialized[0][0]), 
-          (FloatT *)A_serialized);
-    }
-    
-    /**
-     * 慣性航法方程式(所謂システム方程式)において、
-     * その状態量の誤差に対して線形化した場合の式、
-     * すなわち誤差システム方程式
-     * @f[
-     *    \frac{d}{dt} \Bar{x} = A \Bar{x} + B \Bar{u}
-     * @f]
-     * における行列 Aを返します。
-     * この式において @f$ \Bar{x} @f$は状態量、つまり速度・位置・姿勢、の誤差、
-     * @f$ \Bar{u} @f$は入力、すなわち加速度や角速度(、加えてここでは重力も)、の誤差を表します。  
-     * 
-     * @param accel 加速度
-     * @param gyro 角速度
-     * @return (Matrix<FloatT>) A行列
-     */
-    Matrix<FloatT> getA(
-        const Vector3<FloatT> &accel, 
-        const Vector3<FloatT> &gyro) const {
-      return getA(accel, gyro, this->q_e2n.getDCM(), this->q_n2b.getDCM());  
-    }
-    
-    /**
-     * 慣性航法方程式(所謂システム方程式)において、
-     * その状態量の誤差に対して線形化した場合の式、
-     * すなわち誤差システム方程式における行列 Bを返します。
-     * 詳しくはgetB(const Vector3<FloatT> &, const Vector3<FloatT> &)を参照してください。  
-     * 
-     * @param accel 加速度
-     * @param gyro 角速度
-     * @param dcm_n2b @f$ \mathrm{DCM} \left( \Tilde{q}_{n}^{b} \right) @f$
-     * @return (Matrix<FloatT>) A行列
-     * @see getB(const Vector3<FloatT> &, const Vector3<FloatT> &)
-     */
-    Matrix<FloatT> getB(
-        const Vector3<FloatT> &accel, 
-        const Vector3<FloatT> &gyro, 
-        const Matrix<FloatT> &dcm_n2b) const {
-
-#define dcm_n2b(r, c) (const_cast<Matrix<FloatT> *>(&dcm_n2b))->operator()(r, c)
-
-      //行列Bの計算
-      FloatT B_serialized[P_SIZE][Q_SIZE] = {{FloatT(0)}};
-#define B(i, j) B_serialized[i][j]
-      {
         B(0, 0) = dcm_n2b(0, 0);
         B(0, 1) = dcm_n2b(1, 0);
         B(0, 2) = dcm_n2b(2, 0);
@@ -357,35 +350,8 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
         B(9, 3) = dcm_n2b(0, 2) / 2;
         B(9, 4) = dcm_n2b(1, 2) / 2;
         B(9, 5) = dcm_n2b(2, 2) / 2;
-      }
 #undef B
-#undef dcm_n2b
-      
-      return Matrix<FloatT>(
-          sizeof(B_serialized) / sizeof(B_serialized[0]),
-          sizeof(B_serialized[0]) / sizeof(B_serialized[0][0]), 
-          (FloatT *)B_serialized);
-    }
-    
-    /**
-     * 慣性航法方程式(所謂システム方程式)において、
-     * その状態量の誤差に対して線形化した場合の式、
-     * すなわち誤差システム方程式
-     * @f[
-     *    \frac{d}{dt} \Bar{x} = A \Bar{x} + B \Bar{u}
-     * @f]
-     * における行列 Bを返します。
-     * この式において @f$ \Bar{x} @f$は状態量、つまり速度・位置・姿勢、の誤差、
-     * @f$ \Bar{u} @f$は入力、すなわち加速度や角速度(、加えてここでは重力も)、の誤差を表します。  
-     * 
-     * @param accel 加速度
-     * @param gyro 角速度
-     * @return (Matrix<FloatT>) B行列
-     */
-    Matrix<FloatT> getB(
-        const Vector3<FloatT> &accel, 
-        const Vector3<FloatT> &gyro) const {
-      return getB(accel, gyro, (this->q_n2b).getDCM());
+      }
     }
   
   public:
@@ -397,7 +363,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * 
      */
     Filtered_INS2() 
-        : INS<FloatT>(), 
+        : BaseINS(),
           m_filter(Matrix<FloatT>::getI(P_SIZE), Matrix<FloatT>::getI(Q_SIZE)){
     }
     
@@ -410,7 +376,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * @param Q Q行列(入力誤差共分散行列)
      */
     Filtered_INS2(const Matrix<FloatT> &P, const Matrix<FloatT> &Q) 
-        : INS<FloatT>(), m_filter(P, Q) {}
+        : BaseINS(), m_filter(P, Q) {}
     
     /**
      * コピーコンストラクタ
@@ -419,7 +385,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * @param deepcopy ディープコピーを作成するかどうか
      */
     Filtered_INS2(const Filtered_INS2 &orig, const bool deepcopy = false)
-        : INS<FloatT>(orig, deepcopy),
+        : BaseINS(orig, deepcopy),
           m_filter(orig.m_filter, deepcopy){
     }
     
@@ -448,16 +414,16 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * @param deltaT 時間間隔
      */
     void update(const Vector3<FloatT> &accel, const Vector3<FloatT> &gyro, const FloatT &deltaT){
-      
-      // 回転行列の計算
-      Matrix<FloatT> dcm_e2n((this->q_e2n).getDCM());
-      Matrix<FloatT> dcm_n2b((this->q_n2b).getDCM());
-    
-      Matrix<FloatT> A(getA(accel, gyro, dcm_e2n, dcm_n2b));
-      Matrix<FloatT> B(getB(accel, gyro, dcm_n2b));
+      getAB_res AB;
+      getAB(accel, gyro, AB);
+      Matrix<FloatT> A(AB.getA()), B(AB.getB());
+      //std::cerr << "deltaT:" << deltaT << std::endl;
+      //std::cerr << "A:" << A << std::endl;
+      //std::cerr << "B:" << B << std::endl;
+      //std::cerr << "P:" << m_filter.getP() << std::endl;
       m_filter.predict(A, B, deltaT);
       before_update_INS(A, B, deltaT);
-      INS<FloatT>::update(accel, gyro, deltaT);
+      BaseINS::update(accel, gyro, deltaT);
     }
   
   protected:
@@ -484,7 +450,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * 
      * @param x_hat Kalman Filterによって得られたx_hat
      */
-    inline void correct_INS(Matrix<FloatT> &x_hat){
+    virtual inline void correct_INS(Matrix<FloatT> &x_hat){
       
       // 速度
       for(unsigned i = 0; i < 3; i++){(*this)[i] -= x_hat(i, 0);}
@@ -510,9 +476,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
 #undef pow2
 #endif
 
-      for(unsigned i = 10; i < x_hat.rows(); i++){(*this)[i + 2] -= x_hat(i, 0);}
-
-      INS<FloatT>::recalc();
+      BaseINS::recalc();
     }
 
   public:
@@ -523,13 +487,12 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
      * @param z 観測量
      * @param R 誤差共分散行列
      */
-    void correct(const Matrix<FloatT> &H, const Matrix<FloatT> &z, const Matrix<FloatT> &R){
+    virtual void correct(const Matrix<FloatT> &H, const Matrix<FloatT> &z, const Matrix<FloatT> &R){
             
       // 修正量の計算
       Matrix<FloatT> K(m_filter.correct(H, R)); //カルマンゲイン
       Matrix<FloatT> x_hat(K * z);
       before_correct_INS(H, R, K, z, x_hat);
-      
       correct_INS(x_hat);
     }
     /**
@@ -565,7 +528,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
       }
 
       { // 位置
-        FloatT cl(std::cos(INS<FloatT>::lambda)), sl(std::sin(INS<FloatT>::lambda));
+        FloatT cl(std::cos(BaseINS::lambda)), sl(std::sin(BaseINS::lambda));
 
         Matrix<FloatT> M(2, 3);
 
@@ -586,7 +549,7 @@ class Filtered_INS2 : public INS<FloatT>, public Filtered_INS2_Property {
       }
 
       { // 姿勢
-        FloatT psi(INS<FloatT>::euler_psi()), theta(INS<FloatT>::euler_theta()), phi(INS<FloatT>::euler_phi());
+        FloatT psi(BaseINS::euler_psi()), theta(BaseINS::euler_theta()), phi(BaseINS::euler_phi());
 
         // 最小二乗法(事前計算)
         FloatT cpsi(std::cos(psi)), spsi(std::sin(psi));

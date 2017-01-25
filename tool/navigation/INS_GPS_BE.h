@@ -26,21 +26,13 @@
 template <
   class FloatT, 
   typename Filter = KalmanFilterUD<FloatT>,
-  typename FINS = Filtered_INS2<FloatT, Filter>
+  typename BaseFINS = Filtered_INS_BiasEstimated<FloatT, Filter>
 >
 class INS_GPS2_BiasEstimated
-  : public INS_GPS2<
-        FloatT, 
-        Filter, 
-        Filtered_INS_BiasEstimated<FloatT, Filter, FINS> 
-    >{
+  : public INS_GPS2<FloatT, Filter, BaseFINS>{
   public:
     INS_GPS2_BiasEstimated() 
-      : INS_GPS2<
-            FloatT, 
-            Filter, 
-            Filtered_INS_BiasEstimated<FloatT, Filter, FINS> 
-        >(){}
+        : INS_GPS2<FloatT, Filter, BaseFINS>(){}
     
     /**
      * コピーコンストラクタ
@@ -48,12 +40,8 @@ class INS_GPS2_BiasEstimated
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool deepcopy = false) :
-      INS_GPS2<
-            FloatT, 
-            Filter, 
-            Filtered_INS_BiasEstimated<FloatT, Filter, FINS> 
-        >(orig, deepcopy){
+    INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool deepcopy = false)
+        : INS_GPS2<FloatT, Filter, BaseFINS>(orig, deepcopy){
       
     }
     

@@ -108,17 +108,17 @@ struct CorrectInfo {
  * 
  * @param FloatT 演算精度
  * @param Filter カルマンフィルタ
- * @param FINS 他の航法装置を統合する為のINS拡張クラス
+ * @param BaseFINS 他の航法装置を統合する為のINS拡張クラス
  * @see Filtered_INS2
  */
 template <
   class FloatT, 
   typename Filter = KalmanFilterUD<FloatT>,
-  typename FINS = Filtered_INS2<FloatT, Filter> 
+  typename BaseFINS = Filtered_INS2<FloatT, Filter, INS<FloatT> >
 >
-class INS_GPS2 : public FINS{
+class INS_GPS2 : public BaseFINS{
   public:
-    INS_GPS2() : FINS(){} /**< コンストラクタ */
+    INS_GPS2() : BaseFINS(){} /**< コンストラクタ */
     
     /**
      * コピーコンストラクタ
@@ -127,13 +127,13 @@ class INS_GPS2 : public FINS{
      * @param deepcopy ディープコピーを作成するかどうか
      */
     INS_GPS2(const INS_GPS2 &orig, const bool deepcopy = false) :
-      FINS(orig, deepcopy){
+      BaseFINS(orig, deepcopy){
       
     }
     
     ~INS_GPS2(){}         /**< デストラクタ */
     
-    using FINS::correct;
+    using BaseFINS::correct;
     
     /**
      * 観測更新(Measurement Update)を行います。
@@ -141,11 +141,11 @@ class INS_GPS2 : public FINS{
      * @param info 修正情報
      */
     void correct(const CorrectInfo<FloatT> &info){
-      FINS::correct(info.H, info.z, info.R);
+      BaseFINS::correct(info.H, info.z, info.R);
     }
     
-    using FINS::P_SIZE;
-    using FINS::get;
+    using BaseFINS::P_SIZE;
+    using BaseFINS::get;
     
     /**
      * 3D測位時における観測更新(Measurement Update)用の情報を求めます。
@@ -386,8 +386,8 @@ class INS_GPS2 : public FINS{
         H.pivotMerge(0, 7, - v_induced.skewMatrix() * 2);
       }
       
-      FloatT lat_sigma = FINS::meter2lat(gps.sigma_2d);
-      FloatT long_sigma = FINS::meter2long(gps.sigma_2d);
+      FloatT lat_sigma = BaseFINS::meter2lat(gps.sigma_2d);
+      FloatT long_sigma = BaseFINS::meter2long(gps.sigma_2d);
       
       //観測値誤差行列R
       FloatT R_serialized[z_size][z_size] = {{FloatT(0)}};
@@ -453,6 +453,7 @@ class INS_GPS2 : public FINS{
      * @param sigma2_delta_psi delta_psiの確からしさ(分散) [rad^2]
      */
     void correct_yaw(const FloatT &delta_psi, const FloatT &sigma2_delta_psi){
+
       //観測量z
       FloatT z_serialized[1][1] = {{-delta_psi}};
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
@@ -473,10 +474,10 @@ class INS_GPS2 : public FINS{
 #undef z_size
 
       // 修正量の計算
-      Matrix<FloatT> K(FINS::m_filter.correct(H, R)); //カルマンゲイン
+      Matrix<FloatT> K(BaseFINS::m_filter.correct(H, R)); //カルマンゲイン
       Matrix<FloatT> x_hat(K * z);
       //before_correct_INS(H, R, K, z, x_hat); // ヨーだけ補正する特殊モードなため、これは呼び出さない
-      FINS::correct_INS(x_hat);
+      BaseFINS::correct_INS(x_hat);
     }
 };
 
