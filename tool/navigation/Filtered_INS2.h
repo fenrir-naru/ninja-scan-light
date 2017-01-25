@@ -32,27 +32,27 @@
 #include "param/matrix.h"
 #include "algorithm/kalman.h"
 
-template <class FloatT, class BaseINS>
+template <class BaseINS>
 class Filtered_INS2_Property {
   public:
     static const unsigned P_SIZE
 #if defined(_MSC_VER)
-        = INS<FloatT>::STATE_VALUES - 2
+        = BaseINS::STATE_VALUES - 2
 #endif
         ; ///< P行列(システム誤差共分散行列)の大きさ
     static const unsigned Q_SIZE
 #if defined(_MSC_VER)
-        = INS<FloatT>::STATE_VALUES - 5
+        = BaseINS::STATE_VALUES - 5
 #endif
         ; ///< Q行列(入力誤差共分散行列)の大きさ
 };
 
 #if !defined(_MSC_VER)
-template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, BaseINS>::P_SIZE = INS<FloatT>::STATE_VALUES - 2;
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<BaseINS>::P_SIZE = BaseINS::STATE_VALUES - 2;
 
-template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, BaseINS>::Q_SIZE = INS<FloatT>::STATE_VALUES - 5;
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<BaseINS>::Q_SIZE = BaseINS::STATE_VALUES - 5;
 #endif
 
 /**
@@ -83,10 +83,10 @@ template <
     typename BaseINS = INS<FloatT> >
 class Filtered_INS2
     : public BaseINS,
-      public Filtered_INS2_Property<FloatT, BaseINS> {
+      public Filtered_INS2_Property<BaseINS> {
   public:
     typedef BaseINS ins_t;
-    typedef Filtered_INS2_Property<FloatT, BaseINS> property_t;
+    typedef Filtered_INS2_Property<ins_t> property_t;
     using property_t::P_SIZE;
     using property_t::Q_SIZE;
     

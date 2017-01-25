@@ -91,18 +91,18 @@ template <
 const unsigned INS_BiasEstimated<BaseINS>::STATE_VALUES
     = STATE_VALUES_WITHOUT_BIAS + STATE_VALUES_BIAS;
 
-template <class FloatT, class BaseINS>
-class Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >
-    : public Filtered_INS2_Property<FloatT, BaseINS> {
+template <class BaseINS>
+class Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >
+    : public Filtered_INS2_Property<BaseINS> {
   public:
     static const unsigned P_SIZE_WITHOUT_BIAS
 #if defined(_MSC_VER)
-        = Filtered_INS2_Property<FloatT, BaseINS>::P_SIZE
+        = Filtered_INS2_Property<BaseINS>::P_SIZE
 #endif
         ;
     static const unsigned Q_SIZE_WITHOUT_BIAS
 #if defined(_MSC_VER)
-        = Filtered_INS2_Property<FloatT, BaseINS>::Q_SIZE
+        = Filtered_INS2_Property<BaseINS>::Q_SIZE
 #endif
         ;
     static const unsigned P_SIZE
@@ -118,20 +118,20 @@ class Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >
 };
 
 #if !defined(_MSC_VER)
-template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::P_SIZE_WITHOUT_BIAS
-    = Filtered_INS2_Property<FloatT, BaseINS>::P_SIZE;
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::P_SIZE_WITHOUT_BIAS
+    = Filtered_INS2_Property<BaseINS>::P_SIZE;
 
-template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::Q_SIZE_WITHOUT_BIAS
-    = Filtered_INS2_Property<FloatT, BaseINS>::Q_SIZE;
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE_WITHOUT_BIAS
+    = Filtered_INS2_Property<BaseINS>::Q_SIZE;
 
-template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::P_SIZE
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::P_SIZE
     = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
 
-template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::Q_SIZE
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE
     = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
 #endif
 
