@@ -32,11 +32,10 @@
 #endif
 
 template <
-    class FloatT,
-    typename BaseINS = INS<FloatT> >
+    typename BaseINS = INS<> >
 class INS_BiasEstimated : public BaseINS {
   protected:
-    Vector3<FloatT> m_bias_accel, m_bias_gyro;
+    typename BaseINS::vec3_t m_bias_accel, m_bias_gyro;
 
   public:
     static const unsigned STATE_VALUES_WITHOUT_BIAS = BaseINS::STATE_VALUES;
@@ -57,10 +56,10 @@ class INS_BiasEstimated : public BaseINS {
 
     virtual ~INS_BiasEstimated(){}
 
-    Vector3<FloatT> &bias_accel(){return m_bias_accel;}
-    Vector3<FloatT> &bias_gyro(){return m_bias_gyro;}
+    typename BaseINS::vec3_t &bias_accel(){return m_bias_accel;}
+    typename BaseINS::vec3_t &bias_gyro(){return m_bias_gyro;}
 
-    FloatT &operator[](const unsigned &index){
+    typename BaseINS::float_t &operator[](const unsigned &index){
       switch(index){
         case STATE_VALUES_WITHOUT_BIAS:     return m_bias_accel[0];
         case STATE_VALUES_WITHOUT_BIAS + 1: return m_bias_accel[1];
@@ -79,20 +78,21 @@ class INS_BiasEstimated : public BaseINS {
      * @param gyro ジャイロの値
      * @param deltaT 時間間隔
      */
-    void update(const Vector3<FloatT> &accel, const Vector3<FloatT> &gyro, const FloatT &deltaT){
+    void update(
+        const typename BaseINS::vec3_t &accel, const typename BaseINS::vec3_t &gyro,
+        const typename BaseINS::float_t &deltaT){
       // バイアス除去して航法演算
       BaseINS::update(accel + m_bias_accel, gyro + m_bias_gyro, deltaT);
     }
 };
 
 template <
-    class FloatT,
     typename BaseINS>
-const unsigned INS_BiasEstimated<FloatT, BaseINS>::STATE_VALUES
+const unsigned INS_BiasEstimated<BaseINS>::STATE_VALUES
     = STATE_VALUES_WITHOUT_BIAS + STATE_VALUES_BIAS;
 
 template <class FloatT, class BaseINS>
-class Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS> >
+class Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >
     : public Filtered_INS2_Property<FloatT, BaseINS> {
   public:
     static const unsigned P_SIZE_WITHOUT_BIAS
@@ -107,39 +107,39 @@ class Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS> >
         ;
     static const unsigned P_SIZE
 #if defined(_MSC_VER)
-        = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<FloatT, BaseINS>::STATE_VALUES_BIAS
+        = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS
 #endif
         ;
     static const unsigned Q_SIZE
 #if defined(_MSC_VER)
-        = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<FloatT, BaseINS>::STATE_VALUES_BIAS;
+        = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
 #endif
         ;
 };
 
 #if !defined(_MSC_VER)
 template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS> >::P_SIZE_WITHOUT_BIAS
+const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::P_SIZE_WITHOUT_BIAS
     = Filtered_INS2_Property<FloatT, BaseINS>::P_SIZE;
 
 template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS> >::Q_SIZE_WITHOUT_BIAS
+const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::Q_SIZE_WITHOUT_BIAS
     = Filtered_INS2_Property<FloatT, BaseINS>::Q_SIZE;
 
 template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS> >::P_SIZE
-    = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<FloatT, BaseINS>::STATE_VALUES_BIAS;
+const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::P_SIZE
+    = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
 
 template <class FloatT, class BaseINS>
-const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<FloatT, BaseINS> >::Q_SIZE
-    = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<FloatT, BaseINS>::STATE_VALUES_BIAS;
+const unsigned Filtered_INS2_Property<FloatT, INS_BiasEstimated<BaseINS> >::Q_SIZE
+    = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
 #endif
 
 
 template <
     class FloatT,
     template <class> class Filter = KalmanFilterUD,
-    typename BaseFINS = Filtered_INS2<FloatT, Filter, INS_BiasEstimated<FloatT, INS<FloatT> > > >
+    typename BaseFINS = Filtered_INS2<FloatT, Filter, INS_BiasEstimated<INS<FloatT> > > >
 class Filtered_INS_BiasEstimated : public BaseFINS{
   protected:
     Vector3<FloatT> m_beta_accel, m_beta_gyro; // ベータの修正を!!
