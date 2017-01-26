@@ -35,8 +35,13 @@ template <
     typename BaseINS = INS<> >
 class INS_BiasEstimated : public BaseINS {
   public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename BaseINS::float_t float_t;
+    typedef typename BaseINS::vec3_t vec3_t;
+#else
     using typename BaseINS::float_t;
     using typename BaseINS::vec3_t;
+#endif
 
   protected:
     vec3_t m_bias_accel, m_bias_gyro;
@@ -144,9 +149,15 @@ template <
     class BaseFINS = Filtered_INS2<INS_BiasEstimated<INS<> > > >
 class Filtered_INS_BiasEstimated : public BaseFINS {
   public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename BaseFINS::float_t float_t;
+    typedef typename BaseFINS::vec3_t vec3_t;
+    typedef typename BaseFINS::mat_t mat_t;
+#else
     using typename BaseFINS::float_t;
     using typename BaseFINS::vec3_t;
     using typename BaseFINS::mat_t;
+#endif
 
   protected:
     vec3_t m_beta_accel, m_beta_gyro; // ƒx[ƒ^‚ÌC³‚ð!!

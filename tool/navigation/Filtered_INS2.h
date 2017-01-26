@@ -85,9 +85,15 @@ class Filtered_INS2
       public Filtered_INS2_Property<BaseINS> {
   public:
     typedef BaseINS ins_t;
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename ins_t::float_t float_t;
+    typedef typename ins_t::vec3_t vec3_t;
+    typedef typename ins_t::quat_t quat_t;
+#else
     using typename ins_t::float_t;
     using typename ins_t::vec3_t;
     using typename ins_t::quat_t;
+#endif
     typedef Matrix<float_t> mat_t;
 
     typedef Filter<float_t> filter_t;
