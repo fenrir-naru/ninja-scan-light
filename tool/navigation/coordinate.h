@@ -85,11 +85,11 @@ class System_3D {
     System_3D(const Matrix<FloatT> &matrix){
       if(matrix.rows() < matrix.columns()){
         for(unsigned i(0); i < value_boundary; i++){
-          v[i] = matrix(0, i);
+          v[i] = const_cast<Matrix<FloatT> &>(matrix).operator()(0, i);
         }
       }else{
         for(unsigned i(0); i < value_boundary; i++){
-          v[i] = matrix(i, 0);
+          v[i] = const_cast<Matrix<FloatT> &>(matrix).operator()(i, 0);
         }
       }
     }
