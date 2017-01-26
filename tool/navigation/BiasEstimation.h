@@ -171,8 +171,8 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
     
     Filtered_INS_BiasEstimated() 
         : BaseFINS(),
-        m_beta_accel(float_t(1), float_t(1), float_t(1)),
-        m_beta_gyro(float_t(1), float_t(1), float_t(1)),
+        m_beta_accel(1, 1, 1),
+        m_beta_gyro(1, 1, 1),
         m_deltaT_sum(0)
 #if BIAS_EST_MODE == 1
         , previous_modified_bias_accel()

@@ -109,12 +109,12 @@ class Filtered_INS2
       getAB_res(){
         for(int i(0); i < sizeof(A) / sizeof(A[0]); ++i){
           for(int j(0); j < sizeof(A[0]) / sizeof(A[0][0]); ++j){
-            A[i][j] = float_t(0);
+            A[i][j] = 0;
           }
         }
         for(int i(0); i < sizeof(B) / sizeof(B[0]); ++i){
           for(int j(0); j < sizeof(B[0]) / sizeof(B[0][0]); ++j){
-            B[i][j] = float_t(0);
+            B[i][j] = 0;
           }
         }
       }
@@ -343,7 +343,7 @@ class Filtered_INS2
         B(2, 1) = dcm_n2b(1, 2);
         B(2, 2) = dcm_n2b(2, 2);
         
-        B(2, 6) = float_t(1); // d—ÍŒë·Z‚Ì‚Ý
+        B(2, 6) = 1; // d—ÍŒë·Z‚Ì‚Ý
     
         B(7, 3) = dcm_n2b(0, 0) / 2;
         B(7, 4) = dcm_n2b(1, 0) / 2;
