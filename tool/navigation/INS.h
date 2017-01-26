@@ -615,6 +615,20 @@ class INS {
     }
 
     /**
+     * 現在の緯度,経度,高度からECEF座標に変換します。
+     *
+     * @return (vec3_t) XYZ座標
+     */
+    vec3_t xyz() const {
+      float_t n(Earth::R_e / std::sqrt(
+          1.0 - pow2(Earth::epsilon_Earth * (1.0 - (pow2(q_e2n[0]) + pow2(q_e2n[3])) * 2))));
+      return xyz_t(
+          -(n + h) * (q_e2n[0] * q_e2n[2] + q_e2n[1] * q_e2n[3]),
+          (n + h) * (q_e2n[0] * q_e2n[1] - q_e2n[2] * q_e2n[3]),
+          (n * (1.0 - pow2(Earth::epsilon_Earth)) + h) * (1.0 - (pow2(q_e2n[0]) + pow2(q_e2n[3]))));
+    }
+
+    /**
      * 現在の状態量を見やすい形で出力します。
      * 
      * @param out 出力ストリーム
