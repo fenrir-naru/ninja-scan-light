@@ -43,9 +43,10 @@
 
 template<class T>
 struct INS_Extender {
-  template<template<class> class INS_Extended>
+  typedef T type;
+  template<template<class> class Extended>
   struct extend {
-    typedef INS_Extender<INS_Extended<T> > type;
+    typedef INS_Extender<Extended<T> > eval;
   };
 };
 
@@ -61,10 +62,6 @@ struct INS_Extender {
 template <class FloatT = double>
 class INS{
   public:
-    template<template<class> class INS_Extended>
-    struct extend {
-      typedef INS_Extender<INS_Extended<INS> > type;
-    };
     typedef FloatT float_t;
     typedef Vector3<float_t> vec3_t;
     typedef Quaternion<float_t> quat_t;
