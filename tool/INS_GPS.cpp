@@ -159,7 +159,7 @@ VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
 QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
 #include "navigation/INS_GPS2.h"
-#include "navigation/INS_GPS_BE.h"
+#include "navigation/BiasEstimation.h"
 
 #include "navigation/MagneticField.h"
 

@@ -78,51 +78,57 @@ const unsigned Filtered_INS2_Property<BaseINS>::Q_SIZE = BaseINS::STATE_VALUES -
  * @param Filter カルマンフィルタ
  */
 template <
-    class FloatT,
-    template <class> class Filter = KalmanFilterUD,
-    typename BaseINS = INS<FloatT> >
+    class BaseINS = INS<>,
+    template <class> class Filter = KalmanFilterUD>
 class Filtered_INS2
     : public BaseINS,
       public Filtered_INS2_Property<BaseINS> {
   public:
     typedef BaseINS ins_t;
+    using typename ins_t::float_t;
+    using typename ins_t::vec3_t;
+    using typename ins_t::quat_t;
+    typedef Matrix<float_t> mat_t;
+
+    typedef Filter<float_t> filter_t;
     typedef Filtered_INS2_Property<ins_t> property_t;
+
     using property_t::P_SIZE;
     using property_t::Q_SIZE;
     
   protected:
-    Filter<FloatT> m_filter;  ///< カルマンフィルタ本体
+    filter_t m_filter;  ///< カルマンフィルタ本体
     
 #define R_STRICT ///< 曲率半径を厳密に計算するかのスイッチ、この場合計算する
     
     using BaseINS::get;
     
     struct getAB_res {
-      FloatT A[P_SIZE][P_SIZE];
-      FloatT B[P_SIZE][Q_SIZE];
+      float_t A[P_SIZE][P_SIZE];
+      float_t B[P_SIZE][Q_SIZE];
       getAB_res(){
         for(int i(0); i < sizeof(A) / sizeof(A[0]); ++i){
           for(int j(0); j < sizeof(A[0]) / sizeof(A[0][0]); ++j){
-            A[i][j] = FloatT(0);
+            A[i][j] = float_t(0);
           }
         }
         for(int i(0); i < sizeof(B) / sizeof(B[0]); ++i){
           for(int j(0); j < sizeof(B[0]) / sizeof(B[0][0]); ++j){
-            B[i][j] = FloatT(0);
+            B[i][j] = float_t(0);
           }
         }
       }
-      Matrix<FloatT> getA() const {
-        return Matrix<FloatT>(
+      mat_t getA() const {
+        return mat_t(
             sizeof(A) / sizeof(A[0]),
             sizeof(A[0]) / sizeof(A[0][0]),
-            (FloatT *)&A);
+            (float_t *)&A);
       }
-      Matrix<FloatT> getB() const {
-        return Matrix<FloatT>(
+      mat_t getB() const {
+        return mat_t(
             sizeof(B) / sizeof(B[0]),
             sizeof(B[0]) / sizeof(B[0][0]),
-            (FloatT *)&B);
+            (float_t *)&B);
       }
     };
 
@@ -143,16 +149,16 @@ class Filtered_INS2
      * @return (getAB_res) A,B行列
      */
     virtual void getAB(
-        const Vector3<FloatT> &accel, 
-        const Vector3<FloatT> &gyro,
+        const vec3_t &accel,
+        const vec3_t &gyro,
         getAB_res &res) const {
 
       // 回転行列の計算
-      Matrix<FloatT> dcm_e2n((this->q_e2n).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{e}^{n} \right) @f$
-      Matrix<FloatT> dcm_n2b((this->q_n2b).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{n}^{b} \right) @f$
+      mat_t dcm_e2n((this->q_e2n).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{e}^{n} \right) @f$
+      mat_t dcm_n2b((this->q_n2b).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{n}^{b} \right) @f$
       
-#define dcm_e2n(r, c) (const_cast<Matrix<FloatT> *>(&dcm_e2n)->operator()(r, c))
-#define dcm_n2b(r, c) (const_cast<Matrix<FloatT> *>(&dcm_n2b)->operator()(r, c))
+#define dcm_e2n(r, c) (const_cast<mat_t *>(&dcm_e2n)->operator()(r, c))
+#define dcm_n2b(r, c) (const_cast<mat_t *>(&dcm_n2b)->operator()(r, c))
      
 #ifndef pow2
 #define pow2(x) ((x) * (x))
@@ -165,16 +171,16 @@ class Filtered_INS2
       { //行列Aの計算
 #define A(i, j) res.A[i][j]
 
-        Vector3<FloatT> omega_1(this->omega_e2i_4n * 2 + this->omega_n2e_4n);
+        vec3_t omega_1(this->omega_e2i_4n * 2 + this->omega_n2e_4n);
 
 #ifdef R_STRICT
-        FloatT Rn_1(Earth::R_normal(this->phi) + get(7));
-        FloatT Rm_1(Earth::R_meridian(this->phi) + get(7));
-        FloatT Rn_2(pow2(Rn_1));
-        FloatT Rm_2(pow2(Rm_1));
+        float_t Rn_1(Earth::R_normal(this->phi) + get(7));
+        float_t Rm_1(Earth::R_meridian(this->phi) + get(7));
+        float_t Rn_2(pow2(Rn_1));
+        float_t Rm_2(pow2(Rm_1));
 #else
-        FloatT R(Earth::R_e + get(7));
-        FloatT R2(pow2(R));
+        float_t R(Earth::R_e + get(7));
+        float_t R2(pow2(R));
   #define Rn_1 R
   #define Rm_1 R
   #define Rn_2 R2
@@ -239,7 +245,7 @@ class Filtered_INS2
             by_delta_r(2, 0) =  dcm_e2n(2, 1) * dcm_e2n(2, 2) + dcm_e2n(2, 2) * dcm_e2n(2, 1);
             by_delta_r(2, 1) = -dcm_e2n(2, 0) * dcm_e2n(2, 2) - dcm_e2n(2, 2) * dcm_e2n(2, 0);
             
-            FloatT coef(pow2(Earth::Omega_Earth) * 2 * Rn_1);
+            float_t coef(pow2(Earth::Omega_Earth) * 2 * Rn_1);
             by_delta_r(0, 0) *= coef;
             by_delta_r(0, 1) *= coef;
             
@@ -282,7 +288,7 @@ class Filtered_INS2
           A(6, 2) = -1;
         }
     
-        Vector3<FloatT> omega_2(this->omega_e2i_4n + this->omega_n2e_4n);
+        vec3_t omega_2(this->omega_e2i_4n + this->omega_n2e_4n);
         {
           A(7, 1) = -1. / Rn_1 / 2;
       
@@ -337,7 +343,7 @@ class Filtered_INS2
         B(2, 1) = dcm_n2b(1, 2);
         B(2, 2) = dcm_n2b(2, 2);
         
-        B(2, 6) = FloatT(1); // 重力誤差Zのみ
+        B(2, 6) = float_t(1); // 重力誤差Zのみ
     
         B(7, 3) = dcm_n2b(0, 0) / 2;
         B(7, 4) = dcm_n2b(1, 0) / 2;
@@ -364,7 +370,7 @@ class Filtered_INS2
      */
     Filtered_INS2() 
         : BaseINS(),
-          m_filter(Matrix<FloatT>::getI(P_SIZE), Matrix<FloatT>::getI(Q_SIZE)){
+          m_filter(mat_t::getI(P_SIZE), mat_t::getI(Q_SIZE)){
     }
     
     /**
@@ -375,7 +381,7 @@ class Filtered_INS2
      * @param P P行列(システム誤差共分散行列)
      * @param Q Q行列(入力誤差共分散行列)
      */
-    Filtered_INS2(const Matrix<FloatT> &P, const Matrix<FloatT> &Q) 
+    Filtered_INS2(const mat_t &P, const mat_t &Q)
         : BaseINS(), m_filter(P, Q) {}
     
     /**
@@ -401,8 +407,8 @@ class Filtered_INS2
      * @param deltaT 時間間隔
      */
     virtual inline void before_update_INS(
-        const Matrix<FloatT> &A, const Matrix<FloatT> &B, 
-        const FloatT &deltaT
+        const mat_t &A, const mat_t &B,
+        const float_t &deltaT
       ){}
       
   public:    
@@ -413,10 +419,10 @@ class Filtered_INS2
      * @param gyro 角速度
      * @param deltaT 時間間隔
      */
-    void update(const Vector3<FloatT> &accel, const Vector3<FloatT> &gyro, const FloatT &deltaT){
+    void update(const vec3_t &accel, const vec3_t &gyro, const float_t &deltaT){
       getAB_res AB;
       getAB(accel, gyro, AB);
-      Matrix<FloatT> A(AB.getA()), B(AB.getB());
+      mat_t A(AB.getA()), B(AB.getB());
       //std::cerr << "deltaT:" << deltaT << std::endl;
       //std::cerr << "A:" << A << std::endl;
       //std::cerr << "B:" << B << std::endl;
@@ -438,11 +444,11 @@ class Filtered_INS2
      * @param x_hat 修正量
      */
     virtual inline void before_correct_INS(
-        const Matrix<FloatT> &H,
-        const Matrix<FloatT> &R,
-        const Matrix<FloatT> &K,
-        const Matrix<FloatT> &v,
-        Matrix<FloatT> &x_hat
+        const mat_t &H,
+        const mat_t &R,
+        const mat_t &K,
+        const mat_t &v,
+        mat_t &x_hat
       ){}
       
     /**
@@ -450,7 +456,7 @@ class Filtered_INS2
      * 
      * @param x_hat Kalman Filterによって得られたx_hat
      */
-    virtual inline void correct_INS(Matrix<FloatT> &x_hat){
+    virtual inline void correct_INS(mat_t &x_hat){
       
       // 速度
       for(unsigned i = 0; i < 3; i++){(*this)[i] -= x_hat(i, 0);}
@@ -461,14 +467,14 @@ class Filtered_INS2
 #else
 #define ALREADY_POW2_DEFINED
 #endif
-      Quaternion<FloatT> delta_q_e2n(1, -x_hat(3, 0), -x_hat(4, 0), -x_hat(5, 0));
+      quat_t delta_q_e2n(1, -x_hat(3, 0), -x_hat(4, 0), -x_hat(5, 0));
       (this->q_e2n) = delta_q_e2n * (this->q_e2n);
       
       // z位置
       (*this)[7] -= x_hat(6, 0);
       
       // 姿勢修正
-      Quaternion<FloatT> delta_q_n2b(1, -x_hat(7, 0), -x_hat(8, 0), -x_hat(9, 0));
+      quat_t delta_q_n2b(1, -x_hat(7, 0), -x_hat(8, 0), -x_hat(9, 0));
       (this->q_n2b) = delta_q_n2b * (this->q_n2b);
 #ifdef ALREADY_POW2_DEFINED
 #undef ALREADY_POW2_DEFINED
@@ -487,11 +493,11 @@ class Filtered_INS2
      * @param z 観測量
      * @param R 誤差共分散行列
      */
-    virtual void correct(const Matrix<FloatT> &H, const Matrix<FloatT> &z, const Matrix<FloatT> &R){
+    virtual void correct(const mat_t &H, const mat_t &z, const mat_t &R){
             
       // 修正量の計算
-      Matrix<FloatT> K(m_filter.correct(H, R)); //カルマンゲイン
-      Matrix<FloatT> x_hat(K * z);
+      mat_t K(m_filter.correct(H, R)); //カルマンゲイン
+      mat_t x_hat(K * z);
       before_correct_INS(H, R, K, z, x_hat);
       correct_INS(x_hat);
     }
@@ -501,12 +507,12 @@ class Filtered_INS2
      * 
      * @return (Filter &) フィルター
      */
-    Filter<FloatT> &getFilter(){return m_filter;}
+    filter_t &getFilter(){return m_filter;}
 
     struct StandardDeviations {
-      FloatT v_north_ms, v_east_ms, v_down_ms;
-      FloatT longitude_rad, latitude_rad, height_m;
-      FloatT heading_rad, pitch_rad, roll_rad;
+      float_t v_north_ms, v_east_ms, v_down_ms;
+      float_t longitude_rad, latitude_rad, height_m;
+      float_t heading_rad, pitch_rad, roll_rad;
     };
 
     /**
@@ -518,7 +524,7 @@ class Filtered_INS2
     StandardDeviations getSigma() const {
       StandardDeviations sigma;
 
-      Matrix<FloatT> &P(const_cast<Matrix<FloatT> &>(
+      mat_t &P(const_cast<mat_t &>(
           const_cast<Filtered_INS2 *>(this)->getFilter().getP()));
 
       { // 速度
@@ -528,9 +534,9 @@ class Filtered_INS2
       }
 
       { // 位置
-        FloatT cl(std::cos(BaseINS::lambda)), sl(std::sin(BaseINS::lambda));
+        float_t cl(std::cos(BaseINS::lambda)), sl(std::sin(BaseINS::lambda));
 
-        Matrix<FloatT> M(2, 3);
+        mat_t M(2, 3);
 
         M(0, 0) = 0;
         M(0, 1) = 0;
@@ -540,7 +546,7 @@ class Filtered_INS2
         M(1, 1) = cl * cl * 2 - 1;
         M(1, 2) = 0;
 
-        Matrix<FloatT> P_euler_e2n(M * P.partial(3, 3, 3, 3) * M.transpose());
+        mat_t P_euler_e2n(M * P.partial(3, 3, 3, 3) * M.transpose());
 
         sigma.longitude_rad = std::sqrt(P_euler_e2n(0, 0)) * 2; // 経度
         sigma.latitude_rad = std::sqrt(P_euler_e2n(1, 1)) * 2; // 緯度
@@ -549,19 +555,19 @@ class Filtered_INS2
       }
 
       { // 姿勢
-        FloatT psi(BaseINS::euler_psi()), theta(BaseINS::euler_theta()), phi(BaseINS::euler_phi());
+        float_t psi(BaseINS::euler_psi()), theta(BaseINS::euler_theta()), phi(BaseINS::euler_phi());
 
         // 最小二乗法(事前計算)
-        FloatT cpsi(std::cos(psi)), spsi(std::sin(psi));
-        FloatT ctheta(std::cos(theta)), ttheta(std::tan(theta));
-        Matrix<FloatT> M_conv(3, 3);
+        float_t cpsi(std::cos(psi)), spsi(std::sin(psi));
+        float_t ctheta(std::cos(theta)), ttheta(std::tan(theta));
+        mat_t M_conv(3, 3);
         {
           M_conv(0, 0) =  cpsi * ttheta; M_conv(0, 1) = spsi * ttheta; M_conv(0, 2) = 1;
           M_conv(1, 0) = -spsi;          M_conv(1, 1) = cpsi;          M_conv(1, 2) = 0;
           M_conv(2, 0) =  cpsi / ctheta; M_conv(2, 1) = spsi / ctheta; M_conv(2, 2) = 0;
         }
 
-        Matrix<FloatT> P_euler_n2b(M_conv * P.partial(3, 3, 7, 7) * M_conv.transpose());
+        mat_t P_euler_n2b(M_conv * P.partial(3, 3, 7, 7) * M_conv.transpose());
 
         sigma.heading_rad = std::sqrt(P_euler_n2b(0, 0)) * 2; // ヨー
         sigma.pitch_rad = std::sqrt(P_euler_n2b(1, 1)) * 2; // ピッチ

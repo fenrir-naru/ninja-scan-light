@@ -1,6 +1,6 @@
 /*
- *  Filtered_INS_BE.h, header file to perform calculation of INS with bias drift estimation.
- *  Copyright (C) 2015 M.Naruoka (fenrir)
+ *  BiasEstimation.h, header file to perform calculation of INS/GPS with bias drift estimation.
+ *  Copyright (C) 2016 M.Naruoka (fenrir)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -16,13 +16,13 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __FILTERED_INS_BE_H__
-#define __FILTERED_INS_BE_H__
+#ifndef __BIAS_ESTIMATION_H__
+#define __BIAS_ESTIMATION_H__
 
 
 #include "param/matrix.h"
-#include "navigation/Filtered_INS2.h"
-#include "algorithm/kalman.h"
+#include "Filtered_INS2.h"
+#include "INS_GPS2.h"
 
 #define BIAS_EST_MODE 2 // 初期ゼロ点推定含む
 #define ZERO_CONST_ALPHA 0 //(FloatT(1) / 1E4) // 0
@@ -34,8 +34,12 @@
 template <
     typename BaseINS = INS<> >
 class INS_BiasEstimated : public BaseINS {
+  public:
+    using typename BaseINS::float_t;
+    using typename BaseINS::vec3_t;
+
   protected:
-    typename BaseINS::vec3_t m_bias_accel, m_bias_gyro;
+    vec3_t m_bias_accel, m_bias_gyro;
 
   public:
     static const unsigned STATE_VALUES_WITHOUT_BIAS = BaseINS::STATE_VALUES;
@@ -56,10 +60,10 @@ class INS_BiasEstimated : public BaseINS {
 
     virtual ~INS_BiasEstimated(){}
 
-    typename BaseINS::vec3_t &bias_accel(){return m_bias_accel;}
-    typename BaseINS::vec3_t &bias_gyro(){return m_bias_gyro;}
+    vec3_t &bias_accel(){return m_bias_accel;}
+    vec3_t &bias_gyro(){return m_bias_gyro;}
 
-    typename BaseINS::float_t &operator[](const unsigned &index){
+    float_t &operator[](const unsigned &index){
       switch(index){
         case STATE_VALUES_WITHOUT_BIAS:     return m_bias_accel[0];
         case STATE_VALUES_WITHOUT_BIAS + 1: return m_bias_accel[1];
@@ -79,8 +83,8 @@ class INS_BiasEstimated : public BaseINS {
      * @param deltaT 時間間隔
      */
     void update(
-        const typename BaseINS::vec3_t &accel, const typename BaseINS::vec3_t &gyro,
-        const typename BaseINS::float_t &deltaT){
+        const vec3_t &accel, const vec3_t &gyro,
+        const float_t &deltaT){
       // バイアス除去して航法演算
       BaseINS::update(accel + m_bias_accel, gyro + m_bias_gyro, deltaT);
     }
@@ -137,21 +141,24 @@ const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE
 
 
 template <
-    class FloatT,
-    template <class> class Filter = KalmanFilterUD,
-    typename BaseFINS = Filtered_INS2<FloatT, Filter, INS_BiasEstimated<INS<FloatT> > > >
-class Filtered_INS_BiasEstimated : public BaseFINS{
+    class BaseFINS = Filtered_INS2<INS_BiasEstimated<INS<> > > >
+class Filtered_INS_BiasEstimated : public BaseFINS {
+  public:
+    using typename BaseFINS::float_t;
+    using typename BaseFINS::vec3_t;
+    using typename BaseFINS::mat_t;
+
   protected:
-    Vector3<FloatT> m_beta_accel, m_beta_gyro; // ベータの修正を!!
-    FloatT m_deltaT_sum;
+    vec3_t m_beta_accel, m_beta_gyro; // ベータの修正を!!
+    float_t m_deltaT_sum;
 
 #if BIAS_EST_MODE == 1
-    Vector3<FloatT> previous_modified_bias_accel;
-    Vector3<FloatT> previous_modified_bias_gyro;
+    vec3_t previous_modified_bias_accel;
+    vec3_t previous_modified_bias_gyro;
 #elif BIAS_EST_MODE == 2
-    FloatT previous_delteT_sum;
-    Vector3<FloatT> drift_bias_accel;
-    Vector3<FloatT> drift_bias_gyro;
+    float_t previous_delteT_sum;
+    vec3_t drift_bias_accel;
+    vec3_t drift_bias_gyro;
 #endif
     
   public:
@@ -164,8 +171,8 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
     
     Filtered_INS_BiasEstimated() 
         : BaseFINS(),
-        m_beta_accel(FloatT(1), FloatT(1), FloatT(1)),
-        m_beta_gyro(FloatT(1), FloatT(1), FloatT(1)),
+        m_beta_accel(float_t(1), float_t(1), float_t(1)),
+        m_beta_gyro(float_t(1), float_t(1), float_t(1)),
         m_deltaT_sum(0)
 #if BIAS_EST_MODE == 1
         , previous_modified_bias_accel()
@@ -215,12 +222,12 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
     
     ~Filtered_INS_BiasEstimated(){}
 
-    Vector3<FloatT> &beta_accel(){return m_beta_accel;}
-    Vector3<FloatT> &beta_gyro(){return m_beta_gyro;}
+    vec3_t &beta_accel(){return m_beta_accel;}
+    vec3_t &beta_gyro(){return m_beta_gyro;}
 
     void getAB(
-        const Vector3<FloatT> &accel,
-        const Vector3<FloatT> &gyro,
+        const vec3_t &accel,
+        const vec3_t &gyro,
         typename BaseFINS::getAB_res &res) const {
       
       BaseFINS::getAB(accel, gyro, res);
@@ -234,9 +241,9 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
         }
         // A行列のバイアスに関する対角成分を埋める
         for(unsigned i(P_SIZE_WITHOUT_BIAS), j(0); j < STATE_VALUES_BIAS; i++, j++){
-          res.A[i][i] += -((j < Vector3<FloatT>::OUT_OF_INDEX)
+          res.A[i][i] += -((j < vec3_t::OUT_OF_INDEX)
               ? m_beta_accel.get(j)
-              : m_beta_gyro.get(j - (Vector3<FloatT>::OUT_OF_INDEX)));
+              : m_beta_gyro.get(j - (vec3_t::OUT_OF_INDEX)));
         }
       }
       
@@ -256,7 +263,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
      * @param gyro ジャイロの値
      * @param deltaT 時間間隔
      */
-    void update(const Vector3<FloatT> &accel, const Vector3<FloatT> &gyro, const FloatT &deltaT){
+    void update(const vec3_t &accel, const vec3_t &gyro, const float_t &deltaT){
       // 時間を足す
       m_deltaT_sum += deltaT;
       BaseFINS::update(accel, gyro, deltaT);
@@ -267,7 +274,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
      *
      * @param x_hat Kalman Filterによって得られたx_hat
      */
-    void correct_INS(Matrix<FloatT> &x_hat){
+    void correct_INS(mat_t &x_hat){
       for(unsigned i(P_SIZE_WITHOUT_BIAS), j(STATE_VALUES_WITHOUT_BIAS), k(0);
           k < STATE_VALUES_BIAS;
           i++, j++, k++){
@@ -283,12 +290,12 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
      * @param z 観測量
      * @param R 誤差共分散行列
      */
-    void correct(const Matrix<FloatT> &H, const Matrix<FloatT> &z, const Matrix<FloatT> &R){
+    void correct(const mat_t &H, const mat_t &z, const mat_t &R){
 
 #if BIAS_EST_MODE == 0
       { //その1
         // バイアスを減らしておく
-        for(unsigned i = 0; i < Vector3<FloatT>::OUT_OF_INDEX; i++){
+        for(unsigned i = 0; i < vec3_t::OUT_OF_INDEX; i++){
           m_bias_accel[i] *= exp(-m_beta_accel[i] * m_deltaT_sum);
           m_bias_gyro[i] *= exp(-m_beta_gyro[i] * m_deltaT_sum);
         }
@@ -300,8 +307,8 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
 
 #elif BIAS_EST_MODE == 1
       { // その2
-        Vector3<FloatT> _bias_accel(m_bias_accel.copy());
-        Vector3<FloatT> _bias_gyro(m_bias_gyro.copy());
+        vec3_t _bias_accel(m_bias_accel.copy());
+        vec3_t _bias_gyro(m_bias_gyro.copy());
         
         // 突っ込む
         BaseFINS::correct(H, z, R);
@@ -322,38 +329,38 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
 #elif BIAS_EST_MODE == 2
       { // その3、初期ゼロ点推定含む
         // バイアスを減らしておく
-        for(unsigned i = 0; i < Vector3<FloatT>::OUT_OF_INDEX; i++){
+        for(unsigned i = 0; i < vec3_t::OUT_OF_INDEX; i++){
           {
-            FloatT delta_drift_accel(
+            float_t delta_drift_accel(
                 drift_bias_accel[i] 
-                  * (FloatT(1) - std::exp(-m_beta_accel[i] * (m_deltaT_sum - previous_delteT_sum))));
+                  * (float_t(1) - std::exp(-m_beta_accel[i] * (m_deltaT_sum - previous_delteT_sum))));
             drift_bias_accel[i] -= delta_drift_accel;
             m_bias_accel[i] -= delta_drift_accel;
           }
           
           {
-            FloatT delta_drift_gyro(
+            float_t delta_drift_gyro(
                 drift_bias_gyro[i]
-                  * (FloatT(1) - std::exp(-m_beta_gyro[i] * (m_deltaT_sum - previous_delteT_sum))));
+                  * (float_t(1) - std::exp(-m_beta_gyro[i] * (m_deltaT_sum - previous_delteT_sum))));
             drift_bias_gyro[i] -= delta_drift_gyro;
             m_bias_gyro[i] -= delta_drift_gyro;
           }
         }
         
-        Vector3<FloatT> before_correct_bias_accel(m_bias_accel.copy());
-        Vector3<FloatT> before_correct_bias_gyro(m_bias_gyro.copy());
+        vec3_t before_correct_bias_accel(m_bias_accel.copy());
+        vec3_t before_correct_bias_gyro(m_bias_gyro.copy());
         
         // 突っ込む
         BaseFINS::correct(H, z, R);
         
         // 修正量の分配
         {
-          Vector3<FloatT> delta_bias_accel(m_bias_accel - before_correct_bias_accel);
-          Vector3<FloatT> delta_bias_gyro(m_bias_gyro - before_correct_bias_gyro);
+          vec3_t delta_bias_accel(m_bias_accel - before_correct_bias_accel);
+          vec3_t delta_bias_gyro(m_bias_gyro - before_correct_bias_gyro);
           
           // 時定数の調整はここで
 #ifndef ZERO_CONST_ALPHA
-#define ZERO_CONST_ALPHA (FloatT(1) / 1000) // [sec]
+#define ZERO_CONST_ALPHA (float_t(1) / 1000) // [sec]
 #endif
           drift_bias_accel += delta_bias_accel * (1 - std::exp(-m_deltaT_sum * ZERO_CONST_ALPHA));
           drift_bias_gyro += delta_bias_gyro * (1 - std::exp(-m_deltaT_sum * ZERO_CONST_ALPHA));
@@ -365,4 +372,30 @@ class Filtered_INS_BiasEstimated : public BaseFINS{
 #endif
     }
 };
-#endif /* __FILTERED_INS_BE_H__ */
+
+template <
+  class FloatT,
+  template <class> class Filter = KalmanFilterUD,
+  typename BaseFINS = Filtered_INS_BiasEstimated<Filtered_INS2<INS_BiasEstimated<INS<FloatT> >, Filter> >
+>
+class INS_GPS2_BiasEstimated
+  : public INS_GPS2<FloatT, Filter, BaseFINS>{
+  public:
+    INS_GPS2_BiasEstimated()
+        : INS_GPS2<FloatT, Filter, BaseFINS>(){}
+
+    /**
+     * コピーコンストラクタ
+     *
+     * @param orig コピー元
+     * @param deepcopy ディープコピーを作成するかどうか
+     */
+    INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool deepcopy = false)
+        : INS_GPS2<FloatT, Filter, BaseFINS>(orig, deepcopy){
+
+    }
+
+    ~INS_GPS2_BiasEstimated(){}
+};
+
+#endif /* __BIAS_ESTIMATION_H__ */
