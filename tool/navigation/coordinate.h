@@ -50,6 +50,7 @@
 #define pow3(x) ((x)*(x)*(x))
 #endif
 
+#include "param/vector3.h"
 #include "param/matrix.h"
 
 #include "WGS84.h"
@@ -76,13 +77,20 @@ class System_3D {
         v[i] = orig.v[i];
       }
     }
-    System_3D(const Matrix<FloatT> &matrix){
-      Matrix<FloatT> target(matrix);
-      if(matrix.rows() < matrix.columns()){
-        target = target.transpose();
-      }
+    System_3D(const Vector3<FloatT> &vec){
       for(unsigned i(0); i < value_boundary; i++){
-        v[i] = target(i, 0);
+        v[i] = vec.get(i);
+      }
+    }
+    System_3D(const Matrix<FloatT> &matrix){
+      if(matrix.rows() < matrix.columns()){
+        for(unsigned i(0); i < value_boundary; i++){
+          v[i] = matrix(0, i);
+        }
+      }else{
+        for(unsigned i(0); i < value_boundary; i++){
+          v[i] = matrix(i, 0);
+        }
       }
     }
     ~System_3D(){}
@@ -96,6 +104,10 @@ class System_3D {
     }
     
     FloatT &operator[](int i){return v[i];}
+
+    operator Vector3<FloatT>() const {
+      return Vector3<FloatT>(v[0], v[1], v[2]);
+    }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
       out << const_cast<self_t *>(&self)->operator[](0) << " "
@@ -121,11 +133,14 @@ class System_XYZ : public System_3D<FloatT> {
     typedef System_3D<FloatT> super_t;
   public:
     System_XYZ() : super_t() {}
-    System_XYZ(const FloatT &x, const FloatT &y, const FloatT &z) 
+    template <class T>
+    System_XYZ(const T &x, const T &y, const T &z)
         : super_t(x, y, z) {}
     System_XYZ(const self_t &xyz)
         : super_t(xyz) {}
-    System_XYZ(const Matrix<FloatT> &matrix) 
+    System_XYZ(const Vector3<FloatT> &vec)
+        : super_t(vec) {}
+    System_XYZ(const Matrix<FloatT> &matrix)
         : super_t(matrix) {}
     ~System_XYZ(){}
     
@@ -286,6 +301,10 @@ class System_ENU : public System_3D<FloatT> {
         : super_t(east, north, up) {}
     System_ENU(const self_t &enu) 
         : super_t(enu) {}
+    System_ENU(const Vector3<FloatT> &vec)
+        : super_t(vec) {}
+    System_ENU(const Matrix<FloatT> &mat)
+        : super_t(mat) {}
     ~System_ENU() {}
     
     FloatT &east()  {return super_t::operator[](0);}  ///< “Œ¬•ª[m]
