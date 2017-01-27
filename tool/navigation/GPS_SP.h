@@ -34,6 +34,9 @@
  *
  */
 
+#ifndef __GPS_SP_H__
+#define __GPS_SP_H__
+
 #include <utility>
 #include <vector>
 #include <exception>
@@ -376,3 +379,5 @@ class GPS_SinglePositioning {
       return solve_user_position(sat_range, target_time, xyz_t(), 0, false);
     }
 };
+
+#endif /* __GPS_SP_H__ */
