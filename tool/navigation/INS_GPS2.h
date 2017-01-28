@@ -118,6 +118,18 @@ template <
 >
 class INS_GPS2 : public BaseFINS{
   public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename BaseFINS::float_t float_t;
+    typedef typename BaseFINS::vec3_t vec3_t;
+    typedef typename BaseFINS::quat_t quat_t;
+    typedef typename BaseFINS::mat_t mat_t;
+#else
+    using typename BaseFINS::float_t;
+    using typename BaseFINS::vec3_t;
+    using typename BaseFINS::quat_t;
+    using typename BaseFINS::mat_t;
+#endif
+  public:
     INS_GPS2() : BaseFINS(){} /**< コンストラクタ */
     
     /**
@@ -140,7 +152,7 @@ class INS_GPS2 : public BaseFINS{
      * 
      * @param info 修正情報
      */
-    void correct(const CorrectInfo<FloatT> &info){
+    void correct(const CorrectInfo<float_t> &info){
       BaseFINS::correct(info.H, info.z, info.R);
     }
     
@@ -154,19 +166,19 @@ class INS_GPS2 : public BaseFINS{
      * @param gps GPS出力データ
      * @return (CorrectInfo) 観測更新用のデータ
      */
-    CorrectInfo<FloatT> correct_info(const GPS_UBLOX_3D<FloatT> &gps) const {
+    CorrectInfo<float_t> correct_info(const GPS_UBLOX_3D<float_t> &gps) const {
       using std::cos;
       using std::sin;
-      FloatT azimuth(INS<FloatT>::azimuth());
+      float_t azimuth(BaseFINS::azimuth());
       
       //cout << "__correct__" << endl;
       
-      Quaternion<FloatT> q_e2n_gps(INS<FloatT>::e2n(gps.latitude, gps.longitude));
+      quat_t q_e2n_gps(BaseFINS::e2n(gps.latitude, gps.longitude));
       
       //cout << "__correct__" << endl;
       
       //観測量z
-      FloatT z_serialized[8][1];
+      float_t z_serialized[8][1];
 #define z(i, j) z_serialized[i][j]
       {
         z(0, 0) = get(0) - (gps.v_n * cos(azimuth) + gps.v_e * sin(azimuth));
@@ -180,10 +192,10 @@ class INS_GPS2 : public BaseFINS{
       }
 #undef z
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
-      Matrix<FloatT> z(z_size, 1, (FloatT *)z_serialized);
+      mat_t z(z_size, 1, (float_t *)z_serialized);
       
       //行列Hの作成
-      FloatT H_serialized[z_size][P_SIZE] = {{FloatT(0)}};
+      float_t H_serialized[z_size][P_SIZE] = {{0}};
 #define H(i, j) H_serialized[i][j]
       {
         H(0, 0) = 1;
@@ -209,27 +221,27 @@ class INS_GPS2 : public BaseFINS{
         H(7, 6) = 1;
       }
 #undef H
-      Matrix<FloatT> H(z_size, P_SIZE, (FloatT *)H_serialized);
+      mat_t H(z_size, P_SIZE, (float_t *)H_serialized);
       
-      FloatT lat_sigma(INS<FloatT>::meter2lat(gps.sigma_2d));
-      FloatT long_sigma(INS<FloatT>::meter2long(gps.sigma_2d));
+      float_t lat_sigma(BaseFINS::meter2lat(gps.sigma_2d));
+      float_t long_sigma(BaseFINS::meter2long(gps.sigma_2d));
       
       //観測値誤差行列R
-      FloatT R_serialized[z_size][z_size] = {{FloatT(0)}};
+      float_t R_serialized[z_size][z_size] = {{0}};
 #define R(i, j) R_serialized[i][j]
       {
-        typename GPS_UBLOX_3D<FloatT>::sigma_vel_ned_t sigma_vel_ned(
+        typename GPS_UBLOX_3D<float_t>::sigma_vel_ned_t sigma_vel_ned(
             gps.sigma_vel_ned());
         R(0, 0) = pow2(sigma_vel_ned.n);
         R(1, 1) = pow2(sigma_vel_ned.e);
         R(2, 2) = pow2(sigma_vel_ned.d);
         
-        FloatT s_lambda1 = sin((gps.longitude + azimuth) / 2);
-        FloatT s_lambda2 = sin((gps.longitude - azimuth) / 2);
-        FloatT c_lambda1 = cos((gps.longitude + azimuth) / 2);
-        FloatT c_lambda2 = cos((gps.longitude - azimuth) / 2);
-        FloatT s_phi = sin(-gps.latitude / 2);
-        FloatT c_phi = cos(-gps.latitude / 2);
+        float_t s_lambda1 = sin((gps.longitude + azimuth) / 2);
+        float_t s_lambda2 = sin((gps.longitude - azimuth) / 2);
+        float_t c_lambda1 = cos((gps.longitude + azimuth) / 2);
+        float_t c_lambda2 = cos((gps.longitude - azimuth) / 2);
+        float_t s_phi = sin(-gps.latitude / 2);
+        float_t c_phi = cos(-gps.latitude / 2);
         
         R(3, 3) = pow2( c_lambda1 * (s_phi - c_phi) * lat_sigma / 2) + pow2(-s_lambda1 * (c_phi + s_phi) * long_sigma / 2);
         R(4, 4) = pow2( s_lambda2 * (s_phi + c_phi) * lat_sigma / 2) + pow2( c_lambda2 * (c_phi - s_phi) * long_sigma / 2);
@@ -239,10 +251,10 @@ class INS_GPS2 : public BaseFINS{
         R(7, 7) = pow2(gps.sigma_height);
       }
 #undef R
-      Matrix<FloatT> R(z_size, z_size, (FloatT *)R_serialized);
+      mat_t R(z_size, z_size, (float_t *)R_serialized);
 #undef z_size
       
-      return CorrectInfo<FloatT>(H, z, R);
+      return CorrectInfo<float_t>(H, z, R);
     }
     
     /**
@@ -251,7 +263,7 @@ class INS_GPS2 : public BaseFINS{
      * 
      * @param gps GPS出力データ
      */
-    void correct(const GPS_UBLOX_3D<FloatT> &gps){
+    void correct(const GPS_UBLOX_3D<float_t> &gps){
       correct(correct_info(gps));
     }
     
@@ -265,31 +277,31 @@ class INS_GPS2 : public BaseFINS{
      * @param omega_b2i_4b 観測時のジャイロの値
      * @return (CorrectInfo) 観測更新用のデータ
      */
-    CorrectInfo<FloatT> correct_info(const GPS_UBLOX_3D<FloatT> &gps, 
-        const Vector3<FloatT> &lever_arm_b,
-        const Vector3<FloatT> &omega_b2i_4b) const {
+    CorrectInfo<float_t> correct_info(const GPS_UBLOX_3D<float_t> &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b) const {
                    
-      FloatT azimuth(INS<FloatT>::azimuth());
+      float_t azimuth(BaseFINS::azimuth());
       
       // 位置関係
-      Vector3<FloatT> lever_arm_n(
-        ((INS<FloatT>::q_n2b) * lever_arm_b * (INS<FloatT>::q_n2b).conj()).vector());
-      Vector3<FloatT> lever_arm_g(
+      vec3_t lever_arm_n(
+        ((BaseFINS::q_n2b) * lever_arm_b * (BaseFINS::q_n2b).conj()).vector());
+      vec3_t lever_arm_g(
           lever_arm_n[0] * cos(azimuth) - lever_arm_n[1] * sin(azimuth),
           lever_arm_n[0] * sin(azimuth) + lever_arm_n[1] * cos(azimuth),
           lever_arm_n[2]
         );
-      FloatT lever_lat(-INS<FloatT>::meter2lat(lever_arm_g[0]));
-      FloatT lever_long(-INS<FloatT>::meter2long(lever_arm_g[1]));
+      float_t lever_lat(-BaseFINS::meter2lat(lever_arm_g[0]));
+      float_t lever_long(-BaseFINS::meter2long(lever_arm_g[1]));
       
-      FloatT c_phi(cos((-INS<FloatT>::phi - lever_lat) / 2));
-      FloatT s_phi(sin((-INS<FloatT>::phi - lever_lat) / 2));
-      FloatT c_lambda_p(cos((INS<FloatT>::lambda + azimuth + lever_long) / 2));
-      FloatT s_lambda_p(sin((INS<FloatT>::lambda + azimuth + lever_long) / 2));
-      FloatT c_lambda_n(cos((INS<FloatT>::lambda - azimuth + lever_long) / 2));
-      FloatT s_lambda_n(sin((INS<FloatT>::lambda - azimuth + lever_long) / 2));
+      float_t c_phi(cos((-BaseFINS::phi - lever_lat) / 2));
+      float_t s_phi(sin((-BaseFINS::phi - lever_lat) / 2));
+      float_t c_lambda_p(cos((BaseFINS::lambda + azimuth + lever_long) / 2));
+      float_t s_lambda_p(sin((BaseFINS::lambda + azimuth + lever_long) / 2));
+      float_t c_lambda_n(cos((BaseFINS::lambda - azimuth + lever_long) / 2));
+      float_t s_lambda_n(sin((BaseFINS::lambda - azimuth + lever_long) / 2));
       
-      Matrix<FloatT> coefficient_pos_phi_lambda(4, 2);
+      mat_t coefficient_pos_phi_lambda(4, 2);
       {
         coefficient_pos_phi_lambda(0, 0) = -c_lambda_p * (-s_phi + c_phi);
         coefficient_pos_phi_lambda(0, 1) = -s_lambda_p * ( c_phi + s_phi);
@@ -302,38 +314,38 @@ class INS_GPS2 : public BaseFINS{
       }
       coefficient_pos_phi_lambda /= (std::sqrt(2.0) * 2);
       
-      FloatT c_alpha(cos(azimuth));
-      FloatT s_alpha(sin(azimuth));
+      float_t c_alpha(cos(azimuth));
+      float_t s_alpha(sin(azimuth));
       
-      Matrix<FloatT> coefficient_pos_lever_g(2, 3);
+      mat_t coefficient_pos_lever_g(2, 3);
       {
-        coefficient_pos_lever_g(0, 0) = INS<FloatT>::meter2lat(s_alpha * lever_arm_n[2] * -2);
-        coefficient_pos_lever_g(0, 1) = INS<FloatT>::meter2lat(c_alpha * lever_arm_n[2] * -2);
-        coefficient_pos_lever_g(0, 2) = INS<FloatT>::meter2lat((-c_alpha * lever_arm_n[1] - s_alpha * lever_arm_n[0]) * -2);  
-        coefficient_pos_lever_g(1, 0) = INS<FloatT>::meter2long(-c_alpha * lever_arm_n[2] * -2);
-        coefficient_pos_lever_g(1, 1) = INS<FloatT>::meter2long(s_alpha * lever_arm_n[2] * -2);
-        coefficient_pos_lever_g(1, 2) = INS<FloatT>::meter2long((-s_alpha * lever_arm_n[1] + c_alpha * lever_arm_n[0]) * -2);
+        coefficient_pos_lever_g(0, 0) = BaseFINS::meter2lat(s_alpha * lever_arm_n[2] * -2);
+        coefficient_pos_lever_g(0, 1) = BaseFINS::meter2lat(c_alpha * lever_arm_n[2] * -2);
+        coefficient_pos_lever_g(0, 2) = BaseFINS::meter2lat((-c_alpha * lever_arm_n[1] - s_alpha * lever_arm_n[0]) * -2);
+        coefficient_pos_lever_g(1, 0) = BaseFINS::meter2long(-c_alpha * lever_arm_n[2] * -2);
+        coefficient_pos_lever_g(1, 1) = BaseFINS::meter2long(s_alpha * lever_arm_n[2] * -2);
+        coefficient_pos_lever_g(1, 2) = BaseFINS::meter2long((-s_alpha * lever_arm_n[1] + c_alpha * lever_arm_n[0]) * -2);
       }
       
-      Quaternion<FloatT> q_e2n_gps(
-          INS<FloatT>::e2n(
+      quat_t q_e2n_gps(
+          BaseFINS::e2n(
               gps.latitude + lever_lat, 
               gps.longitude + lever_long));
       
       // 速度の修正項
-      Vector3<FloatT> omega_b2n_4b(
-          omega_b2i_4b - INS<FloatT>::omega_e2i_4n + INS<FloatT>::omega_n2e_4n
+      vec3_t omega_b2n_4b(
+          omega_b2i_4b - BaseFINS::omega_e2i_4n + BaseFINS::omega_n2e_4n
         );
-      Vector3<FloatT> v_induced(
-        ((INS<FloatT>::q_n2b) 
+      vec3_t v_induced(
+        ((BaseFINS::q_n2b)
           * (omega_b2n_4b * lever_arm_b) 
-          * (INS<FloatT>::q_n2b).conj()).vector());
+          * (BaseFINS::q_n2b).conj()).vector());
       
-      //Matrix<FloatT> coefficient_vel_omega(omega_b2n_4n.skewMatrix());
-      //Matrix<FloatT> coefficient_vel_lever(-lever_arm_n.skewMatrix());
+      //mat_t coefficient_vel_omega(omega_b2n_4n.skewMatrix());
+      //mat_t coefficient_vel_lever(-lever_arm_n.skewMatrix());
       
       //観測量z
-      FloatT z_serialized[8][1];
+      float_t z_serialized[8][1];
 #define z(i, j) z_serialized[i][j]
       {
         z(0, 0) = get(0) 
@@ -350,10 +362,10 @@ class INS_GPS2 : public BaseFINS{
       }
 #undef z
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
-      Matrix<FloatT> z(z_size, 1, (FloatT *)z_serialized);
+      mat_t z(z_size, 1, (float_t *)z_serialized);
       
       //行列Hの作成
-      Matrix<FloatT> H(z_size, P_SIZE);
+      mat_t H(z_size, P_SIZE);
       {
         H(0, 0) = 1;
         H(1, 1) = 1;
@@ -386,23 +398,23 @@ class INS_GPS2 : public BaseFINS{
         H.pivotMerge(0, 7, - v_induced.skewMatrix() * 2);
       }
       
-      FloatT lat_sigma = BaseFINS::meter2lat(gps.sigma_2d);
-      FloatT long_sigma = BaseFINS::meter2long(gps.sigma_2d);
+      float_t lat_sigma = BaseFINS::meter2lat(gps.sigma_2d);
+      float_t long_sigma = BaseFINS::meter2long(gps.sigma_2d);
       
       //観測値誤差行列R
-      FloatT R_serialized[z_size][z_size] = {{FloatT(0)}};
+      float_t R_serialized[z_size][z_size] = {{0}};
 #define R(i, j) R_serialized[i][j]
       {
         R(0, 0) = pow2(gps.sigma_vel);
         R(1, 1) = pow2(gps.sigma_vel);
         R(2, 2) = pow2(gps.sigma_vel);
         
-        FloatT s_lambda1 = sin((gps.longitude + azimuth) / 2);
-        FloatT s_lambda2 = sin((gps.longitude - azimuth) / 2);
-        FloatT c_lambda1 = cos((gps.longitude + azimuth) / 2);
-        FloatT c_lambda2 = cos((gps.longitude - azimuth) / 2);
-        FloatT s_phi = sin(-gps.latitude / 2);
-        FloatT c_phi = cos(-gps.latitude / 2);
+        float_t s_lambda1 = sin((gps.longitude + azimuth) / 2);
+        float_t s_lambda2 = sin((gps.longitude - azimuth) / 2);
+        float_t c_lambda1 = cos((gps.longitude + azimuth) / 2);
+        float_t c_lambda2 = cos((gps.longitude - azimuth) / 2);
+        float_t s_phi = sin(-gps.latitude / 2);
+        float_t c_phi = cos(-gps.latitude / 2);
         
         R(3, 3) = pow2( c_lambda1 * (s_phi - c_phi) * lat_sigma / 2) + pow2(-s_lambda1 * (c_phi + s_phi) * long_sigma / 2);
         R(4, 4) = pow2( s_lambda2 * (s_phi + c_phi) * lat_sigma / 2) + pow2( c_lambda2 * (c_phi - s_phi) * long_sigma / 2);
@@ -414,7 +426,7 @@ class INS_GPS2 : public BaseFINS{
         // 速度項にさらにΔomega_{b/i}^{n}の影響を加える
       }
 #undef R
-      Matrix<FloatT> R(z_size, z_size, (FloatT *)R_serialized);
+      mat_t R(z_size, z_size, (float_t *)R_serialized);
 #undef z_size
       
       //for(int i = 0; i < z.rows(); i++) cout << z(i, 0) << '\t';
@@ -428,7 +440,7 @@ class INS_GPS2 : public BaseFINS{
       }*/
       //for(int i = 0; i < R.rows(); i++){R(i, i) *= 2;}
       
-      return CorrectInfo<FloatT>(H, z, R);
+      return CorrectInfo<float_t>(H, z, R);
     }
     
     /**
@@ -440,9 +452,9 @@ class INS_GPS2 : public BaseFINS{
      * @param lever_arm_b lever armの大きさ
      * @param omega_b2i_4b 観測時のジャイロの値
      */
-    void correct(const GPS_UBLOX_3D<FloatT> &gps, 
-        const Vector3<FloatT> &lever_arm_b,
-        const Vector3<FloatT> &omega_b2i_4b){
+    void correct(const GPS_UBLOX_3D<float_t> &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b){
       correct(correct_info(gps, lever_arm_b, omega_b2i_4b));
     }
 
@@ -452,30 +464,30 @@ class INS_GPS2 : public BaseFINS{
      * @param delta_psi 現在ヨー角との差分 [rad]
      * @param sigma2_delta_psi delta_psiの確からしさ(分散) [rad^2]
      */
-    void correct_yaw(const FloatT &delta_psi, const FloatT &sigma2_delta_psi){
+    void correct_yaw(const float_t &delta_psi, const float_t &sigma2_delta_psi){
 
       //観測量z
-      FloatT z_serialized[1][1] = {{-delta_psi}};
+      float_t z_serialized[1][1] = {{-delta_psi}};
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
-      Matrix<FloatT> z(z_size, 1, (FloatT *)z_serialized);
+      mat_t z(z_size, 1, (float_t *)z_serialized);
 
       //行列Hの作成
-      FloatT H_serialized[z_size][P_SIZE] = {{FloatT(0)}};
+      float_t H_serialized[z_size][P_SIZE] = {{0}};
 #define H(i, j) H_serialized[i][j]
       {
         H(0, 9) = 2; // u_{3} {}_{n}^{b}
       }
 #undef H
-      Matrix<FloatT> H(z_size, P_SIZE, (FloatT *)H_serialized);
+      mat_t H(z_size, P_SIZE, (float_t *)H_serialized);
 
       //観測値誤差行列R
-      FloatT R_serialized[z_size][z_size] = {{sigma2_delta_psi}};
-      Matrix<FloatT> R(z_size, z_size, (FloatT *)R_serialized);
+      float_t R_serialized[z_size][z_size] = {{sigma2_delta_psi}};
+      mat_t R(z_size, z_size, (float_t *)R_serialized);
 #undef z_size
 
       // 修正量の計算
-      Matrix<FloatT> K(BaseFINS::m_filter.correct(H, R)); //カルマンゲイン
-      Matrix<FloatT> x_hat(K * z);
+      mat_t K(BaseFINS::m_filter.correct(H, R)); //カルマンゲイン
+      mat_t x_hat(K * z);
       //before_correct_INS(H, R, K, z, x_hat); // ヨーだけ補正する特殊モードなため、これは呼び出さない
       BaseFINS::correct_INS(x_hat);
     }
