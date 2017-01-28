@@ -88,12 +88,12 @@ class Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >
         ;
     static const unsigned P_SIZE
 #if defined(_MSC_VER)
-        = P_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_BIAS
+        = P_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
 #endif
         ;
     static const unsigned Q_SIZE
 #if defined(_MSC_VER)
-        = Q_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_BIAS;
+        = Q_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
 #endif
         ;
 };
@@ -211,6 +211,8 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
       }
       BaseFINS::correct_INS(x_hat);
     }
+
+    using BaseFINS::correct_primitive;
 
     /**
      * Measurement update
