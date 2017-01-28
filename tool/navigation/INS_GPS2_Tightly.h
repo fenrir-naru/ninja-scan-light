@@ -36,7 +36,7 @@ struct INS_Property<INS_ClockErrorEstimated<BaseINS> > {
 
 template <
     typename BaseINS = INS<> >
-class INS_ClockErrorEstimated : public BaseINS, public INS_Property<INS_ClockErrorEstimated<BaseINS> > {
+class INS_ClockErrorEstimated : public BaseINS {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseINS::float_t float_t;
@@ -48,9 +48,12 @@ class INS_ClockErrorEstimated : public BaseINS, public INS_Property<INS_ClockErr
     float_t m_clock_error;
 
   public:
-    using INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES_WITHOUT_CLOCK_ERROR;
-    using INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES_CLOCK_ERROR;
-    using INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES; ///< Number of state values
+    static const unsigned STATE_VALUES_WITHOUT_CLOCK_ERROR
+        = INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES_WITHOUT_CLOCK_ERROR;
+    static const unsigned STATE_VALUES_CLOCK_ERROR
+        = INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES_CLOCK_ERROR;
+    static const unsigned STATE_VALUES
+        = INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES; ///< Number of state values
     virtual unsigned state_values() const {return STATE_VALUES;}
 
     INS_ClockErrorEstimated()
