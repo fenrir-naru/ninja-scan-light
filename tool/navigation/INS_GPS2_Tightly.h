@@ -146,12 +146,6 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
     }
 
-    /**
-     * コピーコンストラクタ
-     *
-     * @param orig コピー元
-     * @param deepcopy ディープコピーを作成するかどうか
-     */
     Filtered_INS_ClockErrorEstimated(
         const Filtered_INS_ClockErrorEstimated &orig,
         const bool deepcopy = false) :
@@ -171,20 +165,20 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
       BaseFINS::getAB(accel, gyro, res);
 
-      { // A行列の修正
-        // B行列の加速度、角速度に関する項をA行列へ
+      { // A matrix modification
+        // Copy from part of B associated with clock error
         for(unsigned i(0); i < P_SIZE_WITHOUT_CLOCK_ERROR; i++){
           for(unsigned j(P_SIZE_WITHOUT_CLOCK_ERROR), k(0); k < STATE_VALUES_CLOCK_ERROR; j++, k++){
             res.A[i][j] = res.B[i][k];
           }
         }
-        // A行列のバイアスに関する対角成分を埋める
+        // Modify part of A associated with clock error
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0); j < STATE_VALUES_CLOCK_ERROR; i++, j++){
           res.A[i][i] += -m_beta_clock_error;
         }
       }
 
-      { // B行列の修正
+      { // B matrix modification
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(Q_SIZE_WITHOUT_CLOCK_ERROR), k(0);
              k < STATE_VALUES_CLOCK_ERROR;
              i++, j++, k++){
@@ -194,20 +188,20 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
     }
 
     /**
-     * 時間更新
+     * Time update
      *
-     * @param accel 加速度計の値
-     * @param gyro ジャイロの値
-     * @param deltaT 時間間隔
+     * @param accel acceleration
+     * @param gyro angular speed
+     * @param deltaT delta T
      */
     void update(const vec3_t &accel, const vec3_t &gyro, const float_t &deltaT){
       BaseFINS::update(accel, gyro, deltaT);
     }
 
     /**
-     * Kalman Filterによって得られた@f$ \Hat{x} @f$を利用して、INSを修正します。
+     * Kalman By using correction values @f$ \Hat{x} @f$ estimated by filter, correct INS.
      *
-     * @param x_hat Kalman Filterによって得られたx_hat
+     * @param x_hat correction values estimated by Kalman Filter
      */
     void correct_INS(mat_t &x_hat){
       for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(STATE_VALUES_WITHOUT_CLOCK_ERROR), k(0);
@@ -219,15 +213,20 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
     }
 
     /**
-     * 修正します。
+     * Measurement update
      *
-     * @param H 観測行列
-     * @param z 観測量
-     * @param R 誤差共分散行列
+     * @param H Observation matrix
+     * @param z Observation values
+     * @param R Error covariance of z
      */
     void correct_primitive(const mat_t &H, const mat_t &z, const mat_t &R){
       BaseFINS::correct_primitive(H, z, R);
     }
+};
+
+template <class FloatT>
+struct GPS_RawMeasurement {
+
 };
 
 /**
@@ -244,24 +243,68 @@ template <
   class FloatT,
   template <class> class Filter = KalmanFilterUD,
   typename BaseFINS = Filtered_INS_ClockErrorEstimated<
-      Filtered_INS2<INS_ClockErrorEstimated<INS<> >, Filter> >
+      Filtered_INS2<INS_ClockErrorEstimated<INS<FloatT> >, Filter> >
 >
 class INS_GPS2_Tightly : public BaseFINS{
   public:
-    INS_GPS2_Tightly() : BaseFINS(){} /**< コンストラクタ */
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename BaseFINS::float_t float_t;
+    typedef typename BaseFINS::vec3_t vec3_t;
+    typedef typename BaseFINS::quat_t quat_t;
+    typedef typename BaseFINS::mat_t mat_t;
+#else
+    using typename BaseFINS::float_t;
+    using typename BaseFINS::vec3_t;
+    using typename BaseFINS::quat_t;
+    using typename BaseFINS::mat_t;
+#endif
+  public:
+    INS_GPS2_Tightly() : BaseFINS(){}
 
-    /**
-     * コピーコンストラクタ
-     *
-     * @param orig コピー元
-     * @param deepcopy ディープコピーを作成するかどうか
-     */
     INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool deepcopy = false) :
       BaseFINS(orig, deepcopy){
 
     }
 
-    ~INS_GPS2_Tightly(){}         /**< デストラクタ */
+    ~INS_GPS2_Tightly(){}
+
+    CorrectInfo<float_t> correct_info(const GPS_RawMeasurement<float_t> &gps) const {
+
+      mat_t H;
+      mat_t z;
+      mat_t R;
+
+      return CorrectInfo<FloatT>(H, z, R);
+    }
+
+    /**
+     * Measurement update with GPS raw measurement
+     *
+     * @param gps GPS measurement
+     */
+    void correct(const GPS_RawMeasurement<float_t> &gps){
+      BaseFINS::correct_primitive(correct_info(gps));
+    }
+
+
+    CorrectInfo<float_t> correct_info(const GPS_RawMeasurement<float_t> &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b) const {
+      return correct_info(gps);
+    }
+
+    /**
+     * Measurement update with GPS raw measurement and lever arm effect
+     *
+     * @param gps GPS measurement
+     * @param lever_arm_b lever arm vector in b-frame
+     * @param omega_b2i_4b angular speed vector in b-frame
+     */
+    void correct(const GPS_RawMeasurement<float_t> &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b){
+      BaseFINS::correct_primitive(correct_info(gps, lever_arm_b, omega_b2i_4b));
+    }
 };
 
 #endif /* __INS_GPS2_TIGHTLY_H__ */
