@@ -268,6 +268,8 @@ class INS_GPS2_Tightly : public BaseFINS{
 
     ~INS_GPS2_Tightly(){}
 
+    typedef GPS_RawMeasurement<float_t> raw_data_t;
+
     CorrectInfo<float_t> correct_info(const GPS_RawMeasurement<float_t> &gps) const {
 
       mat_t H;

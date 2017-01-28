@@ -23,6 +23,7 @@
 #include "param/matrix.h"
 #include "Filtered_INS2.h"
 #include "INS_GPS2.h"
+#include "INS_GPS2_Tightly.h"
 
 #define BIAS_EST_MODE 2 // èâä˙É[Éçì_êÑíËä‹Çﬁ
 #define ZERO_CONST_ALPHA 0 //(FloatT(1) / 1E4) // 0
@@ -447,6 +448,47 @@ class INS_GPS2_BiasEstimated
     using super_t::correct;
 
     void correct(const GPS_Solution<float_t> &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b){
+      super_t::correct(gps, lever_arm_b, omega_b2i_4b - BaseFINS::m_bias_gyro);
+    }
+};
+
+template <
+  class FloatT,
+  template <class> class Filter = KalmanFilterUD,
+  typename BaseFINS =
+      Filtered_INS_BiasEstimated<Filtered_INS_ClockErrorEstimated<Filtered_INS2<
+        INS_BiasEstimated<INS_ClockErrorEstimated<INS<FloatT> > >, Filter> > >
+>
+class INS_GPS2_Tightly_BiasEstimated
+    : public INS_GPS2_Tightly<FloatT, Filter, BaseFINS>{
+    typedef INS_GPS2_Tightly<FloatT, Filter, BaseFINS> super_t;
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename BaseFINS::float_t float_t;
+    typedef typename BaseFINS::vec3_t vec3_t;
+    typedef typename super_t::raw_data_t raw_data_t;
+#else
+    using typename BaseFINS::float_t;
+    using typename BaseFINS::vec3_t;
+    using typename super_t::raw_data_t;
+#endif
+  public:
+    INS_GPS2_Tightly_BiasEstimated()
+        : super_t(){}
+
+    INS_GPS2_Tightly_BiasEstimated(
+        const INS_GPS2_Tightly_BiasEstimated &orig, const bool deepcopy = false)
+        : super_t(orig, deepcopy){
+
+    }
+
+    ~INS_GPS2_Tightly_BiasEstimated(){}
+
+    using super_t::correct;
+
+    void correct(const raw_data_t &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       super_t::correct(gps, lever_arm_b, omega_b2i_4b - BaseFINS::m_bias_gyro);
