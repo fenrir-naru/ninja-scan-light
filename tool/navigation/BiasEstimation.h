@@ -43,7 +43,7 @@ struct INS_Property<INS_BiasEstimated<BaseINS> > {
 
 template <
     typename BaseINS = INS<> >
-class INS_BiasEstimated : public BaseINS, public INS_Property<INS_BiasEstimated<BaseINS> > {
+class INS_BiasEstimated : public BaseINS {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseINS::float_t float_t;
@@ -57,9 +57,12 @@ class INS_BiasEstimated : public BaseINS, public INS_Property<INS_BiasEstimated<
     vec3_t m_bias_accel, m_bias_gyro;
 
   public:
-    using INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES_WITHOUT_BIAS;
-    using INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES_BIAS;
-    using INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES;
+    static const unsigned STATE_VALUES_WITHOUT_BIAS
+        = INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES_WITHOUT_BIAS;
+    static const unsigned STATE_VALUES_BIAS
+        = INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES_BIAS;
+    static const unsigned STATE_VALUES
+        = INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES;
     virtual unsigned state_values() const {return STATE_VALUES;}
 
     INS_BiasEstimated()

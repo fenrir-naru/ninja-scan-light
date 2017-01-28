@@ -65,7 +65,7 @@ struct INS_Property {
  * @param FloatT 演算精度、通常はdouble
  */
 template <class FloatT = double>
-class INS : public INS_Property<INS<FloatT> >{
+class INS {
   public:
     typedef FloatT float_t;
     typedef Vector3<float_t> vec3_t;
@@ -90,7 +90,7 @@ class INS : public INS_Property<INS<FloatT> >{
     
   public:
     typedef WGS84Generic<float_t> Earth; ///< 地球モデル
-    using INS_Property<INS>::STATE_VALUES;
+    static const unsigned STATE_VALUES = INS_Property<INS>::STATE_VALUES;
     virtual unsigned state_values() const {return STATE_VALUES;}
     
     /**
