@@ -32,6 +32,26 @@
 #include "param/matrix.h"
 #include "algorithm/kalman.h"
 
+template <class FloatT>
+struct CorrectInfo {
+  Matrix<FloatT> H;
+  Matrix<FloatT> z;
+  Matrix<FloatT> R;
+  CorrectInfo(
+      const Matrix<FloatT> &_H,
+      const Matrix<FloatT> &_z,
+      const Matrix<FloatT> &_R) : H(_H), z(_z), R(_R) {}
+  ~CorrectInfo(){}
+  CorrectInfo(const CorrectInfo &another)
+      : H(another.H), z(another.z), R(another.R) {}
+  CorrectInfo &operator=(const CorrectInfo &another){
+    H = another.H;
+    z = another.z;
+    R = another.R;
+    return *this;
+  }
+};
+
 template <class BaseINS>
 class Filtered_INS2_Property {
   public:
@@ -507,6 +527,50 @@ class Filtered_INS2
       before_correct_INS(H, R, K, z, x_hat);
       correct_INS(x_hat);
     }
+
+    /**
+     * 観測更新(Measurement Update)を行います。
+     *
+     * @param info 修正情報
+     */
+    void correct(const CorrectInfo<float_t> &info){
+      correct(info.H, info.z, info.R);
+    }
+
+    /**
+     * ヨー角修正をフィルタを通して行います。
+     *
+     * @param delta_psi 現在ヨー角との差分 [rad]
+     * @param sigma2_delta_psi delta_psiの確からしさ(分散) [rad^2]
+     */
+    void correct_yaw(const float_t &delta_psi, const float_t &sigma2_delta_psi){
+
+      //観測量z
+      float_t z_serialized[1][1] = {{-delta_psi}};
+#define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
+      mat_t z(z_size, 1, (float_t *)z_serialized);
+
+      //行列Hの作成
+      float_t H_serialized[z_size][P_SIZE] = {{0}};
+#define H(i, j) H_serialized[i][j]
+      {
+        H(0, 9) = 2; // u_{3} {}_{n}^{b}
+      }
+#undef H
+      mat_t H(z_size, P_SIZE, (float_t *)H_serialized);
+
+      //観測値誤差行列R
+      float_t R_serialized[z_size][z_size] = {{sigma2_delta_psi}};
+      mat_t R(z_size, z_size, (float_t *)R_serialized);
+#undef z_size
+
+      // 修正量の計算
+      mat_t K(m_filter.correct(H, R)); //カルマンゲイン
+      mat_t x_hat(K * z);
+      //before_correct_INS(H, R, K, z, x_hat); // ヨーだけ補正する特殊モードなため、これは呼び出さない
+      correct_INS(x_hat);
+    }
+
     /**
      * フィルターを取得します。
      * P行列やQ行列が欲しい場合はgetFilter().getP()などとしてください。

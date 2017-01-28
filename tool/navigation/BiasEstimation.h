@@ -180,6 +180,8 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
     using BaseFINS::m_bias_accel;
     using BaseFINS::m_bias_gyro;
     
+    using BaseFINS::correct;
+
     Filtered_INS_BiasEstimated() 
         : BaseFINS(),
         m_beta_accel(1, 1, 1),
