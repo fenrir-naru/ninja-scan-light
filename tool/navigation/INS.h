@@ -50,6 +50,11 @@ struct INS_Extender {
   };
 };
 
+template <class T>
+struct INS_Property {
+  static const unsigned STATE_VALUES = 12; ///< 状態量の数
+};
+
 /**
  * @brief ストラップダウン慣性航法装置(INS)
  * 
@@ -60,7 +65,7 @@ struct INS_Extender {
  * @param FloatT 演算精度、通常はdouble
  */
 template <class FloatT = double>
-class INS{
+class INS : public INS_Property<INS<FloatT> >{
   public:
     typedef FloatT float_t;
     typedef Vector3<float_t> vec3_t;
@@ -85,7 +90,7 @@ class INS{
     
   public:
     typedef WGS84Generic<float_t> Earth; ///< 地球モデル
-    static const unsigned STATE_VALUES = 12; ///< 状態量の数
+    using INS_Property<INS>::STATE_VALUES;
     virtual unsigned state_values() const {return STATE_VALUES;}
     
     /**

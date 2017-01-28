@@ -31,9 +31,19 @@
 #define BIAS_EST_MODE 0
 #endif
 
+template <typename BaseINS>
+class INS_BiasEstimated;
+
+template <class BaseINS>
+struct INS_Property<INS_BiasEstimated<BaseINS> > {
+  static const unsigned STATE_VALUES_WITHOUT_BIAS = INS_Property<BaseINS>::STATE_VALUES;
+  static const unsigned STATE_VALUES_BIAS = 6;
+  static const unsigned STATE_VALUES = STATE_VALUES_WITHOUT_BIAS + STATE_VALUES_BIAS;
+};
+
 template <
     typename BaseINS = INS<> >
-class INS_BiasEstimated : public BaseINS {
+class INS_BiasEstimated : public BaseINS, public INS_Property<INS_BiasEstimated<BaseINS> > {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseINS::float_t float_t;
@@ -47,9 +57,9 @@ class INS_BiasEstimated : public BaseINS {
     vec3_t m_bias_accel, m_bias_gyro;
 
   public:
-    static const unsigned STATE_VALUES_WITHOUT_BIAS = BaseINS::STATE_VALUES;
-    static const unsigned STATE_VALUES_BIAS = 6;
-    static const unsigned STATE_VALUES; ///< ó‘Ô—Ê‚Ì”
+    using INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES_WITHOUT_BIAS;
+    using INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES_BIAS;
+    using INS_Property<INS_BiasEstimated<BaseINS> >::STATE_VALUES;
     virtual unsigned state_values() const {return STATE_VALUES;}
 
     INS_BiasEstimated()
@@ -94,11 +104,6 @@ class INS_BiasEstimated : public BaseINS {
       BaseINS::update(accel + m_bias_accel, gyro + m_bias_gyro, deltaT);
     }
 };
-
-template <
-    typename BaseINS>
-const unsigned INS_BiasEstimated<BaseINS>::STATE_VALUES
-    = STATE_VALUES_WITHOUT_BIAS + STATE_VALUES_BIAS;
 
 template <class BaseINS>
 class Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >
