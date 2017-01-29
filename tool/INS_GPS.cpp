@@ -182,6 +182,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
   // Navigation strategies
   enum {
+    INS_GPS_INTEGRATION_LOOSELY,
+    INS_GPS_INTEGRATION_TIGHTLY,
+  } ins_gps_integration; ///< integration style.
+  enum {
     INS_GPS_SYNC_OFFLINE,
     INS_GPS_SYNC_BACK_PROPAGATION, ///< a.k.a, smoothing
     INS_GPS_SYNC_REALTIME,
@@ -299,6 +303,10 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
 
+    CHECK_ALIAS(tight);
+    CHECK_OPTION(tightly, true,
+        if(is_true(value)){ins_gps_integration = INS_GPS_INTEGRATION_TIGHTLY;},
+        (ins_gps_integration == INS_GPS_INTEGRATION_TIGHTLY ? "on" : "off"));
     CHECK_OPTION(back_propagate, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
@@ -2063,34 +2071,37 @@ void loop(){
     NAV *nav;
     NAV_Manager(){
       const StandardCalibration &calibration(processors.front()->calibration());
-      if(true){ // Loosely
-        if(options.use_udkf){
-          if(options.est_bias){
-            nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+      switch(options.ins_gps_integration){
+        case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
+          if(options.use_udkf){
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
+            }
           }else{
-            nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
+            }
           }
-        }else{
-          if(options.est_bias){
-            nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
+          break;
+        case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
+          if(options.use_udkf){
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_ud_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_ud_t>::get_nav(calibration);
+            }
           }else{
-            nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_t>::get_nav(calibration);
+            }
           }
-        }
-      }else{ // Tightly
-        if(options.use_udkf){
-          if(options.est_bias){
-            nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_ud_t>::get_nav(calibration);
-          }else{
-            nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_ud_t>::get_nav(calibration);
-          }
-        }else{
-          if(options.est_bias){
-            nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_t>::get_nav(calibration);
-          }else{
-            nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_t>::get_nav(calibration);
-          }
-        }
+          break;
       }
     }
     ~NAV_Manager(){
