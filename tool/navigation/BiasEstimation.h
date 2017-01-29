@@ -122,14 +122,24 @@ class Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >
         = Filtered_INS2_Property<BaseINS>::Q_SIZE
 #endif
         ;
+    static const unsigned P_SIZE_BIAS
+#if defined(_MSC_VER)
+        = INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS
+#endif
+        ;
+    static const unsigned Q_SIZE_BIAS
+#if defined(_MSC_VER)
+        = INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS
+#endif
+        ;
     static const unsigned P_SIZE
 #if defined(_MSC_VER)
-        = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS
+        = P_SIZE_WITHOUT_BIAS + P_SIZE_BIAS
 #endif
         ;
     static const unsigned Q_SIZE
 #if defined(_MSC_VER)
-        = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
+        = Q_SIZE_WITHOUT_BIAS + Q_SIZE_BIAS;
 #endif
         ;
 };
@@ -144,12 +154,20 @@ const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE_WITHO
     = Filtered_INS2_Property<BaseINS>::Q_SIZE;
 
 template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::P_SIZE_BIAS
+    = INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
+
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE_BIAS
+    = INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
+
+template <class BaseINS>
 const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::P_SIZE
-    = P_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
+    = P_SIZE_WITHOUT_BIAS + P_SIZE_BIAS;
 
 template <class BaseINS>
 const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE
-    = Q_SIZE_WITHOUT_BIAS + INS_BiasEstimated<BaseINS>::STATE_VALUES_BIAS;
+    = Q_SIZE_WITHOUT_BIAS + Q_SIZE_BIAS;
 #endif
 
 
@@ -185,6 +203,8 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
     using BaseFINS::ins_t::STATE_VALUES_BIAS;
     using BaseFINS::property_t::P_SIZE_WITHOUT_BIAS;
     using BaseFINS::property_t::Q_SIZE_WITHOUT_BIAS;
+    using BaseFINS::property_t::P_SIZE_BIAS;
+    using BaseFINS::property_t::Q_SIZE_BIAS;
     using BaseFINS::m_bias_accel;
     using BaseFINS::m_bias_gyro;
     
@@ -256,12 +276,12 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
       { // A行列の修正
         // B行列の加速度、角速度に関する項をA行列へ
         for(unsigned i(0); i < P_SIZE_WITHOUT_BIAS; i++){
-          for(unsigned j(P_SIZE_WITHOUT_BIAS), k(0); k < STATE_VALUES_BIAS; j++, k++){
+          for(unsigned j(P_SIZE_WITHOUT_BIAS), k(0); k < P_SIZE_BIAS; j++, k++){
             res.A[i][j] = res.B[i][k];
           }
         }
         // A行列のバイアスに関する対角成分を埋める
-        for(unsigned i(P_SIZE_WITHOUT_BIAS), j(0); j < STATE_VALUES_BIAS; i++, j++){
+        for(unsigned i(P_SIZE_WITHOUT_BIAS), j(0); j < P_SIZE_BIAS; i++, j++){
           res.A[i][i] += -((j < vec3_t::OUT_OF_INDEX)
               ? m_beta_accel.get(j)
               : m_beta_gyro.get(j - (vec3_t::OUT_OF_INDEX)));
@@ -270,7 +290,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
       
       { // B行列の修正
         for(unsigned i(P_SIZE_WITHOUT_BIAS), j(Q_SIZE_WITHOUT_BIAS), k(0);
-             k < STATE_VALUES_BIAS;
+             k < Q_SIZE_BIAS;
              i++, j++, k++){
           res.B[i][j] += 1;
         }

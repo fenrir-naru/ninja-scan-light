@@ -1059,17 +1059,19 @@ class INS_GPS_NAV : public NAV {
 
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
-        static const unsigned NP(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE);
-        P(NP - 6, NP - 6) = P(NP - 5, NP - 5) = P(NP - 4, NP - 4) = 1E-4; // for accelerometer bias drift
-        P(NP - 3, NP - 3) = P(NP - 2, NP - 2) = P(NP - 1, NP - 1) = 1E-7; // for gyro bias drift
+        static const unsigned NP(
+            Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS);
+        P(NP,     NP)     = P(NP + 1, NP + 1) = P(NP + 2, NP + 2) = 1E-4; // for accelerometer bias drift
+        P(NP + 3, NP + 3) = P(NP + 4, NP + 4) = P(NP + 5, NP + 5) = 1E-7; // for gyro bias drift
         ins_gps->getFilter().setP(P);
       }
 
       {
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
-        static const unsigned NQ(Filtered_INS_BiasEstimated<BaseFINS>::Q_SIZE);
-        Q(NQ - 6, NQ - 6) = Q(NQ - 5, NQ - 5) = Q(NQ - 4, NQ - 4) = 1E-6; // for accelerometer bias drift
-        Q(NQ - 3, NQ - 3) = Q(NQ - 2, NQ - 2) = Q(NQ - 1, NQ - 1) = 1E-8; // for gyro bias drift
+        static const unsigned NQ(
+            Filtered_INS_BiasEstimated<BaseFINS>::Q_SIZE_WITHOUT_BIAS);
+        Q(NQ,     NQ)     = Q(NQ + 1, NQ + 1) = Q(NQ + 2, NQ + 2) = 1E-6; // for accelerometer bias drift
+        Q(NQ + 3, NQ + 3) = Q(NQ + 4, NQ + 4) = Q(NQ + 5, NQ + 5) = 1E-8; // for gyro bias drift
         ins_gps->getFilter().setQ(Q);
       }
 
@@ -1399,8 +1401,8 @@ float_sylph_t fname() const {return ins_gps->fname();}
       if(options.dump_stddev){
         Matrix<float_sylph_t> &P(
             const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
-        for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS);
-            i < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE; ++i){
+        for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
+            j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
           out << ',' << sqrt(P(i, i));
         }
       }
