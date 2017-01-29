@@ -1263,12 +1263,12 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return *this;
     }
 
-    template <class FloatT, template <class> class Filter, class FINS>
+    template <class BaseFINS>
     NAV &correct_ins_gps(
         const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
-        INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *){
+        Filtered_INS_BiasEstimated<BaseFINS> *){
       ins_gps->correct(
           gps, lever_arm_b, omega_b2i_4b - ins_gps->bias_gyro());
       return *this;
