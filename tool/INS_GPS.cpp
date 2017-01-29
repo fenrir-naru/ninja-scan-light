@@ -994,38 +994,12 @@ class INS_GPS_NAV : public NAV {
     INS_GPS *ins_gps;
 
     template <class Calibration>
-    void setup_filter_additional(const Calibration &calibration, void *){}
+    void setup_filter2(const Calibration &calibration, void *){}
 
-    template <class Calibration,
-        class FloatT, template <class> class Filter, class FINS>
-    void setup_filter_additional(
+    template <class Calibration, class BaseINS, template <class> class Filter>
+    void setup_filter2(
         const Calibration &calibration,
-        INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) {
-
-      setup_filter_additional(calibration, (FINS *)ins_gps);
-
-      {
-        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
-        static const unsigned NP(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::P_SIZE);
-        P(NP - 6, NP - 6) = P(NP - 5, NP - 5) = P(NP - 4, NP - 4) = 1E-4; // for accelerometer bias drift
-        P(NP - 3, NP - 3) = P(NP - 2, NP - 2) = P(NP - 1, NP - 1) = 1E-7; // for gyro bias drift
-        ins_gps->getFilter().setP(P);
-      }
-
-      {
-        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
-        static const unsigned NQ(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::Q_SIZE);
-        Q(NQ - 6, NQ - 6) = Q(NQ - 5, NQ - 5) = Q(NQ - 4, NQ - 4) = 1E-6; // for accelerometer bias drift
-        Q(NQ - 3, NQ - 3) = Q(NQ - 2, NQ - 2) = Q(NQ - 1, NQ - 1) = 1E-8; // for gyro bias drift
-        ins_gps->getFilter().setQ(Q);
-      }
-
-      ins_gps->beta_accel() *= 0.1;
-      ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
-    }
-
-    template <class Calibration>
-    void setup_filter(const Calibration &calibration){
+        Filtered_INS2<BaseINS, Filter> *fins) {
       /**
        * Initialization of matrix P, system covariance matrix, of Kalman filter.
        * orthogonal elements are
@@ -1074,8 +1048,38 @@ class INS_GPS_NAV : public NAV {
         
         ins_gps->getFilter().setQ(Q);
       }
+    }
 
-      setup_filter_additional(calibration, ins_gps);
+    template <class Calibration, class BaseFINS>
+    void setup_filter2(
+        const Calibration &calibration,
+        Filtered_INS_BiasEstimated<BaseFINS> *fins) {
+
+      setup_filter2(calibration, (BaseFINS *)fins);
+
+      {
+        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        static const unsigned NP(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE);
+        P(NP - 6, NP - 6) = P(NP - 5, NP - 5) = P(NP - 4, NP - 4) = 1E-4; // for accelerometer bias drift
+        P(NP - 3, NP - 3) = P(NP - 2, NP - 2) = P(NP - 1, NP - 1) = 1E-7; // for gyro bias drift
+        ins_gps->getFilter().setP(P);
+      }
+
+      {
+        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        static const unsigned NQ(Filtered_INS_BiasEstimated<BaseFINS>::Q_SIZE);
+        Q(NQ - 6, NQ - 6) = Q(NQ - 5, NQ - 5) = Q(NQ - 4, NQ - 4) = 1E-6; // for accelerometer bias drift
+        Q(NQ - 3, NQ - 3) = Q(NQ - 2, NQ - 2) = Q(NQ - 1, NQ - 1) = 1E-8; // for gyro bias drift
+        ins_gps->getFilter().setQ(Q);
+      }
+
+      ins_gps->beta_accel() *= 0.1;
+      ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
+    }
+
+    template <class Calibration>
+    void setup_filter(const Calibration &calibration){
+      setup_filter2(calibration, ins_gps);
     }
   public:
     template <class Calibration>
