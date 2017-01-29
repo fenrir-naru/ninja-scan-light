@@ -687,6 +687,30 @@ class INS_GPS_NAV : public NAV {
       ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
     }
 
+    template <class Calibration, class BaseFINS>
+    void setup_filter2(
+        const Calibration &calibration,
+        Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) {
+
+      setup_filter2(calibration, (BaseFINS *)fins);
+
+      {
+        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        static const unsigned NP(Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE);
+        P(NP - 1, NP - 1) *= 1; // TODO
+        ins_gps->getFilter().setP(P);
+      }
+
+      {
+        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        static const unsigned NQ(Filtered_INS_ClockErrorEstimated<BaseFINS>::Q_SIZE);
+        Q(NQ - 1, NQ - 1) *= 1; // TODO
+        ins_gps->getFilter().setQ(Q);
+      }
+
+      ins_gps->beta_clock_error() *= 1; // TODO
+    }
+
     template <class Calibration, class Base_INS_GPS>
     void setup_filter2(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
       setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
