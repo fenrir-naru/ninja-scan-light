@@ -94,14 +94,24 @@ class Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >
         = Filtered_INS2_Property<BaseINS>::Q_SIZE
 #endif
         ;
+    static const unsigned P_SIZE_CLOCK_ERROR
+#if defined(_MSC_VER)
+        = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
+#endif
+        ;
+    static const unsigned Q_SIZE_CLOCK_ERROR
+#if defined(_MSC_VER)
+        = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
+#endif
+        ;
     static const unsigned P_SIZE
 #if defined(_MSC_VER)
-        = P_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
+        = P_SIZE_WITHOUT_CLOCK_ERROR + P_SIZE_CLOCK_ERROR
 #endif
         ;
     static const unsigned Q_SIZE
 #if defined(_MSC_VER)
-        = Q_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
+        = Q_SIZE_WITHOUT_CLOCK_ERROR + Q_SIZE_CLOCK_ERROR
 #endif
         ;
 };
@@ -116,12 +126,20 @@ const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::Q_SIZE
     = Filtered_INS2_Property<BaseINS>::Q_SIZE;
 
 template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::P_SIZE_CLOCK_ERROR
+    = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR;
+
+template <class BaseINS>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::Q_SIZE_CLOCK_ERROR
+    = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR;
+
+template <class BaseINS>
 const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::P_SIZE
-    = P_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR;
+    = P_SIZE_WITHOUT_CLOCK_ERROR + P_SIZE_CLOCK_ERROR;
 
 template <class BaseINS>
 const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::Q_SIZE
-    = Q_SIZE_WITHOUT_CLOCK_ERROR + INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR;
+    = Q_SIZE_WITHOUT_CLOCK_ERROR + Q_SIZE_CLOCK_ERROR;
 #endif
 
 template <
@@ -146,6 +164,8 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
     using BaseFINS::ins_t::STATE_VALUES_CLOCK_ERROR;
     using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
     using BaseFINS::property_t::Q_SIZE_WITHOUT_CLOCK_ERROR;
+    using BaseFINS::property_t::P_SIZE_CLOCK_ERROR;
+    using BaseFINS::property_t::Q_SIZE_CLOCK_ERROR;
     using BaseFINS::m_clock_error;
 
     Filtered_INS_ClockErrorEstimated()
@@ -176,19 +196,19 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
       { // A matrix modification
         // Copy from part of B associated with clock error
         for(unsigned i(0); i < P_SIZE_WITHOUT_CLOCK_ERROR; i++){
-          for(unsigned j(P_SIZE_WITHOUT_CLOCK_ERROR), k(0); k < STATE_VALUES_CLOCK_ERROR; j++, k++){
+          for(unsigned j(P_SIZE_WITHOUT_CLOCK_ERROR), k(0); k < P_SIZE_CLOCK_ERROR; j++, k++){
             res.A[i][j] = res.B[i][k];
           }
         }
         // Modify part of A associated with clock error
-        for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0); j < STATE_VALUES_CLOCK_ERROR; i++, j++){
+        for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0); j < P_SIZE_CLOCK_ERROR; i++, j++){
           res.A[i][i] += -m_beta_clock_error;
         }
       }
 
       { // B matrix modification
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(Q_SIZE_WITHOUT_CLOCK_ERROR), k(0);
-             k < STATE_VALUES_CLOCK_ERROR;
+             k < Q_SIZE_CLOCK_ERROR;
              i++, j++, k++){
           res.B[i][j] += 1;
         }
