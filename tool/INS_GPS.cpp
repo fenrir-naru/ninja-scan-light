@@ -1319,8 +1319,10 @@ float_sylph_t fname() const {return ins_gps->fname();}
   protected:
     void label_additional(std::ostream &out, void *) const {}
 
-    template <class FloatT, template <class> class Filter, class FINS>
-    void label_additional(std::ostream &out, INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) const {
+    template <class BaseFINS>
+    void label_additional(
+        std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      label_additional(out, (BaseFINS *)fins);
       out << "bias_accel(X)" << ','  //Bias
           << "bias_accel(Y)" << ','
           << "bias_accel(Z)" << ','
@@ -1359,26 +1361,27 @@ float_sylph_t fname() const {return ins_gps->fname();}
   protected:
     void dump_additional(std::ostream &out, void *) const {}
 
-   template <class FloatT, template <class> class Filter, class FINS>
-   void dump_additional(std::ostream &out,
-       INS_GPS2_BiasEstimated<FloatT, Filter, FINS> *) const {
-     Vector3<float_sylph_t> &ba(ins_gps->bias_accel());
-     Vector3<float_sylph_t> &bg(ins_gps->bias_gyro());
-     out << ba.getX() << ','     // Bias
-         << ba.getY() << ','
-         << ba.getZ() << ','
-         << bg.getX() << ','
-         << bg.getY() << ','
-         << bg.getZ() << ',';
-     if(options.dump_stddev){
-       Matrix<float_sylph_t> &P(
-           const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
-       static const int base_i(INS_GPS2_BiasEstimated<FloatT, Filter, FINS>::P_SIZE);
-       for(int i(base_i - 6); i < base_i; ++i){
-         out << sqrt(P(i, i)) << ',';
-       }
-     }
-   }
+    template <class BaseFINS>
+    void dump_additional(
+        std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      dump_additional(out, (BaseFINS *)fins);
+      Vector3<float_sylph_t> &ba(ins_gps->bias_accel());
+      Vector3<float_sylph_t> &bg(ins_gps->bias_gyro());
+      out << ba.getX() << ','     // Bias
+          << ba.getY() << ','
+          << ba.getZ() << ','
+          << bg.getX() << ','
+          << bg.getY() << ','
+          << bg.getZ() << ',';
+      if(options.dump_stddev){
+        Matrix<float_sylph_t> &P(
+            const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
+        for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS);
+            i < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE; ++i){
+          out << sqrt(P(i, i)) << ',';
+        }
+      }
+    }
 
     /**
      * print current state
