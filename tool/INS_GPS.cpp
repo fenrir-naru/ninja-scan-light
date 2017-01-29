@@ -1004,6 +1004,16 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       }
     }
 
+    template <class BaseFINS>
+    void label2(
+        std::ostream &out, const Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) const {
+      label2(out, (const BaseFINS *)fins);
+      out << ',' << "receiver_clock_error";
+      if(options.dump_stddev){
+        out << ',' << "s1(receiver_clock_error)";
+      }
+    }
+
   public:
     /**
      * print label
@@ -1049,6 +1059,22 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
             const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP());
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
             j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
+          out << ',' << sqrt(P(i, i));
+        }
+      }
+    }
+
+    template <class BaseFINS>
+    void dump2(
+        std::ostream &out, const Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) const {
+      dump2(out, (const BaseFINS *)fins);
+      out << ',' << const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->clock_error();
+      if(options.dump_stddev){
+        Matrix<float_sylph_t> &P(
+            const_cast<Matrix<float_sylph_t> &>(
+              const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->getFilter().getP()));
+        for(int i(Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_WITHOUT_CLOCK_ERROR);
+            i < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE; ++i){
           out << ',' << sqrt(P(i, i));
         }
       }
