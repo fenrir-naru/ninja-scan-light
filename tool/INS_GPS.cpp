@@ -1321,6 +1321,7 @@ class StreamProcessor
       G_Packet_Raw::space_node_t space_node_inidividual;
       G_Packet_Raw::space_node_t &space_node;
       G_Packet_Raw packet_raw_latest;
+      bool packet_raw_updated;
 
       GHandler()
           : G_Observer_t(buffer_size),
@@ -1329,7 +1330,7 @@ class StreamProcessor
           gps_status(status_t::NO_FIX), week_number(0),
           space_node_inidividual(),
           space_node(true ? space_node_inidividual : space_node_shared),
-          packet_raw_latest(space_node) {
+          packet_raw_latest(space_node), packet_raw_updated(false) {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
@@ -1515,6 +1516,7 @@ class StreamProcessor
               dst[raw_t::L1_RANGERATE].push_back(v_t(prn, src.doppler));
             }
             packet_raw_latest.update_solution();
+            packet_raw_updated = true;
             return;
           }
           case 0x11: { // RXM-SFRB
