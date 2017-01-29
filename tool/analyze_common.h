@@ -419,16 +419,16 @@ class NAVData {
      * 
      */
     virtual void label(std::ostream &out = std::cout) const {
-      out << "longitude" << ", "
-           << "latitude" << ", "
-           << "height" << ", "
-           << "v_north" << ", "
-           << "v_east" << ", "
-           << "v_down" << ", "
-           << "Yaw(psi)" << ", "
-           << "Pitch(theta)" << ", "
-           << "Roll(phi)" << ", "
-           << "Azimuth(alpha)" << ", ";
+      out << ',' << "longitude"
+          << ',' << "latitude"
+          << ',' << "height"
+          << ',' << "v_north"
+          << ',' << "v_east"
+          << ',' << "v_down"
+          << ',' << "Yaw(psi)"
+          << ',' << "Pitch(theta)"
+          << ',' << "Roll(phi)"
+          << ',' << "Azimuth(alpha)";
     }
     
   protected:
@@ -438,16 +438,16 @@ class NAVData {
      * @param itow Time stamp
      */
     virtual void dump(std::ostream &out) const {
-      out << rad2deg(longitude()) << ", "
-           << rad2deg(latitude()) << ", "
-           << height() << ", "
-           << v_north() << ", "
-           << v_east() << ", "
-           << v_down() << ", "
-           << rad2deg(heading()) << ", "      // yaw   <- q_{g}^{b}
-           << rad2deg(euler_theta()) << ", "  // pitch <- q_{n}^{b}
-           << rad2deg(euler_phi()) << ", "    // roll  <- q_{n}^{b}
-           << rad2deg(azimuth()) << ", ";     // azimuth)
+      out << ',' << rad2deg(longitude())
+          << ',' << rad2deg(latitude())
+          << ',' << height()
+          << ',' << v_north()
+          << ',' << v_east()
+          << ',' << v_down()
+          << ',' << rad2deg(heading())      // yaw   <- q_{g}^{b}
+          << ',' << rad2deg(euler_theta())  // pitch <- q_{n}^{b}
+          << ',' << rad2deg(euler_phi())    // roll  <- q_{n}^{b}
+          << ',' << rad2deg(azimuth());     // azimuth)
     }
     
   public:

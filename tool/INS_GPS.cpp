@@ -1317,25 +1317,39 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
     
   protected:
-    void label_additional(std::ostream &out, void *) const {}
+    void label2(std::ostream &out, void *) const {}
+
+    template <class BaseINS, template <class> class Filter>
+    void label2(std::ostream &out, Filtered_INS2<BaseINS, Filter> *fins) const {
+      if(options.dump_stddev){
+        out << ',' << "s1(longitude)"
+            << ',' << "s1(latitude)"
+            << ',' << "s1(height)"
+            << ',' << "s1(v_north)"
+            << ',' << "s1(v_east)"
+            << ',' << "s1(v_down)"
+            << ',' << "s1(psi)"
+            << ',' << "s1(theta)"
+            << ',' << "s1(phi)";
+      }
+    }
 
     template <class BaseFINS>
-    void label_additional(
-        std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      label_additional(out, (BaseFINS *)fins);
-      out << "bias_accel(X)" << ','  //Bias
-          << "bias_accel(Y)" << ','
-          << "bias_accel(Z)" << ','
-          << "bias_gyro(X)" << ','
-          << "bias_gyro(Y)" << ','
-          << "bias_gyro(Z)" << ',';
+    void label2(std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      label2(out, (BaseFINS *)fins);
+      out << ',' << "bias_accel(X)"   //Bias
+          << ',' << "bias_accel(Y)"
+          << ',' << "bias_accel(Z)"
+          << ',' << "bias_gyro(X)"
+          << ',' << "bias_gyro(Y)"
+          << ',' << "bias_gyro(Z)" ;
       if(options.dump_stddev){
-        out << "s1(bias_accel(X))" << ','
-            << "s1(bias_accel(Y))" << ','
-            << "s1(bias_accel(Z))" << ','
-            << "s1(bias_gyro(X))" << ','
-            << "s1(bias_gyro(Y))" << ','
-            << "s1(bias_gyro(Z))" << ',';
+        out << ',' << "s1(bias_accel(X))"
+            << ',' << "s1(bias_accel(Y))"
+            << ',' << "s1(bias_accel(Z))"
+            << ',' << "s1(bias_gyro(X))"
+            << ',' << "s1(bias_gyro(Y))"
+            << ',' << "s1(bias_gyro(Z))";
       }
     }
 
@@ -1344,41 +1358,46 @@ float_sylph_t fname() const {return ins_gps->fname();}
      */
     void label(std::ostream &out = std::cout) const {
       NAV::label(out);
-      if(options.dump_stddev){
-        out << "s1(longitude)" << ','
-            << "s1(latitude)" << ','
-            << "s1(height)" << ','
-            << "s1(v_north)" << ','
-            << "s1(v_east)" << ','
-            << "s1(v_down)" << ','
-            << "s1(psi)" << ','
-            << "s1(theta)" << ','
-            << "s1(phi)" << ',';
-      }
-      label_additional(out, ins_gps);
+      label2(out, ins_gps);
     }
   
   protected:
-    void dump_additional(std::ostream &out, void *) const {}
+    void dump2(std::ostream &out, void *) const {}
+
+    template <class BaseINS, template <class> class Filter>
+    void dump2(std::ostream &out, Filtered_INS2<BaseINS, Filter> *fins) const {
+      if(options.dump_stddev){
+        typename Filtered_INS2<BaseINS, Filter>::StandardDeviations sigma(ins_gps->getSigma());
+        out << ',' << rad2deg(sigma.longitude_rad)
+            << ',' << rad2deg(sigma.latitude_rad)
+            << ',' << sigma.height_m
+            << ',' << sigma.v_north_ms
+            << ',' << sigma.v_east_ms
+            << ',' << sigma.v_down_ms
+            << ',' << rad2deg(sigma.heading_rad)
+            << ',' << rad2deg(sigma.pitch_rad)
+            << ',' << rad2deg(sigma.roll_rad);
+      }
+    }
 
     template <class BaseFINS>
-    void dump_additional(
+    void dump2(
         std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      dump_additional(out, (BaseFINS *)fins);
+      dump2(out, (BaseFINS *)fins);
       Vector3<float_sylph_t> &ba(ins_gps->bias_accel());
       Vector3<float_sylph_t> &bg(ins_gps->bias_gyro());
-      out << ba.getX() << ','     // Bias
-          << ba.getY() << ','
-          << ba.getZ() << ','
-          << bg.getX() << ','
-          << bg.getY() << ','
-          << bg.getZ() << ',';
+      out << ',' << ba.getX()      // Bias
+          << ',' << ba.getY()
+          << ',' << ba.getZ()
+          << ',' << bg.getX()
+          << ',' << bg.getY()
+          << ',' << bg.getZ() ;
       if(options.dump_stddev){
         Matrix<float_sylph_t> &P(
             const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS);
             i < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE; ++i){
-          out << sqrt(P(i, i)) << ',';
+          out << ',' << sqrt(P(i, i));
         }
       }
     }
@@ -1390,19 +1409,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
      */
     void dump(std::ostream &out) const {
       NAV::dump(out);
-      if(options.dump_stddev){
-        typename INS_GPS::StandardDeviations sigma(ins_gps->getSigma());
-        out << rad2deg(sigma.longitude_rad) << ','
-            << rad2deg(sigma.latitude_rad) << ','
-            << sigma.height_m << ','
-            << sigma.v_north_ms << ','
-            << sigma.v_east_ms << ','
-            << sigma.v_down_ms << ','
-            << rad2deg(sigma.heading_rad) << ','
-            << rad2deg(sigma.pitch_rad) << ','
-            << rad2deg(sigma.roll_rad) << ',';
-      }
-      dump_additional(out, ins_gps);
+      dump2(out, ins_gps);
     }
 };
 
@@ -1917,8 +1924,8 @@ class Status{
     
     void dump_label(){
       if(!options.out_is_N_packet){
-        options.out() << "mode" << ", "
-            << "itow" << ", ";
+        options.out() << "mode"
+            << ',' << "itow";
         nav.label(options.out());
         options.out() << endl;
       }
@@ -1947,8 +1954,8 @@ class Status{
         return;
       }
 
-      options.out() << label << ", "
-          << itow << ", "
+      options.out() << label
+          << ',' << itow
           << target << endl;
     }
 
