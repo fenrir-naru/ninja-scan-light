@@ -520,7 +520,8 @@ struct Packet{
  * Inertial and temperature sensor data (ADC raw value)
  */
 struct A_Packet : Packet {
-  int ch[9]; ///< ADC raw values
+  Vector3<float_sylph_t> accel; ///< Acceleration
+  Vector3<float_sylph_t> omega; ///< Angular speed
 };
 
 /**
@@ -1533,7 +1534,7 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
   /**
    * Get angular speed in rad/sec
    */
-  Vector3<float_sylph_t> raw2gyro(const int *raw_data) const{
+  Vector3<float_sylph_t> raw2omega(const int *raw_data) const{
     float_sylph_t res[3];
     calibrate(
         &raw_data[index_base + 3], raw_data[index_temp_ch],
@@ -1576,9 +1577,30 @@ class StreamProcessor
       bool previous_seek_next;
       deque<A_Packet> recent_packets;
       bool packet_updated;
+      StandardCalibration calibration;
+
       AHandler() : A_Observer_t(buffer_size),
-          recent_packets(), packet_updated(false) {
+          recent_packets(), packet_updated(false),
+          calibration() {
+
         previous_seek_next = A_Observer_t::ready();
+
+        { // NinjaScan default calibration parameters
+#define config(spec) calibration.check_spec(spec);
+          config("index_base 0");
+          config("index_temp_ch 8");
+          config("acc_bias 32768 32768 32768");
+          config("acc_bias_tc 0 0 0"); // No temperature compensation
+          config("acc_sf 4.1767576e+2 4.1767576e+2 4.1767576e+2"); // MPU-6000/9250 8[G] full scale; (1<<15)/(8*9.80665) [1/(m/s^2)]
+          config("acc_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
+          config("gyro_bias 32768 32768 32768");
+          config("gyro_bias_tc 0 0 0"); // No temperature compensation
+          config("gyro_sf 9.3873405e+2 9.3873405e+2 9.3873405e+2"); // MPU-6000/9250 2000[dps] full scale; (1<<15)/(2000/180*PI) [1/(rad/s)]
+          config("gyro_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
+          config("sigma_accel 0.05 0.05 0.05"); // approx. 150[mG] ? standard deviation
+          config("sigma_gyro 5e-3 5e-3 5e-3"); // approx. 0.3[dps] standard deviation
+#undef config
+        }
       }
       ~AHandler(){}
       void operator()(const A_Observer_t &observer){
@@ -1587,11 +1609,14 @@ class StreamProcessor
         A_Packet packet;
         packet.itow = observer.fetch_ITOW();
 
+        int ch[9];
         A_Observer_t::values_t values(observer.fetch_values());
         for(int i = 0; i < 8; i++){
-          packet.ch[i] = values.values[i];
+          ch[i] = values.values[i];
         }
-        packet.ch[8] = values.temperature;
+        ch[8] = values.temperature;
+        packet.accel = calibration.raw2accel(ch);
+        packet.omega = calibration.raw2omega(ch);
 
         while(options.reduce_1pps_sync_error){
           if(recent_packets.empty()){break;}
@@ -1780,12 +1805,9 @@ class StreamProcessor
   protected:
     int invoked;
     istream *_in;
+    Vector3<float_sylph_t> *ptr_lever_arm;
     
   public:
-    bool use_lever_arm;
-    Vector3<float_sylph_t> lever_arm;
-    StandardCalibration calibration;
-
     deque<A_Packet> &a_packets;
     bool &a_packet_updated;
     G_Packet &g_packet;
@@ -1795,7 +1817,7 @@ class StreamProcessor
 
     StreamProcessor()
         : super_t(), _in(NULL), invoked(0),
-        use_lever_arm(false), lever_arm(), calibration(),
+        ptr_lever_arm(NULL),
         a_handler(),
         a_packets(a_handler.recent_packets), a_packet_updated(a_handler.packet_updated),
         g_handler(),
@@ -1804,8 +1826,18 @@ class StreamProcessor
         m_packets(m_handler.recent_packets) {
 
     }
-    ~StreamProcessor(){}
+    ~StreamProcessor(){
+      delete ptr_lever_arm;
+    }
     
+    const StandardCalibration &calibration() const{
+      return a_handler.calibration;
+    }
+
+    const Vector3<float_sylph_t> *lever_arm() const {
+      return ptr_lever_arm;
+    }
+
     void set_stream(istream *in){_in = in;}
 
     /**
@@ -1897,6 +1929,40 @@ class StreamProcessor
         weight_previous = 0;
       }
       return (previous_it->mag * weight_previous) + (next_it->mag * weight_next);
+    }
+
+    bool check_spec(const char *spec){
+      const char *value;
+      if(value = Options::get_value(spec, "calib_file", false)){ // calibration file
+        cerr << "IMU Calibration file (" << value << ") reading..." << endl;
+        istream &in(options.spec2istream(value));
+        char buf[1024];
+        while(!in.eof()){
+          in.getline(buf, sizeof(buf));
+          a_handler.calibration.check_spec(buf);
+        }
+        return true;
+      }
+
+      if(value = Options::get_value(spec, "lever_arm", false)){ // Lever Arm
+        double buf[3];
+        if(std::sscanf(value, "%lf,%lf,%lf",
+            &(buf[0]), &(buf[1]), &(buf[2])) != 3){
+          cerr << "(error!) Lever arm option requires 3 arguments." << endl;
+          exit(-1);
+        }
+        if(!ptr_lever_arm){
+          ptr_lever_arm = new Vector3<float_sylph_t>(buf[0], buf[1], buf[2]);
+        }else{
+          for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
+            (*ptr_lever_arm)[i] = buf[i];
+          }
+        }
+        std::cerr << "lever_arm: " << *ptr_lever_arm << std::endl;
+        return true;
+      }
+
+      return false;
     }
 } *current_processor;
 
@@ -2024,15 +2090,12 @@ class Status{
      * @param a_packet raw values of ADC
      */
     void time_update(const A_Packet &a_packet){
-      Vector3<float_sylph_t>
-          accel(current_processor->calibration.raw2accel(a_packet.ch)),
-          gyro(current_processor->calibration.raw2gyro(a_packet.ch));
 
       if(initalized){
         const A_Packet &previous(recent_a_packets.back());
       
         { // for LAE
-          gyro_storage[gyro_index++] = gyro;
+          gyro_storage[gyro_index++] = a_packet.omega;
           if(gyro_index == (sizeof(gyro_storage) / sizeof(gyro_storage[0]))){
             gyro_index = 0;
             if(!gyro_init) gyro_init = true;
@@ -2048,7 +2111,7 @@ class Status{
           interval = INTERVAL_FORCE_VALUE;
         }
 
-        nav.update(accel, gyro, interval);
+        nav.update(a_packet.accel, a_packet.omega, interval);
       }
 
       recent_a_packets.push_back(a_packet);
@@ -2074,7 +2137,7 @@ class Status{
         // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
         float_sylph_t gps_advance(recent_a_packets.back().interval(g_packet));
 
-        if(gyro_init && (current_processor->use_lever_arm)){ // When use lever arm effect.
+        if(gyro_init && (current_processor->lever_arm())){ // When use lever arm effect.
           Vector3<float_sylph_t> omega_b2i_4n;
           for(int i(0); i < (sizeof(gyro_storage) / sizeof(gyro_storage[0])); i++){
             omega_b2i_4n += gyro_storage[i];
@@ -2082,7 +2145,7 @@ class Status{
           omega_b2i_4n /= (sizeof(gyro_storage) / sizeof(gyro_storage[0]));
           nav.correct(
               g_packet,
-              current_processor->lever_arm,
+              *(current_processor->lever_arm()),
               omega_b2i_4n,
               gps_advance);
         }else{ // When do not use lever arm effect.
@@ -2122,7 +2185,7 @@ class Status{
           for(deque<A_Packet>::iterator it(recent_a_packets.begin());
               it != recent_a_packets.end();
               ++it){
-            acc += current_processor->calibration.raw2accel(it->ch);
+            acc += it->accel;
           }
           acc /= recent_a_packets.size();
           vec_t acc_reg(-acc / acc.abs());
@@ -2162,7 +2225,7 @@ void loop(){
   struct NAV_Manager {
     NAV *nav;
     NAV_Manager(){
-      const StandardCalibration &calibration(processors.front()->calibration);
+      const StandardCalibration &calibration(processors.front()->calibration());
       if(options.use_udkf){
         if(options.est_bias){
           nav = INS_GPS_NAV<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
@@ -2325,48 +2388,9 @@ int main(int argc, char *argv[]){
 
   StreamProcessor *stream_processor(new StreamProcessor());
 
-  { // NinjsScan default calibration parameters
-#define config(spec) stream_processor->calibration.check_spec(spec);
-    config("index_base 0");
-    config("index_temp_ch 8");
-    config("acc_bias 32768 32768 32768");
-    config("acc_bias_tc 0 0 0"); // No temperature compensation
-    config("acc_sf 4.1767576e+2 4.1767576e+2 4.1767576e+2"); // MPU-6000/9250 8[G] full scale; (1<<15)/(8*9.80665) [1/(m/s^2)]
-    config("acc_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
-    config("gyro_bias 32768 32768 32768");
-    config("gyro_bias_tc 0 0 0"); // No temperature compensation
-    config("gyro_sf 9.3873405e+2 9.3873405e+2 9.3873405e+2"); // MPU-6000/9250 2000[dps] full scale; (1<<15)/(2000/180*PI) [1/(rad/s)]
-    config("gyro_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
-    config("sigma_accel 0.05 0.05 0.05"); // approx. 150[mG] ? standard deviation
-    config("sigma_gyro 5e-3 5e-3 5e-3"); // approx. 0.3[dps] standard deviation
-#undef config
-  }
-
   for(int arg_index(1); arg_index < argc; arg_index++){
-    const char *value;
-    if(value = Options::get_value(argv[arg_index], "calib_file", false)){ // calibration file
-      cerr << "IMU Calibration file (" << value << ") reading..." << endl;
-      istream &in(options.spec2istream(value));
-      char buf[1024];
-      while(!in.eof()){
-        in.getline(buf, sizeof(buf));
-        stream_processor->calibration.check_spec(buf);
-      }
-      continue;
-    }
 
-    if(value = Options::get_value(argv[arg_index], "lever_arm", false)){ // Lever Arm
-      if(std::sscanf(value, "%lf,%lf,%lf",
-          &(stream_processor->lever_arm[0]),
-          &(stream_processor->lever_arm[1]),
-          &(stream_processor->lever_arm[2])) != 3){
-        cerr << "(error!) Lever arm option requires 3 arguments." << endl;
-        exit(-1);
-      }
-      std::cerr << "lever_arm: " << stream_processor->lever_arm << std::endl;
-      stream_processor->use_lever_arm = true;
-      continue;
-    }
+    if(stream_processor->check_spec(argv[arg_index])){continue;}
 
     if(options.check_spec(argv[arg_index])){continue;}
     
