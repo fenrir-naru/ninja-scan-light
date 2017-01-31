@@ -286,7 +286,7 @@ case line_num: { \
     static int read_all(std::istream &in, space_node_t &space_node){
       int res(-1);
       RINEX_NAV_Reader reader(in);
-      if(reader.extract_iono_utc(space_node)){return res;}
+      if(!reader.extract_iono_utc(space_node)){return res;}
       res++;
       for(; reader.has_next(); ++res){
         SatelliteInfo info(reader.next());

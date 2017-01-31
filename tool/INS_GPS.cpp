@@ -166,6 +166,7 @@ QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 #include "navigation/BiasEstimation.h"
 #include "navigation/GPS.h"
 #include "navigation/GPS_SP.h"
+#include "navigation/RINEX.h"
 
 #include "navigation/MagneticField.h"
 
@@ -1776,6 +1777,20 @@ class StreamProcessor
           }
         }
         std::cerr << "lever_arm: " << *ptr_lever_arm << std::endl;
+        return true;
+      }
+
+      if(value = Options::get_value(spec, "rinex_nav", false)){
+        cerr << "RINEX Navigation file (" << value << ") reading..." << endl;
+        istream &in(options.spec2istream(value));
+        int ephemeris(RINEX_NAV_Reader<float_sylph_t>::read_all(
+            in, g_handler.space_node));
+        if(ephemeris < 0){
+          cerr << "(error!) Invalid format!" << endl;
+          exit(-1);
+        }else{
+          std::cerr << "rinex_nav: " << ephemeris << " items captured." << std::endl;
+        }
         return true;
       }
 
