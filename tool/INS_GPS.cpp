@@ -1491,7 +1491,7 @@ class StreamProcessor
           }
           raw.t_ot = get8(218);
           raw.WN_t = get8(226); // truncated
-          raw.delte_t_LS = (G_Observer_t::s8_t)get8(240);
+          raw.delta_t_LS = (G_Observer_t::s8_t)get8(240);
           raw.WN_LSF = get8(248);
           raw.DN = get8(256); // truncated
           raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
