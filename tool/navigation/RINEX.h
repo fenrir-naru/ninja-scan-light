@@ -98,8 +98,9 @@ class RINEX_Reader {
 };
 
 template <class FloatT>
-struct RINEX_Nav {
-  typedef typename GPS_SpaceNode<FloatT>::Satellite::Ephemeris ephemeris_t;
+struct RINEX_NAV {
+  typedef GPS_SpaceNode<FloatT> space_node_t;
+  typedef typename space_node_t::Satellite::Ephemeris ephemeris_t;
   struct SatelliteInfo {
     unsigned int svid;
     FloatT t_ot;  ///< Transmitting time [s]
@@ -108,14 +109,15 @@ struct RINEX_Nav {
 };
 
 template <class FloatT = double>
-class RINEX_Nav_Reader : public RINEX_Reader {
+class RINEX_NAV_Reader : public RINEX_Reader {
   protected:
-    typedef RINEX_Nav<FloatT> model_t;
-    typedef RINEX_Nav_Reader<FloatT> self_t;
+    typedef RINEX_NAV<FloatT> content_t;
+    typedef RINEX_NAV_Reader<FloatT> self_t;
     typedef RINEX_Reader super_t;
   public:
-    typedef typename model_t::ephemeris_t ephemeris_t;
-    typedef typename model_t::SatelliteInfo SatelliteInfo;
+    typedef typename content_t::space_node_t space_node_t;
+    typedef typename content_t::ephemeris_t ephemeris_t;
+    typedef typename content_t::SatelliteInfo SatelliteInfo;
   
   protected:
     SatelliteInfo info;
@@ -223,10 +225,10 @@ case line_num: { \
     }
   
   public:
-    RINEX_Nav_Reader(std::istream &in) : super_t(in, self_t::modify_header) {
+    RINEX_NAV_Reader(std::istream &in) : super_t(in, self_t::modify_header) {
       seek_next();
     }
-    ~RINEX_Nav_Reader(){}
+    ~RINEX_NAV_Reader(){}
     
     SatelliteInfo next() {
       SatelliteInfo current(info);
@@ -240,35 +242,62 @@ case line_num: { \
      * 
      * @return true when successfully obtained, otherwise false
      */
-    bool extract_iono_coef(GPS_SpaceNode<FloatT> &space_node) const {
-      if(_header.find("ION ALPHA") != _header.end()){
+    bool extract_iono_utc(GPS_SpaceNode<FloatT> &space_node) const {
+      typename space_node_t::Ionospheric_UTC_Parameters iono_utc;
+
+      if(_header.find("ION ALPHA") == _header.end()){return false;}
+      {
         std::stringstream sstr(const_cast<super_t::header_t *>(&(_header))
             ->operator[]("ION ALPHA"));
-        sstr >> space_node.iono_coef().alpha0;
-        sstr >> space_node.iono_coef().alpha1;
-        sstr >> space_node.iono_coef().alpha2;
-        sstr >> space_node.iono_coef().alpha3;
-      }else{
-        return false;
+        for(int i(0); i < sizeof(iono_utc.alpha) / sizeof(iono_utc.alpha[0]); ++i){
+          sstr >> iono_utc.alpha[i];
+        }
       }
       
-      if(_header.find("ION BETA") != _header.end()){
+      if(_header.find("ION BETA") == _header.end()){return false;}
+      {
         std::stringstream sstr(const_cast<super_t::header_t *>(&(_header))
             ->operator[]("ION BETA"));
-        sstr >> space_node.iono_coef().beta0;
-        sstr >> space_node.iono_coef().beta1;
-        sstr >> space_node.iono_coef().beta2;
-        sstr >> space_node.iono_coef().beta3;
-      }else{
-        return false;
+        for(int i(0); i < sizeof(iono_utc.beta) / sizeof(iono_utc.beta[0]); ++i){
+          sstr >> iono_utc.beta[i];
+        }
       }
-      
+
+      if(_header.find("DELTA-UTC: A0,A1,T,W") == _header.end()){return false;}
+      {
+        std::stringstream sstr(const_cast<super_t::header_t *>(&(_header))
+            ->operator[]("DELTA-UTC: A0,A1,T,W"));
+        sstr >> iono_utc.A0;
+        sstr >> iono_utc.A1;
+        sstr >> iono_utc.t_ot;
+        sstr >> iono_utc.WN_t;
+      }
+
+      if(_header.find("LEAP SECONDS") != _header.end()){
+        std::stringstream sstr(const_cast<super_t::header_t *>(&(_header))
+            ->operator[]("LEAP SECONDS"));
+        sstr >> iono_utc.delta_t_LS;
+      }
+
+      space_node.update_iono_utc(iono_utc);
       return true;
+    }
+
+    static int read_all(std::istream &in, space_node_t &space_node){
+      int res(-1);
+      RINEX_NAV_Reader reader(in);
+      if(reader.extract_iono_utc(space_node)){return res;}
+      res++;
+      for(; reader.has_next(); ++res){
+        SatelliteInfo info(reader.next());
+        space_node.satellite(info.svid).register_epehemris(info.ephemeris);
+      }
+      return res;
     }
 };
 
 template <class FloatT>
-struct RINEX_Observe {
+struct RINEX_OBS {
   struct ObservedItem {
     GPS_Time<FloatT> t_epoc;
     unsigned event_flag;
@@ -284,13 +313,13 @@ struct RINEX_Observe {
 };
 
 template <class FloatT = double>
-class RINEX_Observe_Reader : public RINEX_Reader {
+class RINEX_OBS_Reader : public RINEX_Reader {
   protected:
-    typedef RINEX_Observe<FloatT> model_t;
-    typedef RINEX_Observe_Reader<FloatT> self_t;
+    typedef RINEX_OBS<FloatT> content_t;
+    typedef RINEX_OBS_Reader<FloatT> self_t;
     typedef RINEX_Reader super_t;
   public:
-    typedef typename model_t::ObservedItem ObservedItem;
+    typedef typename content_t::ObservedItem ObservedItem;
   
   protected:
     std::vector<std::string> types_of_observe;
@@ -399,7 +428,7 @@ class RINEX_Observe_Reader : public RINEX_Reader {
     }
   
   public:
-    RINEX_Observe_Reader(std::istream &in) 
+    RINEX_OBS_Reader(std::istream &in)
         : super_t(in, self_t::modify_header),
           types_of_observe() {
       if(super_t::_header.find("# / TYPES OF OBSERV") != super_t::_header.end()){
@@ -420,7 +449,7 @@ class RINEX_Observe_Reader : public RINEX_Reader {
         }
       }
     }
-    ~RINEX_Observe_Reader(){}
+    ~RINEX_OBS_Reader(){}
     
     ObservedItem next() {
       ObservedItem current(item);
@@ -562,10 +591,10 @@ class RINEX_Writer {
 };
 
 template <class FloatT>
-class RINEX_Nav_Writer : public RINEX_Writer {
+class RINEX_NAV_Writer : public RINEX_Writer {
   public:
-    typedef RINEX_Nav<FloatT> model_t;
-    typedef RINEX_Nav_Writer self_t;
+    typedef RINEX_NAV<FloatT> content_t;
+    typedef RINEX_NAV_Writer self_t;
     typedef RINEX_Writer super_t;
   protected:
     using super_t::RINEX_Float;
@@ -598,10 +627,10 @@ class RINEX_Nav_Writer : public RINEX_Writer {
           << RINEX_FloatD(b3, 12, 4);
       _header["ION BETA"] = ss.str();
     }
-    RINEX_Nav_Writer(std::ostream &out) 
+    RINEX_NAV_Writer(std::ostream &out)
         : super_t(out, default_header, default_header_size) {}
-    ~RINEX_Nav_Writer(){}
-    self_t &operator<<(const typename model_t::SatelliteInfo &data){
+    ~RINEX_NAV_Writer(){}
+    self_t &operator<<(const typename content_t::SatelliteInfo &data){
       std::stringstream buf;
       
       // PRN
@@ -688,7 +717,7 @@ class RINEX_Nav_Writer : public RINEX_Writer {
     }
 };
 template <class FloatT>
-const RINEX_Writer::header_item_t RINEX_Nav_Writer<FloatT>::default_header[] = {
+const RINEX_Writer::header_item_t RINEX_NAV_Writer<FloatT>::default_header[] = {
     {"RINEX VERSION / TYPE",
         "     2              NAVIGATION DATA"},
     {"COMMENT", NULL},
@@ -697,14 +726,14 @@ const RINEX_Writer::header_item_t RINEX_Nav_Writer<FloatT>::default_header[] = {
     {"DELTA UTC: A0,A1,T,W ", NULL},
     {"LEAP SECONDS", NULL}};
 template <class FloatT>
-const int RINEX_Nav_Writer<FloatT>::default_header_size
-    = sizeof(RINEX_Nav_Writer<FloatT>::default_header) / sizeof(RINEX_Nav_Writer<FloatT>::default_header[0]);
+const int RINEX_NAV_Writer<FloatT>::default_header_size
+    = sizeof(RINEX_NAV_Writer<FloatT>::default_header) / sizeof(RINEX_NAV_Writer<FloatT>::default_header[0]);
 
 template <class FloatT>
-class RINEX_Observe_Writer : public RINEX_Writer {
+class RINEX_OBS_Writer : public RINEX_Writer {
   public:
-    typedef RINEX_Observe<FloatT> model_t;
-    typedef RINEX_Observe_Writer self_t;
+    typedef RINEX_OBS<FloatT> content_t;
+    typedef RINEX_OBS_Writer self_t;
     typedef RINEX_Writer super_t;
   protected:
     using super_t::RINEX_Float;
@@ -848,13 +877,13 @@ class RINEX_Observe_Writer : public RINEX_Writer {
     void last_obs(const GPS_Time<FloatT> &t){
       insert_header_time_item("TIME OF LAST OBS", t);
     }
-    RINEX_Observe_Writer(std::ostream &out) 
+    RINEX_OBS_Writer(std::ostream &out)
         : super_t(out, default_header, default_header_size) {}
-    ~RINEX_Observe_Writer(){}
-    self_t &operator<<(const typename model_t::ObservedItem &data){
+    ~RINEX_OBS_Writer(){}
+    self_t &operator<<(const typename content_t::ObservedItem &data){
       
       typedef 
-          typename model_t::ObservedItem::sat_data_t 
+          typename content_t::ObservedItem::sat_data_t
           sat_data_t;
       
       std::stringstream top, rest;
@@ -931,7 +960,7 @@ class RINEX_Observe_Writer : public RINEX_Writer {
     }
 };
 template <class FloatT>
-const RINEX_Writer::header_item_t RINEX_Observe_Writer<FloatT>::default_header[] = {
+const RINEX_Writer::header_item_t RINEX_OBS_Writer<FloatT>::default_header[] = {
     {"RINEX VERSION / TYPE",
         "     2              OBSERVATION DATA"},
     {"PGM / RUN BY / DATE", 
@@ -958,7 +987,7 @@ const RINEX_Writer::header_item_t RINEX_Observe_Writer<FloatT>::default_header[]
     {"# OF SATELLITES", NULL},
     {"PRN / # OF OBS", NULL}};
 template <class FloatT>
-const int RINEX_Observe_Writer<FloatT>::default_header_size
-    = sizeof(RINEX_Observe_Writer<FloatT>::default_header) / sizeof(RINEX_Observe_Writer<FloatT>::default_header[0]);
+const int RINEX_OBS_Writer<FloatT>::default_header_size
+    = sizeof(RINEX_OBS_Writer<FloatT>::default_header) / sizeof(RINEX_OBS_Writer<FloatT>::default_header[0]);
 
 #endif //  __RINEX_H__
