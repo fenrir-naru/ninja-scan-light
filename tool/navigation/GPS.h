@@ -725,7 +725,13 @@ class GPS_SpaceNode {
         typedef std::vector<Ephemeris> eph_list_t;
         eph_list_t eph_list; // ephemeris list in chronological order
         typename eph_list_t::size_type eph_current_index;
-         
+
+        typename eph_list_t::iterator current_ephemeris_iterator() {
+          typename eph_list_t::iterator it(eph_list.begin());
+          std::advance(it, eph_current_index);
+          return it;
+        }
+
       public:
         Satellite() : eph_list(1), eph_current_index(0) {
           // setup first ephemeris as invalid one
@@ -764,8 +770,7 @@ class GPS_SpaceNode {
          */
         bool select_ephemeris(const gps_time_t &target_time){
 
-          typename eph_list_t::const_iterator eph_current(
-              std::advance(eph_list.begin(), eph_current_index));
+          typename eph_list_t::iterator eph_current(current_ephemeris_iterator());
 
           bool is_valid(eph_current->is_valid(target_time));
 
@@ -774,8 +779,8 @@ class GPS_SpaceNode {
             if(!(eph_current->maybe_newer_one_avilable(target_time))){return true;}
           }
 
-          typename eph_list_t::const_iterator it, it_last;
-          if(gps_time_t(eph_current->WN, eph_current->t_oc) >= target_time){
+          typename eph_list_t::iterator it, it_last;
+          if(gps_time_t(eph_current->WN, eph_current->t_oc) <= target_time){
             // find newer
             it = ++eph_current;
             it_last = eph_list.end();
@@ -1011,6 +1016,12 @@ class GPS_SpaceNode {
     }
     bool has_satellite(const int &prn) const {
       return _satellites.find(prn) !=  _satellites.end();
+    }
+    void update_all_ephemeris(const gps_time_t &target_time) {
+      for(typename satellites_t::iterator it(_satellites.begin());
+          it != _satellites.end(); ++it){
+        it->second.select_ephemeris(target_time);
+      }
     }
 
     /**
