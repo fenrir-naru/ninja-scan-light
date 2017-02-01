@@ -405,7 +405,7 @@ class G_Packet_Observer : public Packet_Observer<>{
     unsigned short fetch_WN() const {
       v8_t buf[2];
       this->inspect(buf, 2, 10);
-      return le_char2_2_num<u16_t>(*buf);
+      return le_char2_2_num<s16_t>(*buf);
     }
     
     struct position_t {
