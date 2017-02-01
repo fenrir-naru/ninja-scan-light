@@ -529,11 +529,11 @@ struct G_Packet_Raw : public G_Packet {
   typedef raw_data_t::solver_t solver_t;
 
   bool update_solution(){
-
-    solver_t::user_pvt_t pvt(raw_data.solver.solve_user_pvt(
-        raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
-        raw_data.measurement[raw_data_t::L1_RANGERATE],
-        space_node_t::gps_time_t(0, this->itow)));
+    solver_t::user_pvt_t pvt(
+        raw_data.solver.solve_user_pvt(
+          raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
+          raw_data.measurement[raw_data_t::L1_RANGERATE],
+          raw_data.gpstime));
     if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
       return false;
     }
@@ -1555,11 +1555,15 @@ class StreamProcessor
           case 0x10: { // RXM-RAW
             const unsigned int num_of_sv(observer[6 + 6]);
             if(num_of_sv == 0){return;}
-            packet_raw_latest.itow = observer.fetch_ITOW();
-            packet_raw_latest.raw_data.measurement.clear();
+
             typedef G_Packet_Raw::raw_data_t raw_t;
+            packet_raw_latest.raw_data.gpstime = raw_t::gps_time_t(
+                observer.fetch_WN(), observer.fetch_ITOW());
+
             typedef raw_t::measurement_t dst_t;
             dst_t &dst(packet_raw_latest.raw_data.measurement);
+            dst.clear();
+
             typedef dst_t::mapped_type::value_type v_t;
             for(int i(0); i < num_of_sv; i++){
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
@@ -1568,6 +1572,8 @@ class StreamProcessor
               dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
               dst[raw_t::L1_RANGERATE].push_back(v_t(prn, src.doppler));
             }
+            space_node.update_all_ephemeris(
+                packet_raw_latest.raw_data.gpstime);
             packet_raw_latest.update_solution();
             packet_raw_updated = true;
             return;

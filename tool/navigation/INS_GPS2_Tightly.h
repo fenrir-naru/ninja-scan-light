@@ -271,9 +271,12 @@ struct GPS_RawData {
   typedef std::map<int, prn_obs_t> measurement_t;
   measurement_t measurement;
 
+  typedef typename space_node_t::gps_time_t gps_time_t;
+  gps_time_t gpstime;
+
   GPS_RawData(const space_node_t &_space_node)
       : space_node(_space_node),
-      solver(space_node), measurement() {}
+      solver(space_node), measurement(), gpstime() {}
   ~GPS_RawData(){}
 };
 
