@@ -514,10 +514,11 @@ struct G_Packet : public Packet {
     return solution;
   }
 
+  void *ptr_extension;
+
   typedef GPS_RawData<float_sylph_t> raw_data_t;
-  raw_data_t *ptr_raw_data;
   operator const raw_data_t &() const {
-    return *(const_cast<G_Packet *>(this)->ptr_raw_data);
+    return *static_cast<const raw_data_t *>(ptr_extension);
   }
 };
 
@@ -527,13 +528,13 @@ struct G_Packet_Raw : public G_Packet {
 
   typedef raw_data_t::space_node_t space_node_t;
   typedef raw_data_t::solver_t solver_t;
+  solver_t::user_pvt_t pvt;
 
   bool update_solution(){
-    solver_t::user_pvt_t pvt(
-        raw_data.solver.solve_user_pvt(
-          raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
-          raw_data.measurement[raw_data_t::L1_RANGERATE],
-          raw_data.gpstime));
+    pvt = raw_data.solver.solve_user_pvt(
+        raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
+        raw_data.measurement[raw_data_t::L1_RANGERATE],
+        raw_data.gpstime);
     if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
       return false;
     }
@@ -551,9 +552,27 @@ struct G_Packet_Raw : public G_Packet {
     return true;
   }
 
+  friend std::ostream &operator<<(std::ostream &out, const G_Packet_Raw &packet){
+    out << packet.raw_data.gpstime.week
+        << ',' << packet.raw_data.gpstime.seconds
+        << ',' << packet.pvt.receiver_error / space_node_t::light_speed
+        << ',' << rad2deg(packet.solution.latitude)
+        << ',' << rad2deg(packet.solution.longitude)
+        << ',' << packet.solution.height
+        << ',' << packet.pvt.gdop
+        << ',' << packet.pvt.pdop
+        << ',' << packet.pvt.hdop
+        << ',' << packet.pvt.vdop
+        << ',' << packet.pvt.tdop
+        << ',' << packet.solution.v_n
+        << ',' << packet.solution.v_e
+        << ',' << packet.solution.v_d;
+    return out;
+  }
+
   G_Packet_Raw(const space_node_t &_space_node)
       : G_Packet(), raw_data(_space_node) {
-    G_Packet::ptr_raw_data = &raw_data;
+    G_Packet::ptr_extension = &raw_data;
   }
   ~G_Packet_Raw(){}
 };
@@ -1370,11 +1389,15 @@ class StreamProcessor
       unsigned int gps_status;
       int week_number;
 
-      static G_Packet_Raw::space_node_t space_node_shared;
-      G_Packet_Raw::space_node_t space_node_inidividual;
-      G_Packet_Raw::space_node_t &space_node;
+      typedef G_Packet_Raw::space_node_t space_node_t;
+      static space_node_t space_node_shared;
+      space_node_t space_node_inidividual;
+      space_node_t &space_node;
+      
       G_Packet_Raw packet_raw_latest;
       bool packet_raw_updated;
+
+      ostream *out_raw_pvt;
 
       GHandler()
           : G_Observer_t(buffer_size),
@@ -1383,7 +1406,8 @@ class StreamProcessor
           gps_status(status_t::NO_FIX), week_number(0),
           space_node_inidividual(),
           space_node(true ? space_node_inidividual : space_node_shared),
-          packet_raw_latest(space_node), packet_raw_updated(false) {
+          packet_raw_latest(space_node), packet_raw_updated(false),
+          out_raw_pvt(NULL) {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
@@ -1460,10 +1484,10 @@ class StreamProcessor
         }
       }
 
-      static G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
+      static space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
           const G_Observer_t::subframe_t &subframe){
 
-        G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
+        space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
 #define get8(index) (subframe.bits2u8_align(index, 8))
         { // IONO parameter
           raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
@@ -1498,13 +1522,13 @@ class StreamProcessor
           raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
         }
 #undef get8
-        return (G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters)raw;
+        return (space_node_t::Ionospheric_UTC_Parameters)raw;
       }
 
-      static G_Packet_Raw::space_node_t::Satellite::Ephemeris convert_ephemeris(
+      static space_node_t::Satellite::Ephemeris convert_ephemeris(
           const G_Observer_t::ephemeris_t &eph_rxm){
 
-        typedef G_Packet_Raw::space_node_t::Satellite::Ephemeris eph_t;
+        typedef space_node_t::Satellite::Ephemeris eph_t;
         eph_t eph;
 #define copy(dst, src) eph.dst = eph_rxm.src;
         // Subframe.1
@@ -1572,16 +1596,18 @@ class StreamProcessor
               dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
               dst[raw_t::L1_RANGERATE].push_back(v_t(prn, src.doppler));
             }
-            space_node.update_all_ephemeris(
-                packet_raw_latest.raw_data.gpstime);
-            packet_raw_latest.update_solution();
+            space_node.update_all_ephemeris(packet_raw_latest.raw_data.gpstime);
             packet_raw_updated = true;
+            if(!packet_raw_latest.update_solution()){return;}
+            if(out_raw_pvt){
+              (*out_raw_pvt) << packet_raw_latest << endl;
+            }
             return;
           }
           case 0x11: { // RXM-SFRB
             G_Observer_t::subframe_t subframe(observer.fetch_subframe());
             if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-              G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters iono_utc(
+              space_node_t::Ionospheric_UTC_Parameters iono_utc(
                   convert_iono_utc(subframe));
               /*{ // TODO taking account for truncation
                 iono_utc.WN_t;
@@ -1782,7 +1808,7 @@ class StreamProcessor
             (*ptr_lever_arm)[i] = buf[i];
           }
         }
-        std::cerr << "lever_arm: " << *ptr_lever_arm << std::endl;
+        cerr << "lever_arm: " << *ptr_lever_arm << endl;
         return true;
       }
 
@@ -1795,8 +1821,15 @@ class StreamProcessor
           cerr << "(error!) Invalid format!" << endl;
           exit(-1);
         }else{
-          std::cerr << "rinex_nav: " << ephemeris << " items captured." << std::endl;
+          cerr << "rinex_nav: " << ephemeris << " items captured." << endl;
         }
+        return true;
+      }
+
+      if(value = Options::get_value(spec, "out_raw_pvt", false)){
+        g_handler.out_raw_pvt = &options.spec2ostream(value);
+        g_handler.out_raw_pvt->precision(12);
+        cerr << "out_raw_pvt: " << spec << endl;
         return true;
       }
 
@@ -1805,7 +1838,8 @@ class StreamProcessor
 } *current_processor;
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
-G_Packet_Raw::space_node_t StreamProcessor::GHandler::space_node_shared = G_Packet_Raw::space_node_t();
+StreamProcessor::GHandler::space_node_t StreamProcessor::GHandler::space_node_shared
+    = StreamProcessor::GHandler::space_node_t();
 
 typedef vector<StreamProcessor *> processors_t;
 processors_t processors;
