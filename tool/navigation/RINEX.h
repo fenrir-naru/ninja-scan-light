@@ -210,16 +210,17 @@ case line_num: { \
             info.ephemeris.iodc);
           READ_AND_STORE(7,
             info.t_ot,
-            info.ephemeris.fit_interval,
+            info.ephemeris.fit_interval, // in hours
             dummy,
             dummy);
 #undef READ_AND_STORE
         }
       }
       
-      if(info.ephemeris.fit_interval == 0){
-        info.ephemeris.fit_interval = 4 * 60 * 60; // At least 4 hour validity
+      if(info.ephemeris.fit_interval < 4){
+        info.ephemeris.fit_interval = 4; // At least 4 hour validity
       }
+      info.ephemeris.fit_interval *= (60 * 60); // hours => seconds;
       
       super_t::_has_next = true;
     }
