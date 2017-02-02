@@ -533,7 +533,7 @@ struct G_Packet_Raw : public G_Packet {
   bool update_solution(){
     pvt = raw_data.solver.solve_user_pvt(
         raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
-        raw_data.measurement[raw_data_t::L1_RANGERATE],
+        raw_data.measurement[raw_data_t::L1_PSEUDORANGE_RATE], // raw_data_t::L1_DOPPLER
         raw_data.gpstime);
     if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
       return false;
@@ -1581,20 +1581,35 @@ class StreamProcessor
             if(num_of_sv == 0){return;}
 
             typedef G_Packet_Raw::raw_data_t raw_t;
-            packet_raw_latest.raw_data.gpstime = raw_t::gps_time_t(
-                observer.fetch_WN(), observer.fetch_ITOW());
+            raw_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
+            float_sylph_t delta_t = (current - packet_raw_latest.raw_data.gpstime);
+            packet_raw_latest.raw_data.gpstime = current;
 
             typedef raw_t::measurement_t dst_t;
             dst_t &dst(packet_raw_latest.raw_data.measurement);
+            dst_t::mapped_type previous_pseudo_range(dst[raw_t::L1_PSEUDORANGE]);
             dst.clear();
 
             typedef dst_t::mapped_type::value_type v_t;
             for(int i(0); i < num_of_sv; i++){
+
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
+
               int prn(src.sv_number);
               dst[raw_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
               dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
-              dst[raw_t::L1_RANGERATE].push_back(v_t(prn, src.doppler));
+              dst[raw_t::L1_DOPPLER].push_back(v_t(prn, src.doppler));
+
+              // calculate range rate
+              for(dst_t::mapped_type::const_iterator it(previous_pseudo_range.begin());
+                  it != previous_pseudo_range.end();
+                  ++it){
+                if(prn == it->first){
+                  dst[raw_t::L1_PSEUDORANGE_RATE].push_back(
+                      v_t(prn, (src.pseudo_range - it->second) / delta_t));
+                  break;
+                }
+              }
             }
             space_node.update_all_ephemeris(packet_raw_latest.raw_data.gpstime);
             packet_raw_updated = true;

@@ -262,10 +262,12 @@ struct GPS_RawData {
   typedef GPS_SinglePositioning<float_sylph_t> solver_t;
   const solver_t solver;
 
-  enum {
+  enum measurement_items_t {
     L1_PSEUDORANGE,
-    L1_RANGERATE,
+    L1_PSEUDORANGE_RATE,
+    L1_DOPPLER,
     L1_CARRIER_PHASE,
+    MEASUREMENT_ITEMS_PREDEFINED,
   };
   typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
   typedef std::map<int, prn_obs_t> measurement_t;
