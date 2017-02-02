@@ -342,6 +342,7 @@ class GPS_SpaceNode {
   public:
     static const FloatT light_speed;
     static const FloatT L1_Frequency;
+    static const FloatT L1_WaveLength;
     static const FloatT SC2RAD;
     
   protected:
@@ -1157,6 +1158,9 @@ const FloatT GPS_SpaceNode<FloatT>::light_speed = 2.99792458E8;
 
 template <class FloatT>
 const FloatT GPS_SpaceNode<FloatT>::L1_Frequency = 1575.42E6;
+
+template <class FloatT>
+const FloatT GPS_SpaceNode<FloatT>::L1_WaveLength = light_speed / L1_Frequency;
 
 template <class FloatT>
 const FloatT GPS_SpaceNode<FloatT>::SC2RAD = 3.1415926535898;
