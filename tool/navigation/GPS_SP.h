@@ -288,8 +288,8 @@ class GPS_SinglePositioning {
             it != available_sat_range.end();
             ++it, ++i){
           int j(0);
-          for(typename prn_obs_t::const_iterator it2(prn_range.begin());
-              it2 != prn_range.end();
+          for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
+              it2 != prn_rate.end();
               ++it2, ++j){
             if(it->first->first == it2->first){
               index_table.push_back(index_table_t::value_type(i, j));
