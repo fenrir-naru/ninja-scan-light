@@ -30,7 +30,7 @@ class INS_ClockErrorEstimated;
 template <class BaseINS>
 struct INS_Property<INS_ClockErrorEstimated<BaseINS> > {
   static const unsigned STATE_VALUES_WITHOUT_CLOCK_ERROR = INS_Property<BaseINS>::STATE_VALUES;
-  static const unsigned STATE_VALUES_CLOCK_ERROR = 1;
+  static const unsigned STATE_VALUES_CLOCK_ERROR = 2;
   static const unsigned STATE_VALUES = STATE_VALUES_WITHOUT_CLOCK_ERROR + STATE_VALUES_CLOCK_ERROR;
 };
 
@@ -46,6 +46,7 @@ class INS_ClockErrorEstimated : public BaseINS {
 
   protected:
     float_t m_clock_error;
+    float_t m_clock_rate_error;
 
   public:
     static const unsigned STATE_VALUES_WITHOUT_CLOCK_ERROR
@@ -58,23 +59,25 @@ class INS_ClockErrorEstimated : public BaseINS {
 
     INS_ClockErrorEstimated()
         : BaseINS(),
-          m_clock_error(0) {
+          m_clock_error(0), m_clock_rate_error(0) {
     }
 
     INS_ClockErrorEstimated(const INS_ClockErrorEstimated &orig, const bool deepcopy = false)
         : BaseINS(orig, deepcopy),
-          m_clock_error(orig.m_clock_error) {
+          m_clock_error(orig.m_clock_error), m_clock_rate_error(orig.m_clock_rate_error) {
     }
 
     virtual ~INS_ClockErrorEstimated(){}
 
     float_t &clock_error(){return m_clock_error;}
+    float_t &clock_rate_error(){return m_clock_rate_error;}
 
     using BaseINS::operator[];
 
     const float_t &operator[](const unsigned &index) const {
       switch(index){
-        case STATE_VALUES_WITHOUT_CLOCK_ERROR: return m_clock_error;
+        case STATE_VALUES_WITHOUT_CLOCK_ERROR:     return m_clock_error;
+        case STATE_VALUES_WITHOUT_CLOCK_ERROR + 1: return m_clock_rate_error;
         default: return BaseINS::operator[](index);
       }
     }
@@ -158,6 +161,7 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
   protected:
     float_t m_beta_clock_error;
+    float_t m_beta_clock_rate_error;
 
   public:
     using BaseFINS::ins_t::STATE_VALUES_WITHOUT_CLOCK_ERROR;
@@ -170,21 +174,23 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
     Filtered_INS_ClockErrorEstimated()
         : BaseFINS(),
-        m_beta_clock_error(1){
+        m_beta_clock_error(1), m_beta_clock_rate_error(1) {
 
     }
 
     Filtered_INS_ClockErrorEstimated(
         const Filtered_INS_ClockErrorEstimated &orig,
-        const bool deepcopy = false) :
-      BaseFINS(orig, deepcopy),
-      m_beta_clock_error(orig.m_beta_clock_error){
+        const bool deepcopy = false)
+        : BaseFINS(orig, deepcopy),
+        m_beta_clock_error(orig.m_beta_clock_error),
+        m_beta_clock_rate_error(orig.m_beta_clock_rate_error) {
 
     }
 
     ~Filtered_INS_ClockErrorEstimated(){}
 
     float_t &beta_clock_error(){return m_beta_clock_error;}
+    float_t &beta_clock_rate_error(){return m_beta_clock_rate_error;}
 
     void getAB(
         const vec3_t &accel,
@@ -194,15 +200,9 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
       BaseFINS::getAB(accel, gyro, res);
 
       { // A matrix modification
-        // Copy from part of B associated with clock error
-        for(unsigned i(0); i < P_SIZE_WITHOUT_CLOCK_ERROR; i++){
-          for(unsigned j(P_SIZE_WITHOUT_CLOCK_ERROR), k(0); k < P_SIZE_CLOCK_ERROR; j++, k++){
-            res.A[i][j] = res.B[i][k];
-          }
-        }
-        // Modify part of A associated with clock error
+        // Modify diagonal part of A associated with clock error
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0); j < P_SIZE_CLOCK_ERROR; i++, j++){
-          res.A[i][i] += -m_beta_clock_error;
+          res.A[i][i] += -(j == 0 ? m_beta_clock_error : m_beta_clock_rate_error);
         }
       }
 
