@@ -273,6 +273,21 @@ struct GPS_RawData {
   typedef std::map<int, prn_obs_t> measurement_t;
   measurement_t measurement;
 
+
+  static prn_obs_t difference(
+      const prn_obs_t &operand, const prn_obs_t &argument,
+      const FloatT &scaling = FloatT(1)) {
+    prn_obs_t res;
+    for(prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
+      for(prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
+        if(it->first != it2->first){continue;}
+        res.push_back(prn_obs_t::value_type(it->first, (it->second - it2->second) * scaling));
+        break;
+      }
+    }
+    return res;
+  }
+
   typedef typename space_node_t::gps_time_t gps_time_t;
   gps_time_t gpstime;
 

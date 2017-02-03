@@ -1599,18 +1599,12 @@ class StreamProcessor
               dst[raw_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
               dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
               dst[raw_t::L1_DOPPLER].push_back(v_t(prn, src.doppler));
-
-              // calculate range rate
-              for(dst_t::mapped_type::const_iterator it(previous_pseudo_range.begin());
-                  it != previous_pseudo_range.end();
-                  ++it){
-                if(prn == it->first){
-                  dst[raw_t::L1_PSEUDORANGE_RATE].push_back(
-                      v_t(prn, (src.pseudo_range - it->second) / delta_t));
-                  break;
-                }
-              }
             }
+
+            // calculate rate by using difference between current and previous range.
+            dst[raw_t::L1_PSEUDORANGE_RATE] = raw_t::difference(
+                dst[raw_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
+
             space_node.update_all_ephemeris(packet_raw_latest.raw_data.gpstime);
             packet_raw_updated = true;
             if(!packet_raw_latest.update_solution()){return;}
