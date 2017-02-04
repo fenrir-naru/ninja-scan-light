@@ -436,6 +436,11 @@ class GPS_SpaceNode {
   public:
     class Satellite {
       public:
+
+        struct constellation_t {
+          xyz_t position;
+          xyz_t velocity;
+        };
         
         /**
          * GPS ephemeris
@@ -505,6 +510,176 @@ class GPS_SpaceNode {
             return !((0 <= interval_to_t_oc) && (interval_to_t_oc <= (fit_interval / 2)));
           }
           
+          FloatT eccentric_anomaly(const FloatT &period_from_toe) const {
+
+            // Kepler's Equation for Eccentric Anomaly M(Mk)
+            FloatT n0(std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A));
+            FloatT Mk(m0
+                + (n0 + delta_n) * period_from_toe);
+
+            // Eccentric Anomaly E(Ek)
+            FloatT Ek(Mk);
+  #ifndef KEPLER_DELTA_LIMIT
+  #define KEPLER_DELTA_LIMIT 1E-12
+  #endif
+            for(int loop(0); loop < 10; loop++){
+              FloatT Ek2(Mk + e * sin(Ek));
+              if(std::abs(Ek2 - Ek) < KEPLER_DELTA_LIMIT){break;}
+              Ek = Ek2;
+            }
+
+            return Ek;
+          }
+
+          FloatT eccentric_anomaly(const gps_time_t &t) const {
+            return eccentric_anomaly(period_from_time_of_ephemeris(t));
+          }
+
+          FloatT eccentric_anomaly_dot(const FloatT &eccentric_anomaly) const {
+            FloatT n((std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A)) + delta_n);
+            return n / (1.0 - e * cos(eccentric_anomaly));
+          }
+
+          /**
+           * Calculate correction value in accordance with clock error model
+           *
+           * @param t current time
+           * @param pseudo_range pseudo range in meters
+           * @return in seconds
+           */
+          FloatT clock_error(const gps_time_t &t, const FloatT &pseudo_range = 0) const{
+
+            FloatT transit_time(pseudo_range / light_speed);
+            FloatT tk(period_from_time_of_clock(t) - transit_time);
+            FloatT Ek(eccentric_anomaly(tk));
+
+            // Relativistic correction term
+            FloatT tr(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
+                * e * sqrt_A * sin(Ek));
+
+            FloatT dt(a_f0 + a_f1 * tk + a_f2 * pow2(tk));
+
+            return dt + tr - t_GD;
+          }
+
+          FloatT clock_error_dot(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+
+            FloatT transit_time(pseudo_range / light_speed);
+            FloatT tk(period_from_time_of_clock(t) - transit_time);
+            FloatT Ek(eccentric_anomaly(tk));
+            FloatT Ek_dot(eccentric_anomaly_dot(Ek));
+
+            // Derivative of Relativistic correction term
+            FloatT tr_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
+                * e * sqrt_A * Ek_dot * cos(Ek));
+
+            FloatT dt_dot(a_f1 + a_f2 * 2 * tk);
+
+            return dt_dot + tr_dot;
+          }
+
+          constellation_t constellation(
+              const gps_time_t &t, const FloatT &pseudo_range = 0,
+              const bool &with_velocity = true) const {
+
+            constellation_t res;
+
+            // Time from ephemeris reference epoch (tk)
+            FloatT tk0(period_from_time_of_ephemeris(t));
+
+            // Remove transit time
+            FloatT tk(tk0 - pseudo_range / light_speed);
+
+            // Eccentric Anomaly (Ek)
+            FloatT Ek(eccentric_anomaly(tk));
+
+            // Corrected Radius (rk)
+            FloatT rk(pow2(sqrt_A)
+                * (1.0 - e * cos(Ek)));
+
+            // True Anomaly (vk)
+            FloatT vk(atan2(
+                sqrt(1.0 - pow2(e)) * sin(Ek),
+                cos(Ek) - e));
+
+            // (Corrected) Argument of Latitude (pk) [rad]
+            FloatT pk(vk + omega);
+
+            // (Corrected) Inclination (ik)
+            FloatT ik(i0);
+
+            { // Correction
+              FloatT pk2_sin(sin(pk * 2)),
+                  pk2_cos(cos(pk * 2));
+              FloatT d_uk(
+                  c_us * pk2_sin
+                  + c_uc * pk2_cos);
+              FloatT d_rk(
+                  c_rs * pk2_sin
+                  + c_rc * pk2_cos);
+              FloatT d_ik(
+                  c_is * pk2_sin
+                  + c_ic * pk2_cos);
+
+              pk += d_uk;
+              rk += d_rk;
+              ik += d_ik
+                  + dot_i0 * tk;
+            }
+
+            // Position in orbital plane (xk, yk)
+            FloatT xk(rk * cos(pk)),
+                yk(rk * sin(pk));
+
+            // Corrected longitude of ascending node (Omegak) [rad]
+            FloatT Omegak(Omega0);
+            if(false){ // __MISUNDERSTANDING_ABOUT_OMEGA0_CORRECTION__
+              Omegak += (
+                  (dot_Omega0 - WGS84::Omega_Earth_IAU) * tk0
+                  - WGS84::Omega_Earth_IAU * t_oe);
+            }else{
+              Omegak += (
+                  dot_Omega0 * tk                            // corrected with the time when the wave is transmitted
+                  - WGS84::Omega_Earth_IAU * (t_oe + tk0));  // corrected with the time when the wave is received
+            }
+
+            FloatT Omegak_sin(sin(Omegak)),
+                   Omegak_cos(cos(Omegak));
+            FloatT ik_sin(sin(ik)),
+                   ik_cos(cos(ik));
+
+            res.position.x() = xk * Omegak_cos - yk * Omegak_sin * ik_cos;
+            res.position.y() = xk * Omegak_sin + yk * Omegak_cos * ik_cos;
+            res.position.z() = yk * ik_sin;
+
+            // Velocity calculation => GPS solution vol.8 (3) http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
+            if(with_velocity){
+              FloatT Ek_dot(eccentric_anomaly_dot(Ek));
+              FloatT vk_dot(sin(Ek) * Ek_dot * (1.0 + e * cos(vk))
+                  / (sin(vk) * (1.0 - e * cos(Ek))));
+
+              FloatT pk2_sin(sin(pk * 2)), pk2_cos(cos(pk * 2));
+              FloatT pk_dot(((c_us * pk2_cos - c_uc * pk2_sin) * 2 + 1.0) * vk_dot);
+              FloatT rk_dot(pow2(sqrt_A) * e * sin(Ek) * Ek_dot
+                  + (c_rs * pk2_cos - c_rc * pk2_sin) * 2 * vk_dot);
+              FloatT ik_dot(dot_i0 + (c_is * pk2_cos - c_ic * pk2_sin) * 2 * vk_dot);
+
+              // Velocity in orbital plane (xk_dot, yk_dot)
+              FloatT xk_dot(rk_dot * cos(pk) - yk * pk_dot),
+                  yk_dot(rk_dot * sin(pk) + xk * pk_dot);
+
+              FloatT Omegak_dot(dot_Omega0 - WGS84::Omega_Earth_IAU);
+
+              res.velocity.x() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_cos
+                  - (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_sin;
+              res.velocity.y() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_sin
+                  + (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_cos;
+              res.velocity.z() = yk_dot * ik_sin + yk * ik_cos * ik_dot;
+            }
+
+            return res;
+          }
+
           struct raw_t {
             u8_t  svid;         ///< Satellite number
             
@@ -812,191 +987,18 @@ class GPS_SpaceNode {
           return eph_list[eph_current_index];
         }
         
-        FloatT eccentric_anomaly(const FloatT &period_from_toe) const {
-
-          const Ephemeris &eph_current(eph_list[eph_current_index]);
-
-          // Kepler's Equation for Eccentric Anomaly M(Mk)
-          FloatT n0(std::sqrt(WGS84::mu_Earth) / pow3(eph_current.sqrt_A));
-          FloatT Mk(eph_current.m0
-              + (n0 + eph_current.delta_n) * period_from_toe);
-          
-          // Eccentric Anomaly E(Ek)
-          FloatT Ek(Mk);
-#ifndef KEPLER_DELTA_LIMIT
-#define KEPLER_DELTA_LIMIT 1E-12
-#endif 
-          for(int loop(0); loop < 10; loop++){
-            FloatT Ek2(Mk + eph_current.e * sin(Ek));
-            if(std::abs(Ek2 - Ek) < KEPLER_DELTA_LIMIT){break;}
-            Ek = Ek2;
-          }
-          
-          return Ek;
-        }
-        
-        FloatT eccentric_anomaly(const gps_time_t &t) const {
-          return eccentric_anomaly(eph_list[eph_current_index].period_from_time_of_ephemeris(t));
-        }
-        
-        FloatT eccentric_anomaly_dot(const FloatT &eccentric_anomaly) const {
-          const Ephemeris &eph_current(eph_list[eph_current_index]);
-          FloatT n((std::sqrt(WGS84::mu_Earth) / pow3(eph_current.sqrt_A)) + eph_current.delta_n);
-          return n / (1.0 - eph_current.e * cos(eccentric_anomaly));
-        }
-
-        /**
-         * Calculate correction value in accordance with clock error model
-         *
-         * @param t current time
-         * @param pseudo_range pseudo range in meters
-         * @return in seconds
-         */
         FloatT clock_error(const gps_time_t &t, const FloatT &pseudo_range = 0) const{
-
-          const Ephemeris &eph_current(eph_list[eph_current_index]);
-
-          FloatT transit_time(pseudo_range / self_t::light_speed);
-          FloatT tk(eph_current.period_from_time_of_clock(t) - transit_time);
-          FloatT Ek(eccentric_anomaly(tk));
-
-          // Relativistic correction term
-          FloatT tr(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(self_t::light_speed)
-              * eph_current.e * eph_current.sqrt_A
-              * sin(Ek));
-
-          FloatT dt(eph_current.a_f0
-              + eph_current.a_f1 * tk
-              + eph_current.a_f2 * pow2(tk));
-
-          return dt + tr - eph_current.t_GD;
+          return ephemeris().clock_error(t, pseudo_range);
         }
 
         FloatT clock_error_dot(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
-          const Ephemeris &eph_current(eph_list[eph_current_index]);
-
-          FloatT transit_time(pseudo_range / self_t::light_speed);
-          FloatT tk(eph_current.period_from_time_of_clock(t) - transit_time);
-          FloatT Ek(eccentric_anomaly(tk));
-          FloatT Ek_dot(eccentric_anomaly_dot(Ek));
-
-          // Derivative of Relativistic correction term
-          FloatT tr_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(self_t::light_speed)
-              * eph_current.e * eph_current.sqrt_A
-              * Ek_dot * cos(Ek));
-          
-          FloatT dt_dot(eph_current.a_f1
-              + eph_current.a_f2 * 2 * tk);
-          
-          return dt_dot + tr_dot;
+          return ephemeris().clock_error_dot(t, pseudo_range);
         }
-        
-        struct constellation_t {
-          xyz_t position;
-          xyz_t velocity;
-        };
-        
+
         constellation_t constellation(
             const gps_time_t &t, const FloatT &pseudo_range = 0,
             const bool &with_velocity = true) const {
-          
-          const Ephemeris &eph_current(eph_list[eph_current_index]);
-          constellation_t res;
-          
-          // Time from ephemeris reference epoch (tk)
-          FloatT tk0(eph_current.period_from_time_of_ephemeris(t));
-
-          // Remove transit time
-          FloatT tk(tk0 - pseudo_range / self_t::light_speed);
-
-          // Eccentric Anomaly (Ek)
-          FloatT Ek(eccentric_anomaly(tk));
-          
-          // Corrected Radius (rk)
-          FloatT rk(pow2(eph_current.sqrt_A)
-              * (1.0 - eph_current.e * cos(Ek)));
-          
-          // True Anomaly (vk)
-          FloatT vk(atan2(
-              sqrt(1.0 - pow2(eph_current.e)) * sin(Ek),
-              cos(Ek) - eph_current.e));
-          
-          // (Corrected) Argument of Latitude (pk) [rad]
-          FloatT pk(vk + eph_current.omega);
-          
-          // (Corrected) Inclination (ik)
-          FloatT ik(eph_current.i0);
-          
-          { // Correction
-            FloatT pk2_sin(sin(pk * 2)),
-                pk2_cos(cos(pk * 2));
-            FloatT d_uk(
-                eph_current.c_us * pk2_sin
-                + eph_current.c_uc * pk2_cos);
-            FloatT d_rk(
-                eph_current.c_rs * pk2_sin
-                + eph_current.c_rc * pk2_cos);
-            FloatT d_ik(
-                eph_current.c_is * pk2_sin
-                + eph_current.c_ic * pk2_cos);
-            
-            pk += d_uk;
-            rk += d_rk;
-            ik += d_ik
-                + eph_current.dot_i0 * tk;
-          }
-          
-          // Position in orbital plane (xk, yk)
-          FloatT xk(rk * cos(pk)),
-              yk(rk * sin(pk));
-          
-          // Corrected longitude of ascending node (Omegak) [rad]
-          FloatT Omegak(eph_current.Omega0);
-          if(false){ // __MISUNDERSTANDING_ABOUT_OMEGA0_CORRECTION__
-            Omegak += (
-                (eph_current.dot_Omega0 - WGS84::Omega_Earth_IAU) * tk0
-                - WGS84::Omega_Earth_IAU * eph_current.t_oe);
-          }else{
-            Omegak += (
-                eph_current.dot_Omega0 * tk                            // corrected with the time when the wave is transmitted
-                - WGS84::Omega_Earth_IAU * (eph_current.t_oe + tk0));  // corrected with the time when the wave is received
-          }
-
-          FloatT Omegak_sin(sin(Omegak)),
-                 Omegak_cos(cos(Omegak));
-          FloatT ik_sin(sin(ik)),
-                 ik_cos(cos(ik));
-          
-          res.position.x() = xk * Omegak_cos - yk * Omegak_sin * ik_cos;
-          res.position.y() = xk * Omegak_sin + yk * Omegak_cos * ik_cos;
-          res.position.z() = yk * ik_sin;
-          
-          // Velocity calculation => GPS solution vol.8 (3) http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
-          if(with_velocity){
-            FloatT Ek_dot(eccentric_anomaly_dot(Ek));
-            FloatT vk_dot(sin(Ek) * Ek_dot * (1.0 + eph_current.e * cos(vk))
-                / (sin(vk) * (1.0 - eph_current.e * cos(Ek))));
-            
-            FloatT pk2_sin(sin(pk * 2)), pk2_cos(cos(pk * 2));
-            FloatT pk_dot(((eph_current.c_us * pk2_cos - eph_current.c_uc * pk2_sin) * 2 + 1.0) * vk_dot);
-            FloatT rk_dot(pow2(eph_current.sqrt_A) * eph_current.e * sin(Ek) * Ek_dot
-                + (eph_current.c_rs * pk2_cos - eph_current.c_rc * pk2_sin) * 2 * vk_dot);
-            FloatT ik_dot(eph_current.dot_i0 + (eph_current.c_is * pk2_cos - eph_current.c_ic * pk2_sin) * 2 * vk_dot);
-            
-            // Velocity in orbital plane (xk_dot, yk_dot)
-            FloatT xk_dot(rk_dot * cos(pk) - yk * pk_dot),
-                yk_dot(rk_dot * sin(pk) + xk * pk_dot);
-            
-            FloatT Omegak_dot(eph_current.dot_Omega0 - WGS84::Omega_Earth_IAU);
-            
-            res.velocity.x() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_cos
-                - (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_sin;
-            res.velocity.y() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_sin
-                + (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_cos;
-            res.velocity.z() = yk_dot * ik_sin + yk * ik_cos * ik_dot;
-          }
-          
-          return res;
+          return ephemeris().constellation(t, pseudo_range, with_velocity);
         }
         
         xyz_t position(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
@@ -1112,7 +1114,7 @@ class GPS_SpaceNode {
       }
       T_iono *= F;
       
-      return -T_iono * self_t::light_speed; 
+      return -T_iono * light_speed;
     }
     
     /**
