@@ -839,6 +839,12 @@ class GPS_SpaceNode {
           return eccentric_anomaly(eph_list[eph_current_index].period_from_time_of_ephemeris(t));
         }
         
+        FloatT eccentric_anomaly_dot(const FloatT &eccentric_anomaly) const {
+          const Ephemeris &eph_current(eph_list[eph_current_index]);
+          FloatT n((std::sqrt(WGS84::mu_Earth) / pow3(eph_current.sqrt_A)) + eph_current.delta_n);
+          return n / (1.0 - eph_current.e * cos(eccentric_anomaly));
+        }
+
         /**
          * Calculate correction value in accordance with clock error model
          *
@@ -846,26 +852,43 @@ class GPS_SpaceNode {
          * @param pseudo_range pseudo range in meters
          * @return in seconds
          */
-        FloatT clock_error(const gps_time_t &t, const FloatT pseudo_range = 0) const{
+        FloatT clock_error(const gps_time_t &t, const FloatT &pseudo_range = 0) const{
 
           const Ephemeris &eph_current(eph_list[eph_current_index]);
-          FloatT tk(eph_current.period_from_time_of_clock(t));
 
-          // Propagation time
-          FloatT period_propagation(pseudo_range / self_t::light_speed);
+          FloatT transit_time(pseudo_range / self_t::light_speed);
+          FloatT tk(eph_current.period_from_time_of_clock(t) - transit_time);
+          FloatT Ek(eccentric_anomaly(tk));
 
           // Relativistic correction term
           FloatT tr(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(self_t::light_speed)
               * eph_current.e * eph_current.sqrt_A
-              * sin(eccentric_anomaly(eph_current.period_from_time_of_ephemeris(t) - period_propagation)));
-              
-          tk -= period_propagation;
-          
+              * sin(Ek));
+
           FloatT dt(eph_current.a_f0
               + eph_current.a_f1 * tk
               + eph_current.a_f2 * pow2(tk));
-          
+
           return dt + tr - eph_current.t_GD;
+        }
+
+        FloatT clock_error_dot(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+          const Ephemeris &eph_current(eph_list[eph_current_index]);
+
+          FloatT transit_time(pseudo_range / self_t::light_speed);
+          FloatT tk(eph_current.period_from_time_of_clock(t) - transit_time);
+          FloatT Ek(eccentric_anomaly(tk));
+          FloatT Ek_dot(eccentric_anomaly_dot(Ek));
+
+          // Derivative of Relativistic correction term
+          FloatT tr_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(self_t::light_speed)
+              * eph_current.e * eph_current.sqrt_A
+              * Ek_dot * cos(Ek));
+          
+          FloatT dt_dot(eph_current.a_f1
+              + eph_current.a_f2 * 2 * tk);
+          
+          return dt_dot + tr_dot;
         }
         
         struct constellation_t {
@@ -882,10 +905,9 @@ class GPS_SpaceNode {
           
           // Time from ephemeris reference epoch (tk)
           FloatT tk0(eph_current.period_from_time_of_ephemeris(t));
-          FloatT tk(tk0);
 
-          // Remove propagation time
-          tk -= pseudo_range / self_t::light_speed;
+          // Remove transit time
+          FloatT tk(tk0 - pseudo_range / self_t::light_speed);
 
           // Eccentric Anomaly (Ek)
           FloatT Ek(eccentric_anomaly(tk));
@@ -951,14 +973,13 @@ class GPS_SpaceNode {
           
           // Velocity calculation => GPS solution vol.8 (3) http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
           if(with_velocity){
-            FloatT n((std::sqrt(WGS84::mu_Earth) / pow3(eph_current.sqrt_A)) + eph_current.delta_n);
-            FloatT Ek_dot(n / (1.0 - eph_current.e * cos(Ek)));
+            FloatT Ek_dot(eccentric_anomaly_dot(Ek));
             FloatT vk_dot(sin(Ek) * Ek_dot * (1.0 + eph_current.e * cos(vk))
                 / (sin(vk) * (1.0 - eph_current.e * cos(Ek))));
             
             FloatT pk2_sin(sin(pk * 2)), pk2_cos(cos(pk * 2));
             FloatT pk_dot(((eph_current.c_us * pk2_cos - eph_current.c_uc * pk2_sin) * 2 + 1.0) * vk_dot);
-            FloatT rk_dot(pow2(eph_current.sqrt_A) * eph_current.e * sin(Ek) * n / (1.0 - eph_current.e * cos(Ek))
+            FloatT rk_dot(pow2(eph_current.sqrt_A) * eph_current.e * sin(Ek) * Ek_dot
                 + (eph_current.c_rs * pk2_cos - eph_current.c_rc * pk2_sin) * 2 * vk_dot);
             FloatT ik_dot(eph_current.dot_i0 + (eph_current.c_is * pk2_cos - eph_current.c_ic * pk2_sin) * 2 * vk_dot);
             
