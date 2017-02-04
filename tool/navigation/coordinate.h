@@ -184,8 +184,6 @@ class System_XYZ : public System_3D<FloatT> {
       return (*this - another).dist();
     }
     
-    static const FloatT f0, a0, b0, e0;
-
     /**
      * Convert to LatLongAlt
      * 
@@ -195,6 +193,11 @@ class System_XYZ : public System_3D<FloatT> {
       const FloatT &_y(const_cast<self_t *>(this)->y());
       const FloatT &_z(const_cast<self_t *>(this)->z());
       
+      const FloatT f0(Earth::F_e);
+      const FloatT a0(Earth::R_e);
+      const FloatT b0(a0 * (1.0 - f0));
+      const FloatT e0(std::sqrt(f0 * (2.0 - f0)));
+
       if((_x == 0) && (_y == 0) && (_z == 0)){
         return System_LLH<FloatT, Earth>(0, 0, -a0);
       }
@@ -215,15 +218,6 @@ class System_XYZ : public System_3D<FloatT> {
         );
     }
 };
-
-template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::f0(Earth::F_e);
-template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::a0(Earth::R_e);
-template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::b0(a0 * (1.0 - f0));
-template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::e0(std::sqrt(f0 * (2.0 - f0)));
 
 template <class FloatT = double, class Earth = WGS84>
 class System_LLH : public System_3D<FloatT> {
