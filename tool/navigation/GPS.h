@@ -924,18 +924,20 @@ class GPS_SpaceNode {
          * @param eph ephemeris, assuming the latest one
          */
         void register_ephemeris(const Ephemeris &eph){
+          gps_time_t t_new(eph.WN, eph.t_oc);
           for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
               it != eph_list.rend();
               ++it){
-            if(gps_time_t(eph.WN, eph.t_oc) >= gps_time_t(it->WN, it->t_oc)){
-              if(eph.t_oc != it->t_oc){
-                eph_list.insert(it.base(), eph);
-              }else{
-                (*it) = eph; // overwrite
-              }
-              break;
+            FloatT diff(t_new - gps_time_t(it->WN, it->t_oc));
+            if(diff < 0){continue;}
+            if(diff > 0){
+              eph_list.insert(it.base(), eph);
+            }else{
+              (*it) = eph; // overwrite
             }
+            return;
           }
+          eph_list.insert(eph_list.begin(), eph);
         }
 
         /**
