@@ -533,7 +533,7 @@ struct G_Packet_Raw : public G_Packet {
   bool update_solution(){
     pvt = raw_data.solver.solve_user_pvt(
         raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
-        raw_data.measurement[raw_data_t::L1_PSEUDORANGE_RATE], // raw_data_t::L1_DOPPLER
+        raw_data.measurement[raw_data_t::L1_RANGE_RATE],
         raw_data.gpstime);
     if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
       return false;
@@ -1599,13 +1599,27 @@ class StreamProcessor
               dst[raw_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
               dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
               dst[raw_t::L1_DOPPLER].push_back(v_t(prn, src.doppler));
+
+              // Update ephemeris
+              if(!space_node.has_satellite(prn)){continue;}
+              space_node_t::Satellite &sat(
+                  const_cast<space_node_t &>(space_node).satellite(prn));
+              if(!sat.select_ephemeris(current)){continue;}
+
+              // calculate range rate derived from doppler
+              dst[raw_t::L1_RANGE_RATE].push_back(
+                  dst_t::mapped_type::value_type(
+                    prn,
+                    src.doppler * space_node_t::L1_WaveLength
+                      - space_node_t::light_speed * sat.clock_error_dot(current, src.pseudo_range)));
             }
 
-            // calculate rate by using difference between current and previous range.
-            dst[raw_t::L1_PSEUDORANGE_RATE] = raw_t::difference(
-                dst[raw_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
+            if(dst[raw_t::L1_RANGE_RATE].empty()){
+              // calculate range rate by using difference between current and previous range.
+              dst[raw_t::L1_RANGE_RATE] = raw_t::difference(
+                  dst[raw_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
+            }
 
-            space_node.update_all_ephemeris(packet_raw_latest.raw_data.gpstime);
             packet_raw_updated = true;
             if(!packet_raw_latest.update_solution()){return;}
             if(out_raw_pvt){

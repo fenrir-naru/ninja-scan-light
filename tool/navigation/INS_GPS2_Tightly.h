@@ -264,9 +264,9 @@ struct GPS_RawData {
 
   enum measurement_items_t {
     L1_PSEUDORANGE,
-    L1_PSEUDORANGE_RATE,
     L1_DOPPLER,
     L1_CARRIER_PHASE,
+    L1_RANGE_RATE,
     MEASUREMENT_ITEMS_PREDEFINED,
   };
   typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
