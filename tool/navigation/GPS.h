@@ -923,7 +923,7 @@ class GPS_SpaceNode {
          *
          * @param eph ephemeris, assuming the latest one
          */
-        void register_epehemris(const Ephemeris &eph){
+        void register_ephemeris(const Ephemeris &eph){
           for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
               it != eph_list.rend();
               ++it){

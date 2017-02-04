@@ -291,7 +291,7 @@ case line_num: { \
       res++;
       for(; reader.has_next(); ++res){
         SatelliteInfo info(reader.next());
-        space_node.satellite(info.svid).register_epehemris(info.ephemeris);
+        space_node.satellite(info.svid).register_ephemeris(info.ephemeris);
       }
       return res;
     }

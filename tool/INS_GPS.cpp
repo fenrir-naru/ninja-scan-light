@@ -1643,7 +1643,7 @@ class StreamProcessor
           case 0x31: { // RXM-EPH
             G_Observer_t::ephemeris_t eph_rxm(observer.fetch_ephemeris());
             if(eph_rxm.valid){
-              space_node.satellite(eph_rxm.sv_number).register_epehemris(convert_ephemeris(eph_rxm));
+              space_node.satellite(eph_rxm.sv_number).register_ephemeris(convert_ephemeris(eph_rxm));
             }
             return;
           }
