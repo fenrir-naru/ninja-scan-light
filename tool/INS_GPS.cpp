@@ -1606,11 +1606,12 @@ class StreamProcessor
                   const_cast<space_node_t &>(space_node).satellite(prn));
               if(!sat.select_ephemeris(current)){continue;}
 
+              continue; // TODO
               // calculate range rate derived from doppler
               dst[raw_t::L1_RANGE_RATE].push_back(
                   dst_t::mapped_type::value_type(
                     prn,
-                    src.doppler * space_node_t::L1_WaveLength
+                    src.doppler * space_node_t::L1_WaveLength()
                       - space_node_t::light_speed * sat.clock_error_dot(current, src.pseudo_range)));
             }
 
@@ -1852,7 +1853,7 @@ class StreamProcessor
       if(value = Options::get_value(spec, "out_raw_pvt", false)){
         g_handler.out_raw_pvt = &options.spec2ostream(value);
         g_handler.out_raw_pvt->precision(12);
-        cerr << "out_raw_pvt: " << spec << endl;
+        cerr << "out_raw_pvt: " << value << endl;
         return true;
       }
 

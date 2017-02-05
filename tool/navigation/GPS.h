@@ -63,7 +63,9 @@ template <class FloatT = double>
 class CA_Code {
   public:
     static const FloatT FREQENCY;
-    static const FloatT LENGTH_1CHIP;
+    static inline const FloatT length_1chip() {
+      return 1. / FREQENCY;
+    }
   public:
     class PRN {
       public:
@@ -169,13 +171,11 @@ class CA_Code {
 
 template <class FloatT>
 const FloatT CA_Code<FloatT>::FREQENCY = 1.023E6;
-template <class FloatT>
-const FloatT CA_Code<FloatT>::LENGTH_1CHIP = 1. / CA_Code<FloatT>::FREQENCY;
 
 template <class FloatT = double>
 struct GPS_Time {
   static const unsigned int seconds_day = 60U * 60 * 24;
-  static const unsigned int seconds_week = seconds_day * 7;
+  static const unsigned int seconds_week = (60U * 60 * 24) * 7;
   
   static const int days_of_month[];
   
@@ -198,7 +198,7 @@ struct GPS_Time {
       seconds += quot * seconds_week;
     }
   }
-  GPS_Time(const struct tm &t, const FloatT leap_seconds = 0) {
+  GPS_Time(const struct tm &t, const FloatT &leap_seconds = 0) {
     int days(-6);
     int y(t.tm_year - 80);
     if(y < 0){y += 100;}
@@ -216,7 +216,7 @@ struct GPS_Time {
         + t.tm_sec;
     canonicalize();
   }
-  static GPS_Time now(const FloatT leap_seconds = 0) {
+  static GPS_Time now(const FloatT &leap_seconds = 0) {
     time_t timer;
     struct tm t;
     
@@ -252,14 +252,14 @@ struct GPS_Time {
    */
   FloatT operator-(const GPS_Time &t) const {
     FloatT res(seconds - t.seconds);
-    res += (week - t.week) * seconds_week;
+    res += ((FloatT)week - t.week) * seconds_week;
     return res;
   }
   friend FloatT operator+(FloatT v, const GPS_Time &t){
-    return v + ((t.week * seconds_week) + t.seconds);
+    return v + (((FloatT)t.week * seconds_week) + t.seconds);
   }
   friend FloatT operator-(FloatT v, const GPS_Time &t){
-    return v - ((t.week * seconds_week) + t.seconds);
+    return v - (((FloatT)t.week * seconds_week) + t.seconds);
   }
   bool operator<(const GPS_Time &t) const {
     return ((week < t.week) ? true : ((week > t.week) ? false : (seconds < t.seconds)));
@@ -280,7 +280,7 @@ struct GPS_Time {
     return t.operator<=(*this);
   }
   
-  struct tm c_tm(const FloatT leap_seconds = 0) const {
+  struct tm c_tm(const FloatT &leap_seconds = 0) const {
     struct tm t;
     
     GPS_Time mod_t((*this) + leap_seconds);
@@ -320,7 +320,7 @@ struct GPS_Time {
   FloatT interval(const unsigned int &t_week, 
       const FloatT &t_seconds) const {
     return t_seconds - seconds
-        + (t_week - week) * seconds_week;
+        + ((FloatT)t_week - week) * seconds_week;
   }
   FloatT interval(const GPS_Time &t) const {
     return interval(t.week, t.seconds);
@@ -342,7 +342,9 @@ class GPS_SpaceNode {
   public:
     static const FloatT light_speed;
     static const FloatT L1_Frequency;
-    static const FloatT L1_WaveLength;
+    static inline const FloatT L1_WaveLength() {
+      return light_speed / L1_Frequency;
+    }
     static const FloatT SC2RAD;
     
   protected:
@@ -483,31 +485,39 @@ class GPS_SpaceNode {
           FloatT dot_Omega0;   ///< Rate of right ascension (rad/s)
           FloatT dot_i0;       ///< Rate of inclination angle (rad/s)
 
-          FloatT period_from_time_of_clock(const gps_time_t &t) const {
+          inline FloatT period_from_time_of_clock(const gps_time_t &t) const {
             return -t.interval(WN, t_oc);
           }
         
-          FloatT period_from_time_of_ephemeris(const gps_time_t &t) const {
+          inline FloatT period_from_time_of_ephemeris(const gps_time_t &t) const {
             return -t.interval(WN, t_oe);
           }
           
+          inline FloatT period_from_first_valid_transmittion(const gps_time_t &t) const {
+            return period_from_time_of_clock(t) + (fit_interval / 2);
+          }
+
           /**
            * Return true when valid
            * 
            * @param t GPS time
            */
           bool is_valid(const gps_time_t &t) const {
-            return std::abs(t.interval(WN, t_oc)) <= (fit_interval / 2);
+            return std::abs(period_from_time_of_clock(t)) <= (fit_interval / 2);
           }
-          
+
           /**
            * Return true when newer ephemeris may be available
            * 
            * @param t GPS time
            */
-          bool maybe_newer_one_avilable(const gps_time_t &t) const {
-            FloatT interval_to_t_oc(t.interval(WN, t_oc));
-            return !((0 <= interval_to_t_oc) && (interval_to_t_oc <= (fit_interval / 2)));
+          bool maybe_better_one_avilable(const gps_time_t &t) const {
+            FloatT delta_t(period_from_first_valid_transmittion(t));
+            FloatT transmittion_interval( // @see IDC 20.3.4.5 Reference Times, Table 20-XIII
+                (fit_interval > (4 * 60 * 60))
+                  ? fit_interval / 2 // fit_interval is more than 4 hour, fit_interval / 2
+                  : (1 * 60 * 60));  // fit_interval equals to 4 hour, some SVs transmits every one hour.
+            return !((delta_t >= 0) && (delta_t < transmittion_interval));
           }
           
           FloatT eccentric_anomaly(const FloatT &period_from_toe) const {
@@ -928,9 +938,9 @@ class GPS_SpaceNode {
           for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
               it != eph_list.rend();
               ++it){
-            FloatT diff(t_new - gps_time_t(it->WN, it->t_oc));
-            if(diff < 0){continue;}
-            if(diff > 0){
+            FloatT delta_t(it->period_from_time_of_clock(t_new));
+            if(delta_t < 0){continue;}
+            if(delta_t > 0){
               eph_list.insert(it.base(), eph);
             }else{
               (*it) = eph; // overwrite
@@ -951,35 +961,31 @@ class GPS_SpaceNode {
           typename eph_list_t::iterator eph_current(current_ephemeris_iterator());
 
           bool is_valid(eph_current->is_valid(target_time));
-
-          // check both validity and possibility of more appropriate one
-          if(is_valid){
-            if(!(eph_current->maybe_newer_one_avilable(target_time))){return true;}
+          if(is_valid && (!eph_current->maybe_better_one_avilable(target_time))){
+            return true; // conservative
           }
 
+          FloatT delta_t(eph_current->period_from_first_valid_transmittion(target_time));
+
           typename eph_list_t::iterator it, it_last;
-          if(gps_time_t(eph_current->WN, eph_current->t_oc) <= target_time){
+          if(delta_t >= 0){
             // find newer
-            it = ++eph_current;
+            it = eph_current + 1;
             it_last = eph_list.end();
           }else{
-            // find older
+            // find older (rare case)
             it = eph_list.begin();
             it_last = eph_current;
           }
 
           for( ; it != it_last; ++it){
-            if(it->is_valid(target_time)){
-              eph_current = it; // select the latest even if it is not the best.
+            if(!it->is_valid(target_time)){continue;}
+            FloatT delta_t2(it->period_from_first_valid_transmittion(target_time));
+            if((!is_valid) || (delta_t > delta_t2)){ // update
               is_valid = true;
-              if(!(it->maybe_newer_one_avilable(target_time))){
-                break;
-              }
+              delta_t = delta_t2;
+              eph_current_index = std::distance(eph_list.begin(), it);
             }
-          }
-
-          if(is_valid){
-            eph_current_index = std::distance(eph_list.begin(), eph_current);
           }
 
           return is_valid;
@@ -1183,9 +1189,6 @@ const FloatT GPS_SpaceNode<FloatT>::light_speed = 2.99792458E8;
 
 template <class FloatT>
 const FloatT GPS_SpaceNode<FloatT>::L1_Frequency = 1575.42E6;
-
-template <class FloatT>
-const FloatT GPS_SpaceNode<FloatT>::L1_WaveLength = light_speed / L1_Frequency;
 
 template <class FloatT>
 const FloatT GPS_SpaceNode<FloatT>::SC2RAD = 3.1415926535898;

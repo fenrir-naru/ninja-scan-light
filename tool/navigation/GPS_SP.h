@@ -141,6 +141,7 @@ class GPS_SinglePositioning {
         }else{ // Perform more correction
 
           enu_t relative_pos(enu_t::relative(sat_pos, user_pos));
+
           // Ionospheric
           mat.delta_r(i, 0) += _space_node.iono_correction(relative_pos, usr_llh, target_time_est);
 
@@ -234,7 +235,7 @@ class GPS_SinglePositioning {
       xyz_t user_position(user_position_init);
       FloatT receiver_error(receiver_error_init);
 
-      geometric_matrices_t mat(prn_range.size());
+      geometric_matrices_t mat(available_sat_range.size());
       matrix_t &G(mat.G), &W(mat.W);
 
       // Navigation calculation
@@ -250,6 +251,22 @@ class GPS_SinglePositioning {
 
           // Least square
           matrix_t delta_x((G.transpose() * W * G).inverse() * G.transpose() * W * mat.delta_r);
+
+          if(false){ // debug
+            for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
+                it != available_sat_range.end();
+                ++it){
+              std::cerr << "PRN:" << it->first->first << " => "
+                  << it->second
+                  << " @ Ephemeris: t_oc => "
+                  << it->first->second.ephemeris().WN << "w "
+                  << it->first->second.ephemeris().t_oc << " +/- "
+                  << (it->first->second.ephemeris().fit_interval / 2) << std::endl;
+            }
+            std::cerr << "G:" << G << std::endl;
+            std::cerr << "W:" << W << std::endl;
+            std::cerr << "delta_r:" << mat.delta_r << std::endl;
+          }
 
           xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
           FloatT delta_receiver_error(delta_x(3, 0));
