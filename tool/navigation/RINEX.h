@@ -46,6 +46,7 @@
 #include <vector>
 #include <iomanip>
 #include <ctime>
+#include <exception>
 
 #include "GPS.h"
 
@@ -146,36 +147,38 @@ class RINEX_NAV_Reader : public RINEX_Reader {
           line_data.replace(pos, 1, "E");
         }
         std::stringstream data(line_data);
+#define GET_SS(offset, length) \
+std::stringstream(line_data.size() > offset ? line_data.substr(offset, length) : "0")
         
         FloatT dummy;
         switch(i){
           case 0: {
-            data >> info.svid;
+            GET_SS(0, 2) >> info.svid;
             info.ephemeris.svid = info.svid;
             struct tm t;
-            data >> t.tm_year; // year
-            data >> t.tm_mon;  // month
+            GET_SS(3, 2) >> t.tm_year; // year
+            GET_SS(6, 2) >> t.tm_mon;  // month
             --(t.tm_mon);
-            data >> t.tm_mday; // day of month
-            data >> t.tm_hour; // hour
-            data >> t.tm_min;  // minute
+            GET_SS(9, 2) >> t.tm_mday; // day of month
+            GET_SS(12, 2) >> t.tm_hour; // hour
+            GET_SS(15, 2) >> t.tm_min;  // minute
             t.tm_sec = 0;
             GPS_Time<FloatT> gps_time(t);
             info.ephemeris.WN = gps_time.week;
-            data >> info.ephemeris.t_oc; // second
+            GET_SS(17, 5) >> info.ephemeris.t_oc; // second
             info.ephemeris.t_oc += gps_time.seconds;
-            data >> info.ephemeris.a_f0;
-            data >> info.ephemeris.a_f1;
-            data >> info.ephemeris.a_f2;
+            GET_SS(22, 19) >> info.ephemeris.a_f0;
+            GET_SS(41, 19) >> info.ephemeris.a_f1;
+            GET_SS(60, 19) >> info.ephemeris.a_f2;
             break;
           }
 #define READ_AND_STORE(line_num, v0, v1, v2, v3) \
 case line_num: { \
   FloatT v; \
-  data >> v; v0 = v; \
-  data >> v; v1 = v; \
-  data >> v; v2 = v; \
-  data >> v; v3 = v; \
+  try{GET_SS( 3, 19) >> v; v0 = v;}catch(std::exception &e){v0 = 0;} \
+  try{GET_SS(22, 19) >> v; v1 = v;}catch(std::exception &e){v1 = 0;} \
+  try{GET_SS(41, 19) >> v; v2 = v;}catch(std::exception &e){v2 = 0;} \
+  try{GET_SS(60, 19) >> v; v3 = v;}catch(std::exception &e){v3 = 0;} \
   break; \
 }
           READ_AND_STORE(1,
@@ -214,6 +217,7 @@ case line_num: { \
             dummy,
             dummy);
 #undef READ_AND_STORE
+#undef GET_SS
         }
       }
       
