@@ -1582,12 +1582,16 @@ class StreamProcessor
 
             typedef G_Packet_Raw::raw_data_t raw_t;
             raw_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
-            float_sylph_t delta_t = (current - packet_raw_latest.raw_data.gpstime);
+#ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
+            float_sylph_t delta_t(current - packet_raw_latest.raw_data.gpstime);
+#endif
             packet_raw_latest.raw_data.gpstime = current;
 
             typedef raw_t::measurement_t dst_t;
             dst_t &dst(packet_raw_latest.raw_data.measurement);
+#ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
             dst_t::mapped_type previous_pseudo_range(dst[raw_t::L1_PSEUDORANGE]);
+#endif
             dst.clear();
 
             typedef dst_t::mapped_type::value_type v_t;
@@ -1598,7 +1602,7 @@ class StreamProcessor
               int prn(src.sv_number);
               dst[raw_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
               dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
-              dst[raw_t::L1_DOPPLER].push_back(v_t(prn, src.doppler));
+              dst[raw_t::L1_DOPPLER].push_back(v_t(prn, src.doppler)); // positive sign for approaching satellite
 
               // Update ephemeris
               if(!space_node.has_satellite(prn)){continue;}
@@ -1606,20 +1610,21 @@ class StreamProcessor
                   const_cast<space_node_t &>(space_node).satellite(prn));
               if(!sat.select_ephemeris(current)){continue;}
 
-              continue; // TODO
               // calculate range rate derived from doppler
               dst[raw_t::L1_RANGE_RATE].push_back(
                   dst_t::mapped_type::value_type(
                     prn,
-                    src.doppler * space_node_t::L1_WaveLength()
-                      - space_node_t::light_speed * sat.clock_error_dot(current, src.pseudo_range)));
+                    -src.doppler * space_node_t::L1_WaveLength()
+                      + space_node_t::light_speed * sat.clock_error_dot(current, src.pseudo_range)));
             }
 
+#ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
             if(dst[raw_t::L1_RANGE_RATE].empty()){
               // calculate range rate by using difference between current and previous range.
               dst[raw_t::L1_RANGE_RATE] = raw_t::difference(
                   dst[raw_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
             }
+#endif
 
             packet_raw_updated = true;
             if(!packet_raw_latest.update_solution()){return;}
