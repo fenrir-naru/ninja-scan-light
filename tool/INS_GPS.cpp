@@ -510,20 +510,20 @@ struct A_Packet : public Packet {
 struct G_Packet : public Packet {
   GPS_Solution<float_sylph_t> solution;
 
-  operator GPS_Solution<float_sylph_t>() const {
+  operator const GPS_Solution<float_sylph_t> &() const {
     return solution;
   }
 
   void *ptr_extension;
 
-  typedef GPS_RawData<float_sylph_t> raw_data_t;
-  operator const raw_data_t &() const {
-    return *static_cast<const raw_data_t *>(ptr_extension);
+  template <class T>
+  operator const T &() const {
+    return *static_cast<const T *>(ptr_extension);
   }
 };
 
 struct G_Packet_Raw : public G_Packet {
-  using G_Packet::raw_data_t;
+  typedef GPS_RawData<float_sylph_t> raw_data_t;
   raw_data_t raw_data;
 
   typedef raw_data_t::space_node_t space_node_t;
