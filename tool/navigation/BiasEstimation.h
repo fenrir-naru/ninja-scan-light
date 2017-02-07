@@ -208,7 +208,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
     using BaseFINS::m_bias_accel;
     using BaseFINS::m_bias_gyro;
     
-    using BaseFINS::correct;
+    using BaseFINS::correct_primitive;
 
     Filtered_INS_BiasEstimated() 
         : BaseFINS(),
@@ -331,7 +331,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
      * @param z äœë™ó 
      * @param R åÎç∑ã§ï™éUçsóÒ
      */
-    void correct(const mat_t &H, const mat_t &z, const mat_t &R){
+    void correct_primitive(const mat_t &H, const mat_t &z, const mat_t &R){
 
 #if BIAS_EST_MODE == 0
       { //ÇªÇÃ1
@@ -343,7 +343,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
         m_deltaT_sum = 0;
         
         // ìÀÇ¡çûÇﬁ
-        BaseFINS::correct(H, z, R);
+        BaseFINS::correct_primitive(H, z, R);
       }
 
 #elif BIAS_EST_MODE == 1
@@ -352,7 +352,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
         vec3_t _bias_gyro(m_bias_gyro.copy());
         
         // ìÀÇ¡çûÇﬁ
-        BaseFINS::correct(H, z, R);
+        BaseFINS::correct_primitive(H, z, R);
         
         _bias_accel -= m_bias_accel;
         _bias_gyro -= m_bias_gyro;
@@ -392,7 +392,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
         vec3_t before_correct_bias_gyro(m_bias_gyro.copy());
         
         // ìÀÇ¡çûÇﬁ
-        BaseFINS::correct(H, z, R);
+        BaseFINS::correct_primitive(H, z, R);
         
         // èCê≥ó ÇÃï™îz
         {

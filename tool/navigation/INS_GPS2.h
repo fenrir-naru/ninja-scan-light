@@ -125,7 +125,6 @@ class INS_GPS2 : public BaseFINS{
     
     ~INS_GPS2(){}         /**< デストラクタ */
     
-    using BaseFINS::correct;
     using BaseFINS::P_SIZE;
     using BaseFINS::get;
     
@@ -234,7 +233,7 @@ class INS_GPS2 : public BaseFINS{
      * @param gps GPS出力データ
      */
     void correct(const GPS_UBLOX_3D<float_t> &gps){
-      BaseFINS::correct(correct_info(gps));
+      BaseFINS::correct_primitive(correct_info(gps));
     }
     
     /**
@@ -425,7 +424,7 @@ class INS_GPS2 : public BaseFINS{
     void correct(const GPS_UBLOX_3D<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      correct(correct_info(gps, lever_arm_b, omega_b2i_4b));
+      BaseFINS::correct_primitive(correct_info(gps, lever_arm_b, omega_b2i_4b));
     }
 };
 

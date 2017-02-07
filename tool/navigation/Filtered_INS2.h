@@ -519,7 +519,7 @@ class Filtered_INS2
      * @param z ŠÏ‘ª—Ê
      * @param R Œë·‹¤•ªUs—ñ
      */
-    virtual void correct(const mat_t &H, const mat_t &z, const mat_t &R){
+    void correct_primitive(const mat_t &H, const mat_t &z, const mat_t &R){
             
       // C³—Ê‚ÌŒvZ
       mat_t K(m_filter.correct(H, R)); //ƒJƒ‹ƒ}ƒ“ƒQƒCƒ“
@@ -533,8 +533,8 @@ class Filtered_INS2
      *
      * @param info C³î•ñ
      */
-    void correct(const CorrectInfo<float_t> &info){
-      correct(info.H, info.z, info.R);
+    void correct_primitive(const CorrectInfo<float_t> &info){
+      correct_primitive(info.H, info.z, info.R);
     }
 
     /**

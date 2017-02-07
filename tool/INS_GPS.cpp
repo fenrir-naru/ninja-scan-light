@@ -704,7 +704,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         // Perform back-propagation
         Matrix<float_sylph_t> H_dash(H * previous.Phi);
         Matrix<float_sylph_t> R_dash(R + H * previous.GQGt * H.transpose());
-        previous.ins_gps->correct(H_dash, v, R_dash);
+        previous.ins_gps->correct_primitive(H_dash, v, R_dash);
 
         snapshots.push_back(previous);
       }
@@ -863,7 +863,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
             R += H * it->GQGt * H.transpose();
           }
       }
-      INS_GPS::correct(info);
+      INS_GPS::correct_primitive(info);
     }
 
   public:
