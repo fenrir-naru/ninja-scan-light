@@ -1939,7 +1939,10 @@ class StreamProcessor
         char buf[1024];
         while(!in.eof()){
           in.getline(buf, sizeof(buf));
-          a_handler.calibration.check_spec(buf);
+          if(!buf[0]){continue;}
+          if(!a_handler.calibration.check_spec(buf)){
+            cerr << "unknown_calib_param! : " << buf << endl;
+          }
         }
         return true;
       }
