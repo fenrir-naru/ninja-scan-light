@@ -1580,17 +1580,17 @@ class StreamProcessor
             const unsigned int num_of_sv(observer[6 + 6]);
             if(num_of_sv == 0){return;}
 
-            typedef G_Packet_Raw::raw_data_t raw_t;
-            raw_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
+            typedef G_Packet_Raw::raw_data_t raw_data_t;
+            raw_data_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
             float_sylph_t delta_t(current - packet_raw_latest.raw_data.gpstime);
 #endif
             packet_raw_latest.raw_data.gpstime = current;
 
-            typedef raw_t::measurement_t dst_t;
+            typedef raw_data_t::measurement_t dst_t;
             dst_t &dst(packet_raw_latest.raw_data.measurement);
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
-            dst_t::mapped_type previous_pseudo_range(dst[raw_t::L1_PSEUDORANGE]);
+            dst_t::mapped_type previous_pseudo_range(dst[raw_data_t::L1_PSEUDORANGE]);
 #endif
             dst.clear();
 
@@ -1600,9 +1600,9 @@ class StreamProcessor
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
 
               int prn(src.sv_number);
-              dst[raw_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
-              dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
-              dst[raw_t::L1_DOPPLER].push_back(v_t(prn, src.doppler)); // positive sign for approaching satellite
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
+              dst[raw_data_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
+              dst[raw_data_t::L1_DOPPLER].push_back(v_t(prn, src.doppler)); // positive sign for approaching satellite
 
               // Update ephemeris
               if(!space_node.has_satellite(prn)){continue;}
@@ -1611,7 +1611,7 @@ class StreamProcessor
               if(!sat.select_ephemeris(current)){continue;}
 
               // calculate range rate derived from doppler
-              dst[raw_t::L1_RANGE_RATE].push_back(
+              dst[raw_data_t::L1_RANGE_RATE].push_back(
                   dst_t::mapped_type::value_type(
                     prn,
                     -src.doppler * space_node_t::L1_WaveLength()
@@ -1619,10 +1619,10 @@ class StreamProcessor
             }
 
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
-            if(dst[raw_t::L1_RANGE_RATE].empty()){
+            if(dst[raw_data_t::L1_RANGE_RATE].empty()){
               // calculate range rate by using difference between current and previous range.
-              dst[raw_t::L1_RANGE_RATE] = raw_t::difference(
-                  dst[raw_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
+              dst[raw_data_t::L1_RANGE_RATE] = raw_data_t::difference(
+                  dst[raw_data_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
             }
 #endif
 
