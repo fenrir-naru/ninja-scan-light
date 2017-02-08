@@ -1614,8 +1614,7 @@ class StreamProcessor
               dst[raw_data_t::L1_RANGE_RATE].push_back(
                   dst_t::mapped_type::value_type(
                     prn,
-                    -src.doppler * space_node_t::L1_WaveLength()
-                      + space_node_t::light_speed * sat.clock_error_dot(current, src.pseudo_range)));
+                    -src.doppler * space_node_t::L1_WaveLength()));
             }
 
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
