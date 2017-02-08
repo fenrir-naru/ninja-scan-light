@@ -417,7 +417,8 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
 template <
   class FloatT,
   template <class> class Filter = KalmanFilterUD,
-  typename BaseFINS = Filtered_INS_BiasEstimated<Filtered_INS2<INS_BiasEstimated<INS<FloatT> >, Filter> >
+  typename BaseFINS = Filtered_INS_BiasEstimated<Filtered_INS2<
+      INS_BiasEstimated<INS<FloatT> >, Filter> >
 >
 class INS_GPS2_BiasEstimated
     : public INS_GPS2<FloatT, Filter, BaseFINS>{
@@ -434,12 +435,6 @@ class INS_GPS2_BiasEstimated
   public:
     INS_GPS2_BiasEstimated() : super_t(){}
 
-    /**
-     * コピーコンストラクタ
-     *
-     * @param orig コピー元
-     * @param deepcopy ディープコピーを作成するかどうか
-     */
     INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool &deepcopy = false)
         : super_t(orig, deepcopy){
 
@@ -449,7 +444,7 @@ class INS_GPS2_BiasEstimated
 
     using super_t::correct;
 
-    void correct(const GPS_UBLOX_3D<float_t> &gps,
+    void correct(const GPS_Solution<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       super_t::correct(gps, lever_arm_b, omega_b2i_4b - BaseFINS::m_bias_gyro);

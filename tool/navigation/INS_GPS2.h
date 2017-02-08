@@ -42,14 +42,14 @@
 #endif
 
 /**
- * @brief GPSのデータ型(u-blox)
+ * @brief GPSのデータ型
  *
  * u-blox GPSでのデータ型。3次元測位の場合。
  *
  * @param FloatT 演算精度
  */
 template <class FloatT>
-struct GPS_UBLOX_3D{
+struct GPS_Solution{
   FloatT v_n,          ///< 北方向速度
          v_e,          ///< 東方向速度
          v_d;          ///< 下方向速度
@@ -135,7 +135,7 @@ class INS_GPS2 : public BaseFINS{
      * @param gps GPS出力データ
      * @return (CorrectInfo) 観測更新用のデータ
      */
-    CorrectInfo<float_t> correct_info(const GPS_UBLOX_3D<float_t> &gps) const {
+    CorrectInfo<float_t> correct_info(const GPS_Solution<float_t> &gps) const {
       using std::cos;
       using std::sin;
       float_t azimuth(BaseFINS::azimuth());
@@ -199,7 +199,7 @@ class INS_GPS2 : public BaseFINS{
       float_t R_serialized[z_size][z_size] = {{0}};
 #define R(i, j) R_serialized[i][j]
       {
-        typename GPS_UBLOX_3D<float_t>::sigma_vel_ned_t sigma_vel_ned(
+        typename GPS_Solution<float_t>::sigma_vel_ned_t sigma_vel_ned(
             gps.sigma_vel_ned());
         R(0, 0) = pow2(sigma_vel_ned.n);
         R(1, 1) = pow2(sigma_vel_ned.e);
@@ -232,7 +232,7 @@ class INS_GPS2 : public BaseFINS{
      * 
      * @param gps GPS出力データ
      */
-    void correct(const GPS_UBLOX_3D<float_t> &gps){
+    void correct(const GPS_Solution<float_t> &gps){
       BaseFINS::correct_primitive(correct_info(gps));
     }
     
@@ -246,7 +246,7 @@ class INS_GPS2 : public BaseFINS{
      * @param omega_b2i_4b 観測時のジャイロの値
      * @return (CorrectInfo) 観測更新用のデータ
      */
-    CorrectInfo<float_t> correct_info(const GPS_UBLOX_3D<float_t> &gps,
+    CorrectInfo<float_t> correct_info(const GPS_Solution<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b) const {
                    
@@ -421,7 +421,7 @@ class INS_GPS2 : public BaseFINS{
      * @param lever_arm_b lever armの大きさ
      * @param omega_b2i_4b 観測時のジャイロの値
      */
-    void correct(const GPS_UBLOX_3D<float_t> &gps,
+    void correct(const GPS_Solution<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       BaseFINS::correct_primitive(correct_info(gps, lever_arm_b, omega_b2i_4b));

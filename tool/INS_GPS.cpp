@@ -485,7 +485,7 @@ struct Packet{
 /**
  * Inertial and temperature sensor data (ADC raw value)
  */
-struct A_Packet : Packet {
+struct A_Packet : public Packet {
   Vector3<float_sylph_t> accel; ///< Acceleration
   Vector3<float_sylph_t> omega; ///< Angular speed
 };
@@ -493,36 +493,18 @@ struct A_Packet : Packet {
 /**
  * GPS data
  */
-struct G_Packet : Packet {
-  float_sylph_t llh[3];
-  float_sylph_t acc_2d, acc_v;
-  float_sylph_t vel_ned[3];
-  float_sylph_t acc_vel;
+struct G_Packet : public Packet {
+  GPS_Solution<float_sylph_t> solution;
 
-  /**
-   * cast to a structured data required by Loosely-coupled INS/GPS routine
-   */
-  operator GPS_UBLOX_3D<float_sylph_t>() const {
-    GPS_UBLOX_3D<float_sylph_t> packet;
-    {
-      packet.v_n = vel_ned[0];
-      packet.v_e = vel_ned[1];
-      packet.v_d = vel_ned[2];
-      packet.sigma_vel = acc_vel;
-      packet.latitude = deg2rad(llh[0]);
-      packet.longitude = deg2rad(llh[1]);
-      packet.height = llh[2];
-      packet.sigma_2d = acc_2d;
-      packet.sigma_height = acc_v;
-    }
-    return packet;
+  operator GPS_Solution<float_sylph_t>() const {
+    return solution;
   }
 };
 
 /**
  * Magnetic sensor data
  */
-struct M_Packet : Packet {
+struct M_Packet : public Packet {
   Vector3<float_sylph_t> mag;
 };
 
@@ -1280,11 +1262,11 @@ class StreamProcessor
 
             itow_ms_0x0102 = observer.fetch_ITOW_ms();
 
-            packet_latest.llh[0] = position.latitude;
-            packet_latest.llh[1] = position.longitude;
-            packet_latest.llh[2] = position.altitude;
-            packet_latest.acc_2d = position_acc.horizontal;
-            packet_latest.acc_v = position_acc.vertical;
+            packet_latest.solution.latitude = deg2rad(position.latitude);
+            packet_latest.solution.longitude = deg2rad(position.longitude);
+            packet_latest.solution.height = position.altitude;
+            packet_latest.solution.sigma_2d = position_acc.horizontal;
+            packet_latest.solution.sigma_height = position_acc.vertical;
 
             break;
           }
@@ -1310,10 +1292,10 @@ class StreamProcessor
 
             itow_ms_0x0112 = observer.fetch_ITOW_ms();
 
-            packet_latest.vel_ned[0] = velocity.north;
-            packet_latest.vel_ned[1] = velocity.east;
-            packet_latest.vel_ned[2] = velocity.down;
-            packet_latest.acc_vel = velocity_acc.acc;
+            packet_latest.solution.v_n = velocity.north;
+            packet_latest.solution.v_e = velocity.east;
+            packet_latest.solution.v_d = velocity.down;
+            packet_latest.solution.sigma_vel = velocity_acc.acc;
 
             break;
           }
@@ -1324,10 +1306,10 @@ class StreamProcessor
         if(itow_ms_0x0102 == itow_ms_0x0112){
           packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
           if(options.gps_fake_lock){
-            packet_latest.llh[0] = packet_latest.llh[1] = packet_latest.llh[2] = 0;
-            packet_latest.acc_2d = packet_latest.acc_v = 1E+1;
-            packet_latest.vel_ned[0] = packet_latest.vel_ned[1] = packet_latest.vel_ned[2] = 0;
-            packet_latest.acc_vel = 1;
+            packet_latest.solution.latitude = packet_latest.solution.longitude = packet_latest.solution.height = 0;
+            packet_latest.solution.sigma_2d = packet_latest.solution.sigma_height = 1E+1;
+            packet_latest.solution.v_n = packet_latest.solution.v_e = packet_latest.solution.v_d = 0;
+            packet_latest.solution.sigma_vel = 1;
           }
           packet_updated = true;
         }
@@ -1737,7 +1719,7 @@ class Status{
      */
     void measurement_update(const G_Packet &g_packet){
       
-      if(g_packet.acc_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
+      if(g_packet.solution.sigma_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
         return;
       }
       if(initalized){
@@ -1765,15 +1747,15 @@ class Status{
         }
         if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
-              && (pow(g_packet.vel_ned[0], 2) + pow(g_packet.vel_ned[1], 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
+              && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
             nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
           }
         }
       }else if((current_processor == processors.front())
           && (recent_a_packets.size() >= min_a_packets_for_init)
           && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
-          && (g_packet.acc_2d <= options.gps_threshold.init_acc_2d)
-          && (g_packet.acc_v <= options.gps_threshold.init_acc_v)){
+          && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
+          && (g_packet.solution.sigma_height <= options.gps_threshold.init_acc_v)){
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
@@ -1783,7 +1765,6 @@ class Status{
           attitude[i] = deg2rad(options.init_attitude_deg[i]);
         }
         float_sylph_t&yaw(attitude[0]), &pitch(attitude[1]), &roll(attitude[2]);
-        float_sylph_t latitude(deg2rad(g_packet.llh[0])), longitude(deg2rad(g_packet.llh[1]));
         
         while(!options.has_initial_attitude){
           // Estimate initial attitude by using accelerometer and magnetic sensor (if available) under static assumption
@@ -1807,7 +1788,8 @@ class Status{
           
           // Estimate yaw when magnetic sensor is available
           if(!current_processor->m_packets.empty()){
-            yaw = nav.get_mag_yaw(current_processor->get_mag(g_packet.itow), pitch, roll, latitude, longitude, g_packet.llh[2]);
+            yaw = nav.get_mag_yaw(current_processor->get_mag(g_packet.itow), pitch, roll,
+                g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height);
           }
           
           break;
@@ -1816,8 +1798,8 @@ class Status{
         cerr << "Init : " << setprecision(10) << g_packet.itow << endl;
         initalized = true;
         nav.init(
-            latitude, longitude, g_packet.llh[2],
-            g_packet.vel_ned[0], g_packet.vel_ned[1], g_packet.vel_ned[2],
+            g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height,
+            g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d,
             yaw, pitch, roll);
         cerr << "Initial attitude (yaw, pitch, roll) [deg]: "
             << rad2deg(yaw) << ", "
