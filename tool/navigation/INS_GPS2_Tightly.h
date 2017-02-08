@@ -40,13 +40,15 @@ class INS_ClockErrorEstimated : public BaseINS {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseINS::float_t float_t;
+    typedef typename BaseINS::vec3_t vec3_t;
 #else
     using typename BaseINS::float_t;
+    using typename BaseINS::vec3_t;
 #endif
 
   protected:
-    float_t m_clock_error;
-    float_t m_clock_rate_error;
+    float_t m_clock_error;  ///< receiver clock error [m]
+    float_t m_clock_rate_error;  ///< receiver clock error rate [m/s]
 
   public:
     static const unsigned STATE_VALUES_WITHOUT_CLOCK_ERROR
@@ -80,6 +82,13 @@ class INS_ClockErrorEstimated : public BaseINS {
         case STATE_VALUES_WITHOUT_CLOCK_ERROR + 1: return m_clock_rate_error;
         default: return BaseINS::operator[](index);
       }
+    }
+
+    void update(
+        const vec3_t &accel, const vec3_t &gyro,
+        const float_t &deltaT){
+      m_clock_error += m_clock_rate_error * deltaT;
+      BaseINS::update(accel, gyro, deltaT);
     }
 };
 
@@ -204,6 +213,7 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0); j < P_SIZE_CLOCK_ERROR; i++, j++){
           res.A[i][i] += -(j == 0 ? m_beta_clock_error : m_beta_clock_rate_error);
         }
+        res.A[P_SIZE_WITHOUT_CLOCK_ERROR][P_SIZE_WITHOUT_CLOCK_ERROR + 1] += 1; // d(clock_error)/dt = clock_error
       }
 
       { // B matrix modification
@@ -336,12 +346,70 @@ class INS_GPS2_Tightly : public BaseFINS{
     ~INS_GPS2_Tightly(){}
     
     typedef GPS_RawData<float_t> raw_data_t;
+    typedef typename raw_data_t::space_node_t space_node_t;
 
-    CorrectInfo<float_t> correct_info(const GPS_RawData<float_t> &gps) const {
+    using BaseFINS::P_SIZE;
 
-      mat_t H(0, 0);
-      mat_t z(0, 0);
-      mat_t R(0, 0);
+    CorrectInfo<float_t> correct_info(const raw_data_t &gps) const {
+
+      float_t z_serialized[64]; // maximum 64 observation values
+#define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
+      float_t H_serialized[z_size][P_SIZE] = {{0}};
+      float_t R_diag[z_size] = {0};
+#undef z_size
+
+      typedef typename raw_data_t::measurement_t::const_iterator it_t;
+      typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
+      typedef typename raw_data_t::space_node_t::satellites_t::const_iterator it_sat_t;
+
+      // count up valid measurement, and make observation matrices
+      int z_index(0);
+
+      typename raw_data_t::gps_time_t target_time_est(
+          gps.gpstime - BaseFINS::m_clock_error / space_node_t::light_speed);
+
+      // range
+      for(it_t it(gps.measurement.find(raw_data_t::L1_PSEUDORANGE)); it != gps.measurement.end(); ){
+        for(it2_t it2(it->second.begin()); it2 != it->second.end(); ++it2){
+          int prn(it2->first);
+          it_sat_t it_sat(gps.space_node.satellites().find(prn));
+          if(it_sat == gps.space_node.satellites().end()){continue;} // registered satellite?
+          if(!it_sat->second.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
+
+#if 0
+          // TODO residual calculation
+          float_t range_residual(it2->second - BaseFINS::clock_error());
+
+          z_index++;
+#endif
+        }
+        break;
+      }
+
+      // rate
+      for(it_t it(gps.measurement.find(raw_data_t::L1_RANGE_RATE)); it != gps.measurement.end(); ){
+        for(it2_t it2(it->second.begin()); it2 != it->second.end(); ++it2){
+          int prn(it2->first);
+          it_sat_t it_sat(gps.space_node.satellites().find(prn));
+          if(it_sat == gps.space_node.satellites().end()){continue;} // registered satellite?
+          if(!it_sat->second.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
+
+#if 0
+          // TODO residual calculation
+          float_t rate_residual(it2->second - BaseFINS::clock_rate_error());
+
+          z_index++;
+#endif
+        }
+        break;
+      }
+
+      mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
+      mat_t z(z_index, 1, (float_t *)z_serialized);
+      mat_t R(z_index, z_index);
+      for(int i(0); i < z_index; ++i){
+        R(i, i) = R_diag[i];
+      }
 
       return CorrectInfo<float_t>(H, z, R);
     }
@@ -351,14 +419,14 @@ class INS_GPS2_Tightly : public BaseFINS{
      *
      * @param gps GPS measurement
      */
-    void correct(const GPS_RawData<float_t> &gps){
+    void correct(const raw_data_t &gps){
       CorrectInfo<float_t> info(correct_info(gps));
       if(info.z.rows() < 1){return;}
       BaseFINS::correct_primitive(info);
     }
 
 
-    CorrectInfo<float_t> correct_info(const GPS_RawData<float_t> &gps,
+    CorrectInfo<float_t> correct_info(const raw_data_t &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b) const {
       return correct_info(gps);
@@ -371,7 +439,7 @@ class INS_GPS2_Tightly : public BaseFINS{
      * @param lever_arm_b lever arm vector in b-frame
      * @param omega_b2i_4b angular speed vector in b-frame
      */
-    void correct(const GPS_RawData<float_t> &gps,
+    void correct(const raw_data_t &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       CorrectInfo<float_t> info(correct_info(gps, lever_arm_b, omega_b2i_4b));
