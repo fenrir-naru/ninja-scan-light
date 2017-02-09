@@ -83,81 +83,82 @@ class GPS_SinglePositioning {
       matrix_t delta_r; ///< Residual matrix, whose component order corresponds to sat_range.iterator().
       geometric_matrices_t(const unsigned int &size)
           : G(size, 4), W(size, size), delta_r(size, 1) {}
+
+      matrix_t least_square() const {
+        matrix_t Gt_W(G.transpose() * W);
+        return (Gt_W * G).inverse() * Gt_W * delta_r;
+      }
+    };
+
+    struct residual_t {
+      float_t &residual;
+      float_t &los_neg_x;
+      float_t &los_neg_y;
+      float_t &los_neg_z;
+      float_t &weight;
     };
 
     /**
-     * Get geometric matrices in accordance with current status
+     * Get range residual in accordance with current status
      *
-     * @param sat_range satellite, pseudo-range list
-     * @param target_time time at measurement
-     * @param user_position (temporal solution of) user position in meters
+     * @param sat satellite
+     * @param range pseudo-range
+     * @param time_arrival time when signal arrive
+     * @param usr_pos (temporal solution of) user position in meters
+     * @param usr_pos_llh (temporal solution of) user position in latitude, longitude, and altitude format
      * @param receiver_error (temporal solution of) receiver clock error in meters
      * @param mat matrices to be stored, already initialized with appropriate size
      * @param is_coarse_mode if true, precise correction will be skipped.
      */
-    void get_geometric_matrices(
-        const sat_obs_t &sat_range,
-        const gps_time_t &target_time,
-        const xyz_t &user_position,
+    void range_residual(
+        const satellite_t &sat,
+        const float_t &range,
+        const gps_time_t &time_arrival,
+        const xyz_t &usr_pos,
+        const llh_t &usr_pos_llh,
         const float_t &receiver_error,
-        geometric_matrices_t &mat,
+        residual_t &residual,
         const bool &is_coarse_mode = false) const {
 
-      gps_time_t target_time_est(
-          target_time - (receiver_error / space_node_t::light_speed));
+      // Temporal geometry range
+      residual.residual = range - receiver_error;
 
-      llh_t usr_llh(user_position.llh());
+      // Clock error correction
+      residual.residual += sat.clock_error(time_arrival, residual.residual) * space_node_t::light_speed;
 
-      unsigned i(0);
-      for(typename sat_obs_t::const_iterator it(sat_range.begin());
-          it != sat_range.end();
-          ++it, ++i){
+      // Calculate satellite position
+      xyz_t sat_pos(sat.position(time_arrival, residual.residual));
+      float_t range_est(usr_pos.dist(sat_pos));
 
-        const satellite_t &sat(it->first->second);
-        float_t range(it->second);
+      // Calculate residual
+      residual.residual -= range_est;
 
-        // Temporal geometry range
-        mat.delta_r(i, 0) = range - receiver_error;
+      // Setup design matrix
+      residual.los_neg_x = -(sat_pos.x() - const_cast<xyz_t &>(usr_pos).x()) / range_est;
+      residual.los_neg_y = -(sat_pos.y() - const_cast<xyz_t &>(usr_pos).y()) / range_est;
+      residual.los_neg_z = -(sat_pos.z() - const_cast<xyz_t &>(usr_pos).z()) / range_est;
 
-        // Clock error correction
-        mat.delta_r(i, 0) += sat.clock_error(target_time_est, mat.delta_r(i, 0)) * space_node_t::light_speed;
+      if(is_coarse_mode){
 
-        // Calculate satellite position
-        xyz_t sat_pos(sat.position(target_time_est, mat.delta_r(i, 0)));
-        float_t range_est(user_position.dist(sat_pos));
+        residual.weight = 1;
+      }else{ // Perform more correction
 
-        // Calculate residual
-        mat.delta_r(i, 0) -= range_est;
+        enu_t relative_pos(enu_t::relative(sat_pos, usr_pos));
 
-        // Setup design matrix
-        xyz_t &user_pos(const_cast<xyz_t &>(user_position));
-        mat.G(i, 0) = -(sat_pos.x() - user_pos.x()) / range_est;
-        mat.G(i, 1) = -(sat_pos.y() - user_pos.y()) / range_est;
-        mat.G(i, 2) = -(sat_pos.z() - user_pos.z()) / range_est;
-        mat.G(i, 3) = 1;
+        // Ionospheric
+        residual.residual += _space_node.iono_correction(relative_pos, usr_pos_llh, time_arrival);
 
-        if(is_coarse_mode){
+        // Tropospheric
+        residual.residual += _space_node.tropo_correction(relative_pos, usr_pos_llh);
 
-          mat.W(i, i) = 1;
-        }else{ // Perform more correction
-
-          enu_t relative_pos(enu_t::relative(sat_pos, user_pos));
-
-          // Ionospheric
-          mat.delta_r(i, 0) += _space_node.iono_correction(relative_pos, usr_llh, target_time_est);
-
-          // Tropospheric
-          mat.delta_r(i, 0) += _space_node.tropo_correction(relative_pos, usr_llh);
-
-          // Setup weight
-          if(mat.delta_r(i, 0) > 30.0){
-            // If residual is too big, exclude it by decreasing its weight.
-            mat.W(i, i) = 1E-8;
-          }else{
-            // elevation weight based on "GPS実用プログラミング"
-            mat.W(i, i) = std::pow(sin(relative_pos.elevation())/0.8, 2);
-            if(mat.W(i, i) < 1E-3){mat.W(i, i) = 1E-3;}
-          }
+        // Setup weight
+        if(residual.residual > 30.0){
+          // If residual is too big, exclude it by decreasing its weight.
+          residual.weight = 1E-8;
+        }else{
+          // elevation weight based on "GPS実用プログラミング"
+          residual.weight = std::pow(sin(relative_pos.elevation())/0.8, 2);
+          if(residual.weight < 1E-3){residual.weight = 1E-3;}
         }
       }
     }
@@ -188,7 +189,7 @@ class GPS_SinglePositioning {
      *
      * @param prn_range PRN, pseudo-range list
      * @param prn_rate PRN, pseudo-range rate list
-     * @param target_time time at measurement
+     * @param receiver_time receiver time at measurement
      * @param user_position_init initial solution of user position in meters
      * @param receiver_error_init initial solution of receiver clock error in meters
      * @param good_init if true, initial position and clock error are goodly guessed.
@@ -199,7 +200,7 @@ class GPS_SinglePositioning {
     user_pvt_t solve_user_pvt(
         const prn_obs_t &prn_range,
         const prn_obs_t &prn_rate,
-        const gps_time_t &target_time,
+        const gps_time_t &receiver_time,
         const xyz_t &user_position_init,
         const float_t &receiver_error_init,
         const bool &good_init = true,
@@ -221,7 +222,7 @@ class GPS_SinglePositioning {
 
         int prn(it->first);
         const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
-        if((it_sat != sats.end()) && it_sat->second.ephemeris().is_valid(target_time)){
+        if((it_sat != sats.end()) && it_sat->second.ephemeris().is_valid(receiver_time)){
 
           // Select satellite only when its ephemeris is available and valid.
           available_sat_range.push_back(typename sat_obs_t::value_type(it_sat, it->second));
@@ -236,38 +237,57 @@ class GPS_SinglePositioning {
       xyz_t user_position(user_position_init);
       float_t receiver_error(receiver_error_init);
 
-      geometric_matrices_t mat(available_sat_range.size());
-      matrix_t &G(mat.G), &W(mat.W);
+      llh_t user_position_llh(user_position.llh());
+      gps_time_t time_arrival(
+          receiver_time - (receiver_error / space_node_t::light_speed));
+
+      geometric_matrices_t geomat(available_sat_range.size());
 
       // Navigation calculation
-      try{
-        // If initialization is not appropriate, more iteration will be performed.
-        for(int i(good_init ? 0 : -2); i < 10; i++){
-          get_geometric_matrices(
-              available_sat_range,
-              target_time,
-              user_position, receiver_error,
-              mat,
+
+      // If initialization is not appropriate, more iteration will be performed.
+      for(int i(good_init ? 0 : -2); i < 10; i++){
+
+        unsigned j(0);
+        for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
+            it != available_sat_range.end();
+            ++it, ++j){
+
+          residual_t residual = {
+            geomat.delta_r(j, 0),
+            geomat.G(j, 0), geomat.G(j, 1), geomat.G(j, 2),
+            geomat.W(j, j)
+          };
+          geomat.G(j, 3) = 1;
+
+          const satellite_t &sat(it->first->second);
+          float_t range(it->second);
+
+          range_residual(sat, range, time_arrival,
+              user_position, user_position_llh, receiver_error,
+              residual,
               i <= 0);
+        }
 
-          // Least square
-          matrix_t delta_x((G.transpose() * W * G).inverse() * G.transpose() * W * mat.delta_r);
-
-          if(false){ // debug
-            for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
-                it != available_sat_range.end();
-                ++it){
-              std::cerr << "PRN:" << it->first->first << " => "
-                  << it->second
-                  << " @ Ephemeris: t_oc => "
-                  << it->first->second.ephemeris().WN << "w "
-                  << it->first->second.ephemeris().t_oc << " +/- "
-                  << (it->first->second.ephemeris().fit_interval / 2) << std::endl;
-            }
-            std::cerr << "G:" << G << std::endl;
-            std::cerr << "W:" << W << std::endl;
-            std::cerr << "delta_r:" << mat.delta_r << std::endl;
+        if(false){ // debug
+          for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
+              it != available_sat_range.end();
+              ++it){
+            std::cerr << "PRN:" << it->first->first << " => "
+                << it->second
+                << " @ Ephemeris: t_oc => "
+                << it->first->second.ephemeris().WN << "w "
+                << it->first->second.ephemeris().t_oc << " +/- "
+                << (it->first->second.ephemeris().fit_interval / 2) << std::endl;
           }
+          std::cerr << "G:" << geomat.G << std::endl;
+          std::cerr << "W:" << geomat.W << std::endl;
+          std::cerr << "delta_r:" << geomat.delta_r << std::endl;
+        }
+
+        try{
+          // Least square
+          matrix_t delta_x(geomat.least_square());
 
           xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
           float_t delta_receiver_error(delta_x(3, 0));
@@ -275,8 +295,15 @@ class GPS_SinglePositioning {
           user_position += delta_user_position;
           receiver_error += delta_receiver_error;
 
+          user_position_llh = user_position.llh();
+          time_arrival -= (delta_receiver_error / space_node_t::light_speed);
+
           if(delta_user_position.dist() <= 1E-6){
-            matrix_t C((G.transpose() * G).inverse());
+
+            res.user_position_llh = user_position_llh;
+            res.receiver_error = receiver_error;
+
+            matrix_t C((geomat.G.transpose() * geomat.G).inverse());
 
             // Calculate DOP
             res.gdop = std::sqrt(C.trace());
@@ -287,14 +314,11 @@ class GPS_SinglePositioning {
 
             break;
           }
+        }catch(std::exception &e){
+          res.error_code = user_pvt_t::ERROR_POSITION;
+          return res;
         }
-      }catch(std::exception &e){
-        res.error_code = user_pvt_t::ERROR_POSITION;
-        return res;
       }
-
-      res.user_position_llh = user_position.llh();
-      res.receiver_error = receiver_error;
 
       if((!prn_range.empty()) && with_velocity){ // Calculate velocity
         typedef std::vector<std::pair<int, int> > index_table_t;
@@ -316,10 +340,8 @@ class GPS_SinglePositioning {
           }
         }
 
-        gps_time_t target_time_est(
-              target_time - (receiver_error / space_node_t::light_speed));
         i = 0;
-        geometric_matrices_t mat_rate(index_table.size());
+        geometric_matrices_t geomat2(index_table.size());
         for(typename index_table_t::const_iterator it(index_table.begin());
             it != index_table.end();
             ++it, ++i){
@@ -330,30 +352,27 @@ class GPS_SinglePositioning {
 
           // Calculate satellite velocity
           const satellite_t &sat(available_sat_range[i_range].first->second);
-          xyz_t sat_vel(sat.velocity(
-              target_time_est,
-              range));
+          xyz_t sat_vel(sat.velocity(time_arrival, range));
 
           // copy design matrix
           for(int j(0); j < 4; ++j){
-            mat_rate.G(i, j) = G(i_range, j);
+            geomat2.G(i, j) = geomat.G(i_range, j);
           }
-          mat_rate.W(i, i) = W(i_range, i_range);
+          geomat2.W(i, i) = geomat.W(i_range, i_range);
 
           // Update range rate by subtracting LOS satellite velocity with design matrix G, and clock rate error
-          mat_rate.delta_r(i, 0) = prn_rate[i_rate].second
-              + mat_rate.G(i, 0) * sat_vel.x()
-              + mat_rate.G(i, 1) * sat_vel.y()
-              + mat_rate.G(i, 2) * sat_vel.z()
-              + (sat.clock_error_dot(target_time_est, range) * space_node_t::light_speed);
+          geomat2.delta_r(i, 0) = prn_rate[i_rate].second
+              + geomat2.G(i, 0) * sat_vel.x()
+              + geomat2.G(i, 1) * sat_vel.y()
+              + geomat2.G(i, 2) * sat_vel.z()
+              + (sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed);
         }
 
         try{
           // Least square
-          matrix_t sol((mat_rate.G.transpose() * mat_rate.W * mat_rate.G).inverse()
-              * mat_rate.G.transpose() * mat_rate.W * mat_rate.delta_r);
+          matrix_t sol(geomat2.least_square());
 
-          res.user_velocity_enu = enu_t::relative_rel(xyz_t(sol.partial(3, 1, 0, 0)), res.user_position_llh);
+          res.user_velocity_enu = enu_t::relative_rel(xyz_t(sol.partial(3, 1, 0, 0)), user_position_llh);
           res.receiver_error_rate = sol(3, 0);
         }catch(std::exception &e){
           res.error_code = user_pvt_t::ERROR_VELOCITY;
@@ -369,21 +388,21 @@ class GPS_SinglePositioning {
      *
      * @param prn_range PRN, pseudo-range list
      * @param prn_rate PRN, pseudo-range rate list
-     * @param target_time time at measurement
+     * @param receiver_time receiver time at measurement
      * @return calculation results and matrices used for calculation
      */
     user_pvt_t solve_user_pvt(
         const prn_obs_t &prn_range,
         const prn_obs_t &prn_rate,
-        const gps_time_t &target_time) const {
-      return solve_user_pvt(prn_range, prn_rate, target_time, xyz_t(), 0, false);
+        const gps_time_t &receiver_time) const {
+      return solve_user_pvt(prn_range, prn_rate, receiver_time, xyz_t(), 0, false);
     }
 
     /**
      * Calculate User position with hint
      *
      * @param prn_range PRN, pseudo-range list
-     * @param target_time time at measurement
+     * @param receiver_time receiver time at measurement
      * @param user_position_init initial solution of user position in meters
      * @param receiver_error_init initial solution of receiver clock error in meters
      * @param good_init if true, initial position and clock error are goodly guessed.
@@ -391,13 +410,13 @@ class GPS_SinglePositioning {
      */
     user_pvt_t solve_user_position(
         const prn_obs_t &prn_range,
-        const gps_time_t &target_time,
+        const gps_time_t &receiver_time,
         const xyz_t &user_position_init,
         const float_t &receiver_error_init,
         const bool &good_init = true) const {
 
       return solve_user_pvt(
-          prn_range, prn_obs_t(), target_time,
+          prn_range, prn_obs_t(), receiver_time,
           user_position_init, receiver_error_init,
           good_init, false);
     }
@@ -406,13 +425,13 @@ class GPS_SinglePositioning {
      * Calculate User position without hint
      *
      * @param prn_range PRN and pseudo range
-     * @param target_time time at measurement
+     * @param receiver_time receiver time at measurement
      * @return calculation results and matrices used for calculation
      */
     user_pvt_t solve_user_position(
             const prn_obs_t &prn_range,
-            const gps_time_t &target_time) const {
-      return solve_user_position(prn_range, target_time, xyz_t(), 0, false);
+            const gps_time_t &receiver_time) const {
+      return solve_user_position(prn_range, receiver_time, xyz_t(), 0, false);
     }
 };
 
