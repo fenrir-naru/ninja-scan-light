@@ -139,7 +139,7 @@ class GPS_SinglePositioning {
       float_t pseudo_range(range - receiver_error);
 
       // Clock error correction
-      pseudo_range += sat.clock_error(time_arrival, residual.residual) * space_node_t::light_speed;
+      pseudo_range += sat.clock_error(time_arrival, pseudo_range) * space_node_t::light_speed;
 
       // Calculate satellite position
       xyz_t sat_pos(sat.position(time_arrival, pseudo_range));

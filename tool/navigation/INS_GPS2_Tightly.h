@@ -404,34 +404,34 @@ class INS_GPS2_Tightly : public BaseFINS{
               pos, BaseFINS::m_clock_error,
               residual);
 
-          float_t H_uh[3][4] = {{0}};
           { // setup H matrix
 #define pow2(x) ((x) * (x))
 #define q_e2n(i) BaseFINS::q_e2n.get(i)
+            float_t H_uh[3][4] = {{0}};
             const float_t
                 q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
-                q_beta(q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)),
-                q_gamma(q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3));
-            static const float_t e(BaseFINS::Earth::R_e);
-            const float_t n(e / std::sqrt(1.0 - pow2(e * -q_alpha)));
-            const float_t sf(n * pow2(e) * pow2(q_alpha) / (1.0 - pow2(e) * pow2(q_alpha)));
-            const float_t n_h(n + BaseFINS::h);
+                q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
+                q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
+            static const float_t e(BaseFINS::Earth::epsilon_Earth);
+            const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
+            const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
+            const float_t n_h((n + BaseFINS::h) * 2);
 #undef q_e2n
             H_uh[0][0] = -q_gamma * q_beta * sf;
             H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
-            H_uh[0][2] = -n_h * 2 * q_beta;
+            H_uh[0][2] = -n_h * q_beta;
             H_uh[0][3] = -q_gamma;
 
             H_uh[1][0] = pow2(q_beta) * sf + n_h * q_alpha;
             H_uh[1][1] = q_beta * q_gamma * sf;
-            H_uh[1][2] = -n_h * 2 * q_gamma;
+            H_uh[1][2] = -n_h * q_gamma;
             H_uh[1][3] = q_beta;
 
             {
               const float_t sf2(sf * -(1.0 - pow2(e)));
-              const float_t n_h2(n * (1.0 - pow2(e)) + BaseFINS::h);
-              H_uh[2][0] = q_alpha * q_beta * sf2 + n_h * 4 * q_beta;
-              H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h * 4 * q_gamma;
+              const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
+              H_uh[2][0] = q_alpha * q_beta * sf2 + n_h * q_beta;
+              H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h * q_gamma;
               H_uh[2][3] = -q_alpha;
             }
 #undef pow2
