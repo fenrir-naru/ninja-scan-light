@@ -184,6 +184,8 @@ class System_XYZ : public System_3D<FloatT> {
       return (*this - another).dist();
     }
     
+    static const FloatT f0, a0, b0, e0;
+
     /**
      * Convert to LatLongAlt
      * 
@@ -192,11 +194,6 @@ class System_XYZ : public System_3D<FloatT> {
       const FloatT &_x(const_cast<self_t *>(this)->x());
       const FloatT &_y(const_cast<self_t *>(this)->y());
       const FloatT &_z(const_cast<self_t *>(this)->z());
-      
-      const FloatT f0(Earth::F_e);
-      const FloatT a0(Earth::R_e);
-      const FloatT b0(a0 * (1.0 - f0));
-      const FloatT e0(std::sqrt(f0 * (2.0 - f0)));
 
       if((_x == 0) && (_y == 0) && (_z == 0)){
         return System_LLH<FloatT, Earth>(0, 0, -a0);
@@ -219,10 +216,20 @@ class System_XYZ : public System_3D<FloatT> {
     }
 };
 
+template <class FloatT, class Earth>
+const FloatT System_XYZ<FloatT, Earth>::f0(Earth::F_e);
+template <class FloatT, class Earth>
+const FloatT System_XYZ<FloatT, Earth>::a0(Earth::R_e);
+template <class FloatT, class Earth>
+const FloatT System_XYZ<FloatT, Earth>::b0(Earth::R_e * (1.0 - Earth::F_e));
+template <class FloatT, class Earth>
+const FloatT System_XYZ<FloatT, Earth>::e0(std::sqrt(Earth::F_e * (2.0 - Earth::F_e)));
+
 template <class FloatT = double, class Earth = WGS84>
 class System_LLH : public System_3D<FloatT> {
   protected:
     typedef System_LLH<FloatT, Earth> self_t;
+    typedef System_XYZ<FloatT, Earth> xyz_t;
     typedef System_3D<FloatT> super_t;
   public:
     System_LLH() : super_t() {}
@@ -235,24 +242,22 @@ class System_LLH : public System_3D<FloatT> {
     FloatT &latitude()  {return super_t::operator[](0);}
     FloatT &longitude() {return super_t::operator[](1);}
     FloatT &height()    {return super_t::operator[](2);}
-    
-    static const FloatT f0, a0, b0, e0;
 
     /**
      * Convert to ECEF (Earth-centered Earth-Fixed)
      *
      */
-    System_XYZ<FloatT, Earth> xyz() const {
+    xyz_t xyz() const {
       const FloatT &_lat (const_cast<self_t *>(this)->latitude());   ///< 緯度[rad]
       const FloatT &_lng(const_cast<self_t *>(this)->longitude());  ///< 経度[rad]
       const FloatT &_h   (const_cast<self_t *>(this)->height());     ///< 高度[m]
       
-      FloatT n(a0/std::sqrt(1.0 - pow2(e0) * pow2(std::sin(_lat))));
+      FloatT n(xyz_t::a0/std::sqrt(1.0 - pow2(xyz_t::e0) * pow2(std::sin(_lat))));
       
       return System_XYZ<FloatT, Earth>(
           (n + _h) * std::cos(_lat) * std::cos(_lng),
           (n + _h) * std::cos(_lat) * std::sin(_lng),
-          (n * (1.0 -pow2(e0)) + _h) * std::sin(_lat)
+          (n * (1.0 -pow2(xyz_t::e0)) + _h) * std::sin(_lat)
         );
     }
 
@@ -272,15 +277,6 @@ class System_LLH : public System_3D<FloatT> {
       return in;
     }
 };
-
-template <class FloatT, class Earth>
-const FloatT System_LLH<FloatT, Earth>::f0(Earth::F_e);
-template <class FloatT, class Earth>
-const FloatT System_LLH<FloatT, Earth>::a0(Earth::R_e);
-template <class FloatT, class Earth>
-const FloatT System_LLH<FloatT, Earth>::b0(a0 * (1.0 - f0));
-template <class FloatT, class Earth>
-const FloatT System_LLH<FloatT, Earth>::e0(std::sqrt(f0 * (2.0 - f0)));
 
 template <class FloatT = double, class Earth = WGS84>
 class System_ENU : public System_3D<FloatT> {
