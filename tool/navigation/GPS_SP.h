@@ -123,9 +123,9 @@ class GPS_SinglePositioning {
      * @param receiver_error (temporal solution of) receiver clock error in meters
      * @param mat matrices to be stored, already initialized with appropriate size
      * @param is_coarse_mode if true, precise correction will be skipped.
-     * @return (gps_time_t) time when signal departure from satellite
+     * @return (float_t) pseudo range, which includes delay, and exclude receiver/satellite error.
      */
-    gps_time_t range_residual(
+    float_t range_residual(
         const satellite_t &sat,
         const float_t &range,
         const gps_time_t &time_arrival,
@@ -135,23 +135,22 @@ class GPS_SinglePositioning {
         const bool &is_coarse_mode = false) const {
 
       // Temporal geometry range
-      residual.residual = range - receiver_error;
+      float_t pseudo_range(range - receiver_error);
 
       // Clock error correction
-      residual.residual += sat.clock_error(time_arrival, residual.residual) * space_node_t::light_speed;
+      pseudo_range += sat.clock_error(time_arrival, residual.residual) * space_node_t::light_speed;
 
       // Calculate satellite position
-      gps_time_t time_departure(time_arrival - (residual.residual / space_node_t::light_speed));
-      xyz_t sat_pos(sat.position(time_departure));
-      float_t range_est(usr_pos.xyz.dist(sat_pos));
+      xyz_t sat_pos(sat.position(time_arrival, pseudo_range));
+      float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
       // Calculate residual
-      residual.residual -= range_est;
+      residual.residual = pseudo_range - geometric_range;
 
       // Setup design matrix
-      residual.los_neg_x = -(sat_pos.x() - const_cast<xyz_t &>(usr_pos.xyz).x()) / range_est;
-      residual.los_neg_y = -(sat_pos.y() - const_cast<xyz_t &>(usr_pos.xyz).y()) / range_est;
-      residual.los_neg_z = -(sat_pos.z() - const_cast<xyz_t &>(usr_pos.xyz).z()) / range_est;
+      residual.los_neg_x = -(sat_pos.x() - const_cast<xyz_t &>(usr_pos.xyz).x()) / geometric_range;
+      residual.los_neg_y = -(sat_pos.y() - const_cast<xyz_t &>(usr_pos.xyz).y()) / geometric_range;
+      residual.los_neg_z = -(sat_pos.z() - const_cast<xyz_t &>(usr_pos.xyz).z()) / geometric_range;
 
       if(is_coarse_mode){
 
@@ -177,7 +176,7 @@ class GPS_SinglePositioning {
         }
       }
 
-      return time_departure;
+      return pseudo_range;
     }
 
   public:
@@ -186,9 +185,10 @@ class GPS_SinglePositioning {
         ERROR_NO = 0,
         ERROR_IONO_PARAMS_INVALID,
         ERROR_INSUFFICIENT_SATELLITES,
-        ERROR_POSITION,
+        ERROR_POSITION_LS,
+        ERROR_POSITION_NOT_CONVERGED,
         ERROR_DOP,
-        ERROR_VELOCITY,
+        ERROR_VELOCITY_LS,
       } error_code;
       llh_t user_position_llh;
       float_t receiver_error;
@@ -261,12 +261,14 @@ class GPS_SinglePositioning {
           receiver_time - (receiver_error / space_node_t::light_speed));
 
       geometric_matrices_t geomat(available_sat_range.size());
-
+      sat_obs_t available_sat_pseudorange;
 
       // Position calculation
       // If initialization is not appropriate, more iteration will be performed.
+      bool converged(false);
       for(int i(good_init ? 0 : -2); i < 10; i++){
 
+        available_sat_pseudorange.clear();
         unsigned j(0);
         for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
             it != available_sat_range.end();
@@ -281,10 +283,13 @@ class GPS_SinglePositioning {
           const satellite_t &sat(it->first->second);
           float_t range(it->second);
 
-          range_residual(sat, range, time_arrival,
+          range = range_residual(sat, range, time_arrival,
               user_position, receiver_error,
               residual,
               i <= 0);
+
+          if(i <= 0){continue;}
+          available_sat_pseudorange.push_back(typename sat_obs_t::value_type(it->first, range));
         }
 
         if(false){ // debug
@@ -315,11 +320,19 @@ class GPS_SinglePositioning {
           receiver_error += delta_receiver_error;
           time_arrival -= (delta_receiver_error / space_node_t::light_speed);
 
-          if(delta_user_position.dist() <= 1E-6){break;}
+          if(delta_user_position.dist() <= 1E-6){
+            converged = true;
+            break;
+          }
         }catch(std::exception &e){
-          res.error_code = user_pvt_t::ERROR_POSITION;
+          res.error_code = user_pvt_t::ERROR_POSITION_LS;
           return res;
         }
+      }
+
+      if(!converged){
+        res.error_code = user_pvt_t::ERROR_POSITION_NOT_CONVERGED;
+        return res;
       }
 
       res.user_position_llh = user_position.llh;
@@ -345,8 +358,8 @@ class GPS_SinglePositioning {
 
         // check correspondence between range and rate.
         int i(0);
-        for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
-            it != available_sat_range.end();
+        for(typename sat_obs_t::const_iterator it(available_sat_pseudorange.begin());
+            it != available_sat_pseudorange.end();
             ++it, ++i){
           int j(0);
           for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
@@ -366,12 +379,12 @@ class GPS_SinglePositioning {
             ++it, ++i){
 
           int i_range(it->first), i_rate(it->second);
-          int prn(prn_rate[i_rate].first);
-          float_t range(available_sat_range[i_range].second - receiver_error);
+
+          const satellite_t &sat(available_sat_pseudorange[i_range].first->second);
+          float_t pseudo_range(available_sat_pseudorange[i_range].second);
 
           // Calculate satellite velocity
-          const satellite_t &sat(available_sat_range[i_range].first->second);
-          xyz_t sat_vel(sat.velocity(time_arrival, range));
+          xyz_t sat_vel(sat.velocity(time_arrival, pseudo_range));
 
           // copy design matrix
           geomat2.copy_G_W_row(geomat, i);
@@ -381,7 +394,7 @@ class GPS_SinglePositioning {
               + geomat2.G(i, 0) * sat_vel.x()
               + geomat2.G(i, 1) * sat_vel.y()
               + geomat2.G(i, 2) * sat_vel.z()
-              + (sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed);
+              + (sat.clock_error_dot(time_arrival, pseudo_range) * space_node_t::light_speed);
         }
 
         try{
@@ -391,7 +404,7 @@ class GPS_SinglePositioning {
           res.user_velocity_enu = enu_t::relative_rel(xyz_t(sol.partial(3, 1, 0, 0)), user_position.llh);
           res.receiver_error_rate = sol(3, 0);
         }catch(std::exception &e){
-          res.error_code = user_pvt_t::ERROR_VELOCITY;
+          res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
           return res;
         }
       }
