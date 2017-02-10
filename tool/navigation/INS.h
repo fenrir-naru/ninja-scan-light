@@ -617,15 +617,16 @@ class INS {
     /**
      * 現在の緯度,経度,高度からECEF座標に変換します。
      *
-     * @return (vec3_t) XYZ座標
+     * @return (Vector3_T) XYZ座標
      */
-    vec3_t xyz() const {
+    template <class Vector3_T>
+    Vector3_T xyz() const {
       float_t n(Earth::R_e / std::sqrt(
-          1.0 - pow2(Earth::epsilon_Earth * (1.0 - (pow2(q_e2n[0]) + pow2(q_e2n[3])) * 2))));
-      return xyz_t(
-          -(n + h) * (q_e2n[0] * q_e2n[2] + q_e2n[1] * q_e2n[3]),
-          (n + h) * (q_e2n[0] * q_e2n[1] - q_e2n[2] * q_e2n[3]),
-          (n * (1.0 - pow2(Earth::epsilon_Earth)) + h) * (1.0 - (pow2(q_e2n[0]) + pow2(q_e2n[3]))));
+          1.0 - pow2(Earth::epsilon_Earth * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3))) * 2))));
+      return Vector3_T(
+          -(n + h) * (q_e2n.get(0) * q_e2n.get(2) + q_e2n.get(1) * q_e2n.get(3)),
+          (n + h) * (q_e2n.get(0) * q_e2n.get(1) - q_e2n.get(2) * q_e2n.get(3)),
+          (n * (1.0 - pow2(Earth::epsilon_Earth)) + h) * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3)))));
     }
 
     /**
