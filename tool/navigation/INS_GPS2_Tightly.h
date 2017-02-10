@@ -23,6 +23,7 @@
 #include "Filtered_INS2.h"
 #include "INS_GPS2.h"
 #include "GPS_SP.h"
+#include "coordinate.h"
 
 template <typename BaseINS>
 class INS_ClockErrorEstimated;
@@ -347,8 +348,10 @@ class INS_GPS2_Tightly : public BaseFINS{
     
     typedef GPS_RawData<float_t> raw_data_t;
     typedef typename raw_data_t::space_node_t space_node_t;
+    typedef typename raw_data_t::solver_t solver_t;
 
     using BaseFINS::P_SIZE;
+    using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
 
     CorrectInfo<float_t> correct_info(const raw_data_t &gps) const {
 
@@ -365,44 +368,110 @@ class INS_GPS2_Tightly : public BaseFINS{
       // count up valid measurement, and make observation matrices
       int z_index(0);
 
-      typename raw_data_t::gps_time_t target_time_est(
+      typename raw_data_t::gps_time_t time_arrival(
           gps.gpstime - BaseFINS::m_clock_error / space_node_t::light_speed);
 
-      // range
-      for(it_t it(gps.measurement.find(raw_data_t::L1_PSEUDORANGE)); it != gps.measurement.end(); ){
-        for(it2_t it2(it->second.begin()); it2 != it->second.end(); ++it2){
-          int prn(it2->first);
+      typename solver_t::pos_t pos = {
+        BaseFINS::template xyz<typename solver_t::xyz_t>(),
+        typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
+      };
+
+      while(true){
+        it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
+        if(it_range == gps.measurement.end()){break;}
+
+        it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
+
+        for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
+          int prn(it2_range->first);
           it_sat_t it_sat(gps.space_node.satellites().find(prn));
           if(it_sat == gps.space_node.satellites().end()){continue;} // registered satellite?
-          if(!it_sat->second.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
 
-#if 0
-          // TODO residual calculation
-          float_t range_residual(it2->second - BaseFINS::clock_error());
+          const typename solver_t::satellite_t &sat(it_sat->second);
+          if(!sat.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
 
-          z_index++;
-#endif
+          // range residual
+          float_t los_neg[3], weight;
+          typename solver_t::residual_t residual = {
+            z_serialized[z_index],
+            los_neg[0], los_neg[1], los_neg[2],
+            weight,
+          };
+
+          float_t range(it2_range->second);
+          range = gps.solver.range_residual(
+              sat, range, time_arrival,
+              pos, BaseFINS::m_clock_error,
+              residual);
+
+          float_t H_uh[3][4] = {{0}};
+          { // setup H matrix
+#define pow2(x) ((x) * (x))
+#define q_e2n(i) BaseFINS::q_e2n.get(i)
+            const float_t
+                q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
+                q_beta(q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)),
+                q_gamma(q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3));
+            static const float_t e(BaseFINS::Earth::R_e);
+            const float_t n(e / std::sqrt(1.0 - pow2(e * -q_alpha)));
+            const float_t sf(n * pow2(e) * pow2(q_alpha) / (1.0 - pow2(e) * pow2(q_alpha)));
+            const float_t n_h(n + BaseFINS::h);
+#undef q_e2n
+            H_uh[0][0] = -q_gamma * q_beta * sf;
+            H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
+            H_uh[0][2] = -n_h * 2 * q_beta;
+            H_uh[0][3] = -q_gamma;
+
+            H_uh[1][0] = pow2(q_beta) * sf + n_h * q_alpha;
+            H_uh[1][1] = q_beta * q_gamma * sf;
+            H_uh[1][2] = -n_h * 2 * q_gamma;
+            H_uh[1][3] = q_beta;
+
+            {
+              const float_t sf2(sf * -(1.0 - pow2(e)));
+              const float_t n_h2(n * (1.0 - pow2(e)) + BaseFINS::h);
+              H_uh[2][0] = q_alpha * q_beta * sf2 + n_h * 4 * q_beta;
+              H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h * 4 * q_gamma;
+              H_uh[2][3] = -q_alpha;
+            }
+#undef pow2
+
+            for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
+              for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
+                H_serialized[z_index][k] += los_neg[i] * H_uh[i][j];
+              }
+            }
+            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR] = 1;
+          }
+
+          R_diag[z_index] = weight * 20; // range error [m]
+
+          ++z_index;
+
+          continue; // TODO currently only range support
+
+          if(it_rate == gps.measurement.end()){continue;}
+          it2_t it2_rate(it_rate->second.begin());
+          for(; it2_rate != it_rate->second.end(); ++it2_rate){
+            int prn_rate(it2_rate->first);
+            if(prn == prn_rate){break;}
+          }
+          if(it2_rate == it_rate->second.end()){continue;}
+
+          // rate residual
+          float_t rate(it2_rate->second);
+          typename solver_t::xyz_t sat_vel(sat.velocity(time_arrival, range));
+          z_serialized[z_index] = rate
+              + los_neg[0] * sat_vel.x()
+              + los_neg[1] * sat_vel.y()
+              + los_neg[2] * sat_vel.z()
+              + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed;
+          // TODO subtract user velocity, setup H matrix in NED coordinate
+
+          ++z_index;
         }
         break;
-      }
-
-      // rate
-      for(it_t it(gps.measurement.find(raw_data_t::L1_RANGE_RATE)); it != gps.measurement.end(); ){
-        for(it2_t it2(it->second.begin()); it2 != it->second.end(); ++it2){
-          int prn(it2->first);
-          it_sat_t it_sat(gps.space_node.satellites().find(prn));
-          if(it_sat == gps.space_node.satellites().end()){continue;} // registered satellite?
-          if(!it_sat->second.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
-
-#if 0
-          // TODO residual calculation
-          float_t rate_residual(it2->second - BaseFINS::clock_rate_error());
-
-          z_index++;
-#endif
-        }
-        break;
-      }
+      };
 
       mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
       mat_t z(z_index, 1, (float_t *)z_serialized);

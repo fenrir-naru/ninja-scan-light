@@ -99,6 +99,7 @@ class GPS_SinglePositioning {
       }
     };
 
+  public:
     struct residual_t {
       float_t &residual;
       float_t &los_neg_x;
@@ -179,7 +180,6 @@ class GPS_SinglePositioning {
       return pseudo_range;
     }
 
-  public:
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
