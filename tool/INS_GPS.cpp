@@ -1242,34 +1242,13 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return *this;
     }
 
-  protected:
-    NAV &correct_ins_gps(
-        const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b,
-        void *){
-      ins_gps->correct(gps, lever_arm_b, omega_b2i_4b);
-      return *this;
-    }
-
-    template <class BaseFINS>
-    NAV &correct_ins_gps(
-        const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b,
-        Filtered_INS_BiasEstimated<BaseFINS> *){
-      ins_gps->correct(
-          gps, lever_arm_b, omega_b2i_4b - ins_gps->bias_gyro());
-      return *this;
-    }
-  public:
     NAV &correct(
         const G_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
-      return correct_ins_gps(gps, lever_arm_b, omega_b2i_4b, ins_gps);
+      ins_gps->correct(gps, lever_arm_b, omega_b2i_4b);
+      return *this;
     }
-
 
   protected:
     bool setup_correct(const float_sylph_t &advanceT, void *){
