@@ -444,7 +444,8 @@ class INS_GPS2_Tightly : public BaseFINS{
             H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR] = 1;
           }
 
-          R_diag[z_index] = weight * 20; // range error [m]
+          if(weight < 1E-1){weight = 1E-1;}
+          R_diag[z_index] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
 
           ++z_index;
 
