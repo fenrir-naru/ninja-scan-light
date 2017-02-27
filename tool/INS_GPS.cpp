@@ -712,7 +712,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
 };
 
 template <class INS_GPS>
-class INS_GPS_RealTime : public INS_GPS, public NAVData<float_sylph_t> {
+class INS_GPS_RealTime : public INS_GPS {
   protected:
     struct snapshot_content_t {
       INS_GPS_RealTime *ins_gps;
@@ -756,20 +756,6 @@ class INS_GPS_RealTime : public INS_GPS, public NAVData<float_sylph_t> {
     virtual ~INS_GPS_RealTime(){
       delete _snapshots;
     }
-#define MAKE_PROXY_FUNC(fname) \
-float_sylph_t fname() const {return INS_GPS::fname();}
-    MAKE_PROXY_FUNC(longitude);
-    MAKE_PROXY_FUNC(latitude);
-    MAKE_PROXY_FUNC(height);
-    MAKE_PROXY_FUNC(v_north);
-    MAKE_PROXY_FUNC(v_east);
-    MAKE_PROXY_FUNC(v_down);
-    MAKE_PROXY_FUNC(heading);
-    MAKE_PROXY_FUNC(euler_phi);
-    MAKE_PROXY_FUNC(euler_theta);
-    MAKE_PROXY_FUNC(euler_psi);
-    MAKE_PROXY_FUNC(azimuth);
-#undef MAKE_PROXY_FUNC
 
   protected:
     /**
