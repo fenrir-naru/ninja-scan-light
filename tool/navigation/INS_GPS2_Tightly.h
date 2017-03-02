@@ -235,8 +235,26 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 };
 
 template <class FloatT>
-struct GPS_RawMeasurement {
+struct GPS_RawData {
+  typedef GPS_SpaceNode<FloatT> space_node_t;
+  const space_node_t &space_node;
 
+  typedef GPS_SinglePositioning<float_sylph_t> solver_t;
+  const solver_t solver;
+
+  enum {
+    L1_PSEUDORANGE,
+    L1_RANGERATE,
+    L1_CARRIER_PHASE,
+  };
+  typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
+  typedef std::map<int, prn_obs_t> measurement_t;
+  measurement_t measurement;
+
+  GPS_RawData(const space_node_t &_space_node)
+      : space_node(_space_node),
+      solver(space_node), measurement() {}
+  ~GPS_RawData(){}
 };
 
 /**
@@ -277,16 +295,16 @@ class INS_GPS2_Tightly : public BaseFINS{
     }
 
     ~INS_GPS2_Tightly(){}
+    
+    typedef GPS_RawData<float_t> raw_data_t;
 
-    typedef GPS_RawMeasurement<float_t> raw_data_t;
-
-    CorrectInfo<float_t> correct_info(const GPS_RawMeasurement<float_t> &gps) const {
+    CorrectInfo<float_t> correct_info(const GPS_RawData<float_t> &gps) const {
 
       mat_t H;
       mat_t z;
       mat_t R;
 
-      return CorrectInfo<FloatT>(H, z, R);
+      return CorrectInfo<float_t>(H, z, R);
     }
 
     /**
@@ -294,12 +312,12 @@ class INS_GPS2_Tightly : public BaseFINS{
      *
      * @param gps GPS measurement
      */
-    void correct(const GPS_RawMeasurement<float_t> &gps){
+    void correct(const GPS_RawData<float_t> &gps){
       BaseFINS::correct_primitive(correct_info(gps));
     }
 
 
-    CorrectInfo<float_t> correct_info(const GPS_RawMeasurement<float_t> &gps,
+    CorrectInfo<float_t> correct_info(const GPS_RawData<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b) const {
       return correct_info(gps);
@@ -312,7 +330,7 @@ class INS_GPS2_Tightly : public BaseFINS{
      * @param lever_arm_b lever arm vector in b-frame
      * @param omega_b2i_4b angular speed vector in b-frame
      */
-    void correct(const GPS_RawMeasurement<float_t> &gps,
+    void correct(const GPS_RawData<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       BaseFINS::correct_primitive(correct_info(gps, lever_arm_b, omega_b2i_4b));

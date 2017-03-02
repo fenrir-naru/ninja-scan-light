@@ -505,32 +505,25 @@ struct G_Packet : public Packet {
     return solution;
   }
 
-  operator GPS_RawMeasurement<float_sylph_t>() const {
-    GPS_RawMeasurement<float_sylph_t> res;
-    return res;
+  typedef GPS_RawData<float_sylph_t> raw_data_t;
+  raw_data_t *ptr_raw_data;
+  operator const raw_data_t &() const {
+    return *(const_cast<G_Packet *>(this)->ptr_raw_data);
   }
 };
 
 struct G_Packet_Raw : public G_Packet {
-  typedef GPS_SpaceNode<float_sylph_t> space_node_t;
-  const space_node_t &space_node;
+  using G_Packet::raw_data_t;
+  raw_data_t raw_data;
 
-  typedef GPS_SinglePositioning<float_sylph_t> solver_t;
-  const solver_t solver;
-
-  enum {
-    L1_PSEUDORANGE,
-    L1_RANGERATE,
-    L1_CARRIER_PHASE,
-  };
-  typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
-  typedef std::map<int, prn_obs_t> raw_measurement_t;
-  raw_measurement_t raw_measurement;
+  typedef raw_data_t::space_node_t space_node_t;
+  typedef raw_data_t::solver_t solver_t;
 
   bool update_solution(){
-    solver_t::user_pvt_t pvt(solver.solve_user_pvt(
-        raw_measurement[L1_PSEUDORANGE],
-        raw_measurement[L1_RANGERATE],
+
+    solver_t::user_pvt_t pvt(raw_data.solver.solve_user_pvt(
+        raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
+        raw_data.measurement[raw_data_t::L1_RANGERATE],
         space_node_t::gps_time_t(0, this->itow)));
     if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
       return false;
@@ -550,8 +543,9 @@ struct G_Packet_Raw : public G_Packet {
   }
 
   G_Packet_Raw(const space_node_t &_space_node)
-      : G_Packet(), space_node(_space_node),
-      solver(space_node), raw_measurement() {}
+      : G_Packet(), raw_data(_space_node) {
+    G_Packet::ptr_raw_data = &raw_data;
+  }
   ~G_Packet_Raw(){}
 };
 
@@ -1500,16 +1494,17 @@ class StreamProcessor
             const unsigned int num_of_sv(observer[6 + 6]);
             if(num_of_sv == 0){return;}
             packet_raw_latest.itow = observer.fetch_ITOW();
-            packet_raw_latest.raw_measurement.clear();
+            packet_raw_latest.raw_data.measurement.clear();
+            typedef G_Packet_Raw::raw_data_t raw_t;
+            typedef raw_t::measurement_t dst_t;
+            dst_t &dst(packet_raw_latest.raw_data.measurement);
+            typedef dst_t::mapped_type::value_type v_t;
             for(int i(0); i < num_of_sv; i++){
-              G_Observer_t::raw_measurement_t raw(observer.fetch_raw(i));
-              int prn(raw.sv_number);
-              packet_raw_latest.raw_measurement[G_Packet_Raw::L1_PSEUDORANGE].push_back(
-                  G_Packet_Raw::prn_obs_t::value_type(prn, raw.pseudo_range));
-              packet_raw_latest.raw_measurement[G_Packet_Raw::L1_CARRIER_PHASE].push_back(
-                  G_Packet_Raw::prn_obs_t::value_type(prn, raw.carrier_phase));
-              packet_raw_latest.raw_measurement[G_Packet_Raw::L1_RANGERATE].push_back(
-                  G_Packet_Raw::prn_obs_t::value_type(prn, raw.doppler));
+              G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
+              int prn(src.sv_number);
+              dst[raw_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
+              dst[raw_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
+              dst[raw_t::L1_RANGERATE].push_back(v_t(prn, src.doppler));
             }
             packet_raw_latest.update_solution();
             return;
