@@ -22,6 +22,7 @@
 
 #include "param/matrix.h"
 #include "param/vector3.h"
+#include "INS_GPS2_Tightly.h"
 
 template <class FloatT>
 struct INS_GPS_Back_Propagate_Property {
@@ -258,7 +259,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
      *
      * @param info Correction information
      */
-    void correct_with_info(CorrectInfo<float_t> &info){
+    void correct_with_info(CorrectInfo<float_t> &info, void *dummy = NULL){
       mat_t &H(info.H), &R(info.R);
       switch(rt_mode){
         case RT_LIGHT_WEIGHT:
@@ -294,11 +295,22 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
       INS_GPS::correct_primitive(info);
     }
 
+    template <
+      class FloatT,
+      template <class> class Filter,
+      typename BaseFINS
+    >
+    void correct_with_info(CorrectInfo<float_sylph_t> &info,
+        INS_GPS2_Tightly<FloatT, Filter, BaseFINS> *){
+      if(info.z.rows() < 1){return;}
+      correct_with_info(info);
+    }
+
   public:
     template <class GPS_Packet>
     void correct(const GPS_Packet &gps){
       CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps));
-      correct_with_info(info);
+      correct_with_info(info, this);
     }
 
     template <class GPS_Packet>
@@ -306,7 +318,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
-      correct_with_info(info);
+      correct_with_info(info, this);
     }
 };
 

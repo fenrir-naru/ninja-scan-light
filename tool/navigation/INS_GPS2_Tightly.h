@@ -289,9 +289,8 @@ class INS_GPS2_Tightly : public BaseFINS{
   public:
     INS_GPS2_Tightly() : BaseFINS(){}
 
-    INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool deepcopy = false) :
-      BaseFINS(orig, deepcopy){
-
+    INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool deepcopy = false)
+        : BaseFINS(orig, deepcopy){
     }
 
     ~INS_GPS2_Tightly(){}
@@ -300,9 +299,9 @@ class INS_GPS2_Tightly : public BaseFINS{
 
     CorrectInfo<float_t> correct_info(const GPS_RawData<float_t> &gps) const {
 
-      mat_t H;
-      mat_t z;
-      mat_t R;
+      mat_t H(0, 0);
+      mat_t z(0, 0);
+      mat_t R(0, 0);
 
       return CorrectInfo<float_t>(H, z, R);
     }
@@ -313,7 +312,9 @@ class INS_GPS2_Tightly : public BaseFINS{
      * @param gps GPS measurement
      */
     void correct(const GPS_RawData<float_t> &gps){
-      BaseFINS::correct_primitive(correct_info(gps));
+      CorrectInfo<float_t> info(correct_info(gps));
+      if(info.z.rows() < 1){return;}
+      BaseFINS::correct_primitive(info);
     }
 
 
@@ -333,7 +334,9 @@ class INS_GPS2_Tightly : public BaseFINS{
     void correct(const GPS_RawData<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      BaseFINS::correct_primitive(correct_info(gps, lever_arm_b, omega_b2i_4b));
+      CorrectInfo<float_t> info(correct_info(gps, lever_arm_b, omega_b2i_4b));
+      if(info.z.rows() < 1){return;}
+      BaseFINS::correct_primitive(info);
     }
 };
 
