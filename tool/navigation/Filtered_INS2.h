@@ -416,7 +416,7 @@ class Filtered_INS2
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    Filtered_INS2(const Filtered_INS2 &orig, const bool deepcopy = false)
+    Filtered_INS2(const Filtered_INS2 &orig, const bool &deepcopy = false)
         : BaseINS(orig, deepcopy),
           m_filter(orig.m_filter, deepcopy){
     }

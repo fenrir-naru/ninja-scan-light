@@ -591,7 +591,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, public NAVData<float_sylph_t> {
         : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
     INS_GPS_Back_Propagate(
         const INS_GPS_Back_Propagate &orig,
-        const bool deepcopy = false)
+        const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
     INS_GPS_Back_Propagate &operator=(const INS_GPS_Back_Propagate &another){
       _snapshots = NULL;
@@ -745,7 +745,7 @@ class INS_GPS_RealTime : public INS_GPS {
         : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
     INS_GPS_RealTime(
         const INS_GPS_RealTime &orig,
-        const bool deepcopy = false)
+        const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
     INS_GPS_RealTime &operator=(const INS_GPS_RealTime &another){
       _snapshots = NULL;
@@ -873,7 +873,7 @@ class INS_GPS_Debug : public INS_GPS {
     struct snapshot_t {
       Matrix<float_sylph_t> A, B, H, R, K;
       snapshot_t() : A(), B(), H(), R(), K() {}
-      snapshot_t(const snapshot_t &orig, const bool deepcopy = false)
+      snapshot_t(const snapshot_t &orig, const bool &deepcopy = false)
           : A(deepcopy ? orig.A.copy() : orig.A),
             B(deepcopy ? orig.B.copy() : orig.B),
             H(deepcopy ? orig.H.copy() : orig.H),
@@ -885,7 +885,7 @@ class INS_GPS_Debug : public INS_GPS {
         : INS_GPS(), last_action(ACTION_LAST_NOP) {}
     INS_GPS_Debug(
         const INS_GPS_Debug &orig,
-        const bool deepcopy = false)
+        const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), last_action(orig.last_action), snapshot(orig.snapshot, deepcopy) {}
     INS_GPS_Debug &operator=(const INS_GPS_Debug &another){
       INS_GPS::operator=(another);

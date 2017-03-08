@@ -99,7 +99,7 @@ class KalmanFilter{
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    KalmanFilter(const KalmanFilter &orig, const bool deepcopy = false) :
+    KalmanFilter(const KalmanFilter &orig, const bool &deepcopy = false) :
       m_P(deepcopy ? orig.m_P.copy() : orig.m_P), 
       m_Q(deepcopy ? orig.m_Q.copy() : orig.m_Q){
       //std::cerr << "KF" << std::endl;
@@ -281,7 +281,7 @@ class InformationFilter : public KalmanFilter<FloatT>{
      * @param deepcopy ディープコピーを作成するかどうか
      */
     InformationFilter(
-        const InformationFilter &orig, const bool deepcopy = false)
+        const InformationFilter &orig, const bool &deepcopy = false)
           : KalmanFilter<FloatT>(orig, deepcopy),
             m_I(deepcopy ? orig.m_I.copy() : orig.m_I),
             need_update_P(orig.need_update_P){
@@ -456,7 +456,7 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    KalmanFilterUD(const KalmanFilterUD &orig, const bool deepcopy = false) :
+    KalmanFilterUD(const KalmanFilterUD &orig, const bool &deepcopy = false) :
       KalmanFilter<FloatT>(orig, deepcopy),
       m_U(deepcopy ? orig.m_U.copy() : orig.m_U), 
       m_D(deepcopy ? orig.m_D.copy() : orig.m_D),
@@ -704,7 +704,7 @@ class UnscentedKalmanFilter : public KalmanFilter<FloatT>{
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    UnscentedKalmanFilter(const UnscentedKalmanFilter &orig, const bool deepcopy = false)
+    UnscentedKalmanFilter(const UnscentedKalmanFilter &orig, const bool &deepcopy = false)
         : KalmanFilter<FloatT>(orig, deepcopy),
           m_alpha(orig.m_alpha), m_beta(orig.m_beta), m_kappa(orig.m_kappa), 
           need_recalc_coef(true), m_sqrtQ(){

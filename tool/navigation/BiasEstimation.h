@@ -70,7 +70,7 @@ class INS_BiasEstimated : public BaseINS {
           m_bias_accel(), m_bias_gyro() {
     }
 
-    INS_BiasEstimated(const INS_BiasEstimated &orig, const bool deepcopy = false)
+    INS_BiasEstimated(const INS_BiasEstimated &orig, const bool &deepcopy = false)
         : BaseINS(orig, deepcopy),
           m_bias_accel(deepcopy ? orig.m_bias_accel.copy() : orig.m_bias_accel),
           m_bias_gyro(deepcopy ? orig.m_bias_gyro.copy() : orig.m_bias_gyro) {
@@ -236,7 +236,7 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
      */
     Filtered_INS_BiasEstimated(
         const Filtered_INS_BiasEstimated &orig, 
-        const bool deepcopy = false) :
+        const bool &deepcopy = false) :
       BaseFINS(orig, deepcopy),
       m_beta_accel(deepcopy ? orig.m_beta_accel.copy() : orig.m_beta_accel),
       m_beta_gyro(deepcopy ? orig.m_beta_gyro.copy() : orig.m_beta_gyro),
@@ -440,7 +440,7 @@ class INS_GPS2_BiasEstimated
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool deepcopy = false)
+    INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool &deepcopy = false)
         : super_t(orig, deepcopy){
 
     }

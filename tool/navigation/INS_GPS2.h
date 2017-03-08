@@ -118,7 +118,7 @@ class INS_GPS2 : public BaseFINS{
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    INS_GPS2(const INS_GPS2 &orig, const bool deepcopy = false) :
+    INS_GPS2(const INS_GPS2 &orig, const bool &deepcopy = false) :
       BaseFINS(orig, deepcopy){
       
     }

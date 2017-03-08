@@ -339,7 +339,7 @@ class INS {
      * @param orig コピー元
      * @param deepcopy ディープコピーを作成するかどうか
      */
-    INS(const INS &orig, const bool deepcopy = false) :
+    INS(const INS &orig, const bool &deepcopy = false) :
       v_2e_4n(deepcopy ? orig.v_2e_4n.copy() : orig.v_2e_4n), 
       v_N(orig.v_N), v_E(orig.v_E),
       q_e2n(deepcopy ? orig.q_e2n.copy() : orig.q_e2n), 
