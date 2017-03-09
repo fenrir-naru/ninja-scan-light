@@ -561,7 +561,7 @@ struct M_Packet : Packet {
 };
 
 template <class INS_GPS>
-class INS_GPS_Back_Propagate : public INS_GPS, public NAVData<float_sylph_t> {
+class INS_GPS_Back_Propagate : public INS_GPS {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename INS_GPS::float_t float_t;
@@ -572,68 +572,41 @@ class INS_GPS_Back_Propagate : public INS_GPS, public NAVData<float_sylph_t> {
 #endif
   protected:
     struct snapshot_content_t {
-      INS_GPS_Back_Propagate *ins_gps;
+      INS_GPS ins_gps;
       mat_t Phi;
       mat_t GQGt;
       float_t elapsedT_from_last_correct;
       snapshot_content_t(
-          INS_GPS_Back_Propagate *_ins_gps,
+          const INS_GPS &_ins_gps,
           const mat_t &_Phi,
           const mat_t &_GQGt,
           const float_t &_elapsedT)
-          : ins_gps(_ins_gps), Phi(_Phi), GQGt(_GQGt),
+          : ins_gps(_ins_gps, true), Phi(_Phi), GQGt(_GQGt),
           elapsedT_from_last_correct(_elapsedT){
-      }
-      snapshot_content_t &operator=(const snapshot_content_t &another){
-        ins_gps = another.ins_gps;
-        Phi = another.Phi;
-        GQGt = another.GQGt;
-        elapsedT_from_last_correct = another.elapsedT_from_last_correct;
-        return *this;
       }
     };
     typedef std::vector<snapshot_content_t> snapshots_t;
-    snapshots_t *_snapshots, &snapshots; // share snapshot among instances
+    snapshots_t snapshots;
   public:
     INS_GPS_Back_Propagate()
-        : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
+        : INS_GPS(), snapshots() {}
     INS_GPS_Back_Propagate(
         const INS_GPS_Back_Propagate &orig,
         const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
-    INS_GPS_Back_Propagate &operator=(const INS_GPS_Back_Propagate &another){
-      _snapshots = NULL;
-      snapshots = another.snapshots;
-      INS_GPS::operator=(another);
-      return *this;
-    }
-    virtual ~INS_GPS_Back_Propagate(){
-      delete _snapshots;
-    }
+        : INS_GPS(orig, deepcopy), snapshots(orig.snapshots){}
+    virtual ~INS_GPS_Back_Propagate(){}
+#if 0
     NAV::previous_items_t previous_items() {
       typename NAV::previous_items_t res;
       for(typename snapshots_t::iterator it(snapshots.begin());
           it != snapshots.end();
           ++it){
         res.push_back(
-            NAV::previous_item_t(it->elapsedT_from_last_correct, *(it->ins_gps)));
+            NAV::previous_item_t(it->elapsedT_from_last_correct, it->ins_gps));
       }
       return res;
     }
-#define MAKE_PROXY_FUNC(fname) \
-float_sylph_t fname() const {return INS_GPS::fname();}
-    MAKE_PROXY_FUNC(longitude);
-    MAKE_PROXY_FUNC(latitude);
-    MAKE_PROXY_FUNC(height);
-    MAKE_PROXY_FUNC(v_north);
-    MAKE_PROXY_FUNC(v_east);
-    MAKE_PROXY_FUNC(v_down);
-    MAKE_PROXY_FUNC(heading);
-    MAKE_PROXY_FUNC(euler_phi);
-    MAKE_PROXY_FUNC(euler_theta);
-    MAKE_PROXY_FUNC(euler_psi);
-    MAKE_PROXY_FUNC(azimuth);
-#undef MAKE_PROXY_FUNC
+#endif
 
   protected:
     /**
@@ -656,7 +629,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
       }
 
       snapshots.push_back(
-          snapshot_content_t(new INS_GPS_Back_Propagate(*this, true),
+          snapshot_content_t(*this,
               Phi, Gamma * INS_GPS::getFilter().getQ() * Gamma.transpose(),
               elapsedT_from_last_correct));
     }
@@ -690,11 +663,6 @@ float_sylph_t fname() const {return INS_GPS::fname();}
             // This statement controls depth of back propagation.
             if(it->elapsedT_from_last_correct < options.back_propagate_depth){
               if(mod_elapsedT > 0.1){ // Skip only when sufficient amount of snapshots are existed.
-                for(typename snapshots_t::reverse_iterator it2(it);
-                    it2 != snapshots.rend();
-                    ++it2){
-                  delete it2->ins_gps;
-                }
                 snapshots.erase(snapshots.begin(), it.base());
                 //cerr << "[erase]" << endl;
                 if(snapshots.empty()){return;}
@@ -712,7 +680,7 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         // Perform back-propagation
         mat_t H_dash(H * previous.Phi);
         mat_t R_dash(R + H * previous.GQGt * H.transpose());
-        previous.ins_gps->correct_primitive(H_dash, v, R_dash);
+        previous.ins_gps.correct_primitive(H_dash, v, R_dash);
 
         snapshots.push_back(previous);
       }
@@ -733,47 +701,32 @@ class INS_GPS_RealTime : public INS_GPS {
 #endif
   protected:
     struct snapshot_content_t {
-      INS_GPS_RealTime *ins_gps;
+      INS_GPS ins_gps;
       mat_t A;
       mat_t Phi_inv;
       mat_t GQGt;
       float_t elapsedT_from_last_update;
       snapshot_content_t(
-          INS_GPS_RealTime *_ins_gps,
+          const INS_GPS &_ins_gps,
           const mat_t &_A,
           const mat_t &_Phi_inv,
           const mat_t &_GQGt,
           const float_t &_elapsedT)
-          : ins_gps(_ins_gps), A(_A), Phi_inv(_Phi_inv), GQGt(_GQGt),
+          : ins_gps(_ins_gps, true),
+          A(_A), Phi_inv(_Phi_inv), GQGt(_GQGt),
           elapsedT_from_last_update(_elapsedT){
-      }
-      snapshot_content_t &operator=(const snapshot_content_t &another){
-        ins_gps = another.ins_gps;
-        A = another.A;
-        Phi_inv = another.Phi_inv;
-        GQGt = another.GQGt;
-        elapsedT_from_last_update = another.elapsedT_from_last_update;
-        return *this;
       }
     };
     typedef std::vector<snapshot_content_t> snapshots_t;
-    snapshots_t *_snapshots, &snapshots; // share snapshot among instances
+    snapshots_t snapshots;
   public:
     INS_GPS_RealTime()
-        : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
+        : INS_GPS(), snapshots() {}
     INS_GPS_RealTime(
         const INS_GPS_RealTime &orig,
         const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
-    INS_GPS_RealTime &operator=(const INS_GPS_RealTime &another){
-      _snapshots = NULL;
-      snapshots = another.snapshots;
-      INS_GPS::operator=(another);
-      return *this;
-    }
-    virtual ~INS_GPS_RealTime(){
-      delete _snapshots;
-    }
+        : INS_GPS(orig, deepcopy), snapshots(orig.snapshots){}
+    virtual ~INS_GPS_RealTime(){}
 
   protected:
     /**
@@ -791,7 +744,7 @@ class INS_GPS_RealTime : public INS_GPS {
       mat_t Gamma(B * elapsedT);
 
       snapshots.push_back(
-          snapshot_content_t(new INS_GPS_RealTime(*this),
+          snapshot_content_t(*this,
               A, Phi.inverse(), Gamma * INS_GPS::getFilter().getQ() * Gamma.transpose(),
               elapsedT));
     }
@@ -815,11 +768,6 @@ class INS_GPS_RealTime : public INS_GPS {
           if(it == snapshots.rbegin()){
             // Keep at least one snapshot
             it++;
-          }
-          for(typename snapshots_t::iterator it2(snapshots.begin());
-              it2 != it.base();
-              ++it2){
-            delete it2->ins_gps;
           }
           snapshots.erase(snapshots.begin(), it.base());
           return true;
@@ -873,7 +821,7 @@ class INS_GPS_RealTime : public INS_GPS {
   public:
     template <class GPS_Packet>
     void correct(const GPS_Packet &gps){
-      CorrectInfo<float_t> info(snapshots[0].ins_gps->correct_info(gps));
+      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps));
       correct_with_info(info);
     }
 
@@ -881,7 +829,7 @@ class INS_GPS_RealTime : public INS_GPS {
     void correct(const GPS_Packet &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      CorrectInfo<float_t> info(snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
+      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
       correct_with_info(info);
     }
 };
@@ -1147,10 +1095,12 @@ class INS_GPS_NAV : public NAV {
     previous_items_t previous_items(void *){
       return NAV::previous_items();
     }
+#if 0
     template <class INS_GPS_base>
     previous_items_t previous_items(INS_GPS_Back_Propagate<INS_GPS_base> *){
       return ins_gps->previous_items();
     }
+#endif
     previous_items_t previous_items(){
       return previous_items(ins_gps);
     }
