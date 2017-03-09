@@ -562,17 +562,25 @@ struct M_Packet : Packet {
 
 template <class INS_GPS>
 class INS_GPS_Back_Propagate : public INS_GPS, public NAVData<float_sylph_t> {
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename INS_GPS::float_t float_t;
+    typedef typename INS_GPS::mat_t mat_t;
+#else
+    using typename INS_GPS::float_t;
+    using typename INS_GPS::mat_t;
+#endif
   protected:
     struct snapshot_content_t {
       INS_GPS_Back_Propagate *ins_gps;
-      Matrix<float_sylph_t> Phi;
-      Matrix<float_sylph_t> GQGt;
-      float_sylph_t elapsedT_from_last_correct;
+      mat_t Phi;
+      mat_t GQGt;
+      float_t elapsedT_from_last_correct;
       snapshot_content_t(
           INS_GPS_Back_Propagate *_ins_gps,
-          const Matrix<float_sylph_t> &_Phi,
-          const Matrix<float_sylph_t> &_GQGt,
-          const float_sylph_t &_elapsedT)
+          const mat_t &_Phi,
+          const mat_t &_GQGt,
+          const float_t &_elapsedT)
           : ins_gps(_ins_gps), Phi(_Phi), GQGt(_GQGt),
           elapsedT_from_last_correct(_elapsedT){
       }
@@ -636,13 +644,13 @@ float_sylph_t fname() const {return INS_GPS::fname();}
      * @patam elapsedT interval time
      */
     void before_update_INS(
-        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
-        const float_sylph_t &elapsedT){
-      Matrix<float_sylph_t> Phi(A * elapsedT);
+        const mat_t &A, const mat_t &B,
+        const float_t &elapsedT){
+      mat_t Phi(A * elapsedT);
       for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
-      Matrix<float_sylph_t> Gamma(B * elapsedT);
+      mat_t Gamma(B * elapsedT);
 
-      float_sylph_t elapsedT_from_last_correct(elapsedT);
+      float_t elapsedT_from_last_correct(elapsedT);
       if(!snapshots.empty()){
         elapsedT_from_last_correct += snapshots.back().elapsedT_from_last_correct;
       }
@@ -663,16 +671,16 @@ float_sylph_t fname() const {return INS_GPS::fname();}
      * @param x_hat values to be corrected
      */
     void before_correct_INS(
-        const Matrix<float_sylph_t> &H,
-        const Matrix<float_sylph_t> &R,
-        const Matrix<float_sylph_t> &K,
-        const Matrix<float_sylph_t> &v,
-        Matrix<float_sylph_t> &x_hat){
+        const mat_t &H,
+        const mat_t &R,
+        const mat_t &K,
+        const mat_t &v,
+        mat_t &x_hat){
       if(!snapshots.empty()){
 
         // This routine is invoked by measurement update function called correct().
         // In addition, this routine is reduced to be activated once with the following if-statement.
-        float_sylph_t mod_elapsedT(snapshots.back().elapsedT_from_last_correct);
+        float_t mod_elapsedT(snapshots.back().elapsedT_from_last_correct);
         if(mod_elapsedT > 0){
 
           // The latest is the first
@@ -702,8 +710,8 @@ float_sylph_t fname() const {return INS_GPS::fname();}
         snapshots.pop_back();
 
         // Perform back-propagation
-        Matrix<float_sylph_t> H_dash(H * previous.Phi);
-        Matrix<float_sylph_t> R_dash(R + H * previous.GQGt * H.transpose());
+        mat_t H_dash(H * previous.Phi);
+        mat_t R_dash(R + H * previous.GQGt * H.transpose());
         previous.ins_gps->correct_primitive(H_dash, v, R_dash);
 
         snapshots.push_back(previous);
@@ -713,19 +721,29 @@ float_sylph_t fname() const {return INS_GPS::fname();}
 
 template <class INS_GPS>
 class INS_GPS_RealTime : public INS_GPS {
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename INS_GPS::float_t float_t;
+    typedef typename INS_GPS::vec3_t vec3_t;
+    typedef typename INS_GPS::mat_t mat_t;
+#else
+    using typename INS_GPS::float_t;
+    using typename INS_GPS::vec3_t;
+    using typename INS_GPS::mat_t;
+#endif
   protected:
     struct snapshot_content_t {
       INS_GPS_RealTime *ins_gps;
-      Matrix<float_sylph_t> A;
-      Matrix<float_sylph_t> Phi_inv;
-      Matrix<float_sylph_t> GQGt;
-      float_sylph_t elapsedT_from_last_update;
+      mat_t A;
+      mat_t Phi_inv;
+      mat_t GQGt;
+      float_t elapsedT_from_last_update;
       snapshot_content_t(
           INS_GPS_RealTime *_ins_gps,
-          const Matrix<float_sylph_t> &_A,
-          const Matrix<float_sylph_t> &_Phi_inv,
-          const Matrix<float_sylph_t> &_GQGt,
-          const float_sylph_t &_elapsedT)
+          const mat_t &_A,
+          const mat_t &_Phi_inv,
+          const mat_t &_GQGt,
+          const float_t &_elapsedT)
           : ins_gps(_ins_gps), A(_A), Phi_inv(_Phi_inv), GQGt(_GQGt),
           elapsedT_from_last_update(_elapsedT){
       }
@@ -766,11 +784,11 @@ class INS_GPS_RealTime : public INS_GPS {
      * @patam elapsedT interval time
      */
     void before_update_INS(
-        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
-        const float_sylph_t &elapsedT){
-      Matrix<float_sylph_t> Phi(A * elapsedT);
+        const mat_t &A, const mat_t &B,
+        const float_t &elapsedT){
+      mat_t Phi(A * elapsedT);
       for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
-      Matrix<float_sylph_t> Gamma(B * elapsedT);
+      mat_t Gamma(B * elapsedT);
 
       snapshots.push_back(
           snapshot_content_t(new INS_GPS_RealTime(*this),
@@ -786,14 +804,14 @@ class INS_GPS_RealTime : public INS_GPS {
      * @param advanceT how old is the GPS information (negative value means old)
      * @return bool true when successfully sorted
      */
-    bool setup_correct(float_sylph_t advanceT){
+    bool setup_correct(float_t advanceT){
       if(advanceT > 0){return false;} // positive value (future) is odd
 
       for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
           it != snapshots.rend();
           ++it){
         advanceT += it->elapsedT_from_last_update;
-        if(advanceT > float_sylph_t(-0.005)){ // Find the closest
+        if(advanceT > -0.005){ // Find the closest
           if(it == snapshots.rbegin()){
             // Keep at least one snapshot
             it++;
@@ -817,14 +835,14 @@ class INS_GPS_RealTime : public INS_GPS {
      *
      * @param info Correction information
      */
-    void correct_with_info(CorrectInfo<float_sylph_t> &info){
-      Matrix<float_sylph_t> &H(info.H), &R(info.R);
+    void correct_with_info(CorrectInfo<float_t> &info){
+      mat_t &H(info.H), &R(info.R);
       switch(options.rt_mode){
         case Options::RT_LIGHT_WEIGHT:
           if(!snapshots.empty()){
-            Matrix<float_sylph_t> sum_A(H.columns(), H.columns());
-            Matrix<float_sylph_t> sum_GQGt(sum_A.rows(), sum_A.rows());
-            float_sylph_t bar_delteT(0);
+            mat_t sum_A(H.columns(), H.columns());
+            mat_t sum_GQGt(sum_A.rows(), sum_A.rows());
+            float_t bar_delteT(0);
             for(typename snapshots_t::iterator it(snapshots.begin());
                 it != snapshots.end();
                 ++it){
@@ -834,11 +852,11 @@ class INS_GPS_RealTime : public INS_GPS {
             }
             int n(snapshots.size());
             bar_delteT /= n;
-            Matrix<float_sylph_t> sum_A_GQGt(sum_A * sum_GQGt);
+            mat_t sum_A_GQGt(sum_A * sum_GQGt);
             R += H
                 * (sum_GQGt -= ((sum_A_GQGt + sum_A_GQGt.transpose()) *= (bar_delteT * (n + 1) / (2 * n))))
                 * H.transpose();
-            H *= (Matrix<float_sylph_t>::getI(sum_A.rows()) - sum_A * bar_delteT);
+            H *= (mat_t::getI(sum_A.rows()) - sum_A * bar_delteT);
           }
           break;
         default:
@@ -853,25 +871,35 @@ class INS_GPS_RealTime : public INS_GPS {
     }
 
   public:
-    void correct(const G_Packet &gps){
-      CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps));
+    template <class GPS_Packet>
+    void correct(const GPS_Packet &gps){
+      CorrectInfo<float_t> info(snapshots[0].ins_gps->correct_info(gps));
       correct_with_info(info);
     }
 
-    void correct(const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b){
-      CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
+    template <class GPS_Packet>
+    void correct(const GPS_Packet &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b){
+      CorrectInfo<float_t> info(snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
       correct_with_info(info);
     }
 };
 
 template <class INS_GPS>
 class INS_GPS_Debug : public INS_GPS {
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename INS_GPS::float_t float_t;
+    typedef typename INS_GPS::mat_t mat_t;
+#else
+    using typename INS_GPS::float_t;
+    using typename INS_GPS::mat_t;
+#endif
   protected:
     enum {ACTION_LAST_NOP, ACTION_LAST_UPDATE, ACTION_LAST_CORRECT} last_action;
     struct snapshot_t {
-      Matrix<float_sylph_t> A, B, H, R, K;
+      mat_t A, B, H, R, K;
       snapshot_t() : A(), B(), H(), R(), K() {}
       snapshot_t(const snapshot_t &orig, const bool &deepcopy = false)
           : A(deepcopy ? orig.A.copy() : orig.A),
@@ -900,15 +928,15 @@ class INS_GPS_Debug : public INS_GPS {
     virtual ~INS_GPS_Debug(){}
 
     static void inspect_matrix(
-        std::ostream &out, const Matrix<float_sylph_t> &mat){
+        std::ostream &out, const mat_t &mat){
       for(int i(0); i < mat.rows(); i++){
         for(int j(0); j < mat.columns(); j++){
-          out << const_cast<Matrix<float_sylph_t> &>(mat)(i, j) << ',';
+          out << const_cast<mat_t &>(mat)(i, j) << ',';
         }
       }
     }
     static void inspect_matrix2(
-        std::ostream &out, const Matrix<float_sylph_t> &mat, const char *header){
+        std::ostream &out, const mat_t &mat, const char *header){
       out << header << '(' << mat.rows() << '*' << mat.columns() << "),";
       inspect_matrix(out, mat);
     }
@@ -938,8 +966,8 @@ class INS_GPS_Debug : public INS_GPS {
 
   protected:
     void before_update_INS(
-        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
-        const float_sylph_t &elapsedT){
+        const mat_t &A, const mat_t &B,
+        const float_t &elapsedT){
       last_action = ACTION_LAST_UPDATE;
       snapshot.A = A;
       snapshot.B = B;
@@ -947,11 +975,11 @@ class INS_GPS_Debug : public INS_GPS {
     }
 
     void before_correct_INS(
-        const Matrix<float_sylph_t> &H,
-        const Matrix<float_sylph_t> &R,
-        const Matrix<float_sylph_t> &K,
-        const Matrix<float_sylph_t> &v,
-        Matrix<float_sylph_t> &x_hat){
+        const mat_t &H,
+        const mat_t &R,
+        const mat_t &K,
+        const mat_t &v,
+        mat_t &x_hat){
       last_action = ACTION_LAST_CORRECT;
       snapshot.H = H;
       snapshot.R = R;
