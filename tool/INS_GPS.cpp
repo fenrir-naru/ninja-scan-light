@@ -345,25 +345,15 @@ struct G_Packet;
 
 class NAV : public NAVData<float_sylph_t> {
   public:
-    struct previous_item_t {
-      float_sylph_t elapsedT_from_last_correct;
-      NAVData<float_sylph_t> &nav;
-      previous_item_t(
-          const float_sylph_t &_elapsedT,
-          NAVData<float_sylph_t> &_nav) : elapsedT_from_last_correct(_elapsedT), nav(_nav) {}
-      ~previous_item_t(){}
-      previous_item_t &operator=(const previous_item_t &another){
-        elapsedT_from_last_correct = another.elapsedT_from_last_correct;
-        nav = another.nav;
-        return *this;
-      }
+    struct history_item_t {
+      float_sylph_t deltaT;
+      const NAVData<float_sylph_t> *nav;
     };
-    typedef std::vector<
-        previous_item_t> previous_items_t;
+    typedef std::vector<history_item_t> history_t;
     virtual ~NAV(){}
   public:
-    virtual previous_items_t previous_items(){
-      return previous_items_t();
+    virtual history_t history() const {
+      return history_t();
     }
     virtual void inspect(std::ostream &out) const {}
     friend std::ostream &operator<<(std::ostream &out, const NAV &nav){
@@ -550,6 +540,9 @@ typedef INS_GPS2_BiasEstimated<
     KalmanFilterUD> ins_gps_bias_ekf_ud_t;
 
 template <class INS_GPS>
+class INS_GPS_NAVData;
+
+template <class INS_GPS>
 class INS_GPS_NAV : public NAV {
   public:
     typedef INS_GPS ins_gps_t;
@@ -680,23 +673,30 @@ class INS_GPS_NAV : public NAV {
       if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_NONE){
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<INS_GPS_Back_Propagate<INS_GPS> >(calibration);
+            return new INS_GPS_NAV<
+                INS_GPS_Back_Propagate<
+                  INS_GPS_NAVData<INS_GPS> > >(calibration);
           case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<INS_GPS_RealTime<INS_GPS> >(calibration);
+            return new INS_GPS_NAV<
+                INS_GPS_RealTime<
+                  INS_GPS_NAVData<INS_GPS> > >(calibration);
           default:
-            return new INS_GPS_NAV<INS_GPS>(calibration);
+            return new INS_GPS_NAV<
+                  INS_GPS_NAVData<INS_GPS> >(calibration);
         }
       }else{
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<
-                INS_GPS_Debug<INS_GPS_Back_Propagate<INS_GPS> > >(calibration);
+            return new INS_GPS_NAV<INS_GPS_Debug<
+                INS_GPS_Back_Propagate<
+                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
           case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<
-                INS_GPS_Debug<INS_GPS_RealTime<INS_GPS> > >(calibration);
+            return new INS_GPS_NAV<INS_GPS_Debug<
+                INS_GPS_RealTime<
+                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
           default:
-            return new INS_GPS_NAV<
-                INS_GPS_Debug<INS_GPS> >(calibration);
+            return new INS_GPS_NAV<INS_GPS_Debug<
+                  INS_GPS_NAVData<INS_GPS> > >(calibration);
         }
       }
     }
@@ -710,17 +710,27 @@ class INS_GPS_NAV : public NAV {
       inspect(out, ins_gps);
     }
 
-    previous_items_t previous_items(void *){
-      return NAV::previous_items();
+  protected:
+    history_t history2(const void *) const {
+      return NAV::history();
     }
-#if 0
     template <class INS_GPS_base>
-    previous_items_t previous_items(INS_GPS_Back_Propagate<INS_GPS_base> *){
-      return ins_gps->previous_items();
+    history_t history2(const INS_GPS_Back_Propagate<INS_GPS_base> *) const {
+      typename NAV::history_t res;
+      typedef typename INS_GPS_Back_Propagate<INS_GPS_base>::snapshots_t snapshots_t;
+      const snapshots_t &snapshots(ins_gps->get_snapshots());
+      for(typename snapshots_t::const_iterator it(snapshots.begin());
+          it != snapshots.end();
+          ++it){
+        NAV::history_item_t item = {
+            it->elapsedT_from_last_correct, &(it->ins_gps)};
+        res.push_back(item);
+      }
+      return res;
     }
-#endif
-    previous_items_t previous_items(){
-      return previous_items(ins_gps);
+  public:
+    history_t history() const {
+      return history2(ins_gps);
     }
 
   protected:
@@ -886,9 +896,53 @@ float_sylph_t fname() const {return ins_gps->fname();}
     
   protected:
     void label2(std::ostream &out, void *) const {}
+    template <class INS_GPS_base>
+    void label2(std::ostream &out, INS_GPS_NAVData<INS_GPS_base> *) const {
+      ins_gps->label(out);
+    }
+  public:
+    void label(std::ostream &out) const {
+      label2(out, ins_gps);
+    }
+
+  protected:
+    void dump2(std::ostream &out, void *) const {}
+    template <class INS_GPS_base>
+    void dump2(std::ostream &out, INS_GPS_NAVData<INS_GPS_base> *) const {
+      ins_gps->dump(out);
+    }
+  public:
+    void dump(std::ostream &out) const {
+      dump2(out, ins_gps);
+    }
+};
+
+template <class INS_GPS>
+class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
+  public:
+    INS_GPS_NAVData() : INS_GPS(){}
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
+        : INS_GPS(orig, deepcopy){}
+    ~INS_GPS_NAVData(){}
+#define MAKE_PROXY_FUNC(fname) \
+typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
+    MAKE_PROXY_FUNC(longitude);
+    MAKE_PROXY_FUNC(latitude);
+    MAKE_PROXY_FUNC(height);
+    MAKE_PROXY_FUNC(v_north);
+    MAKE_PROXY_FUNC(v_east);
+    MAKE_PROXY_FUNC(v_down);
+    MAKE_PROXY_FUNC(heading);
+    MAKE_PROXY_FUNC(euler_phi);
+    MAKE_PROXY_FUNC(euler_theta);
+    MAKE_PROXY_FUNC(euler_psi);
+    MAKE_PROXY_FUNC(azimuth);
+#undef MAKE_PROXY_FUNC
+  protected:
+    void label2(std::ostream &out, const void *) const {}
 
     template <class BaseINS, template <class> class Filter>
-    void label2(std::ostream &out, Filtered_INS2<BaseINS, Filter> *fins) const {
+    void label2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
       if(options.dump_stddev){
         out << ',' << "s1(longitude)"
             << ',' << "s1(latitude)"
@@ -903,8 +957,8 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
 
     template <class BaseFINS>
-    void label2(std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      label2(out, (BaseFINS *)fins);
+    void label2(std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      label2(out, (const BaseFINS *)fins);
       out << ',' << "bias_accel(X)"   //Bias
           << ',' << "bias_accel(Y)"
           << ',' << "bias_accel(Z)"
@@ -921,21 +975,22 @@ float_sylph_t fname() const {return ins_gps->fname();}
       }
     }
 
+  public:
     /**
      * print label
      */
     void label(std::ostream &out = std::cout) const {
-      NAV::label(out);
-      label2(out, ins_gps);
+      NAVData<typename INS_GPS::float_t>::label(out);
+      label2(out, this);
     }
   
   protected:
-    void dump2(std::ostream &out, void *) const {}
+    void dump2(std::ostream &out, const void *) const {}
 
     template <class BaseINS, template <class> class Filter>
-    void dump2(std::ostream &out, Filtered_INS2<BaseINS, Filter> *fins) const {
+    void dump2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
       if(options.dump_stddev){
-        typename Filtered_INS2<BaseINS, Filter>::StandardDeviations sigma(ins_gps->getSigma());
+        typename Filtered_INS2<BaseINS, Filter>::StandardDeviations sigma(fins->getSigma());
         out << ',' << rad2deg(sigma.longitude_rad)
             << ',' << rad2deg(sigma.latitude_rad)
             << ',' << sigma.height_m
@@ -950,10 +1005,10 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
     template <class BaseFINS>
     void dump2(
-        std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      dump2(out, (BaseFINS *)fins);
-      Vector3<float_sylph_t> &ba(ins_gps->bias_accel());
-      Vector3<float_sylph_t> &bg(ins_gps->bias_gyro());
+        std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      dump2(out, (const BaseFINS *)fins);
+      Vector3<float_sylph_t> &ba(const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->bias_accel());
+      Vector3<float_sylph_t> &bg(const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->bias_gyro());
       out << ',' << ba.getX()      // Bias
           << ',' << ba.getY()
           << ',' << ba.getZ()
@@ -962,7 +1017,8 @@ float_sylph_t fname() const {return ins_gps->fname();}
           << ',' << bg.getZ() ;
       if(options.dump_stddev){
         Matrix<float_sylph_t> &P(
-            const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
+            const_cast<Matrix<float_sylph_t> &>(
+              const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP()));
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
             j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
           out << ',' << sqrt(P(i, i));
@@ -970,14 +1026,15 @@ float_sylph_t fname() const {return ins_gps->fname();}
       }
     }
 
+  public:
     /**
      * print current state
      * 
      * @param itow current time
      */
     void dump(std::ostream &out) const {
-      NAV::dump(out);
-      dump2(out, ins_gps);
+      NAVData<typename INS_GPS::float_t>::dump(out);
+      dump2(out, this);
     }
 };
 
@@ -1617,12 +1674,12 @@ class Status{
         case DUMP_CORRECT:
           if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_BACK_PROPAGATION){
             // When smoothing is activated
-            NAV::previous_items_t items(nav.previous_items());
+            NAV::history_t items(nav.history());
             int index(0);
-            for(NAV::previous_items_t::iterator it(items.begin());
+            for(NAV::history_t::iterator it(items.begin());
                 it != items.end();
                 ++it, index++){
-              if(it->elapsedT_from_last_correct >= options.back_propagate_property.back_propagate_depth){
+              if(it->deltaT >= options.back_propagate_property.back_propagate_depth){
                 break;
               }
               const char *label;
@@ -1633,7 +1690,7 @@ class Status{
                 if(!options.dump_update){continue;}
                 label = "BP_TU";
               }
-              dump(label, itow + it->elapsedT_from_last_correct, it->nav);
+              dump(label, itow + it->deltaT, *(it->nav));
             }
             break;
           }

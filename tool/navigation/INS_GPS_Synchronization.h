@@ -43,7 +43,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
     using typename INS_GPS::float_t;
     using typename INS_GPS::mat_t;
 #endif
-  protected:
+  public:
     struct snapshot_content_t {
       INS_GPS ins_gps;
       mat_t Phi;
@@ -59,6 +59,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
       }
     };
     typedef std::vector<snapshot_content_t> snapshots_t;
+  protected:
     snapshots_t snapshots;
   public:
     INS_GPS_Back_Propagate()
@@ -71,18 +72,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
     void setup_back_propagation(const INS_GPS_Back_Propagate_Property<float_t> &property){
       INS_GPS_Back_Propagate_Property<float_t>::operator=(property);
     }
-#if 0
-    NAV::previous_items_t previous_items() {
-      typename NAV::previous_items_t res;
-      for(typename snapshots_t::iterator it(snapshots.begin());
-          it != snapshots.end();
-          ++it){
-        res.push_back(
-            NAV::previous_item_t(it->elapsedT_from_last_correct, it->ins_gps));
-      }
-      return res;
-    }
-#endif
+    const snapshots_t &get_snapshots() {return snapshots;}
 
   protected:
     /**
