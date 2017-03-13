@@ -668,39 +668,6 @@ class INS_GPS_NAV : public NAV {
       delete ins_gps;
     }
 
-    template <class Calibration>
-    static NAV *get_nav(const Calibration &calibration){
-      if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_NONE){
-        switch(options.ins_gps_sync_strategy){
-          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<
-                INS_GPS_Back_Propagate<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
-          case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<
-                INS_GPS_RealTime<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
-          default:
-            return new INS_GPS_NAV<
-                  INS_GPS_NAVData<INS_GPS> >(calibration);
-        }
-      }else{
-        switch(options.ins_gps_sync_strategy){
-          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<INS_GPS_Debug<
-                INS_GPS_Back_Propagate<
-                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
-          case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<INS_GPS_Debug<
-                INS_GPS_RealTime<
-                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
-          default:
-            return new INS_GPS_NAV<INS_GPS_Debug<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
-        }
-      }
-    }
-
     void inspect(std::ostream &out, void *) const {}
     template <class INS_GPS_base>
     void inspect(std::ostream &out, INS_GPS_Debug<INS_GPS_base> *) const {
@@ -894,27 +861,49 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return *this;
     }
     
-  protected:
-    void label2(std::ostream &out, void *) const {}
-    template <class INS_GPS_base>
-    void label2(std::ostream &out, INS_GPS_NAVData<INS_GPS_base> *) const {
+    void label(std::ostream &out) const {
       ins_gps->label(out);
     }
-  public:
-    void label(std::ostream &out) const {
-      label2(out, ins_gps);
-    }
 
-  protected:
-    void dump2(std::ostream &out, void *) const {}
-    template <class INS_GPS_base>
-    void dump2(std::ostream &out, INS_GPS_NAVData<INS_GPS_base> *) const {
+    void dump(std::ostream &out) const {
       ins_gps->dump(out);
     }
-  public:
-    void dump(std::ostream &out) const {
-      dump2(out, ins_gps);
+};
+
+template <class INS_GPS>
+struct INS_GPS_NAV_Factory {
+  template <class Calibration>
+  static NAV *get_nav(const Calibration &calibration){
+    if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_NONE){
+      switch(options.ins_gps_sync_strategy){
+        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+          return new INS_GPS_NAV<
+              INS_GPS_Back_Propagate<
+                INS_GPS_NAVData<INS_GPS> > >(calibration);
+        case Options::INS_GPS_SYNC_REALTIME:
+          return new INS_GPS_NAV<
+              INS_GPS_RealTime<
+                INS_GPS_NAVData<INS_GPS> > >(calibration);
+        default:
+          return new INS_GPS_NAV<
+                INS_GPS_NAVData<INS_GPS> >(calibration);
+      }
+    }else{
+      switch(options.ins_gps_sync_strategy){
+        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+          return new INS_GPS_NAV<INS_GPS_Debug<
+              INS_GPS_Back_Propagate<
+                INS_GPS_NAVData<INS_GPS> > > >(calibration);
+        case Options::INS_GPS_SYNC_REALTIME:
+          return new INS_GPS_NAV<INS_GPS_Debug<
+              INS_GPS_RealTime<
+                INS_GPS_NAVData<INS_GPS> > > >(calibration);
+        default:
+          return new INS_GPS_NAV<INS_GPS_Debug<
+                INS_GPS_NAVData<INS_GPS> > >(calibration);
+      }
     }
+  }
 };
 
 template <class INS_GPS>
@@ -1849,15 +1838,15 @@ void loop(){
       const StandardCalibration &calibration(processors.front()->calibration());
       if(options.use_udkf){
         if(options.est_bias){
-          nav = INS_GPS_NAV<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
         }else{
-          nav = INS_GPS_NAV<ins_gps_ekf_ud_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
         }
       }else{
         if(options.est_bias){
-          nav = INS_GPS_NAV<ins_gps_bias_ekf_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
         }else{
-          nav = INS_GPS_NAV<ins_gps_ekf_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
         }
       }
     }
