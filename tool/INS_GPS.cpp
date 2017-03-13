@@ -159,6 +159,8 @@ VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
 QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
 #include "navigation/INS_GPS2.h"
+#include "navigation/INS_GPS_Synchronization.h"
+#include "navigation/INS_GPS_Debug.h"
 #include "navigation/BiasEstimation.h"
 
 #include "navigation/MagneticField.h"
@@ -182,12 +184,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
   } ins_gps_sync_strategy;
   bool est_bias; ///< True for performing bias estimation
   bool use_udkf; ///< True for UD Kalman filtering
-  /**
-   * Number of snapshots to be back-propagated.
-   * Zero means the last snapshot to be corrected, and negative values mean deeper.
-   */
-  float_sylph_t back_propagate_depth;
-  enum {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; ///< Algorithm selection for realtime mode
+
+  INS_GPS_Back_Propagate_Property<float_sylph_t> back_propagate_property;
+  INS_GPS_RealTime_Property realttime_property;
 
   // GPS options
   bool gps_fake_lock; ///< true when gps dummy date is used.
@@ -212,7 +211,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   std::stringstream init_misc_buf; ///< buffer for init_misc string
 
   // Debug
-  enum {DEBUG_KF_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_KF;
+  INS_GPS_Debug_Property debug_property;
 
   Options()
       : super_t(),
@@ -220,44 +219,21 @@ struct Options : public GlobalOptions<float_sylph_t> {
       out_is_N_packet(false),
       ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
       est_bias(true), use_udkf(false),
-      back_propagate_depth(0),
-      rt_mode(RT_LIGHT_WEIGHT),
+      back_propagate_property(),
+      realttime_property(),
       gps_fake_lock(false), gps_threshold(),
       use_magnet(false),
       mag_heading_accuracy_deg(3),
       yaw_correct_with_mag_when_speed_less_than_ms(5),
       has_initial_attitude(false),
       init_misc_buf(), init_misc(&init_misc_buf),
-      debug_KF(DEBUG_KF_NONE) {
+      debug_property() {
+    realttime_property.rt_mode = INS_GPS_RealTime_Property::RT_LIGHT_WEIGHT;
     for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
       init_attitude_deg[i] = 0;
     }
   }
   ~Options(){}
-  
-  bool check_debug_target(const char *spec){
-    if(std::strcmp(spec, "KF_P") == 0){
-      debug_KF = DEBUG_KF_P;
-    }else if(std::strcmp(spec, "KF_FULL") == 0){
-      debug_KF = DEBUG_KF_FULL;
-    }else{
-      return false;
-    }
-    return true;
-  }
-
-  struct show_debug_target_t {
-    const Options &options;
-    show_debug_target_t(const Options &opt) : options(opt) {}
-    friend std::ostream &operator<<(std::ostream &out, const show_debug_target_t &_this){
-      switch(_this.options.debug_KF){
-        case Options::DEBUG_KF_NONE: break;
-        case Options::DEBUG_KF_P: out << "KF_P"; break;
-        case Options::DEBUG_KF_FULL: out << "KF_FULL"; break;
-      }
-      return out;
-    }
-  };
 
   /**
    * Check spec
@@ -308,8 +284,8 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION_BOOL(est_bias);
     CHECK_OPTION_BOOL(use_udkf);
     CHECK_OPTION(bp_depth, false,
-        back_propagate_depth = std::atof(value),
-        back_propagate_depth);
+        back_propagate_property.back_propagate_depth = std::atof(value),
+        back_propagate_property.back_propagate_depth);
 
     CHECK_ALIAS(fake_lock);
     CHECK_OPTION_BOOL(gps_fake_lock);
@@ -357,8 +333,8 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
         value);
 
     CHECK_OPTION(debug, false,
-        if(!check_debug_target(value)){break;},
-        show_debug_target_t(*this));
+        if(!debug_property.check_debug_property_spec(value)){break;},
+        debug_property.show_debug_property());
 #undef CHECK_OPTION
     
     return super_t::check_spec(spec);
@@ -369,25 +345,15 @@ struct G_Packet;
 
 class NAV : public NAVData<float_sylph_t> {
   public:
-    struct previous_item_t {
-      float_sylph_t elapsedT_from_last_correct;
-      NAVData<float_sylph_t> &nav;
-      previous_item_t(
-          const float_sylph_t &_elapsedT,
-          NAVData<float_sylph_t> &_nav) : elapsedT_from_last_correct(_elapsedT), nav(_nav) {}
-      ~previous_item_t(){}
-      previous_item_t &operator=(const previous_item_t &another){
-        elapsedT_from_last_correct = another.elapsedT_from_last_correct;
-        nav = another.nav;
-        return *this;
-      }
+    struct history_item_t {
+      float_sylph_t deltaT;
+      const NAVData<float_sylph_t> *nav;
     };
-    typedef std::vector<
-        previous_item_t> previous_items_t;
+    typedef std::vector<history_item_t> history_t;
     virtual ~NAV(){}
   public:
-    virtual previous_items_t previous_items(){
-      return previous_items_t();
+    virtual history_t history() const {
+      return history_t();
     }
     virtual void inspect(std::ostream &out) const {}
     friend std::ostream &operator<<(std::ostream &out, const NAV &nav){
@@ -560,406 +526,6 @@ struct M_Packet : Packet {
   Vector3<float_sylph_t> mag;
 };
 
-template <class INS_GPS>
-class INS_GPS_Back_Propagate : public INS_GPS, public NAVData<float_sylph_t> {
-  protected:
-    struct snapshot_content_t {
-      INS_GPS_Back_Propagate *ins_gps;
-      Matrix<float_sylph_t> Phi;
-      Matrix<float_sylph_t> GQGt;
-      float_sylph_t elapsedT_from_last_correct;
-      snapshot_content_t(
-          INS_GPS_Back_Propagate *_ins_gps,
-          const Matrix<float_sylph_t> &_Phi,
-          const Matrix<float_sylph_t> &_GQGt,
-          const float_sylph_t &_elapsedT)
-          : ins_gps(_ins_gps), Phi(_Phi), GQGt(_GQGt),
-          elapsedT_from_last_correct(_elapsedT){
-      }
-      snapshot_content_t &operator=(const snapshot_content_t &another){
-        ins_gps = another.ins_gps;
-        Phi = another.Phi;
-        GQGt = another.GQGt;
-        elapsedT_from_last_correct = another.elapsedT_from_last_correct;
-        return *this;
-      }
-    };
-    typedef std::vector<snapshot_content_t> snapshots_t;
-    snapshots_t *_snapshots, &snapshots; // share snapshot among instances
-  public:
-    INS_GPS_Back_Propagate()
-        : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
-    INS_GPS_Back_Propagate(
-        const INS_GPS_Back_Propagate &orig,
-        const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
-    INS_GPS_Back_Propagate &operator=(const INS_GPS_Back_Propagate &another){
-      _snapshots = NULL;
-      snapshots = another.snapshots;
-      INS_GPS::operator=(another);
-      return *this;
-    }
-    virtual ~INS_GPS_Back_Propagate(){
-      delete _snapshots;
-    }
-    NAV::previous_items_t previous_items() {
-      typename NAV::previous_items_t res;
-      for(typename snapshots_t::iterator it(snapshots.begin());
-          it != snapshots.end();
-          ++it){
-        res.push_back(
-            NAV::previous_item_t(it->elapsedT_from_last_correct, *(it->ins_gps)));
-      }
-      return res;
-    }
-#define MAKE_PROXY_FUNC(fname) \
-float_sylph_t fname() const {return INS_GPS::fname();}
-    MAKE_PROXY_FUNC(longitude);
-    MAKE_PROXY_FUNC(latitude);
-    MAKE_PROXY_FUNC(height);
-    MAKE_PROXY_FUNC(v_north);
-    MAKE_PROXY_FUNC(v_east);
-    MAKE_PROXY_FUNC(v_down);
-    MAKE_PROXY_FUNC(heading);
-    MAKE_PROXY_FUNC(euler_phi);
-    MAKE_PROXY_FUNC(euler_theta);
-    MAKE_PROXY_FUNC(euler_psi);
-    MAKE_PROXY_FUNC(azimuth);
-#undef MAKE_PROXY_FUNC
-
-  protected:
-    /**
-     * Call-back function for time update
-     *
-     * @param A matrix A
-     * @param B matrix B
-     * @patam elapsedT interval time
-     */
-    void before_update_INS(
-        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
-        const float_sylph_t &elapsedT){
-      Matrix<float_sylph_t> Phi(A * elapsedT);
-      for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
-      Matrix<float_sylph_t> Gamma(B * elapsedT);
-
-      float_sylph_t elapsedT_from_last_correct(elapsedT);
-      if(!snapshots.empty()){
-        elapsedT_from_last_correct += snapshots.back().elapsedT_from_last_correct;
-      }
-
-      snapshots.push_back(
-          snapshot_content_t(new INS_GPS_Back_Propagate(*this, true),
-              Phi, Gamma * INS_GPS::getFilter().getQ() * Gamma.transpose(),
-              elapsedT_from_last_correct));
-    }
-
-    /**
-     * Call-back function for measurement (correct) update
-     *
-     * @param H matrix H
-     * @param R matrix R
-     * @patam K matrix K (Kalman gain)
-     * @param v =(z - H x)
-     * @param x_hat values to be corrected
-     */
-    void before_correct_INS(
-        const Matrix<float_sylph_t> &H,
-        const Matrix<float_sylph_t> &R,
-        const Matrix<float_sylph_t> &K,
-        const Matrix<float_sylph_t> &v,
-        Matrix<float_sylph_t> &x_hat){
-      if(!snapshots.empty()){
-
-        // This routine is invoked by measurement update function called correct().
-        // In addition, this routine is reduced to be activated once with the following if-statement.
-        float_sylph_t mod_elapsedT(snapshots.back().elapsedT_from_last_correct);
-        if(mod_elapsedT > 0){
-
-          // The latest is the first
-          for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
-              it != snapshots.rend();
-              ++it){
-            // This statement controls depth of back propagation.
-            if(it->elapsedT_from_last_correct < options.back_propagate_depth){
-              if(mod_elapsedT > 0.1){ // Skip only when sufficient amount of snapshots are existed.
-                for(typename snapshots_t::reverse_iterator it2(it);
-                    it2 != snapshots.rend();
-                    ++it2){
-                  delete it2->ins_gps;
-                }
-                snapshots.erase(snapshots.begin(), it.base());
-                //cerr << "[erase]" << endl;
-                if(snapshots.empty()){return;}
-              }
-              break;
-            }
-            // Positive value stands for states to which applied back-propagation have not been applied
-            it->elapsedT_from_last_correct -= mod_elapsedT;
-          }
-        }
-
-        snapshot_content_t previous(snapshots.back());
-        snapshots.pop_back();
-
-        // Perform back-propagation
-        Matrix<float_sylph_t> H_dash(H * previous.Phi);
-        Matrix<float_sylph_t> R_dash(R + H * previous.GQGt * H.transpose());
-        previous.ins_gps->correct_primitive(H_dash, v, R_dash);
-
-        snapshots.push_back(previous);
-      }
-    }
-};
-
-template <class INS_GPS>
-class INS_GPS_RealTime : public INS_GPS {
-  protected:
-    struct snapshot_content_t {
-      INS_GPS_RealTime *ins_gps;
-      Matrix<float_sylph_t> A;
-      Matrix<float_sylph_t> Phi_inv;
-      Matrix<float_sylph_t> GQGt;
-      float_sylph_t elapsedT_from_last_update;
-      snapshot_content_t(
-          INS_GPS_RealTime *_ins_gps,
-          const Matrix<float_sylph_t> &_A,
-          const Matrix<float_sylph_t> &_Phi_inv,
-          const Matrix<float_sylph_t> &_GQGt,
-          const float_sylph_t &_elapsedT)
-          : ins_gps(_ins_gps), A(_A), Phi_inv(_Phi_inv), GQGt(_GQGt),
-          elapsedT_from_last_update(_elapsedT){
-      }
-      snapshot_content_t &operator=(const snapshot_content_t &another){
-        ins_gps = another.ins_gps;
-        A = another.A;
-        Phi_inv = another.Phi_inv;
-        GQGt = another.GQGt;
-        elapsedT_from_last_update = another.elapsedT_from_last_update;
-        return *this;
-      }
-    };
-    typedef std::vector<snapshot_content_t> snapshots_t;
-    snapshots_t *_snapshots, &snapshots; // share snapshot among instances
-  public:
-    INS_GPS_RealTime()
-        : INS_GPS(), _snapshots(new snapshots_t()), snapshots(*_snapshots) {}
-    INS_GPS_RealTime(
-        const INS_GPS_RealTime &orig,
-        const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), _snapshots(NULL), snapshots(orig.snapshots){}
-    INS_GPS_RealTime &operator=(const INS_GPS_RealTime &another){
-      _snapshots = NULL;
-      snapshots = another.snapshots;
-      INS_GPS::operator=(another);
-      return *this;
-    }
-    virtual ~INS_GPS_RealTime(){
-      delete _snapshots;
-    }
-
-  protected:
-    /**
-     * Call-back function for time update
-     *
-     * @param A matrix A
-     * @param B matrix B
-     * @patam elapsedT interval time
-     */
-    void before_update_INS(
-        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
-        const float_sylph_t &elapsedT){
-      Matrix<float_sylph_t> Phi(A * elapsedT);
-      for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
-      Matrix<float_sylph_t> Gamma(B * elapsedT);
-
-      snapshots.push_back(
-          snapshot_content_t(new INS_GPS_RealTime(*this),
-              A, Phi.inverse(), Gamma * INS_GPS::getFilter().getQ() * Gamma.transpose(),
-              elapsedT));
-    }
-
-  public:
-    /**
-     * Sort snapshots before correct
-     * to let a snapshot corresponding to the latest GPS information be first
-     *
-     * @param advanceT how old is the GPS information (negative value means old)
-     * @return bool true when successfully sorted
-     */
-    bool setup_correct(float_sylph_t advanceT){
-      if(advanceT > 0){return false;} // positive value (future) is odd
-
-      for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
-          it != snapshots.rend();
-          ++it){
-        advanceT += it->elapsedT_from_last_update;
-        if(advanceT > float_sylph_t(-0.005)){ // Find the closest
-          if(it == snapshots.rbegin()){
-            // Keep at least one snapshot
-            it++;
-          }
-          for(typename snapshots_t::iterator it2(snapshots.begin());
-              it2 != it.base();
-              ++it2){
-            delete it2->ins_gps;
-          }
-          snapshots.erase(snapshots.begin(), it.base());
-          return true;
-        }
-      }
-
-      return false; // Too old
-    }
-
-  protected:
-    /**
-     * Perform correction with modified correct information
-     *
-     * @param info Correction information
-     */
-    void correct_with_info(CorrectInfo<float_sylph_t> &info){
-      Matrix<float_sylph_t> &H(info.H), &R(info.R);
-      switch(options.rt_mode){
-        case Options::RT_LIGHT_WEIGHT:
-          if(!snapshots.empty()){
-            Matrix<float_sylph_t> sum_A(H.columns(), H.columns());
-            Matrix<float_sylph_t> sum_GQGt(sum_A.rows(), sum_A.rows());
-            float_sylph_t bar_delteT(0);
-            for(typename snapshots_t::iterator it(snapshots.begin());
-                it != snapshots.end();
-                ++it){
-              sum_A += it->A;
-              sum_GQGt += it->GQGt;
-              bar_delteT += it->elapsedT_from_last_update;
-            }
-            int n(snapshots.size());
-            bar_delteT /= n;
-            Matrix<float_sylph_t> sum_A_GQGt(sum_A * sum_GQGt);
-            R += H
-                * (sum_GQGt -= ((sum_A_GQGt + sum_A_GQGt.transpose()) *= (bar_delteT * (n + 1) / (2 * n))))
-                * H.transpose();
-            H *= (Matrix<float_sylph_t>::getI(sum_A.rows()) - sum_A * bar_delteT);
-          }
-          break;
-        default:
-          for(typename snapshots_t::iterator it(snapshots.begin());
-              it != snapshots.end();
-              ++it){
-            H *= it->Phi_inv;
-            R += H * it->GQGt * H.transpose();
-          }
-      }
-      INS_GPS::correct_primitive(info);
-    }
-
-  public:
-    void correct(const G_Packet &gps){
-      CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps));
-      correct_with_info(info);
-    }
-
-    void correct(const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b){
-      CorrectInfo<float_sylph_t> info(snapshots[0].ins_gps->correct_info(gps, lever_arm_b, omega_b2i_4b));
-      correct_with_info(info);
-    }
-};
-
-template <class INS_GPS>
-class INS_GPS_Debug : public INS_GPS {
-  protected:
-    enum {ACTION_LAST_NOP, ACTION_LAST_UPDATE, ACTION_LAST_CORRECT} last_action;
-    struct snapshot_t {
-      Matrix<float_sylph_t> A, B, H, R, K;
-      snapshot_t() : A(), B(), H(), R(), K() {}
-      snapshot_t(const snapshot_t &orig, const bool &deepcopy = false)
-          : A(deepcopy ? orig.A.copy() : orig.A),
-            B(deepcopy ? orig.B.copy() : orig.B),
-            H(deepcopy ? orig.H.copy() : orig.H),
-            R(deepcopy ? orig.R.copy() : orig.R),
-            K(deepcopy ? orig.K.copy() : orig.K) {}
-    } snapshot;
-  public:
-    INS_GPS_Debug()
-        : INS_GPS(), last_action(ACTION_LAST_NOP) {}
-    INS_GPS_Debug(
-        const INS_GPS_Debug &orig,
-        const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), last_action(orig.last_action), snapshot(orig.snapshot, deepcopy) {}
-    INS_GPS_Debug &operator=(const INS_GPS_Debug &another){
-      INS_GPS::operator=(another);
-      last_action = another.last_action;
-      snapshot.A = another.snapshot.A;
-      snapshot.B = another.snapshot.B;
-      snapshot.H = another.snapshot.H;
-      snapshot.R = another.snapshot.R;
-      snapshot.K = another.snapshot.K;
-      return *this;
-    }
-    virtual ~INS_GPS_Debug(){}
-
-    static void inspect_matrix(
-        std::ostream &out, const Matrix<float_sylph_t> &mat){
-      for(int i(0); i < mat.rows(); i++){
-        for(int j(0); j < mat.columns(); j++){
-          out << const_cast<Matrix<float_sylph_t> &>(mat)(i, j) << ',';
-        }
-      }
-    }
-    static void inspect_matrix2(
-        std::ostream &out, const Matrix<float_sylph_t> &mat, const char *header){
-      out << header << '(' << mat.rows() << '*' << mat.columns() << "),";
-      inspect_matrix(out, mat);
-    }
-    void inspect(std::ostream &out) const {
-      switch(options.debug_KF){
-        case Options::DEBUG_KF_P:
-          inspect_matrix(out, const_cast<INS_GPS_Debug *>(this)->getFilter().getP());
-          break;
-        case Options::DEBUG_KF_FULL:
-          switch(last_action){
-            case ACTION_LAST_UPDATE:
-              out << "TU,";
-              inspect_matrix2(out, snapshot.A, "A");
-              inspect_matrix2(out, snapshot.B, "B");
-              break;
-            case ACTION_LAST_CORRECT:
-              out << "MU,";
-              inspect_matrix2(out, snapshot.H, "H");
-              inspect_matrix2(out, snapshot.R, "R");
-              inspect_matrix2(out, snapshot.K, "K");
-              break;
-          }
-          inspect_matrix2(out, const_cast<INS_GPS_Debug *>(this)->getFilter().getP(), "P");
-          break;
-      }
-    }
-
-  protected:
-    void before_update_INS(
-        const Matrix<float_sylph_t> &A, const Matrix<float_sylph_t> &B,
-        const float_sylph_t &elapsedT){
-      last_action = ACTION_LAST_UPDATE;
-      snapshot.A = A;
-      snapshot.B = B;
-      INS_GPS::before_update_INS(A, B, elapsedT);
-    }
-
-    void before_correct_INS(
-        const Matrix<float_sylph_t> &H,
-        const Matrix<float_sylph_t> &R,
-        const Matrix<float_sylph_t> &K,
-        const Matrix<float_sylph_t> &v,
-        Matrix<float_sylph_t> &x_hat){
-      last_action = ACTION_LAST_CORRECT;
-      snapshot.H = H;
-      snapshot.R = R;
-      snapshot.K = K;
-      INS_GPS::before_correct_INS(H, R, K, v, x_hat);
-    }
-};
-
 typedef INS_GPS2<
     float_sylph_t,
     KalmanFilter> ins_gps_ekf_t;
@@ -972,6 +538,9 @@ typedef INS_GPS2_BiasEstimated<
 typedef INS_GPS2_BiasEstimated<
     float_sylph_t,
     KalmanFilterUD> ins_gps_bias_ekf_ud_t;
+
+template <class INS_GPS>
+class INS_GPS_NAVData;
 
 template <class INS_GPS>
 class INS_GPS_NAV : public NAV {
@@ -1066,6 +635,24 @@ class INS_GPS_NAV : public NAV {
       ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
     }
 
+    template <class Calibration, class Base_INS_GPS>
+    void setup_filter2(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
+      setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
+      ins_gps->setup_back_propagation(options.back_propagate_property);
+    }
+
+    template <class Calibration, class Base_INS_GPS>
+    void setup_filter2(const Calibration &calibration, INS_GPS_RealTime<Base_INS_GPS> *ins_gps){
+      setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
+      ins_gps->setup_realtime(options.realttime_property);
+    }
+
+    template <class Calibration, class Base_INS_GPS>
+    void setup_filter2(const Calibration &calibration, INS_GPS_Debug<Base_INS_GPS> *ins_gps){
+      setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
+      ins_gps->setup_debug(options.debug_property);
+    }
+
     template <class Calibration>
     void setup_filter(const Calibration &calibration){
       setup_filter2(calibration, ins_gps);
@@ -1081,32 +668,6 @@ class INS_GPS_NAV : public NAV {
       delete ins_gps;
     }
 
-    template <class Calibration>
-    static NAV *get_nav(const Calibration &calibration){
-      if(options.debug_KF == Options::DEBUG_KF_NONE){
-        switch(options.ins_gps_sync_strategy){
-          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<INS_GPS_Back_Propagate<INS_GPS> >(calibration);
-          case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<INS_GPS_RealTime<INS_GPS> >(calibration);
-          default:
-            return new INS_GPS_NAV<INS_GPS>(calibration);
-        }
-      }else{
-        switch(options.ins_gps_sync_strategy){
-          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<
-                INS_GPS_Debug<INS_GPS_Back_Propagate<INS_GPS> > >(calibration);
-          case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<
-                INS_GPS_Debug<INS_GPS_RealTime<INS_GPS> > >(calibration);
-          default:
-            return new INS_GPS_NAV<
-                INS_GPS_Debug<INS_GPS> >(calibration);
-        }
-      }
-    }
-
     void inspect(std::ostream &out, void *) const {}
     template <class INS_GPS_base>
     void inspect(std::ostream &out, INS_GPS_Debug<INS_GPS_base> *) const {
@@ -1116,15 +677,27 @@ class INS_GPS_NAV : public NAV {
       inspect(out, ins_gps);
     }
 
-    previous_items_t previous_items(void *){
-      return NAV::previous_items();
+  protected:
+    history_t history2(const void *) const {
+      return NAV::history();
     }
     template <class INS_GPS_base>
-    previous_items_t previous_items(INS_GPS_Back_Propagate<INS_GPS_base> *){
-      return ins_gps->previous_items();
+    history_t history2(const INS_GPS_Back_Propagate<INS_GPS_base> *) const {
+      typename NAV::history_t res;
+      typedef typename INS_GPS_Back_Propagate<INS_GPS_base>::snapshots_t snapshots_t;
+      const snapshots_t &snapshots(ins_gps->get_snapshots());
+      for(typename snapshots_t::const_iterator it(snapshots.begin());
+          it != snapshots.end();
+          ++it){
+        NAV::history_item_t item = {
+            it->elapsedT_from_last_correct, &(it->ins_gps)};
+        res.push_back(item);
+      }
+      return res;
     }
-    previous_items_t previous_items(){
-      return previous_items(ins_gps);
+  public:
+    history_t history() const {
+      return history2(ins_gps);
     }
 
   protected:
@@ -1288,11 +861,77 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return *this;
     }
     
+    void label(std::ostream &out) const {
+      ins_gps->label(out);
+    }
+
+    void dump(std::ostream &out) const {
+      ins_gps->dump(out);
+    }
+};
+
+template <class INS_GPS>
+struct INS_GPS_NAV_Factory {
+  template <class Calibration>
+  static NAV *get_nav(const Calibration &calibration){
+    if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_NONE){
+      switch(options.ins_gps_sync_strategy){
+        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+          return new INS_GPS_NAV<
+              INS_GPS_Back_Propagate<
+                INS_GPS_NAVData<INS_GPS> > >(calibration);
+        case Options::INS_GPS_SYNC_REALTIME:
+          return new INS_GPS_NAV<
+              INS_GPS_RealTime<
+                INS_GPS_NAVData<INS_GPS> > >(calibration);
+        default:
+          return new INS_GPS_NAV<
+                INS_GPS_NAVData<INS_GPS> >(calibration);
+      }
+    }else{
+      switch(options.ins_gps_sync_strategy){
+        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+          return new INS_GPS_NAV<INS_GPS_Debug<
+              INS_GPS_Back_Propagate<
+                INS_GPS_NAVData<INS_GPS> > > >(calibration);
+        case Options::INS_GPS_SYNC_REALTIME:
+          return new INS_GPS_NAV<INS_GPS_Debug<
+              INS_GPS_RealTime<
+                INS_GPS_NAVData<INS_GPS> > > >(calibration);
+        default:
+          return new INS_GPS_NAV<INS_GPS_Debug<
+                INS_GPS_NAVData<INS_GPS> > >(calibration);
+      }
+    }
+  }
+};
+
+template <class INS_GPS>
+class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
+  public:
+    INS_GPS_NAVData() : INS_GPS(){}
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
+        : INS_GPS(orig, deepcopy){}
+    ~INS_GPS_NAVData(){}
+#define MAKE_PROXY_FUNC(fname) \
+typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
+    MAKE_PROXY_FUNC(longitude);
+    MAKE_PROXY_FUNC(latitude);
+    MAKE_PROXY_FUNC(height);
+    MAKE_PROXY_FUNC(v_north);
+    MAKE_PROXY_FUNC(v_east);
+    MAKE_PROXY_FUNC(v_down);
+    MAKE_PROXY_FUNC(heading);
+    MAKE_PROXY_FUNC(euler_phi);
+    MAKE_PROXY_FUNC(euler_theta);
+    MAKE_PROXY_FUNC(euler_psi);
+    MAKE_PROXY_FUNC(azimuth);
+#undef MAKE_PROXY_FUNC
   protected:
-    void label2(std::ostream &out, void *) const {}
+    void label2(std::ostream &out, const void *) const {}
 
     template <class BaseINS, template <class> class Filter>
-    void label2(std::ostream &out, Filtered_INS2<BaseINS, Filter> *fins) const {
+    void label2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
       if(options.dump_stddev){
         out << ',' << "s1(longitude)"
             << ',' << "s1(latitude)"
@@ -1307,8 +946,8 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
 
     template <class BaseFINS>
-    void label2(std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      label2(out, (BaseFINS *)fins);
+    void label2(std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      label2(out, (const BaseFINS *)fins);
       out << ',' << "bias_accel(X)"   //Bias
           << ',' << "bias_accel(Y)"
           << ',' << "bias_accel(Z)"
@@ -1325,21 +964,22 @@ float_sylph_t fname() const {return ins_gps->fname();}
       }
     }
 
+  public:
     /**
      * print label
      */
     void label(std::ostream &out = std::cout) const {
-      NAV::label(out);
-      label2(out, ins_gps);
+      NAVData<typename INS_GPS::float_t>::label(out);
+      label2(out, this);
     }
   
   protected:
-    void dump2(std::ostream &out, void *) const {}
+    void dump2(std::ostream &out, const void *) const {}
 
     template <class BaseINS, template <class> class Filter>
-    void dump2(std::ostream &out, Filtered_INS2<BaseINS, Filter> *fins) const {
+    void dump2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
       if(options.dump_stddev){
-        typename Filtered_INS2<BaseINS, Filter>::StandardDeviations sigma(ins_gps->getSigma());
+        typename Filtered_INS2<BaseINS, Filter>::StandardDeviations sigma(fins->getSigma());
         out << ',' << rad2deg(sigma.longitude_rad)
             << ',' << rad2deg(sigma.latitude_rad)
             << ',' << sigma.height_m
@@ -1354,10 +994,10 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
     template <class BaseFINS>
     void dump2(
-        std::ostream &out, Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      dump2(out, (BaseFINS *)fins);
-      Vector3<float_sylph_t> &ba(ins_gps->bias_accel());
-      Vector3<float_sylph_t> &bg(ins_gps->bias_gyro());
+        std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      dump2(out, (const BaseFINS *)fins);
+      Vector3<float_sylph_t> &ba(const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->bias_accel());
+      Vector3<float_sylph_t> &bg(const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->bias_gyro());
       out << ',' << ba.getX()      // Bias
           << ',' << ba.getY()
           << ',' << ba.getZ()
@@ -1366,7 +1006,8 @@ float_sylph_t fname() const {return ins_gps->fname();}
           << ',' << bg.getZ() ;
       if(options.dump_stddev){
         Matrix<float_sylph_t> &P(
-            const_cast<Matrix<float_sylph_t> &>(ins_gps->getFilter().getP()));
+            const_cast<Matrix<float_sylph_t> &>(
+              const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP()));
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
             j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
           out << ',' << sqrt(P(i, i));
@@ -1374,14 +1015,15 @@ float_sylph_t fname() const {return ins_gps->fname();}
       }
     }
 
+  public:
     /**
      * print current state
      * 
      * @param itow current time
      */
     void dump(std::ostream &out) const {
-      NAV::dump(out);
-      dump2(out, ins_gps);
+      NAVData<typename INS_GPS::float_t>::dump(out);
+      dump2(out, this);
     }
 };
 
@@ -2021,12 +1663,12 @@ class Status{
         case DUMP_CORRECT:
           if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_BACK_PROPAGATION){
             // When smoothing is activated
-            NAV::previous_items_t items(nav.previous_items());
+            NAV::history_t items(nav.history());
             int index(0);
-            for(NAV::previous_items_t::iterator it(items.begin());
+            for(NAV::history_t::iterator it(items.begin());
                 it != items.end();
                 ++it, index++){
-              if(it->elapsedT_from_last_correct >= options.back_propagate_depth){
+              if(it->deltaT >= options.back_propagate_property.back_propagate_depth){
                 break;
               }
               const char *label;
@@ -2037,7 +1679,7 @@ class Status{
                 if(!options.dump_update){continue;}
                 label = "BP_TU";
               }
-              dump(label, itow + it->elapsedT_from_last_correct, it->nav);
+              dump(label, itow + it->deltaT, *(it->nav));
             }
             break;
           }
@@ -2196,15 +1838,15 @@ void loop(){
       const StandardCalibration &calibration(processors.front()->calibration());
       if(options.use_udkf){
         if(options.est_bias){
-          nav = INS_GPS_NAV<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
         }else{
-          nav = INS_GPS_NAV<ins_gps_ekf_ud_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
         }
       }else{
         if(options.est_bias){
-          nav = INS_GPS_NAV<ins_gps_bias_ekf_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
         }else{
-          nav = INS_GPS_NAV<ins_gps_ekf_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
         }
       }
     }
