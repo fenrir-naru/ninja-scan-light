@@ -72,7 +72,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
     void setup_back_propagation(const INS_GPS_Back_Propagate_Property<float_t> &property){
       INS_GPS_Back_Propagate_Property<float_t>::operator=(property);
     }
-    const snapshots_t &get_snapshots() {return snapshots;}
+    const snapshots_t &get_snapshots() const {return snapshots;}
 
   protected:
     /**

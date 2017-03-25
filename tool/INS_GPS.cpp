@@ -341,7 +341,9 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
+struct A_Packet;
 struct G_Packet;
+struct M_Packet;
 
 class NAV : public NAVData<float_sylph_t> {
   public:
@@ -356,46 +358,15 @@ class NAV : public NAVData<float_sylph_t> {
       return history_t();
     }
     virtual void inspect(std::ostream &out) const {}
-    friend std::ostream &operator<<(std::ostream &out, const NAV &nav){
-      nav.inspect(out);
-      return out;
-    }
-    virtual void init(
-        const float_sylph_t &latitude, 
-        const float_sylph_t &longitude, 
-        const float_sylph_t &height,
-        const float_sylph_t &v_north, 
-        const float_sylph_t &v_east, 
-        const float_sylph_t &v_down,
-        const float_sylph_t &yaw, 
-        const float_sylph_t &pitch, 
-        const float_sylph_t &roll) = 0;
     virtual float_sylph_t &operator[](unsigned index) = 0;
-    virtual NAV &update(
-        const Vector3<float_sylph_t> &accel, 
-        const Vector3<float_sylph_t> &gyro, 
-        const float_sylph_t &elapsedT) = 0;
     
-    virtual NAV &correct(const G_Packet &gps) = 0;
-    virtual NAV &correct(
-        const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b){
-      return correct(gps);
+    virtual NAV &update(const A_Packet &){
+      return *this;
     }
-    virtual NAV &correct(
-        const G_Packet &gps,
-        const float_sylph_t &advanceT){
-      return correct(gps);
+    virtual NAV &update(const G_Packet &){
+      return *this;
     }
-    virtual NAV &correct(
-        const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b,
-        const float_sylph_t &advanceT){
-      return correct(gps, lever_arm_b, omega_b2i_4b);
-    }
-    virtual NAV &correct_yaw(const float_sylph_t &delta_yaw){
+    virtual NAV &update(const M_Packet &){
       return *this;
     }
 
@@ -528,8 +499,10 @@ template <class INS_GPS>
 class INS_GPS_NAV : public NAV {
   public:
     typedef INS_GPS ins_gps_t;
+    class Helper;
   protected:
     INS_GPS *ins_gps;
+    Helper helper;
 
     template <class Calibration>
     void setup_filter2(const Calibration &calibration, void *){}
@@ -643,7 +616,7 @@ class INS_GPS_NAV : public NAV {
     template <class Calibration>
     INS_GPS_NAV(const Calibration &calibration)
         : NAV(),
-        ins_gps(new INS_GPS()) {
+        ins_gps(new INS_GPS()), helper(*this) {
       setup_filter(calibration);
     }
     virtual ~INS_GPS_NAV() {
@@ -844,11 +817,20 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
     
     void label(std::ostream &out) const {
-      ins_gps->label(out);
+      helper.label(out);
     }
 
     void dump(std::ostream &out) const {
-      ins_gps->dump(out);
+      helper.dump(out);
+    }
+
+    NAV &update(const A_Packet &packet){
+      helper.time_update(packet);
+      return *this;
+    }
+    NAV &update(const G_Packet &packet){
+      helper.measurement_update(packet);
+      return *this;
     }
 };
 
@@ -1563,13 +1545,19 @@ const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
 typedef vector<StreamProcessor *> processors_t;
 processors_t processors;
 
-class Status{
-  private:
-    bool initalized;
-    NAV &nav;
-    int min_a_packets_for_init; // must be greater than 0
+template <class INS_GPS>
+class INS_GPS_NAV<INS_GPS>::Helper {
+  protected:
+    enum {
+      UNINITIALIZED,
+      JUST_INITIALIZED,
+      TIME_UPDATED,
+      MEASUREMENT_UPDATED,
+    } status;
+    INS_GPS_NAV<INS_GPS> &nav;
+    const int min_a_packets_for_init; // must be greater than 0
     deque<A_Packet> recent_a_packets;
-    unsigned int max_recent_a_packets;
+    const unsigned int max_recent_a_packets;
 
   // Used for compensation of lever arm effect
   protected:
@@ -1578,26 +1566,20 @@ class Status{
     bool gyro_init;
 
   public:
-    Status(NAV &_nav) : initalized(false), nav(_nav), gyro_index(0), gyro_init(false),
+    Helper(INS_GPS_NAV<INS_GPS> &_nav)
+        : status(UNINITIALIZED), nav(_nav), gyro_index(0), gyro_init(false),
         min_a_packets_for_init(options.has_initial_attitude ? 1 : 0x10),
         recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)){
     }
   
   public:
-    NAV &get_nav() {return nav;}
-    
-    void dump_label(){
-      if(!options.out_is_N_packet){
-        options.out() << "mode"
-            << ',' << "itow";
-        nav.label(options.out());
-        options.out() << endl;
-      }
+    void label(std::ostream &out) const {
+      if(options.out_is_N_packet){return;}
+      out << "mode"
+          << ',' << "itow";
+      nav.ins_gps->label(out);
+      out << endl;
     }
-    
-    enum dump_mode_t {
-      DUMP_UPDATE, DUMP_CORRECT, 
-    };
   
   protected:
     /**
@@ -1608,74 +1590,84 @@ class Status{
      * @param target NAV to be outputted
      */
     static void dump(
+        ostream &out,
         const char *label, const float_sylph_t &itow,
         const NAVData<float_sylph_t> &target){
       
       if(options.out_is_N_packet){
         char buf[SYLPHIDE_PAGE_SIZE];
         target.encode_N0(itow, buf);
-        options.out().write(buf, sizeof(buf));
+        out.write(buf, sizeof(buf));
         return;
       }
 
-      options.out() << label
+      out << label
           << ',' << itow
           << target << endl;
     }
 
-  public:
-    /**
-     * Dump state
-     *
-     * @param mode operation mode
-     * @param itow current time
-     */
-    void dump(const dump_mode_t mode, const float_sylph_t &itow){
+    template <class Base_INS_GPS>
+    void dump(ostream &out, const float_sylph_t &itow,
+        const INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps) const {
 
-      if(!initalized){return;}
-      
-      switch(mode){
-        case DUMP_UPDATE:
-          if(!options.dump_update){return;}
-          if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_BACK_PROPAGATION){
-            return; // When smoothing is activated, skip.
-          }
-          dump("TU", itow, nav);
-          break;
-        case DUMP_CORRECT:
-          if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_BACK_PROPAGATION){
-            // When smoothing is activated
-            NAV::history_t items(nav.history());
-            int index(0);
-            for(NAV::history_t::iterator it(items.begin());
-                it != items.end();
-                ++it, index++){
-              if(it->deltaT >= options.back_propagate_property.back_propagate_depth){
-                break;
-              }
-              const char *label;
-              if(index == 0){
-                if(!options.dump_correct){continue;}
-                label = "BP_MU";
-              }else{
-                if(!options.dump_update){continue;}
-                label = "BP_TU";
-              }
-              dump(label, itow + it->deltaT, *(it->nav));
+      // When smoothing is activated
+      switch(status){
+        case MEASUREMENT_UPDATED: {
+          typedef typename INS_GPS_Back_Propagate<Base_INS_GPS>::snapshots_t snapshots_t;
+          const snapshots_t &snapshots(ins_gps->get_snapshots());
+          int index(0);
+          for(typename snapshots_t::const_iterator it(snapshots.begin());
+              it != snapshots.end();
+              ++it, index++){
+            if(it->elapsedT_from_last_correct >= options.back_propagate_property.back_propagate_depth){
+              break;
             }
-            break;
+
+            const char *label;
+            if(index == 0){
+              if(!options.dump_correct){continue;}
+              label = "BP_MU";
+            }else{
+              if(!options.dump_update){continue;}
+              label = "BP_TU";
+            }
+            dump(out, label, itow + it->elapsedT_from_last_correct, it->ins_gps);
           }
-          
+          break;
+        }
+        default:
+          return;
+      }
+    }
+
+    void dump(ostream &out, const float_sylph_t &itow, void *) const {
+
+      switch(status){
+        case TIME_UPDATED:
+          if(!options.dump_update){return;}
+          dump(out, "TU", itow, *(nav.ins_gps));
+          break;
+        case MEASUREMENT_UPDATED:
           if(!options.dump_correct){return;}
-          dump("MU", itow, nav);
+          dump(out, "MU", itow, *(nav.ins_gps));
           break;
         default:
           return;
       }
-
-      options.out_debug() << itow << ',' << nav << endl;
     }
-    
+
+  public:
+    void dump(std::ostream &out) const {
+      if(status == UNINITIALIZED){return;}
+
+      const float_sylph_t &itow(recent_a_packets.back().itow);
+      dump(out, itow, nav.ins_gps);
+
+      options.out_debug() << itow << ',';
+      nav.inspect(options.out_debug());
+      options.out_debug() << endl;
+    }
+
     /**
      * Perform time update by using acceleration and angular speed obtained with accelerometer and gyro.
      * 
@@ -1683,7 +1675,7 @@ class Status{
      */
     void time_update(const A_Packet &a_packet){
 
-      if(initalized){
+      if(status >= JUST_INITIALIZED){
         const A_Packet &previous(recent_a_packets.back());
       
         { // for LAE
@@ -1704,6 +1696,7 @@ class Status{
         }
 
         nav.update(a_packet.accel, a_packet.omega, interval);
+        status = TIME_UPDATED;
       }
 
       recent_a_packets.push_back(a_packet);
@@ -1718,11 +1711,11 @@ class Status{
      * @param g_packet observation data of GPS receiver
      */
     void measurement_update(const G_Packet &g_packet){
-      
+
       if(g_packet.solution.sigma_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
         return;
       }
-      if(initalized){
+      if(status >= JUST_INITIALIZED){
         cerr << "MU : " << setprecision(10) << g_packet.itow << endl;
         
         // calculate GPS data timing;
@@ -1751,6 +1744,7 @@ class Status{
             nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
           }
         }
+        status = MEASUREMENT_UPDATED;
       }else if((current_processor == processors.front())
           && (recent_a_packets.size() >= min_a_packets_for_init)
           && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
@@ -1796,7 +1790,7 @@ class Status{
         }
         
         cerr << "Init : " << setprecision(10) << g_packet.itow << endl;
-        initalized = true;
+        status = JUST_INITIALIZED;
         nav.init(
             g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height,
             g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d,
@@ -1805,12 +1799,8 @@ class Status{
             << rad2deg(yaw) << ", "
             << rad2deg(pitch) << ", "
             << rad2deg(roll) << endl;
-        
-        dump_label();
       }
     }
-    
-    bool is_initalized(){return initalized;}
 };
 
 void loop(){
@@ -1837,8 +1827,8 @@ void loop(){
     }
   } nav_manager;
   
-  Status status(*(nav_manager.nav));
-  
+  nav_manager.nav->label(options.out());
+
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
     // Realtime mode supports only one stream.
     current_processor = processors.front();
@@ -1848,8 +1838,8 @@ void loop(){
       if(proc.a_packet_updated){
         proc.a_packet_updated = false;
         A_Packet &packet(proc.a_packets.back());
-        status.time_update(packet);
-        status.dump(Status::DUMP_UPDATE, packet.itow);
+        nav_manager.nav->update(packet);
+        options.out() << *(nav_manager.nav);
       }else if(current_processor->g_packet_updated){
         proc.g_packet_updated = false;
         G_Packet &packet(proc.g_packet);
@@ -1860,8 +1850,8 @@ void loop(){
             started = true;
           }
         }
-        status.measurement_update(packet);
-        status.dump(Status::DUMP_CORRECT, packet.itow);
+        nav_manager.nav->update(packet);
+        options.out() << *(nav_manager.nav);
         if(!options.is_time_before_end(packet.itow, proc.g_packet_wn)){
           break;
         }
@@ -1936,22 +1926,22 @@ void loop(){
       for(; 
           (it_tu != it_tu_end) && (it_tu->itow < g_packet.itow);
           ++it_tu){
-        status.time_update(*it_tu);
-        status.dump(Status::DUMP_UPDATE, it_tu->itow);
+        nav_manager.nav->update(*it_tu);
+        options.out() << *(nav_manager.nav);
       }
       
       // Time update up to the GPS observation
       if(a_packet_deque_has_item){
         A_Packet interpolation((it_tu != it_tu_end) ? *it_tu : *(it_tu - 1));
         interpolation.itow = g_packet.itow;
-        status.time_update(interpolation);
+        nav_manager.nav->update(interpolation);
       }
       
       a_packets.erase(a_packets.begin(), it_tu);
       
       // Measurement update
-      status.measurement_update(g_packet);
-      status.dump(Status::DUMP_CORRECT, g_packet.itow);
+      nav_manager.nav->update(g_packet);
+      options.out() << *(nav_manager.nav);
 
       latest_measurement_update_itow = g_packet.itow;
       latest_measurement_update_gpswn = current_processor->g_packet_wn;
