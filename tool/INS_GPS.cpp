@@ -1549,18 +1549,29 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     } status;
     INS_GPS_NAV<INS_GPS> &nav;
     const int min_a_packets_for_init; // must be greater than 0
-    deque<A_Packet> recent_a_packets;
-    const unsigned int max_recent_a_packets;
+    typedef deque<A_Packet> recent_a_packets_t;
+    recent_a_packets_t recent_a_packets;
+    const int max_recent_a_packets;
 
-  // Used for compensation of lever arm effect
-  protected:
-    Vector3<float_sylph_t> gyro_storage[16];
-    int gyro_index;
-    bool gyro_init;
+    template <class Container>
+    static typename Container::const_iterator nearest(
+        const Container &packets_time_series, const float_sylph_t &itow,
+        const unsigned int &group_size = 1){
+      typename Container::const_iterator
+          it_head(packets_time_series.begin()),
+          it_eval(it_head + (group_size / 2)),
+          it_end(packets_time_series.end());
+      for(int i(distance(it_head, it_end));
+          i > group_size;
+          i--, it_head++, it_eval++){
+        if(it_eval->itow >= itow){break;}
+      }
+      return it_head;
+    }
 
   public:
     Helper(INS_GPS_NAV<INS_GPS> &_nav)
-        : status(UNINITIALIZED), nav(_nav), gyro_index(0), gyro_init(false),
+        : status(UNINITIALIZED), nav(_nav),
         min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
         recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)){
     }
@@ -1670,14 +1681,6 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       if(status >= JUST_INITIALIZED){
         const A_Packet &previous(recent_a_packets.back());
-      
-        { // for LAE
-          gyro_storage[gyro_index++] = a_packet.omega;
-          if(gyro_index == (sizeof(gyro_storage) / sizeof(gyro_storage[0]))){
-            gyro_index = 0;
-            if(!gyro_init) gyro_init = true;
-          }
-        }
 
         // Check interval from the last time update
         float_sylph_t interval(previous.interval(a_packet));
@@ -1778,12 +1781,14 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
         float_sylph_t gps_advance(recent_a_packets.back().interval(g_packet));
 
-        if(gyro_init && (current_processor->lever_arm())){ // When use lever arm effect.
+        if(current_processor->lever_arm()){ // When use lever arm effect.
           Vector3<float_sylph_t> omega_b2i_4n;
-          for(int i(0); i < (sizeof(gyro_storage) / sizeof(gyro_storage[0])); i++){
-            omega_b2i_4n += gyro_storage[i];
+          int packets_for_mean(0x10), i(0);
+          recent_a_packets_t::const_iterator it(nearest(recent_a_packets, g_packet.itow, packets_for_mean));
+          for(; (i < packets_for_mean) && (it != recent_a_packets.end()); i++, it++){
+            omega_b2i_4n += it->omega;
           }
-          omega_b2i_4n /= (sizeof(gyro_storage) / sizeof(gyro_storage[0]));
+          omega_b2i_4n /= i;
           nav.correct(
               g_packet,
               *(current_processor->lever_arm()),
