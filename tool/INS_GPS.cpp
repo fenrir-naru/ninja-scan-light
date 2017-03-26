@@ -205,8 +205,31 @@ struct Options : public GlobalOptions<float_sylph_t> {
   float_sylph_t yaw_correct_with_mag_when_speed_less_than_ms; ///< Threshold for yaw compensation; performing it when under this value [m/s], or ignored non-positive values
 
   // Manual initialization
-  bool has_initial_attitude; ///< Whether initial attitude is given.
-  float_sylph_t init_attitude_deg[3];   ///< Initial attitude [deg] (yaw, pitch, roll)
+  struct initial_attitude_t {
+    float_sylph_t yaw_deg, pitch_deg, roll_deg; ///< Initial attitude [deg] (yaw, pitch, roll)
+    enum mode_t {NOT_GIVEN = 0, YAW_ONLY = 1, YAW_PITCH = 2, FULL_GIVEN = 3} mode; ///< Whether initial attitude is given.
+    initial_attitude_t()
+        : yaw_deg(0), pitch_deg(0), roll_deg(0),
+        mode(NOT_GIVEN) {}
+    initial_attitude_t &parse(const char *spec){
+      int converted(std::sscanf(spec, "%lf,%lf,%lf",
+          &yaw_deg, &pitch_deg, &roll_deg));
+      if(converted > 0){mode = (mode_t)converted;}
+      return *this;
+    }
+    initial_attitude_t &parse_yaw(const char *spec){
+      yaw_deg = std::atof(spec);
+      mode = YAW_ONLY;
+      return *this;
+    }
+    friend std::ostream &operator<<(std::ostream &out, const initial_attitude_t &atti){
+      return out << "(yaw, pitch, roll) (args:"
+          << atti.mode << "): "
+          << atti.yaw_deg << ", "
+          << atti.pitch_deg << ", "
+          << atti.roll_deg;
+    }
+  } initial_attitude;
   std::istream *init_misc; ///< other manual initialization
   std::stringstream init_misc_buf; ///< buffer for init_misc string
 
@@ -225,13 +248,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
       use_magnet(false),
       mag_heading_accuracy_deg(3),
       yaw_correct_with_mag_when_speed_less_than_ms(5),
-      has_initial_attitude(false),
+      initial_attitude(),
       init_misc_buf(), init_misc(&init_misc_buf),
       debug_property() {
     realttime_property.rt_mode = INS_GPS_RealTime_Property::RT_LIGHT_WEIGHT;
-    for(int i(0); i < sizeof(init_attitude_deg) / sizeof(init_attitude_deg[0]); ++i){
-      init_attitude_deg[i] = 0;
-    }
   }
   ~Options(){}
 
@@ -311,20 +331,14 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     if(CHECK_KEY(init_attitude_deg)){
       const char *value(get_value(spec, key_length, false));
       if(!value){return false;}
-      int converted(std::sscanf(value, "%lf,%lf,%lf",
-          &init_attitude_deg[0], &init_attitude_deg[1], &init_attitude_deg[2]));
-      has_initial_attitude = true;
-      std::cerr.write(key, key_length) << " (yaw, pitch, roll) (args:"
-          << converted << "): "
-          << init_attitude_deg[0] << ", "
-          << init_attitude_deg[1] << ", "
-          << init_attitude_deg[2] << std::endl;
+      std::cerr.write(key, key_length)
+          << " " << initial_attitude.parse(value) << std::endl;
       return true;
     }
     CHECK_ALIAS(init-yaw-deg);
     CHECK_OPTION(init_yaw_deg, false,
-        init_attitude_deg[0] = atof(value),
-        init_attitude_deg[0] << " [deg]");
+        initial_attitude.parse_yaw(value),
+        initial_attitude.yaw_deg << " [deg]");
     CHECK_OPTION(init_misc, false,
         {init_misc_buf << value << std::endl; return true;},
         "");
@@ -1547,7 +1561,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
   public:
     Helper(INS_GPS_NAV<INS_GPS> &_nav)
         : status(UNINITIALIZED), nav(_nav), gyro_index(0), gyro_init(false),
-        min_a_packets_for_init(options.has_initial_attitude ? 1 : 0x10),
+        min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
         recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)){
     }
   
@@ -1694,11 +1708,11 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         const float_sylph_t &v_down){
 
       float_sylph_t
-          yaw(deg2rad(options.init_attitude_deg[0])),
-          pitch(deg2rad(options.init_attitude_deg[1])),
-          roll(deg2rad(options.init_attitude_deg[2]));
+          yaw(deg2rad(options.initial_attitude.yaw_deg)),
+          pitch(deg2rad(options.initial_attitude.pitch_deg)),
+          roll(deg2rad(options.initial_attitude.roll_deg));
 
-      if(!options.has_initial_attitude){
+      while(options.initial_attitude.mode < options.initial_attitude.FULL_GIVEN){
         // Estimate initial attitude by using accelerometer and magnetic sensor (if available) under static assumption
 
         typedef Vector3<float_sylph_t> vec_t;
@@ -1713,16 +1727,20 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         acc /= recent_a_packets.size();
         vec_t acc_reg(-acc / acc.abs());
 
+        // Estimate roll angle
+        roll = atan2(acc_reg[1], acc_reg[2]);
+        if(options.initial_attitude.mode >= options.initial_attitude.YAW_PITCH){break;}
+
         // Estimate pitch angle
         pitch = -asin(acc_reg[0]);
-        // Then estimate roll angle
-        roll = atan2(acc_reg[1], acc_reg[2]);
+        if(options.initial_attitude.mode >= options.initial_attitude.YAW_ONLY){break;}
 
         // Estimate yaw when magnetic sensor is available
         if(!current_processor->m_packets.empty()){
           yaw = nav.get_mag_yaw(current_processor->get_mag(itow), pitch, roll,
               latitude, longitude, height);
         }
+        break;
       }
 
       status = JUST_INITIALIZED;
