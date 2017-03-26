@@ -718,27 +718,6 @@ class INS_GPS_NAV : public NAV {
       return true;
     }
 
-    void init(
-        const float_sylph_t &latitude, 
-        const float_sylph_t &longitude, 
-        const float_sylph_t &height,
-        const float_sylph_t &v_north, 
-        const float_sylph_t &v_east, 
-        const float_sylph_t &v_down,
-        const float_sylph_t &yaw, 
-        const float_sylph_t &pitch, 
-        const float_sylph_t &roll){
-      
-      ins_gps->initPosition(latitude, longitude, height);
-      ins_gps->initVelocity(v_north, v_east, v_down);
-      ins_gps->initAttitude(yaw, pitch, roll);
-
-      for(char buf[0x4000]; !options.init_misc->eof(); ){ // Miscellaneous setup
-        options.init_misc->getline(buf, sizeof(buf));
-        init_misc(buf);
-      }
-    }
-
 #define MAKE_PROXY_FUNC(fname) \
 float_sylph_t fname() const {return ins_gps->fname();}
     MAKE_PROXY_FUNC(longitude);
@@ -1705,6 +1684,65 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
     }
 
+    void initialize(
+        const float_sylph_t &itow,
+        const float_sylph_t &latitude,
+        const float_sylph_t &longitude,
+        const float_sylph_t &height,
+        const float_sylph_t &v_north,
+        const float_sylph_t &v_east,
+        const float_sylph_t &v_down){
+
+      float_sylph_t
+          yaw(deg2rad(options.init_attitude_deg[0])),
+          pitch(deg2rad(options.init_attitude_deg[1])),
+          roll(deg2rad(options.init_attitude_deg[2]));
+
+      if(!options.has_initial_attitude){
+        // Estimate initial attitude by using accelerometer and magnetic sensor (if available) under static assumption
+
+        typedef Vector3<float_sylph_t> vec_t;
+
+        // Normalization
+        vec_t acc(0, 0, 0);
+        for(deque<A_Packet>::iterator it(recent_a_packets.begin());
+            it != recent_a_packets.end();
+            ++it){
+          acc += it->accel;
+        }
+        acc /= recent_a_packets.size();
+        vec_t acc_reg(-acc / acc.abs());
+
+        // Estimate pitch angle
+        pitch = -asin(acc_reg[0]);
+        // Then estimate roll angle
+        roll = atan2(acc_reg[1], acc_reg[2]);
+
+        // Estimate yaw when magnetic sensor is available
+        if(!current_processor->m_packets.empty()){
+          yaw = nav.get_mag_yaw(current_processor->get_mag(itow), pitch, roll,
+              latitude, longitude, height);
+        }
+      }
+
+      status = JUST_INITIALIZED;
+
+      cerr << "Init : " << setprecision(10) << itow << endl;
+      cerr << "Initial attitude (yaw, pitch, roll) [deg]: "
+          << rad2deg(yaw) << ", "
+          << rad2deg(pitch) << ", "
+          << rad2deg(roll) << endl;
+
+      nav.ins_gps->initPosition(latitude, longitude, height);
+      nav.ins_gps->initVelocity(v_north, v_east, v_down);
+      nav.ins_gps->initAttitude(yaw, pitch, roll);
+
+      for(char buf[0x4000]; !options.init_misc->eof(); ){ // Miscellaneous setup
+        options.init_misc->getline(buf, sizeof(buf));
+        nav.init_misc(buf);
+      }
+    }
+
     /**
      * Perform measurement update by using position and velocity obtained with GPS receiver.
      * 
@@ -1750,55 +1788,14 @@ class INS_GPS_NAV<INS_GPS>::Helper {
           && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
           && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
           && (g_packet.solution.sigma_height <= options.gps_threshold.init_acc_v)){
+
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
-        
-        float_sylph_t attitude[3];
-        for(int i(0); i < sizeof(attitude) / sizeof(attitude[0]); ++i){
-          attitude[i] = deg2rad(options.init_attitude_deg[i]);
-        }
-        float_sylph_t&yaw(attitude[0]), &pitch(attitude[1]), &roll(attitude[2]);
-        
-        while(!options.has_initial_attitude){
-          // Estimate initial attitude by using accelerometer and magnetic sensor (if available) under static assumption
-          
-          typedef Vector3<float_sylph_t> vec_t;
-          
-          // Normalization
-          vec_t acc(0, 0, 0);
-          for(deque<A_Packet>::iterator it(recent_a_packets.begin());
-              it != recent_a_packets.end();
-              ++it){
-            acc += it->accel;
-          }
-          acc /= recent_a_packets.size();
-          vec_t acc_reg(-acc / acc.abs());
-          
-          // Estimate pitch angle
-          pitch = -asin(acc_reg[0]);
-          // Then estimate roll angle
-          roll = atan2(acc_reg[1], acc_reg[2]);
-          
-          // Estimate yaw when magnetic sensor is available
-          if(!current_processor->m_packets.empty()){
-            yaw = nav.get_mag_yaw(current_processor->get_mag(g_packet.itow), pitch, roll,
-                g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height);
-          }
-          
-          break;
-        }
-        
-        cerr << "Init : " << setprecision(10) << g_packet.itow << endl;
-        status = JUST_INITIALIZED;
-        nav.init(
+        initialize(
+            g_packet.itow,
             g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height,
-            g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d,
-            yaw, pitch, roll);
-        cerr << "Initial attitude (yaw, pitch, roll) [deg]: "
-            << rad2deg(yaw) << ", "
-            << rad2deg(pitch) << ", "
-            << rad2deg(roll) << endl;
+            g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d);
       }
     }
 };
