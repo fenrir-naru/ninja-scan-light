@@ -25,18 +25,19 @@
 #include "GPS_SP.h"
 #include "coordinate.h"
 
-template <typename BaseINS>
+template <typename BaseINS, unsigned int Clocks>
 class INS_ClockErrorEstimated;
 
-template <class BaseINS>
-struct INS_Property<INS_ClockErrorEstimated<BaseINS> > {
+template <class BaseINS, unsigned int Clocks>
+struct INS_Property<INS_ClockErrorEstimated<BaseINS, Clocks> > {
+  static const unsigned CLOCKS_SUPPORTED = Clocks;
   static const unsigned STATE_VALUES_WITHOUT_CLOCK_ERROR = INS_Property<BaseINS>::STATE_VALUES;
-  static const unsigned STATE_VALUES_CLOCK_ERROR = 2;
+  static const unsigned STATE_VALUES_CLOCK_ERROR = 2 * CLOCKS_SUPPORTED;
   static const unsigned STATE_VALUES = STATE_VALUES_WITHOUT_CLOCK_ERROR + STATE_VALUES_CLOCK_ERROR;
 };
 
 template <
-    typename BaseINS = INS<> >
+    typename BaseINS = INS<>, unsigned int Clocks = 1>
 class INS_ClockErrorEstimated : public BaseINS {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
@@ -47,54 +48,66 @@ class INS_ClockErrorEstimated : public BaseINS {
     using typename BaseINS::vec3_t;
 #endif
 
-  protected:
-    float_t m_clock_error;  ///< receiver clock error [m]
-    float_t m_clock_error_rate;  ///< receiver clock error rate [m/s]
-
   public:
+    static const unsigned CLOCKS_SUPPORTED
+        = INS_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::CLOCKS_SUPPORTED;
     static const unsigned STATE_VALUES_WITHOUT_CLOCK_ERROR
-        = INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES_WITHOUT_CLOCK_ERROR;
+        = INS_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::STATE_VALUES_WITHOUT_CLOCK_ERROR;
     static const unsigned STATE_VALUES_CLOCK_ERROR
-        = INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES_CLOCK_ERROR;
+        = INS_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::STATE_VALUES_CLOCK_ERROR;
     static const unsigned STATE_VALUES
-        = INS_Property<INS_ClockErrorEstimated<BaseINS> >::STATE_VALUES; ///< Number of state values
+        = INS_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::STATE_VALUES; ///< Number of state values
     virtual unsigned state_values() const {return STATE_VALUES;}
 
+  protected:
+    float_t m_clock_error[CLOCKS_SUPPORTED];  ///< receiver clock error [m]
+    float_t m_clock_error_rate[CLOCKS_SUPPORTED];  ///< receiver clock error rate [m/s]
+
+  public:
     INS_ClockErrorEstimated()
-        : BaseINS(),
-          m_clock_error(0), m_clock_error_rate(0) {
+        : BaseINS() {
+      for(unsigned int i(0); i < CLOCKS_SUPPORTED; ++i){
+        m_clock_error[i] = 0;
+        m_clock_error_rate[i] = 0;
+      }
     }
 
     INS_ClockErrorEstimated(const INS_ClockErrorEstimated &orig, const bool deepcopy = false)
-        : BaseINS(orig, deepcopy),
-          m_clock_error(orig.m_clock_error), m_clock_error_rate(orig.m_clock_error_rate) {
+        : BaseINS(orig, deepcopy) {
+      for(unsigned int i(0); i < CLOCKS_SUPPORTED; ++i){
+        m_clock_error[i] = orig.m_clock_error[i];
+        m_clock_error_rate[i] = orig.m_clock_error_rate[i];
+      }
     }
 
     virtual ~INS_ClockErrorEstimated(){}
 
-    float_t &clock_error(){return m_clock_error;}
-    float_t &clock_error_rate(){return m_clock_error_rate;}
+    float_t &clock_error(const unsigned int &index = 0){return m_clock_error[index];}
+    float_t &clock_error_rate(const unsigned int &index = 0){return m_clock_error_rate[index];}
 
     using BaseINS::operator[];
 
     const float_t &operator[](const unsigned &index) const {
-      switch(index){
-        case STATE_VALUES_WITHOUT_CLOCK_ERROR:     return m_clock_error;
-        case STATE_VALUES_WITHOUT_CLOCK_ERROR + 1: return m_clock_error_rate;
-        default: return BaseINS::operator[](index);
+      int index_offset(index - STATE_VALUES_WITHOUT_CLOCK_ERROR);
+      if((index_offset >= 0) && (index_offset < STATE_VALUES_CLOCK_ERROR)){
+        int index_clock(index_offset >> 1);
+        return (index_offset & 1 == 0) ? m_clock_error[index_clock] : m_clock_error_rate[index_clock];
       }
+      return BaseINS::operator[](index);
     }
 
     void update(
         const vec3_t &accel, const vec3_t &gyro,
         const float_t &deltaT){
-      m_clock_error += m_clock_error_rate * deltaT;
+      for(unsigned int i(0); i < CLOCKS_SUPPORTED; ++i){
+        m_clock_error[i] += m_clock_error_rate[i] * deltaT;
+      }
       BaseINS::update(accel, gyro, deltaT);
     }
 };
 
-template <class BaseINS>
-class Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >
+template <class BaseINS, unsigned int Clocks>
+class Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >
     : public Filtered_INS2_Property<BaseINS> {
   public:
     static const unsigned P_SIZE_WITHOUT_CLOCK_ERROR
@@ -109,12 +122,12 @@ class Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >
         ;
     static const unsigned P_SIZE_CLOCK_ERROR
 #if defined(_MSC_VER)
-        = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
+        = INS_ClockErrorEstimated<BaseINS, Clocks>::STATE_VALUES_CLOCK_ERROR
 #endif
         ;
     static const unsigned Q_SIZE_CLOCK_ERROR
 #if defined(_MSC_VER)
-        = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR
+        = INS_ClockErrorEstimated<BaseINS, Clocks>::STATE_VALUES_CLOCK_ERROR
 #endif
         ;
     static const unsigned P_SIZE
@@ -130,28 +143,28 @@ class Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >
 };
 
 #if !defined(_MSC_VER)
-template <class BaseINS>
-const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::P_SIZE_WITHOUT_CLOCK_ERROR
+template <class BaseINS, unsigned int Clocks>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::P_SIZE_WITHOUT_CLOCK_ERROR
     = Filtered_INS2_Property<BaseINS>::P_SIZE;
 
-template <class BaseINS>
-const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::Q_SIZE_WITHOUT_CLOCK_ERROR
+template <class BaseINS, unsigned int Clocks>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::Q_SIZE_WITHOUT_CLOCK_ERROR
     = Filtered_INS2_Property<BaseINS>::Q_SIZE;
 
-template <class BaseINS>
-const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::P_SIZE_CLOCK_ERROR
+template <class BaseINS, unsigned int Clocks>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::P_SIZE_CLOCK_ERROR
     = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR;
 
-template <class BaseINS>
-const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::Q_SIZE_CLOCK_ERROR
+template <class BaseINS, unsigned int Clocks>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::Q_SIZE_CLOCK_ERROR
     = INS_ClockErrorEstimated<BaseINS>::STATE_VALUES_CLOCK_ERROR;
 
-template <class BaseINS>
-const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::P_SIZE
+template <class BaseINS, unsigned int Clocks>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::P_SIZE
     = P_SIZE_WITHOUT_CLOCK_ERROR + P_SIZE_CLOCK_ERROR;
 
-template <class BaseINS>
-const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS> >::Q_SIZE
+template <class BaseINS, unsigned int Clocks>
+const unsigned Filtered_INS2_Property<INS_ClockErrorEstimated<BaseINS, Clocks> >::Q_SIZE
     = Q_SIZE_WITHOUT_CLOCK_ERROR + Q_SIZE_CLOCK_ERROR;
 #endif
 
@@ -174,6 +187,7 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
     float_t m_beta_clock_error_rate;
 
   public:
+    using BaseFINS::ins_t::CLOCKS_SUPPORTED;
     using BaseFINS::ins_t::STATE_VALUES_WITHOUT_CLOCK_ERROR;
     using BaseFINS::ins_t::STATE_VALUES_CLOCK_ERROR;
     using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
@@ -210,11 +224,14 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
       BaseFINS::getAB(accel, gyro, res);
 
       { // A matrix modification
-        // Modify diagonal part of A associated with clock error
-        for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0); j < P_SIZE_CLOCK_ERROR; i++, j++){
-          res.A[i][i] += -(j == 0 ? m_beta_clock_error : m_beta_clock_error_rate);
+        // Modify A associated with clock error, then, rate
+        for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0);
+            j < CLOCKS_SUPPORTED; i += 2, j++){
+          // clock error
+          res.A[i][i] += (-m_beta_clock_error);
+          res.A[i][i + 1] += 1; // d(clock_error)/dt = clock_error_rate
+          res.A[i + 1][i + 1] += (-m_beta_clock_error_rate);
         }
-        res.A[P_SIZE_WITHOUT_CLOCK_ERROR][P_SIZE_WITHOUT_CLOCK_ERROR + 1] += 1; // d(clock_error)/dt = clock_error
       }
 
       { // B matrix modification
@@ -270,6 +287,8 @@ struct GPS_RawData {
   typedef GPS_SpaceNode<FloatT> space_node_t;
   const space_node_t &space_node;
 
+  const unsigned int clock_index;
+
   typedef GPS_SinglePositioning<float_sylph_t> solver_t;
   const solver_t solver;
 
@@ -283,7 +302,6 @@ struct GPS_RawData {
   typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
   typedef std::map<int, prn_obs_t> measurement_t;
   measurement_t measurement;
-
 
   static prn_obs_t difference(
       const prn_obs_t &operand, const prn_obs_t &argument,
@@ -302,8 +320,8 @@ struct GPS_RawData {
   typedef typename space_node_t::gps_time_t gps_time_t;
   gps_time_t gpstime;
 
-  GPS_RawData(const space_node_t &_space_node)
-      : space_node(_space_node),
+  GPS_RawData(const space_node_t &_space_node, const unsigned int &_clock_index = 0)
+      : space_node(_space_node), clock_index(_clock_index),
       solver(space_node), measurement(), gpstime() {}
   ~GPS_RawData(){}
 };
@@ -321,8 +339,9 @@ struct GPS_RawData {
 template <
   class FloatT,
   template <class> class Filter = KalmanFilterUD,
+  unsigned int Clocks = 1,
   typename BaseFINS = Filtered_INS_ClockErrorEstimated<
-      Filtered_INS2<INS_ClockErrorEstimated<INS<FloatT> >, Filter> >
+      Filtered_INS2<INS_ClockErrorEstimated<INS<FloatT>, Clocks>, Filter> >
 >
 class INS_GPS2_Tightly : public BaseFINS{
   public:
@@ -338,10 +357,10 @@ class INS_GPS2_Tightly : public BaseFINS{
     using typename BaseFINS::mat_t;
 #endif
   public:
-    INS_GPS2_Tightly() : BaseFINS(){}
+    INS_GPS2_Tightly() : BaseFINS() {}
 
     INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool deepcopy = false)
-        : BaseFINS(orig, deepcopy){
+        : BaseFINS(orig, deepcopy) {
     }
 
     ~INS_GPS2_Tightly(){}
@@ -350,6 +369,7 @@ class INS_GPS2_Tightly : public BaseFINS{
     typedef typename raw_data_t::space_node_t space_node_t;
     typedef typename raw_data_t::solver_t solver_t;
 
+    using BaseFINS::CLOCKS_SUPPORTED;
     using BaseFINS::P_SIZE;
     using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
 
@@ -368,15 +388,17 @@ class INS_GPS2_Tightly : public BaseFINS{
       // count up valid measurement, and make observation matrices
       int z_index(0);
 
-      typename raw_data_t::gps_time_t time_arrival(
-          gps.gpstime - BaseFINS::m_clock_error / space_node_t::light_speed);
-
-      typename solver_t::pos_t pos = {
-        BaseFINS::template xyz<typename solver_t::xyz_t>(),
-        typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
-      };
-
       while(true){
+        if(gps.clock_index < CLOCKS_SUPPORTED){break;}
+
+        typename raw_data_t::gps_time_t time_arrival(
+            gps.gpstime - BaseFINS::m_clock_error[gps.clock_index] / space_node_t::light_speed);
+
+        typename solver_t::pos_t pos = {
+          BaseFINS::template xyz<typename solver_t::xyz_t>(),
+          typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
+        };
+
         it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
         if(it_range == gps.measurement.end()){break;}
 
@@ -401,7 +423,7 @@ class INS_GPS2_Tightly : public BaseFINS{
           float_t range(it2_range->second);
           range = gps.solver.range_residual(
               sat, range, time_arrival,
-              pos, BaseFINS::m_clock_error,
+              pos, BaseFINS::m_clock_error[gps.clock_index],
               residual);
 
           { // setup H matrix
@@ -441,7 +463,7 @@ class INS_GPS2_Tightly : public BaseFINS{
                 H_serialized[z_index][k] += los_neg[i] * H_uh[i][j];
               }
             }
-            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR] = 1;
+            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2)] = 1;
           }
 
           if(weight < 1E-1){weight = 1E-1;}
@@ -472,7 +494,7 @@ class INS_GPS2_Tightly : public BaseFINS{
           ++z_index;
         }
         break;
-      };
+      }
 
       mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
       mat_t z(z_index, 1, (float_t *)z_serialized);

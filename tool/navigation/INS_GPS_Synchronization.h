@@ -298,10 +298,11 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
     template <
       class FloatT,
       template <class> class Filter,
+      unsigned int Receivers,
       typename BaseFINS
     >
     void correct_with_info(CorrectInfo<float_sylph_t> &info,
-        INS_GPS2_Tightly<FloatT, Filter, BaseFINS> *){
+        INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> *){
       if(info.z.rows() < 1){return;}
       correct_with_info(info);
     }

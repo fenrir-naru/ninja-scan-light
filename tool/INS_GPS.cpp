@@ -717,16 +717,20 @@ class INS_GPS_NAV : public NAV {
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
         static const unsigned NP(Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_WITHOUT_CLOCK_ERROR);
-        P(NP, NP) = 1E4; // TODO
-        P(NP + 1, NP + 1) = 1E2;
+        for(int i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_CLOCK_ERROR; i += 2){
+          P(NP + i,     NP + i)     = 1E4; // TODO
+          P(NP + i + 1, NP + i + 1) = 1E2;
+        }
         ins_gps->getFilter().setP(P);
       }
 
       {
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
         static const unsigned NQ(Filtered_INS_ClockErrorEstimated<BaseFINS>::Q_SIZE_WITHOUT_CLOCK_ERROR);
-        Q(NQ, NQ) = 1E3; // TODO
-        Q(NQ + 1, NQ + 1) = 1E1;
+        for(int i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_CLOCK_ERROR; i += 2){
+          Q(NQ + i,     NQ + i)     = 1E3; // TODO
+          Q(NQ + i + 1, NQ + i + 1) = 1E1;
+        }
         ins_gps->getFilter().setQ(Q);
       }
 
@@ -1056,11 +1060,15 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     void label2(
         std::ostream &out, const Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) const {
       label2(out, (const BaseFINS *)fins);
-      out << ',' << "receiver_clock_error"
-          << ',' << "receiver_clock_error_rate";
+      for(unsigned i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::CLOCKS_SUPPORTED; ++i){
+        out << ',' << "receiver_clock_error[" << i << "]"
+            << ',' << "receiver_clock_error_rate[" << i << "]";
+      }
       if(options.dump_stddev){
-        out << ',' << "s1(receiver_clock_error)"
-            << ',' << "s1(receiver_clock_error_rate)";
+        for(unsigned i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::CLOCKS_SUPPORTED; ++i){
+          out << ',' << "s1(receiver_clock_error[" << i << "])"
+              << ',' << "s1(receiver_clock_error_rate[" << i << "])";
+        }
       }
     }
 
@@ -1118,8 +1126,10 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     void dump2(
         std::ostream &out, const Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) const {
       dump2(out, (const BaseFINS *)fins);
-      out << ',' << const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->clock_error()
-          << ',' << const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->clock_error_rate();
+      for(unsigned i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::CLOCKS_SUPPORTED; ++i){
+        out << ',' << const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->clock_error(i)
+            << ',' << const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->clock_error_rate(i);
+      }
       if(options.dump_stddev){
         Matrix<float_sylph_t> &P(
             const_cast<Matrix<float_sylph_t> &>(
