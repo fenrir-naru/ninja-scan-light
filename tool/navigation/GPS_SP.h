@@ -183,6 +183,7 @@ class GPS_SinglePositioning {
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
+        ERROR_UNSOLVED,
         ERROR_IONO_PARAMS_INVALID,
         ERROR_INSUFFICIENT_SATELLITES,
         ERROR_POSITION_LS,
@@ -190,15 +191,17 @@ class GPS_SinglePositioning {
         ERROR_DOP,
         ERROR_VELOCITY_LS,
       } error_code;
-      llh_t user_position_llh;
+      gps_time_t receiver_time;
+      pos_t user_position;
       float_t receiver_error;
       enu_t user_velocity_enu;
       float_t receiver_error_rate;
       float_t gdop, pdop, hdop, vdop, tdop;
 
       user_pvt_t()
-          : error_code(ERROR_NO),
-            user_position_llh(), receiver_error(0),
+          : error_code(ERROR_UNSOLVED),
+            receiver_time(),
+            user_position(), receiver_error(0),
             user_velocity_enu(), receiver_error_rate(0) {}
     };
 
@@ -208,7 +211,7 @@ class GPS_SinglePositioning {
      * @param prn_range PRN, pseudo-range list
      * @param prn_rate PRN, pseudo-range rate list
      * @param receiver_time receiver time at measurement
-     * @param user_position_init initial solution of user position in meters
+     * @param user_position_init initial solution of user position in XYZ meters and LLH
      * @param receiver_error_init initial solution of receiver clock error in meters
      * @param good_init if true, initial position and clock error are goodly guessed.
      * @param with_velocity if true, perform velocity estimation.
@@ -219,12 +222,13 @@ class GPS_SinglePositioning {
         const prn_obs_t &prn_range,
         const prn_obs_t &prn_rate,
         const gps_time_t &receiver_time,
-        const xyz_t &user_position_init,
+        const pos_t &user_position_init,
         const float_t &receiver_error_init,
         const bool &good_init = true,
         const bool &with_velocity = true) const {
 
       user_pvt_t res;
+      res.receiver_time = receiver_time;
 
       if(!_space_node.is_valid_iono_utc()){
         res.error_code = user_pvt_t::ERROR_IONO_PARAMS_INVALID;
@@ -254,11 +258,11 @@ class GPS_SinglePositioning {
         return res;
       }
 
-      pos_t user_position = {user_position_init, user_position_init.llh()};
-      float_t receiver_error(receiver_error_init);
+      res.user_position = user_position_init;
+      res.receiver_error = receiver_error_init;
 
       gps_time_t time_arrival(
-          receiver_time - (receiver_error / space_node_t::light_speed));
+          receiver_time - (res.receiver_error / space_node_t::light_speed));
 
       geometric_matrices_t geomat(available_sat_range.size());
       sat_obs_t available_sat_pseudorange;
@@ -284,7 +288,7 @@ class GPS_SinglePositioning {
           float_t range(it->second);
 
           range = range_residual(sat, range, time_arrival,
-              user_position, receiver_error,
+              res.user_position, res.receiver_error,
               residual,
               i <= 0);
 
@@ -313,11 +317,11 @@ class GPS_SinglePositioning {
           matrix_t delta_x(geomat.least_square());
 
           xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
-          user_position.xyz += delta_user_position;
-          user_position.llh = user_position.xyz.llh();
+          res.user_position.xyz += delta_user_position;
+          res.user_position.llh = res.user_position.xyz.llh();
 
           float_t delta_receiver_error(delta_x(3, 0));
-          receiver_error += delta_receiver_error;
+          res.receiver_error += delta_receiver_error;
           time_arrival -= (delta_receiver_error / space_node_t::light_speed);
 
           if(delta_user_position.dist() <= 1E-6){
@@ -334,9 +338,6 @@ class GPS_SinglePositioning {
         res.error_code = user_pvt_t::ERROR_POSITION_NOT_CONVERGED;
         return res;
       }
-
-      res.user_position_llh = user_position.llh;
-      res.receiver_error = receiver_error;
 
       try{
         matrix_t C((geomat.G.transpose() * geomat.G).inverse());
@@ -401,7 +402,8 @@ class GPS_SinglePositioning {
           // Least square
           matrix_t sol(geomat2.least_square());
 
-          res.user_velocity_enu = enu_t::relative_rel(xyz_t(sol.partial(3, 1, 0, 0)), user_position.llh);
+          res.user_velocity_enu = enu_t::relative_rel(
+              xyz_t(sol.partial(3, 1, 0, 0)), res.user_position.llh);
           res.receiver_error_rate = sol(3, 0);
         }catch(std::exception &e){
           res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
@@ -409,7 +411,36 @@ class GPS_SinglePositioning {
         }
       }
 
+      res.error_code = user_pvt_t::ERROR_NO;
       return res;
+    }
+
+    /**
+     * Calculate User position/velocity with hint
+     *
+     * @param prn_range PRN, pseudo-range list
+     * @param prn_rate PRN, pseudo-range rate list
+     * @param receiver_time receiver time at measurement
+     * @param user_position_init_xyz initial solution of user position in meters
+     * @param receiver_error_init initial solution of receiver clock error in meters
+     * @param good_init if true, initial position and clock error are goodly guessed.
+     * @param with_velocity if true, perform velocity estimation.
+     * @return calculation results and matrices used for calculation
+     * @see update_ephemeris(), register_ephemeris
+     */
+    user_pvt_t solve_user_pvt(
+        const prn_obs_t &prn_range,
+        const prn_obs_t &prn_rate,
+        const gps_time_t &receiver_time,
+        const xyz_t &user_position_init_xyz,
+        const float_t &receiver_error_init,
+        const bool &good_init = true,
+        const bool &with_velocity = true) const {
+      pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
+      return solve_user_pvt(
+          prn_range, prn_rate, receiver_time,
+          user_position_init, receiver_error_init,
+          good_init, with_velocity);
     }
 
     /**

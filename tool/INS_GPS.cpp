@@ -531,10 +531,27 @@ struct G_Packet_Raw : public G_Packet {
   solver_t::user_pvt_t pvt;
 
   bool update_solution(){
-    pvt = raw_data.solver.solve_user_pvt(
-        raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
-        raw_data.measurement[raw_data_t::L1_RANGE_RATE],
-        raw_data.gpstime);
+    while(true){
+      if(pvt.error_code == solver_t::user_pvt_t::ERROR_NO){
+        float_sylph_t delta_t(std::abs(raw_data.gpstime - pvt.receiver_time));
+        if(delta_t < 5E-3){ // 5 ms
+          return true; // already updated
+        }else if(delta_t < 300){ // 300 sec
+          pvt = raw_data.solver.solve_user_pvt(
+              raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
+              raw_data.measurement[raw_data_t::L1_RANGE_RATE],
+              raw_data.gpstime,
+              pvt.user_position,
+              pvt.receiver_error);
+          break;
+        }
+      }
+      pvt = raw_data.solver.solve_user_pvt(
+          raw_data.measurement[raw_data_t::L1_PSEUDORANGE],
+          raw_data.measurement[raw_data_t::L1_RANGE_RATE],
+          raw_data.gpstime);
+      break;
+    }
     if(pvt.error_code != solver_t::user_pvt_t::ERROR_NO){
       return false;
     }
@@ -544,9 +561,9 @@ struct G_Packet_Raw : public G_Packet {
     solution.v_e = pvt.user_velocity_enu.east();
     solution.v_d = -pvt.user_velocity_enu.up();
     //solution.sigma_vel;
-    solution.latitude = pvt.user_position_llh.latitude();
-    solution.longitude = pvt.user_position_llh.longitude();
-    solution.height = pvt.user_position_llh.height();
+    solution.latitude = pvt.user_position.llh.latitude();
+    solution.longitude = pvt.user_position.llh.longitude();
+    solution.height = pvt.user_position.llh.height();
     //solution.sigma_2d;
     //solution.sigma_height;
     return true;
