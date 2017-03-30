@@ -384,6 +384,22 @@ class NAV : public NAVData<float_sylph_t> {
       return *this;
     }
 
+    template <class Container>
+    static typename Container::const_iterator nearest(
+        const Container &packets_time_series, const float_sylph_t &itow,
+        const unsigned int &group_size = 1){
+      typename Container::const_iterator
+          it_head(packets_time_series.begin()),
+          it_eval(it_head + (group_size / 2)),
+          it_end(packets_time_series.end());
+      for(int i(distance(it_head, it_end));
+          i > group_size;
+          i--, it_head++, it_eval++){
+        if(it_eval->itow >= itow){break;}
+      }
+      return it_head;
+    }
+
     /**
      * Estimate yaw correction angle by using magnetic sensor values
      *
@@ -1460,41 +1476,6 @@ class StreamProcessor
       return true;
     }
 
-    Vector3<float_sylph_t> get_mag() {
-      return m_packets.empty()
-          ? Vector3<float_sylph_t>(1, 0, 0) // heading is north
-          : m_packets.back().mag;
-    }
-
-    Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
-      if(m_packets.size() < 2){
-        return Vector3<float_sylph_t>(1, 0, 0); // heading is north
-      }
-      deque<M_Packet>::iterator
-          previous_it(m_packets.begin()),
-          next_it(m_packets.begin() + 1);
-      for(int i(distance(previous_it, m_packets.end()));
-          i > 2;
-          i--, previous_it++, next_it++){
-        if(next_it->itow >= itow){break;}
-      }
-      float_sylph_t
-          weight_previous((next_it->itow - itow) / (next_it->itow - previous_it->itow)),
-          weight_next(1. - weight_previous);
-      /* Reduce excessive extrapolation.
-       * The extrapolation is required, because M page combines several samples which are sometimes obtained late.
-       * The threshold is +/- 2 steps.
-       */
-      if(weight_previous > 3){
-        weight_previous = 1;
-        weight_next = 0;
-      }else if(weight_next > 3){
-        weight_next = 1;
-        weight_previous = 0;
-      }
-      return (previous_it->mag * weight_previous) + (next_it->mag * weight_next);
-    }
-
     bool check_spec(const char *spec){
       const char *value;
       if(value = Options::get_value(spec, "calib_file", false)){ // calibration file
@@ -1553,20 +1534,28 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     recent_a_packets_t recent_a_packets;
     const int max_recent_a_packets;
 
-    template <class Container>
-    static typename Container::const_iterator nearest(
-        const Container &packets_time_series, const float_sylph_t &itow,
-        const unsigned int &group_size = 1){
-      typename Container::const_iterator
-          it_head(packets_time_series.begin()),
-          it_eval(it_head + (group_size / 2)),
-          it_end(packets_time_series.end());
-      for(int i(distance(it_head, it_end));
-          i > group_size;
-          i--, it_head++, it_eval++){
-        if(it_eval->itow >= itow){break;}
+    Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
+      if(current_processor->m_packets.size() < 2){
+        return Vector3<float_sylph_t>(1, 0, 0); // heading is north
       }
-      return it_head;
+      deque<M_Packet>::const_iterator
+          it_a(nearest(current_processor->m_packets, itow, 2)),
+          it_b(it_a + 1);
+      float_sylph_t
+          weight_a((it_b->itow - itow) / (it_b->itow - it_a->itow)),
+          weight_b(1. - weight_a);
+      /* Reduce excessive extrapolation.
+       * The extrapolation is required, because M page combines several samples which are sometimes obtained late.
+       * The threshold is +/- 2 steps.
+       */
+      if(weight_a > 3){
+        weight_a = 1;
+        weight_b = 0;
+      }else if(weight_b > 3){
+        weight_b = 1;
+        weight_a = 0;
+      }
+      return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
 
   public:
@@ -1740,7 +1729,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
         // Estimate yaw when magnetic sensor is available
         if(!current_processor->m_packets.empty()){
-          yaw = nav.get_mag_yaw(current_processor->get_mag(itow), pitch, roll,
+          yaw = nav.get_mag_yaw(get_mag(itow), pitch, roll,
               latitude, longitude, height);
         }
         break;
@@ -1802,7 +1791,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
               && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
-            nav.correct_yaw(nav.get_mag_delta_yaw(current_processor->get_mag(g_packet.itow)));
+            nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
           }
         }
         status = MEASUREMENT_UPDATED;
