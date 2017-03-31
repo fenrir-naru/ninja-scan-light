@@ -49,6 +49,7 @@
 #define USE_ARRAY2D_ITERATOR
 
 #include <string>
+#include <cstring>
 #include <exception>
 
 /**
@@ -217,9 +218,14 @@ class Array2D{
      * @param column 列インデックス(開始番号は0～)
      * @return (T) 成分
      */
+    virtual const T &operator()(
+        const unsigned int &row,
+        const unsigned int &column) const throw(StorageException) = 0;
     virtual T &operator()(
         const unsigned int &row,
-        const unsigned int &column) throw(StorageException) = 0;
+        const unsigned int &column) throw(StorageException){
+      return const_cast<T &>(static_cast<const self_t &>(*this)(row, column));
+    }
     
     template <class IteratorGenerator>
     void iterate_operation(const IteratorGenerator &gen, void (*op)(T &t)) {
@@ -308,8 +314,8 @@ class Array2D{
 #ifdef USE_ARRAY2D_ITERATOR
       all_elements(array2d_clear);
 #else
-      for(unsigned int i = 0; i < rows(); i++){
-        for(unsigned int j = 0; j < columns(); j++){
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
           array2d_clear(this->operator()(i, j));
         }
       }
@@ -383,12 +389,12 @@ class Array2D_Dense : public Array2D<T> {
      *
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
-     * @return (T) 成分
+     * @return (const T &) 成分
      * @throw StorageException 参照インデックスが不正の場合
      */
-    T &operator()(
+    const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) throw(StorageException){
+        const unsigned int &column) const throw(StorageException){
       if((row >= rows()) || (column >= columns())){
         throw StorageException("Index incorrect");
       }
@@ -515,7 +521,7 @@ class Array2D_Dense : public Array2D<T> {
 
 template <class T>
 void array2d_copy(Array2D_Dense<T> *dist, const T *src){
-  memcpy(dist->buffer(), src,
+  std::memcpy(dist->buffer(), src,
       sizeof(T) * dist->rows() * dist->columns());
 }
 
@@ -604,12 +610,12 @@ class Array2D_Delegate : public Array2D<T>{
      *
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
-     * @return (T) 成分
+     * @return (const T &) 成分
      * @throw StorageException インデックスが不正の場合
      */
-    T &operator()(
+    const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) throw(StorageException){
+        const unsigned int &column) const throw(StorageException){
       return m_target->operator()(row, column);
     }
     
@@ -705,10 +711,10 @@ class Array2D_CoFactor : public Array2D_Delegate<T>{
      * @throw StorageException 何らかの例外が発生した場合
      */
     Array2D_CoFactor(const Array2D<T> &array,
-                    const unsigned int &rowCoFactor,
-                    const unsigned int &columnCoFactor) throw(StorageException)
-                       : Array2D_Delegate<T>(array.rows() - 1, array.columns() - 1, array),
-                         m_RowCoFactor(rowCoFactor), m_ColumnCoFactor(columnCoFactor){}
+        const unsigned int &rowCoFactor,
+        const unsigned int &columnCoFactor) throw(StorageException)
+        : Array2D_Delegate<T>(array.rows() - 1, array.columns() - 1, array),
+        m_RowCoFactor(rowCoFactor), m_ColumnCoFactor(columnCoFactor){}
 
     /**
      * コピーコンストラクタ。
@@ -717,7 +723,7 @@ class Array2D_CoFactor : public Array2D_Delegate<T>{
      * @throw StorageException
      */
     Array2D_CoFactor(const Array2D_CoFactor &array) throw(StorageException)
-      : Array2D_Delegate<T>(array),
+        : Array2D_Delegate<T>(array),
         m_RowCoFactor(array.row_cofactor()), m_ColumnCoFactor(array.column_cofactor()){}
 
     /**
@@ -725,12 +731,12 @@ class Array2D_CoFactor : public Array2D_Delegate<T>{
      *
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
-     * @return (T) 成分
+     * @return (const T &) 成分
      * @throw StorageException インデックスが不正な場合など
      */
-    T &operator()(
+    const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) throw(StorageException){
+        const unsigned int &column) const throw(StorageException){
       return Array2D_Delegate<T>::operator()(
           (row < row_cofactor() ? row : row + 1), (column < column_cofactor() ? column : column + 1));
     }
@@ -779,12 +785,12 @@ class Array2D_Transpose : public Array2D_Delegate<T>{
      *
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
-     * @return (T) 成分
+     * @return (const T &) 成分
      * @throw StorageException インデックスが不正な場合など
      */
-    T &operator()(
+    const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) throw(StorageException){
+        const unsigned int &column) const throw(StorageException){
       return Array2D_Delegate<T>::operator()(column, row);
     }
     
@@ -846,13 +852,13 @@ class Array2D_Partial : public Array2D_Delegate<T>{
      * @param columnOffset 同じく列インデックス
      * @throw StorageException 何らかの例外が発生した場合
      */
-    Array2D_Partial(const unsigned int &rows,
-                    const unsigned int &columns,
-                    const Array2D<T> &array,
-                    const unsigned int &rowOffset,
-                    const unsigned int &columnOffset) throw(StorageException)
-                       : Array2D_Delegate<T>(rows, columns, array),
-                         m_RowOffset(rowOffset), m_ColumnOffset(columnOffset){}
+    Array2D_Partial(
+        const unsigned int &rows, const unsigned int &columns,
+        const Array2D<T> &array,
+        const unsigned int &rowOffset, const unsigned int &columnOffset)
+        throw(StorageException)
+        : Array2D_Delegate<T>(rows, columns, array),
+        m_RowOffset(rowOffset), m_ColumnOffset(columnOffset){}
 
     /**
      * コピーコンストラクタ。
@@ -861,7 +867,7 @@ class Array2D_Partial : public Array2D_Delegate<T>{
      * @throw StorageException
      */
     Array2D_Partial(const Array2D_Partial &array) throw(StorageException)
-      : Array2D_Delegate<T>(array),
+        : Array2D_Delegate<T>(array),
         m_RowOffset(array.row_offset()), m_ColumnOffset(array.column_offset()){}
 
     /**
@@ -869,12 +875,12 @@ class Array2D_Partial : public Array2D_Delegate<T>{
      *
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
-     * @return (T) 成分
+     * @return (const T &) 成分
      * @throw StorageException インデックスが不正な場合など
      */
-    T &operator()(
+    const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) throw(StorageException){
+        const unsigned int &column) const throw(StorageException){
       return Array2D_Delegate<T>::operator()(
           row + row_offset(), column + column_offset());
     }
@@ -1052,13 +1058,18 @@ class Matrix{
      *
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
-     * @return (T) 成分
+     * @return (const T &) 成分
      * @throw MatrixException インデックスが不正な場合など
      */
+    const T &operator()(
+        const unsigned int &row,
+        const unsigned int &column) const throw(MatrixException){
+      return m_Storage->operator()(row, column);
+    }
     T &operator()(
         const unsigned int &row,
         const unsigned int &column) throw(MatrixException){
-      return m_Storage->operator()(row, column);
+      return const_cast<T &>(static_cast<const self_t &>(*this)(row, column));
     }
     /**
      * 指定した行列成分を返します。(Matlab風味)
@@ -1086,8 +1097,7 @@ class Matrix{
         }
         for(unsigned int i(0); i < rows(); i++){
           for(unsigned int j(0); j < columns(); j++){
-            if(const_cast<self_t &>(*this)(i, j)
-                != const_cast<self_t &>(matrix)(i, j)){
+            if((*this)(i, j) != matrix(i, j)){
               return false;
             }
           }
@@ -1118,7 +1128,7 @@ class Matrix{
      */
     static self_t getScalar(const unsigned int &size, const T &scalar){
       self_t result(size, size);
-      for(unsigned int i = 0; i < size; i++){result(i, i) = scalar;}
+      for(unsigned int i(0); i < size; i++){result(i, i) = scalar;}
       return result;
     }
 
@@ -1154,10 +1164,10 @@ class Matrix{
      *
      */
     PartialMatrix<T> partial(
-          const unsigned int &rowSize,
-          const unsigned int &columnSize,
-          const unsigned int &rowOffset,
-          const unsigned int &columnOffset) const throw(MatrixException){
+        const unsigned int &rowSize,
+        const unsigned int &columnSize,
+        const unsigned int &rowOffset,
+        const unsigned int &columnOffset) const throw(MatrixException){
       if((rowOffset < 0) || (columnOffset < 0)
           || (rowSize + rowOffset > rows()) || (columnSize + columnOffset > columns())){
         throw MatrixException("Index Incorrect!!");
@@ -1199,10 +1209,10 @@ class Matrix{
     self_t &exchangeRows(const unsigned int &row1, const unsigned int &row2) throw(MatrixException){
       if(row1 >= rows() || row2 >= rows()){throw MatrixException("Index incorrect");}
       T temp;
-      for(unsigned int j = 0; j < columns(); j++){
-      	temp = (*this)(row1, j);
-      	(*this)(row1, j) = (*this)(row2, j);
-      	(*this)(row2, j) = temp;
+      for(unsigned int j(0); j < columns(); j++){
+        temp = (*this)(row1, j);
+        (*this)(row1, j) = (*this)(row2, j);
+        (*this)(row2, j) = temp;
       }
       return *this;
     }
@@ -1218,10 +1228,10 @@ class Matrix{
     self_t &exchangeColumns(const unsigned int &column1, const unsigned int &column2){
       if(column1 >= columns() || column2 >= columns()){throw MatrixException("Index incorrect");}
       T temp;
-      for(unsigned int i = 0; i < rows(); i++){
-				temp = (*this)(i, column1);
-      	(*this)(i, column1) = (*this)(i, column2);
-      	(*this)(i, column2) = temp;
+      for(unsigned int i(0); i < rows(); i++){
+        temp = (*this)(i, column1);
+        (*this)(i, column1) = (*this)(i, column2);
+        (*this)(i, column2) = temp;
       }
       return *this;
     }
@@ -1240,10 +1250,9 @@ class Matrix{
      */
     bool isDiagonal() const{
       if(isSquare()){
-        for(unsigned int i = 0; i < rows(); i++){
-          for(unsigned int j = i + 1; j < columns(); j++){
-            if((const_cast<self_t &>(*this)(i, j) != T(0))
-                || (const_cast<self_t &>(*this)(j, i) != T(0))){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(i + 1); j < columns(); j++){
+            if(((*this)(i, j) != T(0)) || ((*this)(j, i) != T(0))){
               return false;
             }
           }
@@ -1258,14 +1267,14 @@ class Matrix{
      * @return (bool) 対称行列である場合true、それ以外の場合false
      */
     bool isSymmetric() const{
-    	if(isSquare()){
-    		for(unsigned int i = 0; i < rows(); i++){
-    			for(unsigned int j = i + 1; j < columns(); j++){
-    				if((*const_cast<Matrix *>(this))(i, j) != (*const_cast<Matrix *>(this))(j, i)){return false;}
-    			}
-    		}
-    		return true;
-    	}else{return false;}
+      if(isSquare()){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(i + 1); j < columns(); j++){
+            if((*this)(i, j) != (*this)(j, i)){return false;}
+          }
+        }
+        return true;
+      }else{return false;}
     }
 
     /**
@@ -1288,7 +1297,7 @@ class Matrix{
       if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
       T tr(0);
       for(unsigned i(0); i < rows(); i++){
-        tr += (*const_cast<self_t *>(this))(i, i);
+        tr += (*this)(i, i);
       }
       return tr;
     }
@@ -1311,8 +1320,8 @@ class Matrix{
       ScalarMultiplier op(scalar);
       m_Storage->all_elements(op);
 #else
-      for(unsigned int i = 0; i < rows(); i++){
-        for(unsigned int j = 0; j < columns(); j++){
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
           (*this)(i, j) *= scalar;
         }
       }
@@ -1379,13 +1388,13 @@ class Matrix{
       PlusEqual op(*this);
       matrix.m_Storage->all_elements(op);
 #else
-      for(unsigned int i = 0; i < rows(); i++){
-    		for(unsigned int j = 0; j < columns(); j++){
-          (*this)(i, j) += (const_cast<self_t &>(matrix))(i, j);
-    		}
-  		}
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
+          (*this)(i, j) += matrix(i, j);
+        }
+      }
 #endif
-  		return *this;
+      return *this;
     }
 
     /**
@@ -1413,18 +1422,18 @@ class Matrix{
      * @return (self_t) 自分自身
      */
     self_t &operator-=(const self_t &matrix){
-    	if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
+      if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
 #ifdef USE_ARRAY2D_ITERATOR
-		  MinusEqual op(*this);
+      MinusEqual op(*this);
       matrix.m_Storage->all_elements(op);
 #else
-		  for(unsigned int i = 0; i < rows(); i++){
-        for(unsigned int j = 0; j < columns(); j++){
-          (*this)(i, j) -= (const_cast<self_t &>(matrix))(i, j);
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
+          (*this)(i, j) -= matrix(i, j);
         }
       }
 #endif
-  		return *this;
+      return *this;
     }
 
     /**
@@ -1447,15 +1456,11 @@ class Matrix{
         throw MatrixException("Operation void!!");
       }
       self_t result(self_t::naked(rows(), matrix.columns()));
-      for(unsigned int i = 0; i < result.rows(); i++){
-        for(unsigned int j = 0; j < result.columns(); j++){
-          result(i, j)
-              = ((*const_cast<self_t *>(this))(i, 0)
-                * (const_cast<self_t &>(matrix))(0, j));
+      for(unsigned int i(0); i < result.rows(); i++){
+        for(unsigned int j(0); j < result.columns(); j++){
+          result(i, j) = (*this)(i, 0) * matrix(0, j);
           for(unsigned int k(1); k < columns(); k++){
-            result(i, j)
-                += ((*const_cast<self_t *>(this))(i, k)
-                  * (const_cast<self_t &>(matrix))(k, j));
+            result(i, j) += ((*this)(i, k) * matrix(k, j));
           }
         }
       }
@@ -1519,14 +1524,13 @@ class Matrix{
     T determinant(bool do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
       if(rows() == 1){
-        return (*const_cast<self_t *>(this))(0, 0);
+        return (*this)(0, 0);
       }else{
         T sum(0);
         T sign(1);
-        for(unsigned int i = 0; i < rows(); i++){
-          if((*const_cast<self_t *>(this))(i, 0) != T(0)){
-            sum += (*const_cast<self_t *>(this))(i, 0)
-                * (coMatrix(i, 0).determinant(false)) * sign;
+        for(unsigned int i(0); i < rows(); i++){
+          if((*this)(i, 0) != T(0)){
+            sum += (*this)(i, 0) * (coMatrix(i, 0).determinant(false)) * sign;
           }
           sign = -sign;
         }
@@ -1601,33 +1605,33 @@ class Matrix{
      * @return (self_t) LU分解
      * @throw MatrixException 正方行列ではなくLU分解を計算することができない場合
      */
-   	self_t decomposeLU(bool do_check = true) const throw(MatrixException){
-   		if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
-   		self_t LU(self_t::naked(rows(), columns() * 2));
+     self_t decomposeLU(bool do_check = true) const throw(MatrixException){
+       if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
+       self_t LU(self_t::naked(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
-   		for(unsigned int i = 0; i < rows(); i++){
-   			for(unsigned int j = 0; j < columns(); j++){
-   				if(i >= j){
+       for(unsigned int i(0); i < rows(); i++){
+         for(unsigned int j(0); j < columns(); j++){
+           if(i >= j){
             U(i, j) = T(i == j ? 1 : 0);
-   					L(i, j) = (*const_cast<Matrix *>(this))(i, j);
-   					for(unsigned int k = 0; k < j; k++){
-   						L(i, j) -= (L(i, k) * U(k, j));
-   					}
-   				}else{
+             L(i, j) = (*this)(i, j);
+             for(unsigned int k(0); k < j; k++){
+               L(i, j) -= (L(i, k) * U(k, j));
+             }
+           }else{
             L(i, j) = T(0);
-   					U(i, j) = (*const_cast<Matrix *>(this))(i, j);
-   					for(unsigned int k = 0; k < i; k++){
-   						U(i, j) -= (L(i, k) * U(k, j));
-   					}
-   					U(i, j) /= L(i, i);
-   				}
-   			}
-   		}
+             U(i, j) = (*this)(i, j);
+             for(unsigned int k(0); k < i; k++){
+               U(i, j) -= (L(i, k) * U(k, j));
+             }
+             U(i, j) /= L(i, i);
+           }
+         }
+       }
 #undef L
 #undef U
-   		return LU;
-   	}
+       return LU;
+     }
 
     /**
      * UD分解をします。
@@ -1644,12 +1648,12 @@ class Matrix{
       self_t UD(rows(), columns() * 2);
 #define U(i, j) UD(i, j)
 #define D(i, j) UD(i, j + columns())
-      for(int i = rows() - 1; i >= 0; i--){
+      for(int i(rows() - 1); i >= 0; i--){
         D(i, i) = P(i, i);
         U(i, i) = T(1);
-        for(int j = 0; j < i; j++){
+        for(int j(0); j < i; j++){
           U(j, i) = P(j, i) / D(i, i);
-          for(int k = 0; k <= j; k++){
+          for(int k(0); k <= j; k++){
             P(k, j) -= U(k, i) * D(i, i) * U(j, i);
           }
         }
@@ -1674,8 +1678,8 @@ class Matrix{
       self_t result(rows(), columns());
       T det;
       if((det = determinant()) == 0){throw MatrixException("Operation void!!");}
-      for(int i = 0; i < rows(); i++){
-        for(int j = 0; j < columns(); j++){
+      for(int i(0); i < rows(); i++){
+        for(int j(0); j < columns(); j++){
           result(i, j) = coMatrix(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
         }
       }
@@ -1686,9 +1690,9 @@ class Matrix{
 
       self_t left(copy());
       self_t right(self_t::getI(rows()));
-      for(unsigned int i = 0; i < rows(); i++){
+      for(unsigned int i(0); i < rows(); i++){
         if(left(i, i) == T(0)){ //(i, i)が存在するように並べ替え
-          for(unsigned int j = i+1; j <= rows(); j++){
+          for(unsigned int j(i + 1); j <= rows(); j++){
             if(j == rows()){throw MatrixException("Operation void!! ; Invert matrix not exist");}
             if(left(j, i) != T(0)){
               left.exchangeRows(j, i);
@@ -1698,15 +1702,15 @@ class Matrix{
           }
         }
         if(left(i, i) != T(1)){
-          for(unsigned int j = 0; j < columns(); j++){right(i, j) /= left(i, i);}
-          for(unsigned int j = i+1; j < columns(); j++){left(i, j) /= left(i, i);}
+          for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}
+          for(unsigned int j(i+1); j < columns(); j++){left(i, j) /= left(i, i);}
           left(i, i) = T(1);
         }
-        for(unsigned int k = 0; k < rows(); k++){
+        for(unsigned int k(0); k < rows(); k++){
           if(k == i){continue;}
           if(left(k, i) != T(0)){
-            for(unsigned int j = 0; j < columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
-            for(unsigned int j = i+1; j < columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
+            for(unsigned int j(0); j < columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
+            for(unsigned int j(i+1); j < columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
             left(k, i) = T(0);
           }
         }
@@ -1746,13 +1750,13 @@ class Matrix{
      * @param matrix 足す行列
      */
     self_t &pivotMerge(const int &row, const int &column, const self_t &matrix){
-      for(unsigned int i = 0; i < matrix.rows(); i++){
-      	if(row + i < 0){continue;}
+      for(unsigned int i(0); i < matrix.rows(); i++){
+        if(row + i < 0){continue;}
         else if(row + i >= rows()){break;}
-        for(unsigned int j = 0; j < matrix.columns(); j++){
-        	if(column + j < 0){continue;}
+        for(unsigned int j(0); j < matrix.columns(); j++){
+          if(column + j < 0){continue;}
           else if(column + j >= columns()){break;}
-          (*this)(row + i, column + j) += (const_cast<self_t &>(matrix))(i, j);
+          (*this)(row + i, column + j) += matrix(i, j);
         }
       }
       return *this;
@@ -1777,24 +1781,24 @@ class Matrix{
      * @throw MatrixException 正方行列ではなく計算することができない場合
      */
     self_t hessenberg(Matrix *transform) const throw(MatrixException){
-    	if(!isSquare()){throw MatrixException("Operation void!!");}
+      if(!isSquare()){throw MatrixException("Operation void!!");}
 
-    	self_t result(copy());
-    	for(unsigned int j = 0; j < columns() - 2; j++){
-    		T t(0);
-    		for(unsigned int i = j + 1; i < rows(); i++){
-    			t += pow(result(i, j), 2);
-    		}
+      self_t result(copy());
+      for(unsigned int j(0); j < columns() - 2; j++){
+        T t(0);
+        for(unsigned int i(j + 1); i < rows(); i++){
+          t += pow(result(i, j), 2);
+        }
         T s = ::sqrt(t);
         if(result(j + 1, j) < 0){s *= -1;}
 
-    		self_t omega(self_t::naked(rows() - (j+1), 1));
-    		{
-    			for(unsigned int i = 0; i < omega.rows(); i++){
-    				omega(i, 0) = result(j+i+1, j);
-    			}
-    			omega(0, 0) += s;
-    		}
+        self_t omega(self_t::naked(rows() - (j+1), 1));
+        {
+          for(unsigned int i(0); i < omega.rows(); i++){
+            omega(i, 0) = result(j+i+1, j);
+          }
+          omega(0, 0) += s;
+        }
 
         self_t P(self_t::getI(rows()));
         T denom(t + result(j + 1, j) * s);
@@ -1804,18 +1808,18 @@ class Matrix{
 
         result = P * result * P;
         if(transform){(*transform) *= P;}
-    	}
+      }
 
-    	//ゼロ処理
-    	bool sym = isSymmetric();
-    	for(unsigned int j = 0; j < columns() - 2; j++){
-    		for(unsigned int i = j + 2; i < rows(); i++){
-    			result(i, j) = T(0);
-    			if(sym){result(j, i) = T(0);}
-    		}
-    	}
+      //ゼロ処理
+      bool sym = isSymmetric();
+      for(unsigned int j(0); j < columns() - 2; j++){
+        for(unsigned int i(j + 2); i < rows(); i++){
+          result(i, j) = T(0);
+          if(sym){result(j, i) = T(0);}
+        }
+      }
 
-    	return result;
+      return result;
     }
 
     /**
@@ -1834,10 +1838,10 @@ class Matrix{
      * @param lower 結果(固有値2)
      */
     void eigen22(const int &row, const int &column, Complex<T> &upper, Complex<T> &lower) const throw(MatrixException){
-      T a((*const_cast<Matrix *>(this))(row, column)),
-        b((*const_cast<Matrix *>(this))(row, column + 1)),
-        c((*const_cast<Matrix *>(this))(row + 1, column)),
-        d((*const_cast<Matrix *>(this))(row + 1, column + 1));
+      T a((*this)(row, column)),
+        b((*this)(row, column + 1)),
+        c((*this)(row + 1, column)),
+        d((*this)(row + 1, column + 1));
       T root(pow((a - d), 2) + b * c * 4);
       if(root >= T(0)){
         root = ::sqrt(root);
@@ -1866,24 +1870,24 @@ class Matrix{
         const T &threshold_abs,
         const T &threshold_rel) const throw(MatrixException){
 
-    	if(!isSquare()){throw MatrixException("Operation void!!");}
+      if(!isSquare()){throw MatrixException("Operation void!!");}
 
       //パワー法(べき乗法)
       /*self_t result(rows(), rows() + 1);
       self_t source = copy();
-      for(int i = 0; i < columns(); i++){result(0, i) = T(1);}
-      for(int i = 0; i < columns(); i++){
+      for(int i(0); i < columns(); i++){result(0, i) = T(1);}
+      for(int i(0); i < columns(); i++){
         while(true){
           self_t approxVec = source * result.columnVector(i);
           T approxVal(0);
-          for(int j = 0; j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
+          for(int j(0); j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
           approxVal = sqrt(approxVal);
-          for(int j = 0; j < approxVec.rows(); j++){result(j, i) = approxVec(j, 0) / approxVal;}
+          for(int j(0); j < approxVec.rows(); j++){result(j, i) = approxVec(j, 0) / approxVal;}
           T before = result(i, rows());
           if(abs(before - (result(i, rows()) = approxVal)) < threshold){break;}
         }
-        for(int j = 0; (i < rows() - 1) && (j < rows()); j++){
-          for(int k = 0; k < rows(); k++){
+        for(int j(0); (i < rows() - 1) && (j < rows()); j++){
+          for(int k(0); k < rows(); k++){
             source(j, k) -= result(i, rows()) * result(j, i) * result(k, i);
           }
         }
@@ -1951,24 +1955,24 @@ class Matrix{
 
         //ハウスホルダー変換を繰り返す
         T b1, b2, b3, r;
-        for(int i = 0; i < m - 1; i++){
-        	if(i == 0){
-        		b1 = A(0, 0) * A(0, 0) - mu_sum * A(0, 0) + mu_multi + A(0, 1) * A(1, 0);
+        for(int i(0); i < m - 1; i++){
+          if(i == 0){
+            b1 = A(0, 0) * A(0, 0) - mu_sum * A(0, 0) + mu_multi + A(0, 1) * A(1, 0);
             b2 = A(1, 0) * (A(0, 0) + A(1, 1) - mu_sum);
-    	    	b3 = A(2, 1) * A(1, 0);
-        	}else{
-        		b1 = A(i, i - 1);
+            b3 = A(2, 1) * A(1, 0);
+          }else{
+            b1 = A(i, i - 1);
             b2 = A(i + 1, i - 1);
-  	      	b3 = (i == m - 2 ? T(0) : A(i + 2, i - 1));
-        	}
+            b3 = (i == m - 2 ? T(0) : A(i + 2, i - 1));
+          }
 
-        	r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
+          r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
 
           Matrix omega(3, 1);
           {
-    	  	  omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
-        		omega(1, 0) = b2;
-        		if(b3 != T(0)){omega(2, 0) = b3;}
+            omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
+            omega(1, 0) = b2;
+            if(b3 != T(0)){omega(2, 0) = b3;}
           }
           Matrix P(Matrix::getI(rows()));
           T denom((omega.transpose() * omega)(0, 0));
@@ -2007,17 +2011,17 @@ class Matrix{
       Matrix<Complex<T> > x(rows(), rows());  //固有ベクトル
       A = A_;
 
-      for(unsigned int j = 0; j < rows(); j++){
+      for(unsigned int j(0); j < rows(); j++){
         int n = rows();
-        for(unsigned int i = 0; i < j; i++){
+        for(unsigned int i(0); i < j; i++){
           if((lambda(j, 0) - lambda(i, 0)).abs() <= threshold_abs){--n;}
         }
         //std::cout << n << ", " << lambda(j, 0) << std::endl;
         x(--n, j) = 1;
         while(n-- > 0){
           x(n, j) = x(n+1, j) * (lambda(j, 0) - A(n+1, n+1));
-          for(unsigned int i = n+2; i < rows(); i++){
-          	x(n, j) -= x(i, j) * A(n+1, i);
+          for(unsigned int i(n+2); i < rows(); i++){
+            x(n, j) -= x(i, j) * A(n+1, i);
           }
           if(A(n+1, n)){x(n, j) /= A(n+1, n);}
         }
@@ -2028,13 +2032,13 @@ class Matrix{
       Matrix<Complex<T> > x(Matrix<Complex<T> >::getI(rows()));  //固有ベクトル
       A = A_;
       Matrix<Complex<T> > A_C(rows(), rows());
-      for(unsigned int i = 0; i < rows(); i++){
-        for(unsigned int j = 0; j < columns(); j++){
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
           A_C(i, j) = A(i, j);
         }
       }
 
-      for(unsigned int j = 0; j < rows(); j++){
+      for(unsigned int j(0); j < rows(); j++){
         // http://www.prefield.com/algorithm/math/eigensystem.html を参考に
         // かつ、固有値が等しい場合の対処方法として、
         // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
@@ -2044,7 +2048,7 @@ class Matrix{
         if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
           approx_lambda += 2E-3;
         }
-        for(unsigned int i = 0; i < rows(); i++){
+        for(unsigned int i(0); i < rows(); i++){
           A_C_lambda(i, i) -= approx_lambda;
         }
         Matrix<Complex<T> > A_C_lambda_LU(A_C_lambda.decomposeLU());
@@ -2070,8 +2074,8 @@ class Matrix{
 #endif
 
       /*Matrix<Complex<T> > lambda2(rows(), rows());
-      for(int i = 0; i < rows(); i++){
-      	lambda2(i, i) = lambda(i, 0);
+      for(int i(0); i < rows(); i++){
+        lambda2(i, i) = lambda(i, 0);
       }
 
       std::cout << "A:" << A << std::endl;
@@ -2079,21 +2083,21 @@ class Matrix{
       std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
 
       //結果の格納
-      for(unsigned int j = 0; j < x.columns(); j++){
-        for(unsigned int i = 0; i < x.rows(); i++){
-          for(unsigned int k = 0; k < transform.columns(); k++){
+      for(unsigned int j(0); j < x.columns(); j++){
+        for(unsigned int i(0); i < x.rows(); i++){
+          for(unsigned int k(0); k < transform.columns(); k++){
             result(i, j) += transform(i, k) * x(k, j);
           }
         }
 
         //正規化
         Complex<T> _norm;
-        for(unsigned int i = 0; i < rows(); i++){
-        	_norm += result(i, j).abs2();
+        for(unsigned int i(0); i < rows(); i++){
+          _norm += result(i, j).abs2();
         }
         T norm = ::sqrt(_norm.real());
-        for(unsigned int i = 0; i < rows(); i++){
-        	result(i, j) /= norm;
+        for(unsigned int i(0); i < rows(); i++){
+          result(i, j) /= norm;
         }
         //std::cout << result.partial(rows(), 1, 0, j).transpose() << std::endl;
       }
@@ -2136,7 +2140,7 @@ class Matrix{
       Matrix<Complex<T> > VsD(eigen_mat.partial(n, n, 0, 0));
       Matrix<Complex<T> > nV(VsD.inverse());
       for(int i(0); i < n; i++){
-        VsD.partial(n, 1, 0, i) *= ::sqrt(const_cast<Matrix<Complex<T> > &>(eigen_mat)(i, n));
+        VsD.partial(n, 1, 0, i) *= std::sqrt(eigen_mat(i, n));
       }
 
       return VsD * nV;
@@ -2172,17 +2176,17 @@ class Matrix{
      *
      */
     friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
-    	if(matrix.m_Storage){
-    		out << "{";
-	      for(unsigned int i = 0; i < matrix.rows(); i++){
-  	      out << (i == 0 ? "" : ",") << std::endl << "{";
-    	    for(unsigned int j = 0; j < matrix.columns(); j++){
-      	    out << (j == 0 ? "" : ",") << (const_cast<self_t &>(matrix))(i, j);
-        	}
-	        out << "}";
-  	    }
-    	  out << std::endl << "}";
-    	}
+      if(matrix.m_Storage){
+        out << "{";
+        for(unsigned int i(0); i < matrix.rows(); i++){
+          out << (i == 0 ? "" : ",") << std::endl << "{";
+          for(unsigned int j(0); j < matrix.columns(); j++){
+            out << (j == 0 ? "" : ",") << matrix(i, j);
+          }
+          out << "}";
+        }
+        out << std::endl << "}";
+      }
       return out;
     }
 };
@@ -2205,7 +2209,7 @@ class DelegatedMatrix : public Matrix<T>{
       if((this != &matrix) && (super_t::m_Storage)){
         for(unsigned int i(0); i < (std::min)(super_t::rows(), matrix.rows()); i++){
           for(unsigned int j(0); j < (std::min)(super_t::columns(), matrix.columns()); j++){
-            (*this)(i, j) = (const_cast<super_t &>(matrix))(i, j);
+            (*this)(i, j) = matrix(i, j);
           }
         }
       }
@@ -2266,9 +2270,9 @@ class CoMatrix : public DelegatedMatrix<T>{
         const root_t &matrix,
         const unsigned int &rowCoFactor,
         const unsigned int &columnCoFactor) throw(MatrixException)
-            : super_t(new Array2D_CoFactor<T>(
-                *(matrix.storage()),
-                rowCoFactor, columnCoFactor)){}
+        : super_t(new Array2D_CoFactor<T>(
+        *(matrix.storage()),
+        rowCoFactor, columnCoFactor)){}
 
     /**
      * デストラクタ。
@@ -2380,14 +2384,13 @@ class PartialMatrix : public DelegatedMatrix<T>{
      */
     PartialMatrix(
         const root_t &matrix,
-        const unsigned int &rows,
-        const unsigned int &columns,
-        const unsigned int &rowOffset,
-        const unsigned int &columnOffset) throw(MatrixException)
-            : super_t(new Array2D_Partial<T>(
-                rows, columns,
-                *(matrix.storage()),
-                rowOffset, columnOffset)){}
+        const unsigned int &rows, const unsigned int &columns,
+        const unsigned int &rowOffset, const unsigned int &columnOffset)
+        throw(MatrixException)
+        : super_t(new Array2D_Partial<T>(
+        rows, columns,
+        *(matrix.storage()),
+        rowOffset, columnOffset)){}
 
     /**
      * デストラクタ。

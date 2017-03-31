@@ -120,7 +120,7 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
         std::ostream &out, const mat_t &mat){
       for(int i(0); i < mat.rows(); i++){
         for(int j(0); j < mat.columns(); j++){
-          out << const_cast<mat_t &>(mat)(i, j) << ',';
+          out << mat(i, j) << ',';
         }
       }
     }

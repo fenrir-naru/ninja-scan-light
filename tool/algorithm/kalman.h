@@ -567,7 +567,7 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
         // fÇÃê∂ê¨
         for(int i = 0; i < f.rows(); i++){
           for(int j = 0; j <= i; j++){
-            f(i, 0) += const_cast<Matrix<FloatT> *>(&H)->operator()(k, j) * m_U(j, i);
+            f(i, 0) += H(k, j) * m_U(j, i);
           }
         }
         
@@ -576,7 +576,7 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
           g(i, 0) = m_D(i, i) * f(i, 0);
         }
         
-        FloatT r(const_cast<Matrix<FloatT> *>(&R)->operator()(k, k));
+        FloatT r(R(k, k));
         FloatT alpha = r + f(0, 0) * g(0, 0);
         K(0, k) = g(0, 0);
         m_D(0, 0) *= (r / alpha);
@@ -649,7 +649,7 @@ class UnscentedKalmanFilter : public KalmanFilter<FloatT>{
       
       if(cov.isDiagonal()){   // ëŒäpçsóÒÇÃèÍçáÅAçÇë¨âª
         for(int i(0); i < sqrt_cov.rows(); i++){
-          sqrt_cov(i, i) = sqrt(const_cast<Matrix<FloatT> &>(cov)(i, i));
+          sqrt_cov(i, i) = sqrt(cov(i, i));
         }
       }else{  // ÇªÇ§Ç≈Ç»Ç¢èÍçáÇÕÇ‹Ç∂ÇﬂÇ…åvéZÇ∑ÇÈ
         Matrix<Complex<FloatT> > sqrt_cov_C(cov.sqrt());

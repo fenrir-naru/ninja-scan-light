@@ -183,9 +183,6 @@ class Filtered_INS2
       mat_t dcm_e2n((this->q_e2n).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{e}^{n} \right) @f$
       mat_t dcm_n2b((this->q_n2b).getDCM()); ///< @f$ \mathrm{DCM} \left( \Tilde{q}_{n}^{b} \right) @f$
       
-#define dcm_e2n(r, c) (const_cast<mat_t *>(&dcm_e2n)->operator()(r, c))
-#define dcm_n2b(r, c) (const_cast<mat_t *>(&dcm_n2b)->operator()(r, c))
-     
 #ifndef pow2
 #define pow2(x) ((x) * (x))
 #else
@@ -594,8 +591,8 @@ class Filtered_INS2
     StandardDeviations getSigma() const {
       StandardDeviations sigma;
 
-      mat_t &P(const_cast<mat_t &>(
-          const_cast<Filtered_INS2 *>(this)->getFilter().getP()));
+      const mat_t &P(
+          const_cast<Filtered_INS2 *>(this)->getFilter().getP());
 
       { // ‘¬“x
         sigma.v_north_ms = std::sqrt(P(0, 0));

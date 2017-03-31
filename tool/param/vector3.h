@@ -490,11 +490,11 @@ class Vector3 : public Vector3Data<FloatT> {
         : super_t() {
       if((matrix.rows() == OUT_OF_INDEX) && (matrix.columns() == 1)){
         for(unsigned int i = 0; i < OUT_OF_INDEX; i++){
-          set(i, (*const_cast<Matrix<FloatT> *>(&matrix))(i, 0));
+          (*this)[i] = matrix(i, 0);
         }
       }else if((matrix.rows() == 1) && (matrix.columns() == OUT_OF_INDEX)){
         for(unsigned int i = 0; i < OUT_OF_INDEX; i++){
-          set(i, (*const_cast<Matrix<FloatT> *>(&matrix))(0, i));
+          (*this)[i] = matrix(0, i);
         }
       }else{
         throw MatrixException("Operatiorn void!! ; Need Matrix(3, 1) or Matrix(1, 3)");
@@ -509,7 +509,7 @@ class Vector3 : public Vector3Data<FloatT> {
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){
         res[i] = FloatT(0);
         for(unsigned int j(0); j < OUT_OF_INDEX; j++){
-          res[i] += const_cast<Matrix<FloatT> &>(matrix)(i, j) * vec[j];
+          res[i] += matrix(i, j) * vec[j];
         }
       }
       return res;

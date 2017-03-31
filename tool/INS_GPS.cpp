@@ -978,9 +978,8 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
           << ',' << bg.getY()
           << ',' << bg.getZ() ;
       if(options.dump_stddev){
-        Matrix<float_sylph_t> &P(
-            const_cast<Matrix<float_sylph_t> &>(
-              const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP()));
+        const Matrix<float_sylph_t> &P(
+            const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP());
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
             j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
           out << ',' << sqrt(P(i, i));

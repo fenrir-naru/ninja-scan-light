@@ -603,46 +603,44 @@ class Quaternion : public QuaternionData<FloatT> {
      * あるいはDCMの条件を満たす@f$ 3 \times 3 @f$行列を
      * Quaternion型に変換します。
      * 
-     * @param matrix 行列
+     * @param mat 行列
      * @throws MatrixException 行列のサイズが正しくないとき
      */
-    Quaternion(const Matrix<FloatT> &matrix) throw(MatrixException)
+    Quaternion(const Matrix<FloatT> &mat) throw(MatrixException)
         : super_t() {
       
-      Matrix<FloatT> &m(const_cast<Matrix<FloatT> &>(matrix));
-      
-      if(matrix.rows() == OUT_OF_INDEX && matrix.columns() == 1){
-        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= m(i, 0);}
-      }else if(matrix.rows() == 1 && matrix.columns() == OUT_OF_INDEX){
-        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= m(0, i);}
-      }else if((matrix.rows() == 3) && (matrix.columns() == 3)){
+      if(mat.rows() == OUT_OF_INDEX && mat.columns() == 1){
+        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= mat(i, 0);}
+      }else if(mat.rows() == 1 && mat.columns() == OUT_OF_INDEX){
+        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= mat(0, i);}
+      }else if((mat.rows() == 3) && (mat.columns() == 3)){
         
         // TODO: DCMの条件を満たしているか、調べること
         
         // 対角要素を足すと 3 q_0^2 - (q_1^2 + q_2^2 + q_3^2) == 4 q_0^2 - 1 であり
         // q_0 >= 0であるからq_0が一番はじめにとける        
-        (*this)[0] = std::sqrt(((m(0, 0) + m(1, 1) + m(2, 2)) + 1) / 4);
+        (*this)[0] = std::sqrt(((mat(0, 0) + mat(1, 1) + mat(2, 2)) + 1) / 4);
         
         if((*this)[0] > 1E-10){
           // 非対角要素から残りを求める
-          (*this)[1] = (m(1, 2) - m(2, 1)) / 4 / (*this)[0];
-          (*this)[2] = (m(2, 0) - m(0, 2)) / 4 / (*this)[0];
-          (*this)[3] = (m(0, 1) - m(1, 0)) / 4 / (*this)[0];
+          (*this)[1] = (mat(1, 2) - mat(2, 1)) / 4 / (*this)[0];
+          (*this)[2] = (mat(2, 0) - mat(0, 2)) / 4 / (*this)[0];
+          (*this)[3] = (mat(0, 1) - mat(1, 0)) / 4 / (*this)[0];
         }else{  // 0に近いとあんまりよくない
           // 対角要素(0)+(1)-(2) => (q_0^2 + q_1^2 + q_2^2) - 3 q_3^2 == 1 - 4 q_3^2 であり
           // このときq_3を正とする
-          (*this)[3] = std::sqrt(((m(0, 0) + m(1, 1) - m(2, 2)) - 1) / -4);
+          (*this)[3] = std::sqrt(((mat(0, 0) + mat(1, 1) - mat(2, 2)) - 1) / -4);
           if((*this)[3] > 1E-10){
-            (*this)[1] = (m(2, 0) + m(0, 2)) / 4 / (*this)[3];
-            (*this)[2] = (m(2, 1) + m(1, 2)) / 4 / (*this)[3];
+            (*this)[1] = (mat(2, 0) + mat(0, 2)) / 4 / (*this)[3];
+            (*this)[2] = (mat(2, 1) + mat(1, 2)) / 4 / (*this)[3];
           }else{ // あまり小さいと問題
             // 対角要素から求める
             // 対角要素-(0)+(1)+(2) => (q_0^2 + q_2^2 + q_3^2) - 3 q_1^2 == 1 - 4 q_1^2
             // 対角要素(0)-(1)+(2) => (q_0^2 + q_1^2 + q_3^2) - 3 q_2^2 == 1 - 4 q_2^2
             // このときq_2を正とし、q_1の符号は非対角要素から求める
-            (*this)[1] = std::sqrt(((-m(0, 0) + m(1, 1) + m(2, 2)) - 1) / -4);
-            (*this)[2] = std::sqrt(((m(0, 0) - m(1, 1) + m(2, 2)) - 1) / -4);
-            if(m(0, 1) + m(1, 0) < 0){(*this)[1] *= -1;}
+            (*this)[1] = std::sqrt(((-mat(0, 0) + mat(1, 1) + mat(2, 2)) - 1) / -4);
+            (*this)[2] = std::sqrt(((mat(0, 0) - mat(1, 1) + mat(2, 2)) - 1) / -4);
+            if(mat(0, 1) + mat(1, 0) < 0){(*this)[1] *= -1;}
           }
         } 
       }else{
