@@ -303,6 +303,11 @@ struct GPS_RawData {
   typedef std::map<int, prn_obs_t> measurement_t;
   measurement_t measurement;
 
+  measurement_t::mapped_type measurement_of(const measurement_t::key_type &key) const {
+    typename measurement_t::const_iterator it(measurement.find(key));
+    return it == measurement.end() ? measurement_t::mapped_type() : it->second;
+  }
+
   static prn_obs_t difference(
       const prn_obs_t &operand, const prn_obs_t &argument,
       const FloatT &scaling = FloatT(1)) {
