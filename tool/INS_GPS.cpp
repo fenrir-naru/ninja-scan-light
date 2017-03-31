@@ -1160,9 +1160,8 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
             << ',' << const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->clock_error_rate(i);
       }
       if(options.dump_stddev){
-        Matrix<float_sylph_t> &P(
-            const_cast<Matrix<float_sylph_t> &>(
-              const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->getFilter().getP()));
+        const Matrix<float_sylph_t> &P(
+            const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->getFilter().getP());
         for(int i(Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_WITHOUT_CLOCK_ERROR), j(0);
             j < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_CLOCK_ERROR; ++i, ++j){
           out << ',' << sqrt(P(i, i));

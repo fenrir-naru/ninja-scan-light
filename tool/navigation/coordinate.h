@@ -60,6 +60,10 @@ class System_3D {
   protected:
     typedef System_3D self_t;
     FloatT v[3];
+    template <class T>
+    static const T &const_ref(T *ptr){return static_cast<const T &>(*ptr);}
+    template <class T>
+    static T &non_const_ref(const T &ref){return const_cast<T &>(ref);}
   public:
     static const unsigned int value_boundary = 3;
     System_3D(){
@@ -85,11 +89,11 @@ class System_3D {
     System_3D(const Matrix<FloatT> &matrix){
       if(matrix.rows() < matrix.columns()){
         for(unsigned i(0); i < value_boundary; i++){
-          v[i] = const_cast<Matrix<FloatT> &>(matrix).operator()(0, i);
+          v[i] = matrix(0, i);
         }
       }else{
         for(unsigned i(0); i < value_boundary; i++){
-          v[i] = const_cast<Matrix<FloatT> &>(matrix).operator()(i, 0);
+          v[i] = matrix(i, 0);
         }
       }
     }
@@ -103,16 +107,19 @@ class System_3D {
       return *this;
     }
     
-    FloatT &operator[](int i){return v[i];}
+    const FloatT &operator[](const int &i) const {return v[i];}
+    FloatT &operator[](const int &i){
+      return non_const_ref(const_ref(this)[i]);
+    }
 
     operator Vector3<FloatT>() const {
       return Vector3<FloatT>(v[0], v[1], v[2]);
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
-      out << const_cast<self_t *>(&self)->operator[](0) << " "
-          << const_cast<self_t *>(&self)->operator[](1) << " "
-          << const_cast<self_t *>(&self)->operator[](2);
+      out << operator[](0) << " "
+          << operator[](1) << " "
+          << operator[](2);
       return out;
     }
     friend std::istream &operator>>(std::istream &in, self_t &self){
@@ -131,6 +138,8 @@ class System_XYZ : public System_3D<FloatT> {
   protected:
     typedef System_XYZ<FloatT, Earth> self_t;
     typedef System_3D<FloatT> super_t;
+    using super_t::const_ref;
+    using super_t::non_const_ref;
   public:
     System_XYZ() : super_t() {}
     template <class T>
@@ -144,14 +153,18 @@ class System_XYZ : public System_3D<FloatT> {
         : super_t(matrix) {}
     ~System_XYZ(){}
     
-    FloatT &x(){return super_t::operator[](0);}
-    FloatT &y(){return super_t::operator[](1);}
-    FloatT &z(){return super_t::operator[](2);}
-    
+    const FloatT &x() const {return super_t::operator[](0);}
+    const FloatT &y() const {return super_t::operator[](1);}
+    const FloatT &z() const {return super_t::operator[](2);}
+
+    FloatT &x(){return non_const_ref(const_ref(this).x());}
+    FloatT &y(){return non_const_ref(const_ref(this).y());}
+    FloatT &z(){return non_const_ref(const_ref(this).z());}
+
     self_t &operator+=(const self_t &another){
-      x() += const_cast<self_t *>(&another)->x();
-      y() += const_cast<self_t *>(&another)->y();
-      z() += const_cast<self_t *>(&another)->z();
+      x() += another.x();
+      y() += another.y();
+      z() += another.z();
       return *this;
     }
     self_t operator+(const self_t &another) const {
@@ -159,9 +172,9 @@ class System_XYZ : public System_3D<FloatT> {
       return copy += another;
     }
     self_t &operator-=(const self_t &another){
-      x() -= const_cast<self_t *>(&another)->x();
-      y() -= const_cast<self_t *>(&another)->y();
-      z() -= const_cast<self_t *>(&another)->z();
+      x() -= another.x();
+      y() -= another.y();
+      z() -= another.z();
       return *this;
     }
     self_t operator-(const self_t &another) const {
@@ -171,13 +184,8 @@ class System_XYZ : public System_3D<FloatT> {
     
     FloatT dist() const {
       
-      const FloatT &_x(const_cast<self_t *>(this)->x());
-      const FloatT &_y(const_cast<self_t *>(this)->y());
-      const FloatT &_z(const_cast<self_t *>(this)->z());
-      
       return FloatT(std::sqrt(
-          pow2(_x) + pow2(_y) + pow2(_z)
-        ));
+          pow2(x()) + pow2(y()) + pow2(z())));
     }
     
     FloatT dist(const self_t &another) const {
@@ -191,28 +199,23 @@ class System_XYZ : public System_3D<FloatT> {
      * 
      */
     System_LLH<FloatT, Earth> llh() const {
-      const FloatT &_x(const_cast<self_t *>(this)->x());
-      const FloatT &_y(const_cast<self_t *>(this)->y());
-      const FloatT &_z(const_cast<self_t *>(this)->z());
-
-      if((_x == 0) && (_y == 0) && (_z == 0)){
+      if((x() == 0) && (y() == 0) && (z() == 0)){
         return System_LLH<FloatT, Earth>(0, 0, -a0);
       }
 
       FloatT h(pow2(a0) - pow2(b0));
-      FloatT p(std::sqrt(pow2(_x) + pow2(_y)));
+      FloatT p(std::sqrt(pow2(x()) + pow2(y())));
       //cout << "p => " << p << endl;
-      FloatT t(std::atan2(_z*a0, p*b0));
+      FloatT t(std::atan2(z()*a0, p*b0));
       FloatT sint(std::sin(t)), cost(std::cos(t));
       
-      FloatT _lat(std::atan2(_z + (h / b0 * pow3(sint)), p - (h / a0 * pow3(cost))));
+      FloatT _lat(std::atan2(z() + (h / b0 * pow3(sint)), p - (h / a0 * pow3(cost))));
       FloatT n(a0 / std::sqrt(1.0 - pow2(e0) * pow2(std::sin(_lat))));
       
       return System_LLH<FloatT, Earth>(
           _lat,
-          std::atan2(_y, _x),
-          (p / std::cos(_lat) - n)
-        );
+          std::atan2(y(), x()),
+          (p / std::cos(_lat) - n));
     }
 };
 
@@ -231,6 +234,8 @@ class System_LLH : public System_3D<FloatT> {
     typedef System_LLH<FloatT, Earth> self_t;
     typedef System_XYZ<FloatT, Earth> xyz_t;
     typedef System_3D<FloatT> super_t;
+    using super_t::const_ref;
+    using super_t::non_const_ref;
   public:
     System_LLH() : super_t() {}
     System_LLH(const FloatT &latitude, const FloatT &longitude, const FloatT &height) 
@@ -239,32 +244,34 @@ class System_LLH : public System_3D<FloatT> {
         : super_t(llh) {}
     ~System_LLH(){}
     
-    FloatT &latitude()  {return super_t::operator[](0);}
-    FloatT &longitude() {return super_t::operator[](1);}
-    FloatT &height()    {return super_t::operator[](2);}
+    const FloatT &latitude() const {return super_t::operator[](0);}
+    const FloatT &longitude() const {return super_t::operator[](1);}
+    const FloatT &height() const {return super_t::operator[](2);}
+
+    FloatT &latitude(){return non_const_ref(const_ref(this).latitude());}
+    FloatT &longitude(){return non_const_ref(const_ref(this).longitude());}
+    FloatT &height(){return non_const_ref(const_ref(this).height());}
 
     /**
      * Convert to ECEF (Earth-centered Earth-Fixed)
      *
      */
     xyz_t xyz() const {
-      const FloatT &_lat (const_cast<self_t *>(this)->latitude());   ///< ˆÜ“x[rad]
-      const FloatT &_lng(const_cast<self_t *>(this)->longitude());  ///< Œo“x[rad]
-      const FloatT &_h   (const_cast<self_t *>(this)->height());     ///< ‚“x[m]
-      
-      FloatT n(xyz_t::a0/std::sqrt(1.0 - pow2(xyz_t::e0) * pow2(std::sin(_lat))));
+      FloatT
+          clat(std::cos(latitude())), clng(std::cos(longitude())),
+          slat(std::sin(latitude())), slng(std::sin(longitude()));
+      FloatT n(xyz_t::a0 / std::sqrt(1.0 - pow2(xyz_t::e0) * pow2(slat)));
       
       return System_XYZ<FloatT, Earth>(
-          (n + _h) * std::cos(_lat) * std::cos(_lng),
-          (n + _h) * std::cos(_lat) * std::sin(_lng),
-          (n * (1.0 -pow2(xyz_t::e0)) + _h) * std::sin(_lat)
-        );
+          (n + height()) * clat * slng,
+          (n + height()) * clat * slng,
+          (n * (1.0 -pow2(xyz_t::e0)) + height()) * slat);
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
-      out << (const_cast<self_t *>(&self)->latitude() / M_PI * 180) << " "
-          << (const_cast<self_t *>(&self)->longitude() / M_PI * 180) << " "
-          << const_cast<self_t *>(&self)->height();
+      out << (latitude() / M_PI * 180) << " "
+          << (longitude() / M_PI * 180) << " "
+          << height();
       return out;
     }
     friend std::istream &operator>>(std::istream &in, self_t &self){
@@ -285,6 +292,8 @@ class System_ENU : public System_3D<FloatT> {
     typedef System_3D<FloatT> super_t;
     typedef System_XYZ<FloatT, Earth> xyz_t;
     typedef System_LLH<FloatT, Earth> llh_t;
+    using super_t::const_ref;
+    using super_t::non_const_ref;
   public:
     System_ENU() : super_t() {}
     System_ENU(const FloatT &east, const FloatT &north, const FloatT &up) 
@@ -297,25 +306,24 @@ class System_ENU : public System_3D<FloatT> {
         : super_t(mat) {}
     ~System_ENU() {}
     
-    FloatT &east()  {return super_t::operator[](0);}  ///< “Œ¬•ª[m]
-    FloatT &north() {return super_t::operator[](1);}  ///< –k¬•ª[m]
-    FloatT &up()    {return super_t::operator[](2);}  ///< ã¬•ª[m]
+    const FloatT &east() const {return super_t::operator[](0);}  ///< “Œ¬•ª[m]
+    const FloatT &north() const {return super_t::operator[](1);}  ///< –k¬•ª[m]
+    const FloatT &up() const {return super_t::operator[](2);}  ///< ã¬•ª[m]
     
+    FloatT &east(){return non_const_ref(const_ref(this).east());}
+    FloatT &north(){return non_const_ref(const_ref(this).north());}
+    FloatT &up(){return non_const_ref(const_ref(this).up());}
+
     static self_t relative_rel(const xyz_t &rel_pos, const llh_t &base_llh){
-      const FloatT &rel_x(const_cast<xyz_t &>(rel_pos).x());
-      const FloatT &rel_y(const_cast<xyz_t &>(rel_pos).y());
-      const FloatT &rel_z(const_cast<xyz_t &>(rel_pos).z());
-      
-      FloatT s1(std::sin(const_cast<llh_t &>(base_llh).longitude())),
-          c1(std::cos(const_cast<llh_t &>(base_llh).longitude())),
-          s2(std::sin(const_cast<llh_t &>(base_llh).latitude())),
-          c2(std::cos(const_cast<llh_t &>(base_llh).latitude()));
+      FloatT s1(std::sin(base_llh.longitude())),
+          c1(std::cos(base_llh.longitude())),
+          s2(std::sin(base_llh.latitude())),
+          c2(std::cos(base_llh.latitude()));
       
       return self_t(
-          -rel_x * s1 + rel_y * c1,
-          -rel_x * c1 * s2 - rel_y * s1 * s2 + rel_z * c2,
-          rel_x * c1 * c2 + rel_y * s1 * c2 + rel_z * s2
-        );
+          -rel_pos.x() * s1      + rel_pos.y() * c1,
+          -rel_pos.x() * c1 * s2 - rel_pos.y() * s1 * s2 + rel_pos.z() * c2,
+           rel_pos.x() * c1 * c2 + rel_pos.y() * s1 * c2 + rel_pos.z() * s2);
     }
     
     static self_t relative_rel(const xyz_t &rel_pos, const xyz_t &base){
@@ -331,30 +339,17 @@ class System_ENU : public System_3D<FloatT> {
       FloatT s1(std::sin(base_llh.longitude())), c1(std::cos(base_llh.longitude()));
       FloatT s2(std::sin(base_llh.latitude())), c2(std::cos(base_llh.latitude()));
       
-      const FloatT &_east(const_cast<self_t *>(this)->east());
-      const FloatT &_north(const_cast<self_t *>(this)->north());
-      const FloatT &_up(const_cast<self_t *>(this)->up());
-      
       return xyz_t(
-          -_east * s1 - _north * c1 * s2 + _up * c1 * c2 
-            + const_cast<xyz_t *>(&base)->x(),
-          _east * c1 - _north * s1 * s2 + _up * s1 * c2
-            + const_cast<xyz_t *>(&base)->y(),
-          _north * c2 + _up * s2
-            + const_cast<xyz_t *>(&base)->z()
-        );
+          -east() * s1 - north() * c1 * s2 + up() * c1 * c2 + base.x(),
+           east() * c1 - north() * s1 * s2 + up() * s1 * c2 + base.y(),
+                         north() * c2      + up() * s2      + base.z());
     }
     
     FloatT elevation() const {
-      const FloatT &_east(const_cast<self_t *>(this)->east());
-      const FloatT &_north(const_cast<self_t *>(this)->north());
-      const FloatT &_up(const_cast<self_t *>(this)->up());
-      return FloatT(std::atan2(_up, std::sqrt(pow2(_east) + pow2(_north))));
+      return FloatT(std::atan2(up(), std::sqrt(pow2(east()) + pow2(north()))));
     }
     FloatT azimuth() const {
-      const FloatT &_east(const_cast<self_t *>(this)->east());
-      const FloatT &_north(const_cast<self_t *>(this)->north());
-      return FloatT(std::atan2(_east, _north));
+      return FloatT(std::atan2(east(), north()));
     }
 };
 

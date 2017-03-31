@@ -93,9 +93,9 @@ class GPS_SinglePositioning {
 
       void copy_G_W_row(const geometric_matrices_t &another, const unsigned int &row){
         for(unsigned int j(0); j < 4; ++j){
-          G(row, j) = const_cast<matrix_t &>(another.G)(row, j);
+          G(row, j) = another.G(row, j);
         }
-        W(row, row) = const_cast<matrix_t &>(another.W)(row, row);
+        W(row, row) = another.W(row, row);
       }
     };
 
@@ -149,9 +149,9 @@ class GPS_SinglePositioning {
       residual.residual = pseudo_range - geometric_range;
 
       // Setup design matrix
-      residual.los_neg_x = -(sat_pos.x() - const_cast<xyz_t &>(usr_pos.xyz).x()) / geometric_range;
-      residual.los_neg_y = -(sat_pos.y() - const_cast<xyz_t &>(usr_pos.xyz).y()) / geometric_range;
-      residual.los_neg_z = -(sat_pos.z() - const_cast<xyz_t &>(usr_pos.xyz).z()) / geometric_range;
+      residual.los_neg_x = -(sat_pos.x() - usr_pos.xyz.x()) / geometric_range;
+      residual.los_neg_y = -(sat_pos.y() - usr_pos.xyz.y()) / geometric_range;
+      residual.los_neg_z = -(sat_pos.z() - usr_pos.xyz.z()) / geometric_range;
 
       if(is_coarse_mode){
 

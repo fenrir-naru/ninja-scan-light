@@ -1077,11 +1077,11 @@ class GPS_SpaceNode {
              
       // Pierce point
       FloatT psi(0.0137 / (sc_el + 0.11) - 0.022);
-      FloatT phi_i(rad2sc(const_cast<llh_t *>(&usrllh)->latitude()) 
+      FloatT phi_i(rad2sc(usrllh.latitude())
           + psi * cos(az));
       if(phi_i > 0.416){phi_i = 0.416;}
       else if(phi_i < -0.416){phi_i = -0.416;}
-      FloatT lambda_i(rad2sc(const_cast<llh_t *>(&usrllh)->longitude())
+      FloatT lambda_i(rad2sc(usrllh.longitude())
           + psi * sin(az) / cos(sc2rad(phi_i)));
       FloatT phi_m(phi_i 
           + 0.064 * cos(sc2rad(lambda_i - 1.617)));
@@ -1157,7 +1157,7 @@ class GPS_SpaceNode {
       FloatT el(relative_pos.elevation());
       
       // Altitude (m)
-      FloatT h(const_cast<llh_t *>(&usrllh)->height());
+      const FloatT &h(usrllh.height());
       FloatT f(1.0);
       if(h > (1.0 / 2.3E-5)){
         f = 0;
