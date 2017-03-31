@@ -1661,6 +1661,22 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       options.out_debug() << endl;
     }
 
+  protected:
+    void time_update(const A_Packet &a_packet, float_sylph_t deltaT){
+
+      // Check interval from the last time update
+#define INTERVAL_THRESHOLD 10
+#define INTERVAL_FORCE_VALUE 0.01
+      if((deltaT < 0) || (deltaT >= INTERVAL_THRESHOLD)){
+        // Rewrite time stamp forcedly when discontinuity is too large.
+        deltaT = INTERVAL_FORCE_VALUE;
+      }
+
+      nav.update(a_packet.accel, a_packet.omega, deltaT);
+      status = TIME_UPDATED;
+    }
+
+  public:
     /**
      * Perform time update by using acceleration and angular speed obtained with accelerometer and gyro.
      * 
@@ -1672,21 +1688,26 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         const A_Packet &previous(recent_a_packets.back());
 
         // Check interval from the last time update
-        float_sylph_t interval(previous.interval(a_packet));
-#define INTERVAL_THRESHOLD 10
-#define INTERVAL_FORCE_VALUE 0.01
-        if((interval < 0) || (interval >= INTERVAL_THRESHOLD)){
-          // Rewrite time stamp forcedly when discontinuity is too large.
-          interval = INTERVAL_FORCE_VALUE;
-        }
-
-        nav.update(a_packet.accel, a_packet.omega, interval);
-        status = TIME_UPDATED;
+        float_sylph_t deltaT(previous.interval(a_packet));
+        time_update(a_packet, deltaT);
       }
 
       recent_a_packets.push_back(a_packet);
       if(recent_a_packets.size() > max_recent_a_packets){
         recent_a_packets.pop_front();
+      }
+    }
+
+  protected:
+    void time_update_after_initialization(Packet packet){
+      recent_a_packets_t::const_reverse_iterator it_r(recent_a_packets.rbegin());
+      for(; it_r != recent_a_packets.rend(); ++it_r){
+        if(packet.interval(*it_r) <= 0){break;}
+      }
+      for(recent_a_packets_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
+          it != recent_a_packets.end(); ++it){
+        time_update(*it, packet.interval(*it));
+        packet = *it;
       }
     }
 
@@ -1753,6 +1774,20 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
     }
 
+    void time_update_before_measurement_update(const float_sylph_t &advanceT, void *){
+      if(advanceT <= 0){return;}
+      // Time update up to the GPS observation
+      A_Packet interpolation(recent_a_packets.back());
+      interpolation.itow += advanceT;
+      time_update(interpolation);
+    }
+
+    template <class Base_INS_GPS>
+    void time_update_before_measurement_update(const float_sylph_t &advanceT, INS_GPS_RealTime<Base_INS_GPS> *){
+      return;
+    }
+
+  public:
     /**
      * Perform measurement update by using position and velocity obtained with GPS receiver.
      * 
@@ -1769,6 +1804,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         // calculate GPS data timing;
         // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
         float_sylph_t gps_advance(recent_a_packets.back().interval(g_packet));
+        time_update_before_measurement_update(gps_advance, nav.ins_gps);
 
         if(current_processor->lever_arm()){ // When use lever arm effect.
           Vector3<float_sylph_t> omega_b2i_4n;
@@ -1808,6 +1844,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
             g_packet.itow,
             g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height,
             g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d);
+        time_update_after_initialization(g_packet);
       }
     }
 };
@@ -1929,7 +1966,6 @@ void loop(){
       
       deque<A_Packet> &a_packets(processors.front()->a_packets);
       deque<A_Packet>::iterator it_tu(a_packets.begin()), it_tu_end(a_packets.end());
-      const bool a_packet_deque_has_item(it_tu != it_tu_end);
     
       // Time update up to the last sample before GPS observation
       for(; 
@@ -1938,14 +1974,6 @@ void loop(){
         nav_manager.nav->update(*it_tu);
         options.out() << *(nav_manager.nav);
       }
-      
-      // Time update up to the GPS observation
-      if(a_packet_deque_has_item){
-        A_Packet interpolation((it_tu != it_tu_end) ? *it_tu : *(it_tu - 1));
-        interpolation.itow = g_packet.itow;
-        nav_manager.nav->update(interpolation);
-      }
-      
       a_packets.erase(a_packets.begin(), it_tu);
       
       // Measurement update
