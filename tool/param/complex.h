@@ -118,13 +118,19 @@ class Complex{
      *
      * @return (FloatT) 実数部
      */
-    FloatT &real(){return m_Real;}
+    const FloatT &real() const {return m_Real;}
+    FloatT &real(){
+      return const_cast<FloatT &>(static_cast<const Complex &>(*this).real());
+    }
     /**
      * 虚数部を返します。
      *
      * @return (FloatT) 虚数部
      */
-    FloatT &imaginary(){return m_Imaginary;}
+    const FloatT &imaginary() const {return m_Imaginary;}
+    FloatT &imaginary(){
+      return const_cast<FloatT &>(static_cast<const Complex &>(*this).imaginary());
+    }
 
     /**
      * 絶対値の二乗を返します。
@@ -175,7 +181,7 @@ class Complex{
     	}else{
         FloatT _abs(pow(abs(), factor));
     		double _arg(arg() * factor);
-    		return Complex(_abs * cos(_arg), _abs * sin(_arg));
+    		return Complex(_abs * std::cos(_arg), _abs * std::sin(_arg));
     	}
     }
 
@@ -206,9 +212,9 @@ class Complex{
      * @return (bool) 等しい場合true
      */
     bool operator==(const Complex<FloatT> &complex) const{
-      return m_Real == const_cast<Complex *>(&complex)->real() ?
-      					m_Imaginary == const_cast<Complex *>(&complex)->imaginary() :
-      					false;
+      return m_Real == complex.real()
+          ? m_Imaginary == complex.imaginary()
+          : false;
     }
     /**
      * 等しくないか調べます。
@@ -315,8 +321,8 @@ class Complex{
      * @return (Complex<FloatT>) 加算結果
      */
     Complex<FloatT> &operator+=(const Complex<FloatT> &complex){
-      m_Real += (const_cast<Complex *>(&complex))->real();
-      m_Imaginary += (const_cast<Complex *>(&complex))->imaginary();
+      m_Real += complex.real();
+      m_Imaginary += complex.imaginary();
       return *this;
     }
     /**
@@ -352,11 +358,9 @@ class Complex{
      * @return (Complex<FloatT>) 乗算結果
      */
     Complex<FloatT> operator*(const Complex<FloatT> &complex) const{
-      Complex<FloatT> result(m_Real * (const_cast<Complex *>(&complex))->real()
-                          - m_Imaginary * (const_cast<Complex *>(&complex))->imaginary(),
-                        m_Real * (const_cast<Complex *>(&complex))->imaginary()
-                          + m_Imaginary * (const_cast<Complex *>(&complex))->real());
-      return result;
+      return Complex<FloatT>(
+          m_Real * complex.real()      - m_Imaginary * complex.imaginary(),
+          m_Real * complex.imaginary() + m_Imaginary * complex.real());
     }
     /**
      * 乗算を行います。破壊的です。
@@ -366,11 +370,11 @@ class Complex{
     Complex<FloatT> &operator*=(const Complex<FloatT> &complex){
       Complex<FloatT> copy = *this;
       m_Real =
-        copy.real() * (const_cast<Complex *>(&complex))->real()
-        - copy.imaginary() * (const_cast<Complex *>(&complex))->imaginary();
+        copy.real() * complex.real()
+        - copy.imaginary() * complex.imaginary();
       m_Imaginary =
-        copy.real() * (const_cast<Complex *>(&complex))->imaginary()
-        + copy.imaginary() * (const_cast<Complex *>(&complex))->real();
+        copy.real() * complex.imaginary()
+        + copy.imaginary() * complex.real();
       return *this;
     }
 
@@ -408,8 +412,8 @@ class Complex{
      * @param complex 出力する複素数
      */
     friend std::ostream &operator<<(std::ostream &out, const Complex<FloatT> &complex){
-      out << (const_cast<Complex *>(&complex))->real() << " + "
-          << (const_cast<Complex *>(&complex))->imaginary() << "i";
+      out << complex.real() << " + "
+          << complex.imaginary() << "i";
       return out;
     }
 
@@ -420,7 +424,7 @@ class Complex{
      * @return (Complex<FloatT>) 結果
      */
     static Complex<FloatT> exp(const FloatT &imaginary){
-      return Complex<FloatT>(cos(imaginary), sin(imaginary));
+      return Complex<FloatT>(std::cos(imaginary), std::sin(imaginary));
     }
 
     /**
@@ -431,7 +435,7 @@ class Complex{
      * @return (Complex<FloatT>) 結果
      */
     static Complex<FloatT> exp(const FloatT &real, const FloatT &imaginary){
-      return Complex<FloatT>::exp(imaginary) *= ::exp(real);
+      return Complex<FloatT>::exp(imaginary) *= std::exp(real);
     }
 
     /**
@@ -442,8 +446,7 @@ class Complex{
      */
     static Complex<FloatT> exp(const Complex<FloatT> &complex){
       return Complex<FloatT>::exp(
-          const_cast<Complex<FloatT> *>(&complex)->real(),
-          const_cast<Complex<FloatT> *>(&complex)->imaginary());
+          complex.real(), complex.imaginary());
     }
 };
 

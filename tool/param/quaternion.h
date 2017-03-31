@@ -159,13 +159,19 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
      * 
      * @return (T) スカラー要素
      */
-    FloatT &scalar(){return storage->scalar;}
+    const FloatT &scalar() const {return storage->scalar;}
+    FloatT &scalar(){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this).scalar());
+    }
     /**
      * ベクトル要素を返します。
      * 
      * @return (Vector<FloatT>) ベクトル要素
      */
-    Vector3<FloatT> &vector(){return storage->vector;}
+    const Vector3<FloatT> &vector() const {return storage->vector;}
+    Vector3<FloatT> &vector(){
+      return const_cast<Vector3<FloatT> &>(static_cast<const self_t &>(*this).vector());
+    }
     
     /**
      * 要素(の参照)を返します。
@@ -174,9 +180,12 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
      * @param index 要素番号、0:スカラー要素,1～3:3次元ベクトル要素X～Z
      * @return (FloatT &) 要素への参照
      */
-    FloatT &operator[](unsigned index){
+    const FloatT &operator[](const unsigned int &index) const {
       if(index == 0){return storage->scalar;}
       else{return (storage->vector)[index - 1];}
+    }
+    FloatT &operator[](const unsigned int &index){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this)[index]);
     }
 };
 
@@ -213,6 +222,9 @@ class Quaternion : public QuaternionData<FloatT> {
     
   public:
     using super_t::OUT_OF_INDEX;
+    using super_t::operator[];
+    using super_t::scalar;
+    using super_t::vector;
     
     /**
      * コンストラクタ
@@ -274,27 +286,27 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quarterion) コピー
      */
     self_t copy() const{
-      return self_t((const super_t &)super_t::deep_copy());
+      return self_t(super_t::deep_copy());
     }
     
     /**
      * 要素を設定します。
-     * 要素番号の定義はoperator[](unsigned)によって定義されています。
+     * 要素番号の定義はoperator[](unsigned int)によって定義されています。
      * 
      * @param index 要素番号
      * @param value 設定する値
-     * @see operator[](unsigned)
+     * @see operator[](unsigned int)
      */
-    void set(unsigned index, const FloatT &value){(*this)[index] = value;}
+    void set(const unsigned int &index, const FloatT &value){(*this)[index] = value;}
     /**
      * 要素を取得します。
-     * 要素番号の定義はoperator[](unsigned)によって定義されています。
+     * 要素番号の定義はoperator[](unsigned int) constによって定義されています。
      * 
      * @param index 要素番号
      * @return FloatT 要素
-     * @see operator[](unsigned)
+     * @see operator[](unsigned int) const
      */
-    FloatT get(unsigned index) const{return (*const_cast<self_t *>(this))[index];}
+    const FloatT &get(const unsigned int &index) const{return (*this)[index];}
     
     /**
      * 共役クォータニオンを求めます。
@@ -309,10 +321,7 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quarterion<FloatT>) 共役クォータニオン
      */
     self_t conj() const{
-      self_t conj(
-          const_cast<Quaternion *>(this)->scalar(),
-          -(const_cast<Quaternion *>(this)->vector()));
-      return conj;  
+      return self_t(scalar(), -vector());
     }
 
 #ifndef pow2
@@ -330,8 +339,7 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (FloatT) 結果
      */
     FloatT abs2() const{
-      return pow2(get(0)) 
-          + const_cast<self_t *>(this)->vector().abs2();
+      return pow2(scalar()) + vector().abs2();
     }
 #ifndef POW2_ALREADY_DEFINED
 #undef pow2
@@ -352,8 +360,8 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quaternion<FloatT>) 結果
      */
     self_t &operator*=(const FloatT &t){
-      super_t::scalar() *= t;
-      super_t::vector() *= t;
+      scalar() *= t;
+      vector() *= t;
       return *this;
     }
     
@@ -403,17 +411,12 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quaternion<FloatT>) 結果
      */
     self_t operator*(const self_t &q) const{
-      self_t result(
-        ((const_cast<self_t *>(this)->scalar()) 
-            * const_cast<self_t &>(q).scalar())
-          - ((const_cast<self_t *>(this)->vector()).innerp(
-              const_cast<self_t &>(q).vector())),
-        (const_cast<self_t &>(q).vector() 
-            * (const_cast<self_t *>(this)->scalar()))
-          += ((const_cast<self_t *>(this)->vector()) 
-            * const_cast<self_t &>(q).scalar()) 
-          += ((const_cast<self_t *>(this)->vector()) 
-            * const_cast<self_t &>(q).vector()));
+      self_t result((
+          scalar() * q.scalar())
+            - (vector().innerp(q.vector())),
+          (q.vector() * scalar())
+            += (vector() * q.scalar())
+            += (vector() * q.vector()));
       return result;
     }
     
@@ -443,7 +446,7 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quaternion<FloatT>) 結果
      */
     self_t &operator+=(const self_t &q){
-      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] += q.get(i);}
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] += q[i];}
       return *this;
     }
     /**
@@ -472,7 +475,7 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quaternion<FloatT>) 結果
      */
     self_t &operator-=(const self_t &q){
-      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] -= q.get(i);}
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] -= q[i];}
       return *this;
     }
     /**
@@ -501,9 +504,9 @@ class Quaternion : public QuaternionData<FloatT> {
      * @return (Quaternion<FloatT>) 結果
      */
     self_t &operator*=(const Vector3<FloatT> &v){
-      FloatT temp_scalar(super_t::scalar());
-      super_t::scalar() = -(super_t::vector().innerp(v));
-      (super_t::vector() *= v) += v * temp_scalar;
+      FloatT temp_scalar(scalar());
+      scalar() = -(vector().innerp(v));
+      (vector() *= v) += v * temp_scalar;
       return (*this);
     }
     /**
@@ -520,7 +523,7 @@ class Quaternion : public QuaternionData<FloatT> {
      * 
      * @return (T) 結果
      */
-    FloatT getTheta_2() const{return acos(regularize()[0]);}
+    FloatT getTheta_2() const{return std::acos(regularize()[0]);}
     /**
      * 回転角を求めます。
      * 
@@ -538,7 +541,7 @@ class Quaternion : public QuaternionData<FloatT> {
       self_t r(regularize());
       FloatT theta_2(r.getTheta_2());
       for(unsigned int i(0); i < Vector3<FloatT>::OUT_OF_INDEX; i++){
-        axis[i] = get(i + 1) / sin(theta_2);
+        axis[i] = (*this)[i + 1] / std::sin(theta_2);
       }
       return axis;
     }
@@ -589,7 +592,7 @@ class Quaternion : public QuaternionData<FloatT> {
      */
     friend std::ostream &operator<<(std::ostream &out, const self_t &q){
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){
-        out << (i == 0 ? "{" : ",") << q.get(i);
+        out << (i == 0 ? "{" : ",") << q[i];
       }
       out << "}";
       return out;
@@ -609,9 +612,9 @@ class Quaternion : public QuaternionData<FloatT> {
       Matrix<FloatT> &m(const_cast<Matrix<FloatT> &>(matrix));
       
       if(matrix.rows() == OUT_OF_INDEX && matrix.columns() == 1){
-        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i] = m(i, 0);}
+        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= m(i, 0);}
       }else if(matrix.rows() == 1 && matrix.columns() == OUT_OF_INDEX){
-        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i] = m(0, i);}
+        for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= m(0, i);}
       }else if((matrix.rows() == 3) && (matrix.columns() == 3)){
         
         // TODO: DCMの条件を満たしているか、調べること
@@ -654,7 +657,7 @@ class Quaternion : public QuaternionData<FloatT> {
      */
     Matrix<FloatT> toMatrix() const{
       Matrix<FloatT> matrix = Matrix<FloatT>(OUT_OF_INDEX, 1);
-      for(int i(0); i < OUT_OF_INDEX; i++){matrix(i, 0) = get(i);}
+      for(int i(0); i < OUT_OF_INDEX; i++){matrix(i, 0) = (*this)[i];}
       return matrix;
     }
 };
@@ -691,20 +694,28 @@ class QuaternionData<float_t> : public QuaternionDataProperty<float_t> { \
     } \
     \
     self_t deep_copy() const{ \
-      return self_t(_scalar, \
-          _vector.getX(), _vector.getY(), _vector.getZ()); \
+      return self_t(_scalar, _vector.copy()); \
     } \
     \
   public: \
     ~QuaternionData(){} \
     \
-    float_t &scalar(){return _scalar;} \
+    const float_t &scalar() const {return _scalar;} \
+    float_t &scalar(){ \
+      return const_cast<float_t &>(static_cast<const self_t &>(*this).scalar()); \
+    } \
     \
-    Vector3<float_t> &vector(){return _vector;} \
+    const Vector3<float_t> &vector() const {return _vector;} \
+    Vector3<float_t> &vector(){ \
+      return const_cast<Vector3<float_t> &>(static_cast<const self_t &>(*this).vector()); \
+    } \
     \
-    float_t &operator[](unsigned index){ \
+    const float_t &operator[](const unsigned &index) const { \
       if(index == 0){return _scalar;} \
       else{return _vector[index - 1];} \
+    } \
+    float_t &operator[](const unsigned &index){ \
+      return const_cast<float_t &>(static_cast<const self_t &>(*this)[index]); \
     } \
 }
 

@@ -165,9 +165,12 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
      * @param index 要素番号、0～2:要素X～Z
      * @return (FloatT &) 要素への参照
      */
-    FloatT &operator[](const unsigned int &index){
+    const FloatT &operator[](const unsigned int &index) const {
       //if(index => OUT_OF_INDEX){return NULL;}
       return (storage->values)[index];
+    }
+    FloatT &operator[](const unsigned int &index){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this)[index]);
     }
 };
 
@@ -242,13 +245,14 @@ class Vector3 : public Vector3Data<FloatT> {
      * @return (Vector3) コピー
      */
     self_t copy() const{
-      return self_t((const super_t &)super_t::deep_copy());
+      return self_t(super_t::deep_copy());
     }
     
     using super_t::X_INDEX;
     using super_t::Y_INDEX;
     using super_t::Z_INDEX;
     using super_t::OUT_OF_INDEX;
+    using super_t::operator[];
     
     /**
      * 要素を設定します。
@@ -258,7 +262,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @param value 設定する値
      * @see operator[](const unsigned int &)
      */
-    void set(unsigned index, const FloatT &value){(*this)[index] = value;}
+    void set(const unsigned &index, const FloatT &value){(*this)[index] = value;}
     /**
      * X要素を設定します。
      * @param x 設定する値
@@ -276,29 +280,29 @@ class Vector3 : public Vector3Data<FloatT> {
     void setZ(const FloatT &z){set(Z_INDEX, z);}
     
     /**
-     * 要素を取得します。値返しのため、代入は不可です。
-     * 要素番号の定義はoperator[](const unsigned int &)によって定義されています。
+     * 要素を取得します。
+     * 要素番号の定義はoperator[](const unsigned int &) constによって定義されています。
      * 
      * @param index 要素番号
-     * @return FloatT 要素
-     * @see operator[](const unsigned int &)
+     * @return const FloatT & 要素
+     * @see operator[](const unsigned int &) const
      */
-    FloatT get(unsigned index) const{return (*const_cast<Vector3 *>(this))[index];}
+    const FloatT &get(const unsigned &index) const {return (*this)[index];}
     /**
      * X要素を取得します。
      * @return FloatT X要素
      */
-    FloatT getX() const{return get(X_INDEX);}
+    const FloatT &getX() const {return get(X_INDEX);}
     /**
      * Y要素を取得します。
      * @return FloatT Y要素
      */
-    FloatT getY() const{return get(Y_INDEX);}
+    const FloatT &getY() const {return get(Y_INDEX);}
     /**
      * Z要素を取得します。
      * @return FloatT Z要素
      */
-    FloatT getZ() const{return get(Z_INDEX);}
+    const FloatT &getZ() const {return get(Z_INDEX);}
 
 #ifndef pow2
 #define pow2(x) ((x) * (x))
@@ -319,7 +323,7 @@ class Vector3 : public Vector3Data<FloatT> {
      */
     FloatT abs2() const{
       FloatT result(0);
-      for(unsigned int i = 0; i < OUT_OF_INDEX; i++){result += pow2(get(i));}
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){result += pow2((*this)[i]);}
       return result;
     }
 #ifndef POW2_ALREADY_DEFINED
@@ -351,7 +355,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @return (Vector3<FloatT>) 結果
      */
     self_t &operator*=(const FloatT &t){
-      for(unsigned int i = 0; i < OUT_OF_INDEX; i++){(*this)[i] *= t;}
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] *= t;}
       return *this;
     }
     /**
@@ -386,7 +390,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @return (Vector3<FloatT>) 結果
      */
     self_t &operator+=(const self_t &v){
-      for(unsigned int i = 0; i < OUT_OF_INDEX; i++){(*this)[i] += v.get(i);}
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] += v[i];}
       return *this;
     }
     /**
@@ -405,7 +409,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @return (Vector3<FloatT>) 結果
      */
     self_t &operator-=(const self_t &v){
-     for(unsigned int i = 0; i < OUT_OF_INDEX; i++){(*this)[i] -= v.get(i);}
+     for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] -= v[i];}
       return *this;
     }
     /**
@@ -425,9 +429,9 @@ class Vector3 : public Vector3Data<FloatT> {
      */
     self_t operator*(const self_t &v) const{
       self_t result;
-      result[0] = get(1) * v.get(2) - get(2) * v.get(1);
-      result[1] = get(2) * v.get(0) - get(0) * v.get(2);
-      result[2] = get(0) * v.get(1) - get(1) * v.get(0);
+      result[0] = (*this)[1] * v[2] - (*this)[2] * v[1];
+      result[1] = (*this)[2] * v[0] - (*this)[0] * v[2];
+      result[2] = (*this)[0] * v[1] - (*this)[1] * v[0];
       return result;
     }
     
@@ -439,8 +443,8 @@ class Vector3 : public Vector3Data<FloatT> {
      */
     FloatT innerp(const self_t &v) const{
      FloatT result(0);
-      for(unsigned int i = 0; i < OUT_OF_INDEX; i++){
-       result += get(i) * v.get(i);
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){
+       result += (*this)[i] * v[i];
       }
      return result;
     }
@@ -453,10 +457,10 @@ class Vector3 : public Vector3Data<FloatT> {
      * @see operator*(const Vector3<FloatT> &) const
      */
     self_t &operator*=(const self_t &v){
-     FloatT temp0 = (*this)[0], temp1 = (*this)[1];
-     (*this)[0] = (*this)[1] * v.get(2) - (*this)[2] * v.get(1);
-      (*this)[1] = (*this)[2] * v.get(0) - temp0 * v.get(2);
-      (*this)[2] = temp0 * v.get(1) - temp1 * v.get(0);
+      FloatT temp0((*this)[0]), temp1((*this)[1]);
+      (*this)[0] = (*this)[1] * v[2] - (*this)[2] * v[1];
+      (*this)[1] = (*this)[2] * v[0] - temp0 * v[2];
+      (*this)[2] = temp0 * v[1] - temp1 * v[0];
       return *this;
     }
 
@@ -469,8 +473,8 @@ class Vector3 : public Vector3Data<FloatT> {
      */
     friend std::ostream &operator<<(std::ostream &out, const self_t &v){
       out << "{";
-      for(unsigned int i = 0; i < OUT_OF_INDEX; i++){
-        out << (i == 0 ? "" : ",") << v.get(i);
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){
+        out << (i == 0 ? "" : ",") << v[i];
       }
       out << "}";
       return out;  
@@ -505,7 +509,7 @@ class Vector3 : public Vector3Data<FloatT> {
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){
         res[i] = FloatT(0);
         for(unsigned int j(0); j < OUT_OF_INDEX; j++){
-          res[i] += const_cast<Matrix<FloatT> &>(matrix)(i, j) * vec.get(j);
+          res[i] += const_cast<Matrix<FloatT> &>(matrix)(i, j) * vec[j];
         }
       }
       return res;
@@ -518,7 +522,7 @@ class Vector3 : public Vector3Data<FloatT> {
      */
     Matrix<FloatT> toMatrix() const{
       Matrix<FloatT> matrix(OUT_OF_INDEX, 1);
-      for(unsigned int i = 0; i < OUT_OF_INDEX; i++){matrix(i, 0) = get(i);}
+      for(unsigned int i(0); i < OUT_OF_INDEX; i++){matrix(i, 0) = (*this)[i];}
       return matrix;
     }
     
@@ -546,12 +550,12 @@ class Vector3 : public Vector3Data<FloatT> {
     Matrix<FloatT> skewMatrix() const{
       Matrix<FloatT> matrix(OUT_OF_INDEX, OUT_OF_INDEX);
       {
-        matrix(0, 1) = -get(2);
-        matrix(0, 2) =  get(1);
-        matrix(1, 0) =  get(2);
-        matrix(1, 2) = -get(0);
-        matrix(2, 0) = -get(1);
-        matrix(2, 1) =  get(0);
+        matrix(0, 1) = -(*this)[2];
+        matrix(0, 2) =  (*this)[1];
+        matrix(1, 0) =  (*this)[2];
+        matrix(1, 2) = -(*this)[0];
+        matrix(2, 0) = -(*this)[1];
+        matrix(2, 1) =  (*this)[0];
       }
       return matrix;
     }
@@ -587,14 +591,17 @@ class Vector3Data<float_t> : public Vector3DataProperty<float_t> { \
     \
     self_t deep_copy() const { \
       self_t copied; \
-      memcpy(copied.values, values, sizeof(values)); \
+      std::memcpy(copied.values, values, sizeof(values)); \
       return copied; \
     } \
   public: \
     ~Vector3Data(){} \
     \
-    float_t &operator[](const unsigned int &index){ \
+    const float_t &operator[](const unsigned int &index) const { \
       return values[index]; \
+    } \
+    float_t &operator[](const unsigned int &index){ \
+      return const_cast<float_t &>(static_cast<const self_t &>(*this)[index]); \
     } \
 }
 
