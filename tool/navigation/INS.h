@@ -368,10 +368,10 @@ class INS {
      * 状態量を外部から変更した際は必ずrecalc()をすること。
      * 
      * @param index 状態量番号
-     * @return 状態量(への参照、代入も可)
+     * @return 状態量
      * @see recalc()
      */
-    virtual float_t &operator[](const unsigned &index){
+    virtual const float_t &operator[](const unsigned &index) const {
       switch(index){
         case 1:  return v_2e_4n[1];
         case 2:  return v_2e_4n[2];
@@ -388,8 +388,12 @@ class INS {
       }
     }
     
+    float_t &operator[](const unsigned &index){
+      return const_cast<float_t &>(static_cast<const INS<float_t> &>(*this)[index]);
+    }
+
     const float_t &get(const unsigned &index) const {
-      return const_cast<INS<float_t> *>(this)->operator[](index);
+      return (*this)[index];
     }
     
     void set(const unsigned &index, const float_t &v){

@@ -81,7 +81,9 @@ class INS_BiasEstimated : public BaseINS {
     vec3_t &bias_accel(){return m_bias_accel;}
     vec3_t &bias_gyro(){return m_bias_gyro;}
 
-    float_t &operator[](const unsigned &index){
+    using BaseINS::operator[];
+
+    const float_t &operator[](const unsigned &index) const {
       switch(index){
         case STATE_VALUES_WITHOUT_BIAS:     return m_bias_accel[0];
         case STATE_VALUES_WITHOUT_BIAS + 1: return m_bias_accel[1];
