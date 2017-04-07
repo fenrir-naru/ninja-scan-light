@@ -449,16 +449,16 @@ class INS {
       recalc();
     }
     
-    float_t v_north() const{return v_N;}            /**< 北方向速度を返します。 @return (float_t) 北方向速度 */
-    float_t v_east() const{return v_E;}             /**< 東方向速度を返します。 @return (float_t) 東方向速度 */
-    float_t v_down() const{return v_2e_4n.get(2);}  /**< 下方向速度を返します。 @return (float_t) 下方向速度 */
+    const float_t &v_north() const{return v_N;}            /**< 北方向速度を返します。 @return (const float_t &) 北方向速度 */
+    const float_t &v_east() const{return v_E;}             /**< 東方向速度を返します。 @return (const float_t &) 東方向速度 */
+    const float_t &v_down() const{return v_2e_4n.get(2);}  /**< 下方向速度を返します。 @return (const float_t &) 下方向速度 */
     
-    float_t latitude() const{return phi;}           /**< 緯度を返します。 @return (float_t) 緯度 */
-    float_t longitude() const{return lambda;}       /**< 経度を返します。 @return (float_t) 経度 */
-    float_t height() const{return h;}               /**< 高度を返します。 @return (float_t) 高度 */
-    float_t azimuth() const{return alpha;}          /**< アジムス角を返します。 @return (float_t) アジムス角 */
+    const float_t &latitude() const{return phi;}           /**< 緯度を返します。 @return (const float_t &) 緯度 */
+    const float_t &longitude() const{return lambda;}       /**< 経度を返します。 @return (const float_t &) 経度 */
+    const float_t &height() const{return h;}               /**< 高度を返します。 @return (const float_t &) 高度 */
+    const float_t &azimuth() const{return alpha;}          /**< アジムス角を返します。 @return (const float_t &) アジムス角 */
     
-    quat_t n2b() const{return q_n2b.copy();}  /**< 姿勢をクォータニオンで返します。 @return (float_t) 姿勢 */
+    const quat_t &n2b() const{return q_n2b;}  /**< 姿勢をクォータニオンで返します。 @return (const quat_t &) 姿勢 */
     
     /* オイラー角への変換 */
     /**
@@ -567,8 +567,8 @@ class INS {
       return _heading > M_PI ? (_heading - (2 * M_PI)) : (_heading < -M_PI ? (_heading + (2 * M_PI)) : _heading);
     }
     
-    vec3_t omega_e2i() const{return omega_e2i_4n.copy();} /**< @f$ \vec{\omega}_{e/i}^{n} @f$ を返します。 @return @f$ \vec{\omega}_{e/i}^{n} @f$ */
-    vec3_t omega_n2e() const{return omega_n2e_4n.copy();} /**< @f$ \vec{\omega}_{n/e}^{n} @f$ を返します。 @return @f$ \vec{\omega}_{n/e}^{n} @f$ */
+    const vec3_t &omega_e2i() const{return omega_e2i_4n;} /**< @f$ \vec{\omega}_{e/i}^{n} @f$ を返します。 @return @f$ \vec{\omega}_{e/i}^{n} @f$ */
+    const vec3_t &omega_n2e() const{return omega_n2e_4n;} /**< @f$ \vec{\omega}_{n/e}^{n} @f$ を返します。 @return @f$ \vec{\omega}_{n/e}^{n} @f$ */
     
     /**
      * ある距離の緯線方向の移動に対して、現在位置における緯度の変化を求めます。
