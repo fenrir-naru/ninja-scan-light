@@ -227,7 +227,11 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
         // Modify A associated with clock error, then, rate
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(0);
             j < CLOCKS_SUPPORTED; i += 2, j++){
-          // clock error
+
+          /* Matrix layout (A)
+           * [-b_c] [      1] : row(j*2)   => clock(j) error
+           * [   0] [-b_cdot] : row(j*2+1) => clock(j) error rate
+           */
           res.A[i][i] += (-m_beta_clock_error);
           res.A[i][i + 1] += 1; // d(clock_error)/dt = clock_error_rate
           res.A[i + 1][i + 1] += (-m_beta_clock_error_rate);
@@ -238,6 +242,11 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
         for(unsigned i(P_SIZE_WITHOUT_CLOCK_ERROR), j(Q_SIZE_WITHOUT_CLOCK_ERROR), k(0);
              k < Q_SIZE_CLOCK_ERROR;
              i++, j++, k++){
+
+          /* Matrix layout (B)
+           * [1] : row(j*2)   => clock(j) error
+           * [1] : row(j*2+1) => clock(j) error rate
+           */
           res.B[i][j] += 1;
         }
       }
@@ -400,9 +409,10 @@ class INS_GPS2_Tightly : public BaseFINS{
             gps.gpstime - BaseFINS::m_clock_error[gps.clock_index] / space_node_t::light_speed);
 
         typename solver_t::pos_t pos = {
-          BaseFINS::template xyz<typename solver_t::xyz_t>(),
+          BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
           typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
         };
+        typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
 
         it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
         if(it_range == gps.measurement.end()){break;}
@@ -476,7 +486,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
           ++z_index;
 
-          continue; // TODO currently only range support
+          // continue; // activate when range is unsupported.
 
           if(it_rate == gps.measurement.end()){continue;}
           it2_t it2_rate(it_rate->second.begin());
@@ -488,13 +498,34 @@ class INS_GPS2_Tightly : public BaseFINS{
 
           // rate residual
           float_t rate(it2_rate->second);
-          typename solver_t::xyz_t sat_vel(sat.velocity(time_arrival, range));
+          typename solver_t::xyz_t rel_vel(sat.velocity(time_arrival, range) - vel_xyz);
           z_serialized[z_index] = rate
-              + los_neg[0] * sat_vel.x()
-              + los_neg[1] * sat_vel.y()
-              + los_neg[2] * sat_vel.z()
+              + los_neg[0] * rel_vel.x()
+              + los_neg[1] * rel_vel.y()
+              + los_neg[2] * rel_vel.z()
               + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed;
-          // TODO subtract user velocity, setup H matrix in NED coordinate
+
+          { // setup H matrix
+            { // velocity
+              mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
+              for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
+                for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
+                  H_serialized[z_index][j] += los_neg[i] * dcm_q_e2n_star(i, j);
+                }
+              }
+            }
+            { // position
+              const float_t &x(vel_xyz.x()), &y(vel_xyz.y()), &z(vel_xyz.z());
+              vel_xyz.x();
+              H_serialized[z_index][3] += (                  los_neg[1] * -z + los_neg[2] *  y) * 2;
+              H_serialized[z_index][4] += (los_neg[0] *  z                   + los_neg[2] * -x) * 2;
+              H_serialized[z_index][5] += (los_neg[0] * -y + los_neg[1] *  x                  ) * 2;
+            }
+            // error rate
+            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2) + 1] = 1;
+          }
+
+          R_diag[z_index] = R_diag[z_index - 1]; // TODO
 
           ++z_index;
         }
