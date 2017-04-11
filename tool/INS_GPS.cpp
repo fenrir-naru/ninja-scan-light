@@ -1568,7 +1568,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void label(std::ostream &out) const {
       if(options.out_is_N_packet){return;}
       out << "mode"
-          << ',' << "itow";
+          << ',' << "itow"
+          << ',';
       nav.ins_gps->label(out);
       out << endl;
     }
@@ -1595,7 +1596,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       out << label
           << ',' << itow
-          << target << endl;
+          << ',' << target << endl;
     }
 
     template <class Base_INS_GPS>

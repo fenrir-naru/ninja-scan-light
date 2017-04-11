@@ -419,7 +419,7 @@ class NAVData {
      * 
      */
     virtual void label(std::ostream &out = std::cout) const {
-      out << ',' << "longitude"
+      out << "longitude"
           << ',' << "latitude"
           << ',' << "height"
           << ',' << "v_north"
@@ -437,7 +437,7 @@ class NAVData {
      * 
      */
     virtual void dump(std::ostream &out) const {
-      out << ',' << rad2deg(longitude())
+      out << rad2deg(longitude())
           << ',' << rad2deg(latitude())
           << ',' << height()
           << ',' << v_north()
