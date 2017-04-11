@@ -435,7 +435,6 @@ class NAVData {
     /**
      * Print current state
      * 
-     * @param itow Time stamp
      */
     virtual void dump(std::ostream &out) const {
       out << ',' << rad2deg(longitude())
@@ -454,7 +453,6 @@ class NAVData {
     /**
      * Print current state
      * 
-     * @param itow Time stamp
      */
     friend std::ostream &operator<<(std::ostream &out, const NAVData<FloatT> &nav){
       nav.dump(out);
@@ -464,6 +462,8 @@ class NAVData {
     /**
      * Make N0 packet
      * 
+     * @param itow Time stamp
+     * @param buf buffer to store results
      */
     void encode_N0(
         const FloatT &itow,
