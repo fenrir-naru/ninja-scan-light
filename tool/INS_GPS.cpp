@@ -372,7 +372,7 @@ class NAV : public NAVData<float_sylph_t> {
       return history_t();
     }
     virtual void inspect(std::ostream &out) const {}
-    virtual float_sylph_t &operator[](unsigned index) = 0;
+    virtual float_sylph_t &operator[](const unsigned &index) = 0;
     
     virtual NAV &update(const A_Packet &){
       return *this;
@@ -763,7 +763,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
     MAKE_PROXY_FUNC(azimuth);
 #undef MAKE_PROXY_FUNC
     
-    float_sylph_t &operator[](unsigned index){return ins_gps->operator[](index);}
+    float_sylph_t &operator[](const unsigned &index){return ins_gps->operator[](index);}
     
     NAV &update(
         const Vector3<float_sylph_t> &accel, 
