@@ -32,7 +32,7 @@
 #ifndef __FIFO_H__
 #define __FIFO_H__
 
-#include <string>
+#include <cstring>
 
 #ifndef min_macro
 #define min_macro(a, b) ((a < b) ? (a) : (b))
@@ -44,11 +44,11 @@
 struct memcpy_t {
   template <typename StorageT>
   memcpy_t(const StorageT *src, StorageT *dist){
-    memcpy(dist, src, sizeof(StorageT));
+    std::memcpy(dist, src, sizeof(StorageT));
   }
   template <typename StorageT, typename SizeT>
   memcpy_t(const StorageT *src, StorageT *dist, SizeT size){
-    memcpy(dist, src, sizeof(StorageT) * size);
+    std::memcpy(dist, src, sizeof(StorageT) * size);
   }
 };
 
@@ -84,13 +84,15 @@ class FIFO {
     typedef unsigned char bool_t;
 #endif
   public:
-    FIFO(const unsigned int &_capacity) : storage(NULL) {
-      storage = new StorageT[_capacity];
-      capacity = _capacity;
-      prius = follower = storage;
+    typedef FIFO<StorageT, DuplicatorT> self_t;
+    FIFO(const unsigned int &_capacity)
+        : capacity(_capacity), storage(new StorageT[capacity]),
+        prius(storage), follower(storage) {
     }
-    FIFO() : storage(NULL), capacity(0), prius(NULL), follower(NULL){}
-    ~FIFO(){
+    FIFO()
+        : capacity(0), storage(NULL),
+        prius(NULL), follower(NULL){}
+    virtual ~FIFO(){
       delete [] storage;
     }
     
@@ -236,7 +238,7 @@ class FIFO {
         return 0;
       }
     }
-    StorageT &operator[] (const int &index) const {
+    const StorageT &operator[] (const int &index) const {
       StorageT *result;
       if(index >= 0){
         result = follower + index;
@@ -251,12 +253,24 @@ class FIFO {
       }
       return *result;
     }
-    StorageT &head() const {
+    StorageT &operator[] (const int &index) {
+      return const_cast<StorageT &>(static_cast<const self_t *>(this)->operator[](index));
+    }
+    const StorageT &head() const {
       return operator[](0);
+    }
+    StorageT &head() {
+      return operator[](0);
+    }
+    const StorageT &tail() const {
+      return operator[](-1);
+    }
+    StorageT &tail() {
+      return operator[](-1);
     }
     
     /**
-     * insepct data in FIFO
+     * inspect data in FIFO
      *  
      * @param buffer 
      * @param size
@@ -312,6 +326,24 @@ class FIFO {
       if(storage){delete [] storage;}
       storage = new_storage;
       capacity = _capacity;
+    }
+
+    FIFO(const self_t &orig)
+        : capacity(orig.capacity), storage(new StorageT[capacity]),
+        prius(storage), follower(storage) {
+      prius += orig.inspect(storage, orig.size());
+    }
+    self_t &operator=(const self_t &another){
+      if(storage != another.storage){
+        if(capacity < another.capacity){
+          delete [] storage;
+          storage = new StorageT[another.capacity];
+          capacity = another.capacity;
+        }
+        prius = follower = storage;
+        prius += another.inspect(storage, another.size());
+      }
+      return *this;
     }
 };
 
