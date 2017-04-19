@@ -70,6 +70,11 @@ FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
 template <class FloatT>
 struct GlobalOptions {
+  protected:
+  GlobalOptions(const GlobalOptions<FloatT> &);
+  GlobalOptions<FloatT> &operator=(const GlobalOptions<FloatT> &);
+
+  public:
   struct gps_time_t {
     FloatT sec; ///< GPS time
     int wn; ///< GPS week number
