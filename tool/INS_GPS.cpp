@@ -496,6 +496,7 @@ struct A_Packet : public Packet {
  */
 struct G_Packet : public Packet {
   GPS_Solution<float_sylph_t> solution;
+  Vector3<float_sylph_t> **lever_arm;
 
   operator GPS_Solution<float_sylph_t>() const {
     return solution;
@@ -1244,6 +1245,7 @@ class StreamProcessor
      */
     struct GHandler : public G_Observer_t  {
       bool previous_seek_next;
+      Vector3<float_sylph_t> *lever_arm;
       G_Packet packet_latest;
       bool packet_updated;
       int itow_ms_0x0102, itow_ms_0x0112;
@@ -1252,12 +1254,16 @@ class StreamProcessor
 
       GHandler()
           : G_Observer_t(buffer_size),
+          lever_arm(NULL),
           packet_latest(), packet_updated(false),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0) {
         previous_seek_next = G_Observer_t::ready();
+        packet_latest.lever_arm = &lever_arm;
       }
-      ~GHandler(){}
+      ~GHandler(){
+        delete lever_arm;
+      }
 
       /**
        * Extract the following data.
@@ -1410,7 +1416,6 @@ class StreamProcessor
   protected:
     int invoked;
     istream *_in;
-    Vector3<float_sylph_t> *ptr_lever_arm;
     
   public:
     deque<A_Packet> &a_packets;
@@ -1422,7 +1427,6 @@ class StreamProcessor
 
     StreamProcessor()
         : super_t(), _in(NULL), invoked(0),
-        ptr_lever_arm(NULL),
         a_handler(),
         a_packets(a_handler.recent_packets), a_packet_updated(a_handler.packet_updated),
         g_handler(),
@@ -1431,16 +1435,10 @@ class StreamProcessor
         m_packets(m_handler.recent_packets) {
 
     }
-    ~StreamProcessor(){
-      delete ptr_lever_arm;
-    }
+    ~StreamProcessor(){}
     
     const StandardCalibration &calibration() const{
       return a_handler.calibration;
-    }
-
-    const Vector3<float_sylph_t> *lever_arm() const {
-      return ptr_lever_arm;
     }
 
     void set_stream(istream *in){_in = in;}
@@ -1524,14 +1522,14 @@ class StreamProcessor
           cerr << "(error!) Lever arm option requires 3 arguments." << endl;
           exit(-1);
         }
-        if(!ptr_lever_arm){
-          ptr_lever_arm = new Vector3<float_sylph_t>(buf[0], buf[1], buf[2]);
+        if(!g_handler.lever_arm){
+          g_handler.lever_arm = new Vector3<float_sylph_t>(buf[0], buf[1], buf[2]);
         }else{
           for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
-            (*ptr_lever_arm)[i] = buf[i];
+            (*g_handler.lever_arm)[i] = buf[i];
           }
         }
-        std::cerr << "lever_arm: " << *ptr_lever_arm << std::endl;
+        std::cerr << "lever_arm: " << *g_handler.lever_arm << std::endl;
         return true;
       }
 
@@ -1832,7 +1830,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         float_sylph_t gps_advance(recent_a_packets.back().interval(g_packet));
         time_update_before_measurement_update(gps_advance, nav.ins_gps);
 
-        if(current_processor->lever_arm()){ // When use lever arm effect.
+        if(*g_packet.lever_arm){ // When use lever arm effect.
           Vector3<float_sylph_t> omega_b2i_4n;
           int packets_for_mean(0x10), i(0);
           recent_a_packets_t::const_iterator it(nearest(recent_a_packets, g_packet.itow, packets_for_mean));
@@ -1842,7 +1840,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
           omega_b2i_4n /= i;
           nav.correct(
               g_packet,
-              *(current_processor->lever_arm()),
+              **g_packet.lever_arm,
               omega_b2i_4n,
               gps_advance);
         }else{ // When do not use lever arm effect.
@@ -1857,8 +1855,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
           }
         }
         status = MEASUREMENT_UPDATED;
-      }else if((current_processor == processors.front())
-          && (recent_a_packets.size() >= min_a_packets_for_init)
+      }else if((recent_a_packets.size() >= min_a_packets_for_init)
           && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
           && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
           && (g_packet.solution.sigma_height <= options.gps_threshold.init_acc_v)){
