@@ -368,6 +368,7 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
+struct Packet;
 struct A_Packet;
 struct G_Packet;
 struct G_Packet_Raw;
@@ -399,6 +400,10 @@ class NAV : public NAVData<float_sylph_t> {
     }
     virtual NAV &update(const M_Packet &){
       return *this;
+    }
+    template <class T>
+    NAV &update(const Packet &packet){
+      return update(static_cast<const T &>(packet));
     }
 
     template <class Container>
@@ -1352,6 +1357,10 @@ class StreamProcessor
 
   public:
     static const unsigned int buffer_size;
+    struct {
+      NAV &(NAV::*updater)(const Packet &);
+      const Packet *packet;
+    } latest;
   protected:
     typedef AbstractSylphideProcessor<float_sylph_t> super_t;
     typedef A_Packet_Observer<float_sylph_t> A_Observer_t;
@@ -1362,13 +1371,14 @@ class StreamProcessor
      * A page (ADC value)
      */
     struct AHandler : public A_Observer_t {
+      StreamProcessor &outer;
       bool previous_seek_next;
       deque<A_Packet> recent_packets;
-      bool packet_updated;
       StandardCalibration calibration;
 
-      AHandler() : A_Observer_t(buffer_size),
-          recent_packets(), packet_updated(false),
+      AHandler(StreamProcessor &invoker) : A_Observer_t(buffer_size),
+          outer(invoker),
+          recent_packets(),
           calibration() {
 
         previous_seek_next = A_Observer_t::ready();
@@ -1418,7 +1428,9 @@ class StreamProcessor
           recent_packets.pop_front();
         }
         recent_packets.push_back(packet);
-        packet_updated = true;
+
+        outer.latest.updater = &NAV::update<A_Packet>;
+        outer.latest.packet = &(recent_packets.back());
       }
     } a_handler;
 
@@ -1426,6 +1438,7 @@ class StreamProcessor
      * G page (u-blox)
      */
     struct GHandler : public G_Observer_t  {
+      StreamProcessor &outer;
       bool previous_seek_next;
       Vector3<float_sylph_t> *lever_arm;
       G_Packet packet_latest;
@@ -1444,8 +1457,9 @@ class StreamProcessor
 
       ostream *out_raw_pvt;
 
-      GHandler()
+      GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
+          outer(invoker),
           lever_arm(NULL),
           packet_latest(), packet_updated(false),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
@@ -1530,6 +1544,8 @@ class StreamProcessor
             packet_latest.solution.sigma_vel = 1;
           }
           packet_updated = true;
+          outer.latest.updater = &NAV::update<G_Packet>;
+          outer.latest.packet = &packet_latest;
         }
       }
 
@@ -1717,9 +1733,13 @@ class StreamProcessor
     } g_handler;
 
     struct MHandler : public M_Observer_t {
+      StreamProcessor &outer;
       bool previous_seek_next;
       deque<M_Packet> recent_packets;
-      MHandler() : M_Observer_t(buffer_size), recent_packets() {
+      MHandler(StreamProcessor &invoker)
+          : M_Observer_t(buffer_size),
+          outer(invoker),
+          recent_packets() {
         previous_seek_next = M_Observer_t::ready();
       }
       ~MHandler(){}
@@ -1758,6 +1778,8 @@ class StreamProcessor
           recent_packets.pop_front();
         }
         recent_packets.push_back(m_packet);
+        //outer.latest.updater = &NAV::update<M_Packet>;
+        //outer.latest.packet = &recent_packets.back();
       }
     } m_handler;
 
@@ -1767,7 +1789,6 @@ class StreamProcessor
     
   public:
     deque<A_Packet> &a_packets;
-    bool &a_packet_updated;
     G_Packet &g_packet;
     bool &g_packet_updated;
     int &g_packet_wn;
@@ -1775,11 +1796,11 @@ class StreamProcessor
 
     StreamProcessor()
         : super_t(), _in(NULL), invoked(0),
-        a_handler(),
-        a_packets(a_handler.recent_packets), a_packet_updated(a_handler.packet_updated),
-        g_handler(),
+        a_handler(*this),
+        a_packets(a_handler.recent_packets),
+        g_handler(*this),
         g_packet(g_handler.packet_latest), g_packet_updated(g_handler.packet_updated), g_packet_wn(g_handler.week_number),
-        m_handler(),
+        m_handler(*this),
         m_packets(m_handler.recent_packets) {
 
     }
@@ -1825,6 +1846,8 @@ class StreamProcessor
 #endif
       }
       
+      latest.packet = NULL;
+
       switch(buffer[0]){
         case 'A':
           super_t::process_packet(
@@ -2349,7 +2372,10 @@ void loop(){
     StreamProcessor &proc(*current_processor);
     bool started(false);
     while(proc.process_1page()){
-      if(proc.a_packet_updated){
+      if(!proc.latest.packet){continue;}
+      (nav_manager.nav->*proc.latest.updater)(*proc.latest.packet);
+      options.out() << *(nav_manager.nav);
+      /*if(proc.a_packet_updated){
         proc.a_packet_updated = false;
         A_Packet &packet(proc.a_packets.back());
         nav_manager.nav->update(packet);
@@ -2369,7 +2395,7 @@ void loop(){
         if(!options.is_time_before_end(packet.itow, proc.g_packet_wn)){
           break;
         }
-      }
+      }*/
     }
     return;
   }
