@@ -995,6 +995,10 @@ float_sylph_t fname() const {return ins_gps->fname();}
       helper.measurement_update(packet);
       return *this;
     }
+    NAV &update(const M_Packet &packet){
+      helper.compass(packet);
+      return *this;
+    }
 };
 
 template <class INS_GPS>
@@ -1735,11 +1739,11 @@ class StreamProcessor
     struct MHandler : public M_Observer_t {
       StreamProcessor &outer;
       bool previous_seek_next;
-      deque<M_Packet> recent_packets;
+      M_Packet packet_latest;
       MHandler(StreamProcessor &invoker)
           : M_Observer_t(buffer_size),
           outer(invoker),
-          recent_packets() {
+          packet_latest() {
         previous_seek_next = M_Observer_t::ready();
       }
       ~MHandler(){}
@@ -1760,26 +1764,20 @@ class StreamProcessor
           }
         }
 
+        float_sylph_t itow(observer.fetch_ITOW());
+        if(options.reduce_1pps_sync_error){
+          float_sylph_t delta_t(itow - packet_latest.itow);
+          if((delta_t >= 1) && (delta_t < 2)){itow -= 1;}
+        }
+        packet_latest.itow = itow;
+
         // TODO: magnetic sensor axes must correspond to ones of accelerometer and gyro.
-        Vector3<float_sylph_t> mag(values.x[3], values.y[3], values.z[3]);
-        M_Packet m_packet;
-        m_packet.itow = observer.fetch_ITOW();
-        m_packet.mag = mag;
+        packet_latest.mag[0] = values.x[3];
+        packet_latest.mag[1] = values.y[3];
+        packet_latest.mag[2] = values.z[3];
 
-        while(options.reduce_1pps_sync_error){
-          if(recent_packets.empty()){break;}
-          float_sylph_t delta_t(m_packet.itow - recent_packets.back().itow);
-          if((delta_t < 1) || (delta_t >= 2)){break;}
-          m_packet.itow -= 1;
-          break;
-        }
-
-        while(recent_packets.size() > 0x40){
-          recent_packets.pop_front();
-        }
-        recent_packets.push_back(m_packet);
-        //outer.latest.updater = &NAV::update<M_Packet>;
-        //outer.latest.packet = &recent_packets.back();
+        outer.latest.updater = &NAV::update<M_Packet>;
+        outer.latest.packet = &packet_latest;
       }
     } m_handler;
 
@@ -1792,7 +1790,6 @@ class StreamProcessor
     G_Packet &g_packet;
     bool &g_packet_updated;
     int &g_packet_wn;
-    deque<M_Packet> &m_packets;
 
     StreamProcessor()
         : super_t(), _in(NULL), invoked(0),
@@ -1800,8 +1797,7 @@ class StreamProcessor
         a_packets(a_handler.recent_packets),
         g_handler(*this),
         g_packet(g_handler.packet_latest), g_packet_updated(g_handler.packet_updated), g_packet_wn(g_handler.week_number),
-        m_handler(*this),
-        m_packets(m_handler.recent_packets) {
+        m_handler(*this) {
 
     }
     ~StreamProcessor(){}
@@ -1947,16 +1943,31 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     } status;
     INS_GPS_NAV<INS_GPS> &nav;
     const int min_a_packets_for_init; // must be greater than 0
-    typedef deque<A_Packet> recent_a_packets_t;
-    recent_a_packets_t recent_a_packets;
-    const int max_recent_a_packets;
+
+    template <class T>
+    struct PacketBuffer {
+      const int max_size;
+      typedef deque<T> buf_t;
+      buf_t buf;
+      PacketBuffer(const int &_max_size) : max_size(_max_size), buf() {}
+      void push(const T &packet){
+        if(buf.size() >= max_size){buf.pop_front();}
+        buf.push_back(packet);
+      }
+    };
+
+    typedef PacketBuffer<A_Packet> recent_a_t;
+    recent_a_t recent_a;
+
+    typedef PacketBuffer<M_Packet> recent_m_t;
+    recent_m_t recent_m;
 
     Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
-      if(current_processor->m_packets.size() < 2){
+      if(recent_m.buf.size() < 2){
         return Vector3<float_sylph_t>(1, 0, 0); // heading is north
       }
-      deque<M_Packet>::const_iterator
-          it_a(nearest(current_processor->m_packets, itow, 2)),
+      typename recent_m_t::buf_t::const_iterator
+          it_a(nearest(recent_m.buf, itow, 2)),
           it_b(it_a + 1);
       float_sylph_t
           weight_a((it_b->itow - itow) / (it_b->itow - it_a->itow)),
@@ -1974,12 +1985,16 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
-
   public:
+    void compass(const M_Packet &packet){
+      recent_m.push(packet);
+    }
+
     Helper(INS_GPS_NAV<INS_GPS> &_nav)
         : status(UNINITIALIZED), nav(_nav),
         min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
-        recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)){
+        recent_a(max(min_a_packets_for_init, 0x100)),
+        recent_m(0x10){
     }
   
   public:
@@ -2071,7 +2086,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void dump(std::ostream &out) const {
       if(status == UNINITIALIZED){return;}
 
-      const float_sylph_t &itow(recent_a_packets.back().itow);
+      const float_sylph_t &itow(recent_a.buf.back().itow);
       dump(out, itow, nav.ins_gps);
 
       options.out_debug() << itow << ',';
@@ -2103,27 +2118,24 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void time_update(const A_Packet &a_packet){
 
       if(status >= JUST_INITIALIZED){
-        const A_Packet &previous(recent_a_packets.back());
+        const A_Packet &previous(recent_a.buf.back());
 
         // Check interval from the last time update
         float_sylph_t deltaT(previous.interval(a_packet));
         time_update(a_packet, deltaT);
       }
 
-      recent_a_packets.push_back(a_packet);
-      if(recent_a_packets.size() > max_recent_a_packets){
-        recent_a_packets.pop_front();
-      }
+      recent_a.push(a_packet);
     }
 
   protected:
     void time_update_after_initialization(Packet packet){
-      recent_a_packets_t::const_reverse_iterator it_r(recent_a_packets.rbegin());
-      for(; it_r != recent_a_packets.rend(); ++it_r){
+      typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
+      for(; it_r != recent_a.buf.rend(); ++it_r){
         if(packet.interval(*it_r) <= 0){break;}
       }
-      for(recent_a_packets_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
-          it != recent_a_packets.end(); ++it){
+      for(typename recent_a_t::buf_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
+          it != recent_a.buf.end(); ++it){
         time_update(*it, packet.interval(*it));
         packet = *it;
       }
@@ -2150,12 +2162,12 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
         // Normalization
         vec_t acc(0, 0, 0);
-        for(deque<A_Packet>::iterator it(recent_a_packets.begin());
-            it != recent_a_packets.end();
+        for(typename recent_a_t::buf_t::iterator it(recent_a.buf.begin());
+            it != recent_a.buf.end();
             ++it){
           acc += it->accel;
         }
-        acc /= recent_a_packets.size();
+        acc /= recent_a.buf.size();
         vec_t acc_reg(-acc / acc.abs());
 
         // Estimate roll angle
@@ -2166,8 +2178,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         pitch = -asin(acc_reg[0]);
         if(options.initial_attitude.mode >= options.initial_attitude.YAW_ONLY){break;}
 
-        // Estimate yaw when magnetic sensor is available
-        if(!current_processor->m_packets.empty()){
+        // Estimate yaw when magnetic compass is available
+        if(!recent_m.buf.empty()){
           yaw = nav.get_mag_yaw(get_mag(itow), pitch, roll,
               latitude, longitude, height);
         }
@@ -2195,7 +2207,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void time_update_before_measurement_update(const float_sylph_t &advanceT, void *){
       if(advanceT <= 0){return;}
       // Time update up to the GPS observation
-      A_Packet interpolation(recent_a_packets.back());
+      A_Packet interpolation(recent_a.buf.back());
       interpolation.itow += advanceT;
       time_update(interpolation);
     }
@@ -2211,14 +2223,15 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       // calculate GPS data timing;
       // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
-      float_sylph_t gps_advance(recent_a_packets.back().interval(g_packet));
+      float_sylph_t gps_advance(recent_a.buf.back().interval(g_packet));
       time_update_before_measurement_update(gps_advance, nav.ins_gps);
 
       if(*g_packet.lever_arm){ // When use lever arm effect.
         Vector3<float_sylph_t> omega_b2i_4n;
         int packets_for_mean(0x10), i(0);
-        recent_a_packets_t::const_iterator it(nearest(recent_a_packets, g_packet.itow, packets_for_mean));
-        for(; (i < packets_for_mean) && (it != recent_a_packets.end()); i++, it++){
+        typename recent_a_t::buf_t::const_iterator it(
+            nearest(recent_a.buf, g_packet.itow, packets_for_mean));
+        for(; (i < packets_for_mean) && (it != recent_a.buf.end()); i++, it++){
           omega_b2i_4n += it->omega;
         }
         omega_b2i_4n /= i;
@@ -2232,9 +2245,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
             g_packet,
             gps_advance);
       }
-      if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
+      if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
         if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
-            && (pow(nav.v_north(), 2) + pow(nav.v_east(), 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
+            && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
           nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
         }
       }
@@ -2254,8 +2267,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       if(status >= JUST_INITIALIZED){
         measurement_update_common(g_packet);
-      }else if((recent_a_packets.size() >= min_a_packets_for_init)
-          && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
+      }else if((recent_a.buf.size() >= min_a_packets_for_init)
+          && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
           && (g_packet.solution.sigma_height <= options.gps_threshold.init_acc_v)){
 
@@ -2294,9 +2307,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> *ins_gps){
       if(status >= JUST_INITIALIZED){
         measurement_update_common(g_packet);
-      }else if((current_processor == processors.front())
-          && (recent_a_packets.size() >= min_a_packets_for_init)
-          && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
+      }else if((recent_a.buf.size() >= min_a_packets_for_init)
+          && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && g_packet.update_pvt()){
 
         initialize_common(
