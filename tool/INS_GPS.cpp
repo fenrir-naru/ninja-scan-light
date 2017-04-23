@@ -1854,6 +1854,15 @@ class StreamProcessor
           super_t::process_packet(
               buffer, read_count,
               g_handler, g_handler.previous_seek_next, g_handler);
+          if(latest.packet){
+            // Time check
+            if(!options.is_time_before_end(latest.packet->itow, g_handler.week_number)){
+              return false;
+            }
+            if(!options.is_time_after_start(latest.packet->itow, g_handler.week_number)){
+              latest.packet = NULL;
+            }
+          }
           break;
         case 'M':
           if(!options.use_magnet){break;}
@@ -2382,32 +2391,10 @@ void loop(){
     // Realtime mode supports only one stream.
     current_processor = processors.front();
     StreamProcessor &proc(*current_processor);
-    bool started(false);
     while(proc.process_1page()){
       if(!proc.latest.packet){continue;}
       (nav_manager.nav->*proc.latest.updater)(*proc.latest.packet);
       options.out() << *(nav_manager.nav);
-      /*if(proc.a_packet_updated){
-        proc.a_packet_updated = false;
-        A_Packet &packet(proc.a_packets.back());
-        nav_manager.nav->update(packet);
-        options.out() << *(nav_manager.nav);
-      }else if(current_processor->g_packet_updated){
-        proc.g_packet_updated = false;
-        G_Packet &packet(proc.g_packet);
-        if(!started){
-          if(!options.is_time_after_start(packet.itow, proc.g_packet_wn)){ // Time check
-            continue;
-          }else{
-            started = true;
-          }
-        }
-        nav_manager.nav->update(packet);
-        options.out() << *(nav_manager.nav);
-        if(!options.is_time_before_end(packet.itow, proc.g_packet_wn)){
-          break;
-        }
-      }*/
     }
     return;
   }
