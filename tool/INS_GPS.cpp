@@ -1563,7 +1563,7 @@ class StreamProcessor
 
       return false;
     }
-} *current_processor;
+};
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
 
@@ -1945,8 +1945,7 @@ void loop(){
 
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
     // Realtime mode supports only one stream.
-    current_processor = processors.front();
-    StreamProcessor &proc(*current_processor);
+    StreamProcessor &proc(*processors.front());
     while(proc.process_1page()){
       if(!proc.latest.packet){continue;}
       (nav_manager.nav->*proc.latest.updater)(*proc.latest.packet);
@@ -2005,11 +2004,10 @@ void loop(){
         it_mu != mu_queue.end();
         ++it_mu){
       
-      current_processor = *it_mu;
-      G_Packet &g_packet(current_processor->g_packet);
-      current_processor->g_packet_updated = false;
+      G_Packet &g_packet((*it_mu)->g_packet);
+      (*it_mu)->g_packet_updated = false;
 
-      if(!options.is_time_after_start(g_packet.itow, current_processor->g_packet_wn)){ // Time check
+      if(!options.is_time_after_start(g_packet.itow, (*it_mu)->g_packet_wn)){ // Time check
         continue;
       }
       
@@ -2030,7 +2028,7 @@ void loop(){
       options.out() << *(nav_manager.nav);
 
       latest_measurement_update_itow = g_packet.itow;
-      latest_measurement_update_gpswn = current_processor->g_packet_wn;
+      latest_measurement_update_gpswn = (*it_mu)->g_packet_wn;
     }
     
     if(!options.is_time_before_end(latest_measurement_update_itow, latest_measurement_update_gpswn)){
