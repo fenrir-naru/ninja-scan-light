@@ -1179,9 +1179,21 @@ class StreamProcessor
 
   public:
     static const unsigned int buffer_size;
-    struct {
-      NAV &(NAV::*updater)(const Packet &);
+    struct latest_t {
       const Packet *packet;
+      NAV &(NAV::*updater)(const Packet &);
+      void invalid() {packet = NULL;}
+      latest_t() {invalid();}
+      bool is_valid() const {return packet != NULL;}
+      template <class T>
+      latest_t &operator=(const T &another){
+        packet = &another;
+        updater = &NAV::update<T>;
+        return *this;
+      }
+      NAV &apply(NAV &nav) const {
+        return (nav.*updater)(*packet);
+      }
     } latest;
   protected:
     typedef AbstractSylphideProcessor<float_sylph_t> super_t;
@@ -1251,8 +1263,7 @@ class StreamProcessor
         }
         recent_packets.push_back(packet);
 
-        outer.latest.updater = &NAV::update<A_Packet>;
-        outer.latest.packet = &(recent_packets.back());
+        outer.latest = recent_packets.back();
       }
     } a_handler;
 
@@ -1352,8 +1363,7 @@ class StreamProcessor
             packet_latest.solution.sigma_vel = 1;
           }
           packet_updated = true;
-          outer.latest.updater = &NAV::update<G_Packet>;
-          outer.latest.packet = &packet_latest;
+          outer.latest = packet_latest;
         }
       }
       /**
@@ -1428,8 +1438,7 @@ class StreamProcessor
         packet_latest.mag[1] = values.y[3];
         packet_latest.mag[2] = values.z[3];
 
-        outer.latest.updater = &NAV::update<M_Packet>;
-        outer.latest.packet = &packet_latest;
+        outer.latest = packet_latest;
       }
     } m_handler;
 
@@ -1444,7 +1453,8 @@ class StreamProcessor
     int &g_packet_wn;
 
     StreamProcessor()
-        : super_t(), _in(NULL), invoked(0),
+        : super_t(), latest(),
+        _in(NULL), invoked(0),
         a_handler(*this),
         a_packets(a_handler.recent_packets),
         g_handler(*this),
@@ -1494,7 +1504,7 @@ class StreamProcessor
 #endif
       }
       
-      latest.packet = NULL;
+      latest.invalid();
 
       switch(buffer[0]){
         case 'A':
@@ -1506,13 +1516,13 @@ class StreamProcessor
           super_t::process_packet(
               buffer, read_count,
               g_handler, g_handler.previous_seek_next, g_handler);
-          if(latest.packet){
+          if(latest.is_valid()){
             // Time check
             if(!options.is_time_before_end(latest.packet->itow, g_handler.week_number)){
               return false;
             }
             if(!options.is_time_after_start(latest.packet->itow, g_handler.week_number)){
-              latest.packet = NULL;
+              latest.invalid();
             }
           }
           break;
@@ -1947,8 +1957,8 @@ void loop(){
     // Realtime mode supports only one stream.
     StreamProcessor &proc(*processors.front());
     while(proc.process_1page()){
-      if(!proc.latest.packet){continue;}
-      (nav_manager.nav->*proc.latest.updater)(*proc.latest.packet);
+      if(!proc.latest.is_valid()){continue;}
+      proc.latest.apply(*nav_manager.nav);
       options.out() << *(nav_manager.nav);
     }
     return;
