@@ -100,20 +100,16 @@ class FIFO {
       return capacity;
     } 
     int stored() const {
-      StorageT *_prius(prius), *_follower(follower);
-      return (_prius >= _follower ?
-           _prius - _follower :
-           _prius + capacity - _follower);
+      return (prius >= follower ?
+           prius - follower :
+           prius + capacity - follower);
     }
     bool_t is_empty() const {
       return prius == follower;
     }
     
     int margin() const {
-      StorageT *_prius(prius), *_follower(follower);
-      return (_follower <= _prius ?
-           _follower + capacity - _prius :
-           _follower - _prius) - 1;
+      return capacity - stored() - 1;
     }
     bool_t has_margin() const {
       return margin() > 0;
@@ -126,7 +122,7 @@ class FIFO {
      * @param size 
      * @return (int)
      */
-   unsigned int write(StorageT *values, unsigned int size){
+   unsigned int write(const StorageT *values, unsigned int size){
       unsigned int _size;
       StorageT *prius_next;
       if(values == NULL){return 0;}
@@ -280,7 +276,7 @@ class FIFO {
     unsigned int inspect(
         StorageT *buffer, 
         unsigned int size, 
-        unsigned int offset) const {
+        const unsigned int &offset = 0) const {
       unsigned int _size;
       StorageT *follower2;
       if(buffer == NULL){return 0;}
@@ -300,18 +296,6 @@ class FIFO {
         DuplicatorT(follower2, buffer, _size);
       }
       return size;
-    }
-    
-    /**
-     * inspect data in FIFO
-     *  
-     * @param buffer 
-     * @param size
-     * @param offset 
-     * @return (int) 
-     */
-    unsigned int inspect(StorageT *buffer, unsigned int size) const {
-      return inspect(buffer, size, 0);
     }
     
     /**
