@@ -502,6 +502,13 @@ class NAVData {
       *(v_s16_t *)(&buf[28]) = le_char4_2_num<v_s16_t>(*(const char *)&theta);
       *(v_s16_t *)(&buf[30]) = le_char4_2_num<v_s16_t>(*(const char *)&phi);
     }
+
+    virtual FloatT time_stamp() const {return 0;}
+
+    void encode_N0(char buf[32]) const {
+      encode_N0(time_stamp(), buf);
+    }
+
 };
 
 #endif
