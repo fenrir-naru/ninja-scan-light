@@ -165,6 +165,9 @@ class FIFO {
         }
       }
     }
+    unsigned int push(const StorageT &value){
+      return push(&value);
+    }
     
     unsigned int skip(unsigned int size){
       unsigned int _size;
