@@ -493,7 +493,9 @@ struct A_Packet : public Packet {
  */
 struct G_Packet : public Packet {
   GPS_Solution<float_sylph_t> solution;
-  Vector3<float_sylph_t> **lever_arm;
+  Vector3<float_sylph_t> *lever_arm;
+
+  G_Packet() : solution(), lever_arm(NULL) {}
 
   operator GPS_Solution<float_sylph_t>() const {
     return solution;
@@ -1270,7 +1272,7 @@ class StreamProcessor
     struct GHandler : public G_Observer_t  {
       StreamProcessor &outer;
       bool previous_seek_next;
-      Vector3<float_sylph_t> *lever_arm;
+      Vector3<float_sylph_t> lever_arm;
       G_Packet packet_latest;
       bool packet_updated;
       int itow_ms_0x0102, itow_ms_0x0112;
@@ -1280,16 +1282,13 @@ class StreamProcessor
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
           outer(invoker),
-          lever_arm(NULL),
+          lever_arm(),
           packet_latest(), packet_updated(false),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0) {
         previous_seek_next = G_Observer_t::ready();
-        packet_latest.lever_arm = &lever_arm;
       }
-      ~GHandler(){
-        delete lever_arm;
-      }
+      ~GHandler(){}
 
       /**
        * Extract the following data.
@@ -1444,13 +1443,11 @@ class StreamProcessor
     istream *_in;
     
   public:
-    int &g_packet_wn;
-
     StreamProcessor()
         : super_t(), latest_packet(),
         _in(NULL), invoked(0),
         a_handler(*this),
-        g_handler(*this), g_packet_wn(g_handler.week_number),
+        g_handler(*this),
         m_handler(*this) {
 
     }
@@ -1552,14 +1549,11 @@ class StreamProcessor
           cerr << "(error!) Lever arm option requires 3 arguments." << endl;
           exit(-1);
         }
-        if(!g_handler.lever_arm){
-          g_handler.lever_arm = new Vector3<float_sylph_t>(buf[0], buf[1], buf[2]);
-        }else{
-          for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
-            (*g_handler.lever_arm)[i] = buf[i];
-          }
+        for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
+          g_handler.lever_arm[i] = buf[i];
         }
-        std::cerr << "lever_arm: " << *g_handler.lever_arm << std::endl;
+        g_handler.packet_latest.lever_arm = &(g_handler.lever_arm);
+        std::cerr << "lever_arm: " << g_handler.lever_arm << std::endl;
         return true;
       }
 
@@ -1845,7 +1839,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         float_sylph_t gps_advance(recent_a.buf.back().interval(g_packet));
         time_update_before_measurement_update(gps_advance, nav.ins_gps);
 
-        if(*g_packet.lever_arm){ // When use lever arm effect.
+        if(g_packet.lever_arm){ // When use lever arm effect.
           Vector3<float_sylph_t> omega_b2i_4n;
           int packets_for_mean(0x10), i(0);
           typename recent_a_t::buf_t::const_iterator it(
@@ -1856,7 +1850,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
           omega_b2i_4n /= i;
           nav.correct(
               g_packet,
-              **g_packet.lever_arm,
+              *g_packet.lever_arm,
               omega_b2i_4n,
               gps_advance);
         }else{ // When do not use lever arm effect.
