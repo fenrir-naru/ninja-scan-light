@@ -157,7 +157,7 @@ struct GlobalOptions {
   
   std::istream &spec2istream(
       const char *spec, 
-      const bool force_fstream = false){
+      const bool &force_fstream = false){
     if(!force_fstream){
       if(strcmp(spec, "-") == 0){
         // '-' stands for standard inputs
@@ -199,7 +199,7 @@ struct GlobalOptions {
   
   std::ostream &spec2ostream(
       const char *spec,
-      const bool force_fstream = false){
+      const bool &force_fstream = false){
     if(!force_fstream){
       if(std::strcmp(spec, "-") == 0){
         // '-' stands for standard outputs
