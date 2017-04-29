@@ -1009,8 +1009,35 @@ struct StandardCalibration {
     float_sylph_t sf[N];
     float_sylph_t alignment[N][N];
     float_sylph_t sigma[N];
+    static void set(char *spec, float_sylph_t target[N]){
+      for(int i(0); i < N; i++){
+        target[i] = std::strtod(spec, &spec);
+      }
+    }
+    static void set(char *spec, float_sylph_t target[N][N]){
+      for(int i(0); i < N; i++){
+        for(int j(0); j < N; j++){
+          target[i][j] = std::strtod(spec, &spec);
+        }
+      }
+    }
+    static std::ostream &dump(std::ostream &out, const float_sylph_t target[N]){
+      for(int i(0); i < N; i++){
+        out << " " << target[i];
+      }
+      return out;
+    }
+    static std::ostream &dump(std::ostream &out, const float_sylph_t target[N][N]){
+      for(int i(0); i < N; i++){
+        for(int j(0); j < N; j++){
+          out << " " << target[i][j];
+        }
+      }
+      return out;
+    }
   };
-  calibration_info_t<3> accel, gyro;
+  typedef calibration_info_t<3> dof3_t;
+  dof3_t accel, gyro;
 
   bool check_spec(const char *line){
     const char *value;
@@ -1023,49 +1050,48 @@ struct StandardCalibration {
       return true;
     }
 #define TO_STRING(name) # name
-#define make_proc1(name, sensor, item) \
+#define check_proc(name, sensor, item) \
 if(value = Options::get_value2(line, TO_STRING(name))){ \
-  std::cerr << TO_STRING(name) << ":"; \
-  char *spec(const_cast<char *>(value)); \
-  for(int i(0); i < 3; i++){ \
-    sensor.item[i] = std::strtod(spec, &spec); \
-    std::cerr << " " << sensor.item[i]; \
-  } \
-  std::cerr << std::endl; \
+  dof3_t::set(const_cast<char *>(value), sensor.item); \
   return true; \
 }
-#define make_proc2(name, sensor, item) \
-if(value = Options::get_value2(line, TO_STRING(name))){ \
-  std::cerr << TO_STRING(name) << ": {"; \
-  char *spec(const_cast<char *>(value)); \
-  for(int i(0); i < 3; i++){ \
-    for(int j(0); j < 3; j++){ \
-      sensor.item[i][j] = std::strtod(spec, &spec); \
-    } \
-    std::cerr \
-        << std::endl << "{" \
-        << sensor.item[i][0] << ", " \
-        << sensor.item[i][1] << ", " \
-        << sensor.item[i][2] << "}"; \
-  } \
-  std::cerr << "}" << std::endl; \
-  return true; \
-}
-    make_proc1(acc_bias_tc, accel, bias_tc);
-    make_proc1(acc_bias, accel, bias_base);
-    make_proc1(acc_sf, accel, sf);
-    make_proc2(acc_mis, accel, alignment);
-    make_proc1(gyro_bias_tc, gyro, bias_tc);
-    make_proc1(gyro_bias, gyro, bias_base);
-    make_proc1(gyro_sf, gyro, sf);
-    make_proc2(gyro_mis, gyro, alignment);
-    make_proc1(sigma_accel, accel, sigma);
-    make_proc1(sigma_gyro, gyro, sigma);
-#undef make_proc1
-#undef make_proc2
+    check_proc(acc_bias_tc, accel, bias_tc);
+    check_proc(acc_bias, accel, bias_base);
+    check_proc(acc_sf, accel, sf);
+    check_proc(acc_mis, accel, alignment);
+    check_proc(gyro_bias_tc, gyro, bias_tc);
+    check_proc(gyro_bias, gyro, bias_base);
+    check_proc(gyro_sf, gyro, sf);
+    check_proc(gyro_mis, gyro, alignment);
+    check_proc(sigma_accel, accel, sigma);
+    check_proc(sigma_gyro, gyro, sigma);
+#undef check_proc
 #undef TO_STRING
 
     return false;
+  }
+
+  friend std::ostream &operator<<(
+      std::ostream &out, const StandardCalibration &calib){
+    out << "index_base " << calib.index_base << std::endl;
+    out << "index_temp_ch " << calib.index_temp_ch << std::endl;
+#define TO_STRING(name) # name
+#define dump_proc(name, sensor, item) \
+  out << TO_STRING(name); \
+  dof3_t::dump(out, calib.sensor.item)
+    dump_proc(acc_bias_tc, accel, bias_tc) << std::endl;
+    dump_proc(acc_bias, accel, bias_base) << std::endl;
+    dump_proc(acc_sf, accel, sf) << std::endl;
+    dump_proc(acc_mis, accel, alignment) << std::endl;
+    dump_proc(gyro_bias_tc, gyro, bias_tc) << std::endl;
+    dump_proc(gyro_bias, gyro, bias_base) << std::endl;
+    dump_proc(gyro_sf, gyro, sf) << std::endl;
+    dump_proc(gyro_mis, gyro, alignment) << std::endl;
+    dump_proc(sigma_accel, accel, sigma) << std::endl;
+    dump_proc(sigma_gyro, gyro, sigma);
+#undef dump_proc
+#undef TO_STRING
+    return out;
   }
 
   template <class NumType, std::size_t N>
@@ -2024,6 +2050,7 @@ int main(int argc, char *argv[]){
         options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
 
     processors.push_back(stream_processor);
+    cerr << stream_processor->calibration() << endl;
   }
 
   if(processors.empty()){
