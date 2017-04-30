@@ -1385,6 +1385,26 @@ class StreamProcessor
       Packet *clone_packet() const {
         return (*packet_cloner)(packet_ptr);
       }
+      void move(const StreamProcessor &self, const StreamProcessor &another){
+        if(!another.latest_packet.is_valid()){return;}
+        struct {
+          const Packet &external;
+          const Packet &internal;
+        } targets[] = {
+          {another.a_handler.packet_latest, self.a_handler.packet_latest},
+          {another.g_handler.packet_latest, self.g_handler.packet_latest},
+          {another.g_handler.packet_raw_latest, self.g_handler.packet_raw_latest},
+          {another.m_handler.packet_latest, self.m_handler.packet_latest},
+        };
+        for(int i(0); i < sizeof(targets) / sizeof(targets[0]); i++){
+          if(another.latest_packet.packet_ptr == &targets[i].external){
+            packet_ptr = &targets[i].internal;
+            packet_applier = another.latest_packet.packet_applier;
+            packet_cloner = another.latest_packet.packet_cloner;
+            break;
+          }
+        }
+      }
     } latest_packet;
   protected:
     typedef AbstractSylphideProcessor<float_sylph_t> super_t;
@@ -1426,6 +1446,13 @@ class StreamProcessor
         }
       }
       ~AHandler(){}
+      AHandler &operator=(const AHandler &another){
+        A_Observer_t::operator=(another);
+        previous_seek_next = another.previous_seek_next;
+        packet_latest = another.packet_latest;
+        calibration = another.calibration;
+        return *this;
+      }
       void operator()(const A_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1457,7 +1484,6 @@ class StreamProcessor
       bool previous_seek_next;
       Vector3<float_sylph_t> lever_arm;
       G_Packet packet_latest;
-      bool packet_updated;
       int itow_ms_0x0102, itow_ms_0x0112;
       unsigned int gps_status;
       int week_number;
@@ -1468,7 +1494,6 @@ class StreamProcessor
       space_node_t &space_node;
       
       G_Packet_Raw packet_raw_latest;
-      bool packet_raw_updated;
 
       ostream *out_raw_pvt;
 
@@ -1476,16 +1501,30 @@ class StreamProcessor
           : G_Observer_t(buffer_size),
           outer(invoker),
           lever_arm(),
-          packet_latest(), packet_updated(false),
+          packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0),
           space_node_inidividual(),
           space_node(true ? space_node_inidividual : space_node_shared),
-          packet_raw_latest(space_node), packet_raw_updated(false),
+          packet_raw_latest(space_node),
           out_raw_pvt(NULL) {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
+      GHandler &operator=(const GHandler &another){
+        G_Observer_t::operator=(another);
+        previous_seek_next = another.previous_seek_next;
+        lever_arm = another.lever_arm;
+        packet_latest = another.packet_latest;
+        itow_ms_0x0102 = another.itow_ms_0x0102;
+        itow_ms_0x0112 = another.itow_ms_0x0112;
+        gps_status = another.gps_status;
+        week_number = another.week_number;
+        space_node_inidividual = another.space_node_inidividual;
+        //packet_raw_latest = another.packet_raw_latest; // TODO
+        out_raw_pvt = another.out_raw_pvt;
+        return *this;
+      }
 
       /**
        * Extract the following data.
@@ -1555,7 +1594,6 @@ class StreamProcessor
             packet_latest.solution.v_n = packet_latest.solution.v_e = packet_latest.solution.v_d = 0;
             packet_latest.solution.sigma_vel = 1;
           }
-          packet_updated = true;
           outer.latest_packet = packet_latest;
         }
       }
@@ -1702,7 +1740,6 @@ class StreamProcessor
             }
 #endif
 
-            packet_raw_updated = true;
             outer.latest_packet = packet_raw_latest;
             if(out_raw_pvt && packet_raw_latest.update_solution()){
               (*out_raw_pvt) << packet_raw_latest << endl;
@@ -1755,6 +1792,11 @@ class StreamProcessor
         previous_seek_next = M_Observer_t::ready();
       }
       ~MHandler(){}
+      MHandler &operator=(const MHandler &another){
+        previous_seek_next = another.previous_seek_next;
+        packet_latest = another.packet_latest;
+        return *this;
+      }
       void operator()(const M_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1801,8 +1843,32 @@ class StreamProcessor
         m_handler(*this) {
 
     }
+    StreamProcessor(const StreamProcessor &another)
+        : super_t(another), latest_packet(),
+        _in(another._in), invoked(another.invoked),
+        a_handler(*this),
+        g_handler(*this),
+        m_handler(*this) {
+      a_handler = another.a_handler;
+      g_handler = another.g_handler;
+      m_handler = another.m_handler;
+      latest_packet.move(*this, another);
+    }
     ~StreamProcessor(){}
     
+    StreamProcessor &operator=(const StreamProcessor &another){
+      if(this != &another){
+        super_t::operator=(another);
+        _in = another._in;
+        invoked = another.invoked;
+        a_handler = another.a_handler;
+        g_handler = another.g_handler;
+        m_handler = another.m_handler;
+        latest_packet.move(*this, another);
+      }
+      return *this;
+    }
+
     const StandardCalibration &calibration() const{
       return a_handler.calibration;
     }
@@ -1937,7 +2003,7 @@ const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
 StreamProcessor::GHandler::space_node_t StreamProcessor::GHandler::space_node_shared
     = StreamProcessor::GHandler::space_node_t();
 
-typedef vector<StreamProcessor *> processors_t;
+typedef vector<StreamProcessor> processors_t;
 processors_t processors;
 
 template <class INS_GPS>
@@ -2336,7 +2402,7 @@ void loop(){
   struct NAV_Manager {
     NAV *nav;
     NAV_Manager(){
-      const StandardCalibration &calibration(processors.front()->calibration());
+      const StandardCalibration &calibration(processors.front().calibration());
       switch(options.ins_gps_integration){
         case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
           if(options.use_udkf){
@@ -2400,7 +2466,8 @@ void loop(){
     options.out() << endl;
   }
 
-  StreamProcessor &proc(*processors.front());
+  // TODO multiple log stream will be support.
+  StreamProcessor &proc(processors.front());
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
     // Realtime mode supports only one stream.
     while(proc.process_1page()){
@@ -2452,30 +2519,29 @@ int main(int argc, char *argv[]){
   // option check...
   cerr << "Option checking..." << endl;
 
-  StreamProcessor *stream_processor(new StreamProcessor());
-
   for(int arg_index(1); arg_index < argc; arg_index++){
+    StreamProcessor stream_processor;
 
-    if(stream_processor->check_spec(argv[arg_index])){continue;}
+    for(; arg_index < argc; arg_index++){
+      if(stream_processor.check_spec(argv[arg_index])){continue;}
+      if(options.check_spec(argv[arg_index])){continue;}
 
-    if(options.check_spec(argv[arg_index])){continue;}
-    
-    if(!processors.empty()){
-      cerr << "(error!) Unknown option or too many log." << endl;
-      exit(-1);
+      cerr << "Log file(" << processors.size() << "): ";
+      istream &in(options.spec2istream(argv[arg_index]));
+      stream_processor.set_stream(
+          options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
+
+      processors.push_back(stream_processor);
+      cerr << stream_processor.calibration() << endl;
     }
-    
-    cerr << "Log file: ";
-    istream &in(options.spec2istream(argv[arg_index]));
-    stream_processor->set_stream(
-        options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
-
-    processors.push_back(stream_processor);
-    cerr << stream_processor->calibration() << endl;
   }
 
   if(processors.empty()){
     cerr << "(error!) No log file." << endl;
+    exit(-1);
+  }
+  if(processors.size() > 1){ // TODO multiple log stream will be support.
+    cerr << "(error!) too many log." << endl;
     exit(-1);
   }
 
@@ -2487,12 +2553,6 @@ int main(int argc, char *argv[]){
   options.out_debug() << setprecision(16);
 
   loop();
-  
-  for(processors_t::iterator it(processors.begin());
-      it != processors.end();
-      ++it){
-    delete *it;
-  }
 
   return 0;
 }
