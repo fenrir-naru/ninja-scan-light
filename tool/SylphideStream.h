@@ -32,6 +32,9 @@
 #ifndef __SYLPHIDE_STREAM_H__
 #define __SYLPHIDE_STREAM_H__
 
+#include <cstddef>
+
+#include "std.h"
 #include "util/endian.h"
 #include "util/crc.h"
 
@@ -44,17 +47,18 @@ struct SylphideProtocol {
   static const unsigned int capsule_size;
   static const unsigned int payload_fixed_length = 0x20;
   
-  typedef unsigned short v_u16_t;
+  typedef Uint16 v_u16_t;
   
   template<class Container>
   static v_u16_t calc_crc16(
       Container &target,
       const unsigned int &size,
-      unsigned int offset,
+      const unsigned int &offset,
       v_u16_t crc_u16 = 0){
     
+    unsigned int _offset(offset);
     for(int i(0); i < size; i++){
-      crc_u16 = CRC16::crc16_generic(target[offset++], crc_u16);
+      crc_u16 = CRC16::crc16_generic(target[_offset++], crc_u16);
     }
     return crc_u16;
   }
@@ -63,7 +67,7 @@ struct SylphideProtocol {
   static v_u16_t calc_crc16(
       T (&target)[N],
       const unsigned int &size,
-      unsigned int offset,
+      const unsigned int &offset,
       v_u16_t crc_u16 = 0){
     return CRC16::crc16((unsigned char *)&target[offset], size, crc_u16);
   }
@@ -80,7 +84,7 @@ struct SylphideProtocol {
      * @return (unsigned int) パケットのサイズ
      */
     static const unsigned int packet_size(
-        const unsigned int payload_size){
+        const unsigned int &payload_size){
       
       // ペイロードサイズ確認
       switch(payload_size){
@@ -104,9 +108,9 @@ struct SylphideProtocol {
      */
     template<class Container>
     static unsigned int preprocess(Container &target,
-        const unsigned int payload_size = payload_fixed_length,
-        const bool request_ack = false,
-        const bool ack_reply = false){
+        const unsigned int &payload_size = payload_fixed_length,
+        const bool &request_ack = false,
+        const bool &ack_reply = false){
       
       unsigned int payload_start_offset(capsule_head_size);
       
@@ -146,24 +150,24 @@ struct SylphideProtocol {
     }
     
     /**
-      * シーケンス番号を埋め込む
-      *
-      * @param target エンコード結果の格納先
-      * @param sequence_num シーケンス番号
-      */
-     template<class Container>
-     static void embed_sequence_num(Container &target,
-         const unsigned int sequence_num){
+     * シーケンス番号を埋め込む
+     *
+     * @param target エンコード結果の格納先
+     * @param sequence_num シーケンス番号
+     */
+    template<class Container>
+    static void embed_sequence_num(Container &target,
+        const unsigned int &sequence_num){
 
-       // シーケンス番号の書き込み
-       v_u16_t sequence_num_u16(sequence_num);
-       v_u16_t sequence_num_u16_le(
-           le_char2_2_num<v_u16_t>(*(char *)&sequence_num_u16));
-       target[header_size]
-           = *(unsigned char *)&sequence_num_u16_le;
-       target[header_size + 1]
-           = *(((unsigned char *)&sequence_num_u16_le) + 1);
-     }
+      // シーケンス番号の書き込み
+      v_u16_t sequence_num_u16(sequence_num);
+      v_u16_t sequence_num_u16_le(
+          le_char2_2_num<v_u16_t>(*(char *)&sequence_num_u16));
+      target[header_size]
+          = *(unsigned char *)&sequence_num_u16_le;
+      target[header_size + 1]
+          = *(((unsigned char *)&sequence_num_u16_le) + 1);
+    }
 
     /**
      * エンコードして送信する
@@ -180,9 +184,9 @@ struct SylphideProtocol {
         Stream &stream,
         const unsigned int &sequence_num,
         Container &payload,
-        const unsigned int payload_size = payload_fixed_length,
-        const bool request_ack = false,
-        const bool ack_reply = false){
+        const unsigned int &payload_size = payload_fixed_length,
+        const bool &request_ack = false,
+        const bool &ack_reply = false){
 
       unsigned char header_buf[8];
 
@@ -219,8 +223,8 @@ struct SylphideProtocol {
      */
     template<class Container>
     static void postprocess(Container &target,
-        const unsigned int sequence_num,
-        const unsigned int whole_size){
+        const unsigned int &sequence_num,
+        const unsigned int &whole_size){
       
       // シーケンス番号の書き込み
       embed_sequence_num(target, sequence_num);
@@ -387,7 +391,7 @@ struct SylphideProtocol {
     template<class Container, class BufferT>
     static void extract_payload(
         Container &target, BufferT &buf,
-        const unsigned int whole_size, const unsigned int extract_size){
+        const unsigned int &whole_size, const unsigned int &extract_size){
       
       for(int i(0), j(whole_size - extract_size - capsule_tail_size); 
           i < extract_size; 
@@ -722,42 +726,36 @@ class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
     }
 };
 
-typedef 
-    basic_SylphideStreambuf_in<char, std::char_traits<char> > 
-    SylphideStreambuf_in;
-
-typedef 
-    basic_SylphideStreambuf_out<char, std::char_traits<char> > 
-    SylphideStreambuf_out;
-
-class SylphideIStream : public std::istream {
+template<class _Elem, class _Traits>
+class basic_SylphideIStream : public std::istream {
   public:
-    typedef SylphideStreambuf_in buf_t;
+    typedef basic_SylphideStreambuf_in<_Elem, _Traits> buf_t;
   protected:
     typedef std::istream super_t;
     buf_t buf;
   public:
-    SylphideIStream(std::istream &in)
+    basic_SylphideIStream(std::istream &in)
         : buf(in), super_t(&buf){}
-    SylphideIStream(std::istream &in, const unsigned int payload_size)
+    basic_SylphideIStream(std::istream &in, const unsigned int payload_size)
         : buf(in, payload_size), super_t(&buf){}
-    ~SylphideIStream(){}
+    ~basic_SylphideIStream(){}
     unsigned int current_sequence() const {
       return const_cast<buf_t &>(buf).sequence_number();
     }
 };
 
-class SylphideOStream : public std::ostream {
+template<class _Elem, class _Traits>
+class basic_SylphideOStream : public std::ostream {
   public:
-    typedef SylphideStreambuf_out buf_t;
+    typedef basic_SylphideStreambuf_out<_Elem, _Traits> buf_t;
   protected:
     typedef std::ostream super_t;
     buf_t buf;
   public:
-    SylphideOStream(std::ostream &out, 
+    basic_SylphideOStream(std::ostream &out,
         const unsigned int &payload_size = SylphideProtocol::payload_fixed_length)
         : buf(out, payload_size), super_t(&buf){}
-    ~SylphideOStream(){}
+    ~basic_SylphideOStream(){}
     void set_payload_size(const unsigned int &new_size){
       buf.set_payload_size(new_size);
     }
@@ -768,6 +766,15 @@ class SylphideOStream : public std::ostream {
       return buf.sequence_number_lock();
     }
 };
+
+typedef
+    basic_SylphideIStream<char, std::char_traits<char> >
+    SylphideIStream;
+
+typedef
+    basic_SylphideOStream<char, std::char_traits<char> >
+    SylphideOStream;
+
 
 #endif
 
