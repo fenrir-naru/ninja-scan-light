@@ -624,9 +624,9 @@ class INS {
       float_t n(Earth::R_e / std::sqrt(
           1.0 - pow2(Earth::epsilon_Earth * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3))) * 2))));
       return Vector3_T(
-          -(n + h) * (q_e2n.get(0) * q_e2n.get(2) + q_e2n.get(1) * q_e2n.get(3)),
-          (n + h) * (q_e2n.get(0) * q_e2n.get(1) - q_e2n.get(2) * q_e2n.get(3)),
-          (n * (1.0 - pow2(Earth::epsilon_Earth)) + h) * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3)))));
+          -(n + h) * (q_e2n.get(0) * q_e2n.get(2) + q_e2n.get(1) * q_e2n.get(3)) * 2,
+          (n + h) * (q_e2n.get(0) * q_e2n.get(1) - q_e2n.get(2) * q_e2n.get(3)) * 2,
+          (n * (1.0 - pow2(Earth::epsilon_Earth)) + h) * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3))) * 2));
     }
 
     /**

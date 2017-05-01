@@ -91,7 +91,7 @@ class INS_ClockErrorEstimated : public BaseINS {
       int index_offset(index - STATE_VALUES_WITHOUT_CLOCK_ERROR);
       if((index_offset >= 0) && (index_offset < STATE_VALUES_CLOCK_ERROR)){
         int index_clock(index_offset >> 1);
-        return (index_offset & 1 == 0) ? m_clock_error[index_clock] : m_clock_error_rate[index_clock];
+        return (index_offset % 2 == 0) ? m_clock_error[index_clock] : m_clock_error_rate[index_clock];
       }
       return BaseINS::operator[](index);
     }
@@ -403,7 +403,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       int z_index(0);
 
       while(true){
-        if(gps.clock_index < CLOCKS_SUPPORTED){break;}
+        if(gps.clock_index >= CLOCKS_SUPPORTED){break;}
 
         typename raw_data_t::gps_time_t time_arrival(
             gps.gpstime - BaseFINS::m_clock_error[gps.clock_index] / space_node_t::light_speed);
@@ -449,7 +449,7 @@ class INS_GPS2_Tightly : public BaseFINS{
                 q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
                 q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
                 q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
-            static const float_t e(BaseFINS::Earth::epsilon_Earth);
+            const float_t &e(BaseFINS::Earth::epsilon_Earth);
             const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
             const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
             const float_t n_h((n + BaseFINS::h) * 2);
@@ -467,18 +467,18 @@ class INS_GPS2_Tightly : public BaseFINS{
             {
               const float_t sf2(sf * -(1.0 - pow2(e)));
               const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
-              H_uh[2][0] = q_alpha * q_beta * sf2 + n_h * q_beta;
-              H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h * q_gamma;
+              H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
+              H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
               H_uh[2][3] = -q_alpha;
             }
 #undef pow2
 
             for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
               for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-                H_serialized[z_index][k] += los_neg[i] * H_uh[i][j];
+                H_serialized[z_index][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
               }
             }
-            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2)] = 1;
+            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2)] = -1; // polarity checked.
           }
 
           if(weight < 1E-1){weight = 1E-1;}
@@ -499,7 +499,7 @@ class INS_GPS2_Tightly : public BaseFINS{
           // rate residual
           float_t rate(it2_rate->second);
           typename solver_t::xyz_t rel_vel(sat.velocity(time_arrival, range) - vel_xyz);
-          z_serialized[z_index] = rate
+          z_serialized[z_index] = rate - BaseFINS::m_clock_error_rate[gps.clock_index]
               + los_neg[0] * rel_vel.x()
               + los_neg[1] * rel_vel.y()
               + los_neg[2] * rel_vel.z()
@@ -510,22 +510,21 @@ class INS_GPS2_Tightly : public BaseFINS{
               mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
               for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
                 for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-                  H_serialized[z_index][j] += los_neg[i] * dcm_q_e2n_star(i, j);
+                  H_serialized[z_index][j] -= los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
                 }
               }
             }
             { // position
               const float_t &x(vel_xyz.x()), &y(vel_xyz.y()), &z(vel_xyz.z());
-              vel_xyz.x();
-              H_serialized[z_index][3] += (                  los_neg[1] * -z + los_neg[2] *  y) * 2;
-              H_serialized[z_index][4] += (los_neg[0] *  z                   + los_neg[2] * -x) * 2;
-              H_serialized[z_index][5] += (los_neg[0] * -y + los_neg[1] *  x                  ) * 2;
+              H_serialized[z_index][3] -= (                  los_neg[1] * -z + los_neg[2] *  y) * 2;  // polarity checked.
+              H_serialized[z_index][4] -= (los_neg[0] *  z                   + los_neg[2] * -x) * 2;
+              H_serialized[z_index][5] -= (los_neg[0] * -y + los_neg[1] *  x                  ) * 2;
             }
             // error rate
-            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2) + 1] = 1;
+            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2) + 1] = -1; // polarity checked.
           }
 
-          R_diag[z_index] = R_diag[z_index - 1]; // TODO
+          R_diag[z_index] = R_diag[z_index - 1] * 1E-3; // TODO rate error variance
 
           ++z_index;
         }

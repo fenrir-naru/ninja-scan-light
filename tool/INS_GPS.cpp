@@ -1629,6 +1629,7 @@ class StreamProcessor
             float_sylph_t delta_t(current - packet_raw_latest.raw_data.gpstime);
 #endif
             packet_raw_latest.raw_data.gpstime = current;
+            packet_raw_latest.itow = current.seconds;
 
             typedef raw_data_t::measurement_t dst_t;
             dst_t &dst(packet_raw_latest.raw_data.measurement);
