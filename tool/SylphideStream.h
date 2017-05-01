@@ -35,12 +35,12 @@
 #include <cstddef>
 
 #include "std.h"
-#include "util/endian.h"
 #include "util/crc.h"
 
-struct SylphideProtocol {
+template <class KeyType = unsigned char>
+struct generic_SylphideProtocol {
   
-  static const unsigned char header[];
+  static const KeyType header[];
   static const unsigned int header_size;
   static const unsigned int capsule_head_size;
   static const unsigned int capsule_tail_size;
@@ -137,13 +137,9 @@ struct SylphideProtocol {
       // ペイロードサイズが可変の場合はサイズも書いておく
       if(add_payload_size){
         v_u16_t payload_size_u16(payload_size);
-        v_u16_t payload_size_u16_le(
-            le_char2_2_num<v_u16_t>(*(char *)&payload_size_u16));
-        target[payload_start_offset] 
-            = *(unsigned char *)&payload_size_u16_le;
-        target[payload_start_offset + 1] 
-            = *(((unsigned char *)&payload_size_u16_le) + 1);
-        payload_start_offset += sizeof(v_u16_t);
+        target[payload_start_offset] = (KeyType)(payload_size_u16 & 0xFF);
+        target[payload_start_offset + 1] = (KeyType)(payload_size_u16 >> 8);
+        payload_start_offset += 2;
       }
       
       return payload_start_offset;
@@ -161,12 +157,8 @@ struct SylphideProtocol {
 
       // シーケンス番号の書き込み
       v_u16_t sequence_num_u16(sequence_num);
-      v_u16_t sequence_num_u16_le(
-          le_char2_2_num<v_u16_t>(*(char *)&sequence_num_u16));
-      target[header_size]
-          = *(unsigned char *)&sequence_num_u16_le;
-      target[header_size + 1]
-          = *(((unsigned char *)&sequence_num_u16_le) + 1);
+      target[header_size] = (KeyType)(sequence_num_u16 & 0xFF);
+      target[header_size + 1] = (KeyType)(sequence_num_u16 >> 8);
     }
 
     /**
@@ -188,7 +180,7 @@ struct SylphideProtocol {
         const bool &request_ack = false,
         const bool &ack_reply = false){
 
-      unsigned char header_buf[8];
+      KeyType header_buf[8], crc_buffer[2];
 
       unsigned int payload_offset(
           preprocess(header_buf, payload_size, request_ack, ack_reply));
@@ -207,11 +199,11 @@ struct SylphideProtocol {
           payload, payload_size, 0,
           calc_crc16(header_buf, payload_offset - header_size, header_size)));
 
-      v_u16_t crc_u16_le(
-          le_char2_2_num<v_u16_t>(*(char *)&crc_u16));
+      crc_buffer[0] = (KeyType)(crc_u16 & 0xFF);
+      crc_buffer[1] = (KeyType)(crc_u16 >> 8);
 
       // フッタ送信
-      stream((unsigned char *)&crc_u16_le, sizeof(crc_u16_le));
+      stream(crc_buffer, 2);
     }
 
     /**
@@ -233,16 +225,14 @@ struct SylphideProtocol {
       v_u16_t crc_u16(calc_crc16(
           target, whole_size - capsule_tail_size - header_size, header_size));
       
-      v_u16_t crc_u16_le(
-          le_char2_2_num<v_u16_t>(*(char *)&crc_u16));
-      target[whole_size - sizeof(v_u16_t)]
-          = *(unsigned char *)&crc_u16_le;
-      target[whole_size - sizeof(v_u16_t) + 1]
-          = *(((unsigned char *)&crc_u16_le) + 1);
+      target[whole_size - 2] = (KeyType)(crc_u16 & 0xFF);
+      target[whole_size - 1] = (KeyType)(crc_u16 >> 8);
       
 #if DEBUG > 3
-      std::cerr << sequence_num_u16 << "=>" << sequence_num_u16_le << std::endl;
-      std::cerr << crc_u16 << "=>" << crc_u16_le << std::endl;
+      std::cerr
+          << "! (SEQ: " << sequence_num
+          << ", CRC: " << crc_u16
+          << ")" << std::endl;
       
       std::cerr << "--write--" << std::endl;
       std::cerr << hex;
@@ -272,8 +262,8 @@ struct SylphideProtocol {
         return false;
       }
       // ヘッダ確認
-      if(((unsigned char)target[0] != header[0])
-          || (((unsigned char)target[1] & 0xF0) != header[1])){
+      if(((KeyType)target[0] != header[0])
+          || (((KeyType)target[1] & 0xF0) != header[1])){
         return false;
       }
       return true;
@@ -289,11 +279,9 @@ struct SylphideProtocol {
     static unsigned int payload_size(Container &target){
       
       // ペイロードサイズ確認
-      switch((unsigned char)target[1] & 0x03){
+      switch((KeyType)target[1] & 0x03){
         case 1: { // ペイロード所有、可変長
-          unsigned char buf[] = {
-              (unsigned char)target[4], (unsigned char)target[5]};
-          return le_char2_2_num<v_u16_t>(*(const char *)buf);
+          return ((v_u16_t)(KeyType)target[4]) + (((v_u16_t)(KeyType)target[5]) << 8);
         }
         case 2: // ペイロード非所有、固定長(0bytes)
           return 0;
@@ -314,11 +302,9 @@ struct SylphideProtocol {
     static unsigned int packet_size(Container &target){
       
       // ペイロードサイズ確認
-      switch((unsigned char)target[1] & 0x03){
+      switch((KeyType)target[1] & 0x03){
         case 1: { // ペイロード所有、可変長
-          unsigned char buf[] = {
-              (unsigned char)target[4], (unsigned char)target[5]};
-          return le_char2_2_num<v_u16_t>(*(const char *)buf) + capsule_size + 2;
+          return ((v_u16_t)(KeyType)target[4]) + (((v_u16_t)(KeyType)target[5]) << 8) + capsule_size + 2;
         }
         case 2: // ペイロード非所有、固定長(0bytes)
           return capsule_size;
@@ -351,9 +337,7 @@ struct SylphideProtocol {
     static unsigned int sequence_num(Container &target){
           
       // シーケンス番号
-      unsigned char buf[] = {
-          (unsigned char)target[2], (unsigned char)target[3]};
-      return le_char2_2_num<v_u16_t>(*(const char *)buf);    
+      return ((v_u16_t)(KeyType)target[2]) + (((v_u16_t)(KeyType)target[3]) << 8);
     }
     
     /**
@@ -365,7 +349,7 @@ struct SylphideProtocol {
     template<class Container>
     static bool is_request_ack(Container &target){
       
-      return (target[header_size - 1] & 0x08);
+      return ((KeyType)target[header_size - 1] & 0x08);
     }
     
     /**
@@ -377,7 +361,7 @@ struct SylphideProtocol {
     template<class Container>
     static bool is_ack_reply(Container &target){
       
-      return (target[header_size - 1] & 0x04);
+      return ((KeyType)target[header_size - 1] & 0x04);
     }
     
     /**
@@ -396,7 +380,7 @@ struct SylphideProtocol {
       for(int i(0), j(whole_size - extract_size - capsule_tail_size); 
           i < extract_size; 
           i++, j++){
-        buf[i] = target[j];
+        buf[i] = (KeyType)target[j];
       }
     }
     
@@ -425,10 +409,8 @@ struct SylphideProtocol {
       // CRC確認
       v_u16_t crc16_orig, crc16_calc;
       {
-        unsigned char buf[] = {
-            (unsigned char)target[whole_size - capsule_tail_size], 
-            (unsigned char)target[whole_size - capsule_tail_size + 1]};
-        crc16_orig = le_char2_2_num<v_u16_t>(*(const char *)buf);
+        crc16_orig = ((v_u16_t)(KeyType)target[whole_size - capsule_tail_size])
+            + (((v_u16_t)(KeyType)target[whole_size - capsule_tail_size + 1]) << 8);
         
         crc16_calc = calc_crc16(
             target, whole_size - capsule_tail_size - header_size, header_size);
@@ -457,22 +439,27 @@ struct SylphideProtocol {
   };
 };
 
-const unsigned char SylphideProtocol::header[] 
+template <class KeyType>
+const KeyType generic_SylphideProtocol<KeyType>::header[]
     = {0xF7, 0xE0};
 
-const unsigned int SylphideProtocol::header_size 
-    = sizeof(SylphideProtocol::header);
+template <class KeyType>
+const unsigned int generic_SylphideProtocol<KeyType>::header_size
+    = sizeof(generic_SylphideProtocol<KeyType>::header) / sizeof(generic_SylphideProtocol<KeyType>::header[0]);
 
-const unsigned int SylphideProtocol::capsule_head_size 
-    = SylphideProtocol::header_size 
-        + sizeof(SylphideProtocol::v_u16_t);
+template <class KeyType>
+const unsigned int generic_SylphideProtocol<KeyType>::capsule_head_size
+    = generic_SylphideProtocol<KeyType>::header_size + 2;
 
-const unsigned int SylphideProtocol::capsule_tail_size 
-    = sizeof(SylphideProtocol::v_u16_t);
+template <class KeyType>
+const unsigned int generic_SylphideProtocol<KeyType>::capsule_tail_size = 2;
 
-const unsigned int SylphideProtocol::capsule_size 
-    = SylphideProtocol::capsule_head_size
-        + SylphideProtocol::capsule_tail_size;
+template <class KeyType>
+const unsigned int generic_SylphideProtocol<KeyType>::capsule_size
+    = generic_SylphideProtocol<KeyType>::capsule_head_size
+        + generic_SylphideProtocol<KeyType>::capsule_tail_size;
+
+typedef generic_SylphideProtocol<> SylphideProtocol;
 
 #ifndef __TI_COMPILER_VERSION__
 // DSP向けの場合、stream/STL関連の機能はカットしておく
