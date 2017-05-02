@@ -144,6 +144,7 @@
 #include <vector>
 #include <utility>
 #include <deque>
+#include <algorithm>
 
 #define IS_LITTLE_ENDIAN 1
 #include "SylphideStream.h"
@@ -361,15 +362,11 @@ struct M_Packet;
 
 class NAV : public NAVData<float_sylph_t> {
   public:
-    struct history_item_t {
-      float_sylph_t deltaT;
-      const NAVData<float_sylph_t> *nav;
-    };
-    typedef std::vector<history_item_t> history_t;
+    typedef std::vector<const NAVData<float_sylph_t> *> updated_items_t;
     virtual ~NAV(){}
   public:
-    virtual history_t history() const {
-      return history_t();
+    virtual updated_items_t updated_items() const {
+      return updated_items_t();
     }
     virtual void inspect(std::ostream &out) const {}
     virtual float_sylph_t &operator[](const unsigned &index) = 0;
@@ -496,6 +493,9 @@ struct A_Packet : public Packet {
  */
 struct G_Packet : public Packet {
   GPS_Solution<float_sylph_t> solution;
+  Vector3<float_sylph_t> *lever_arm;
+
+  G_Packet() : solution(), lever_arm(NULL) {}
 
   operator GPS_Solution<float_sylph_t>() const {
     return solution;
@@ -663,29 +663,6 @@ class INS_GPS_NAV : public NAV {
     }
 
   protected:
-    history_t history2(const void *) const {
-      return NAV::history();
-    }
-    template <class INS_GPS_base>
-    history_t history2(const INS_GPS_Back_Propagate<INS_GPS_base> *) const {
-      typename NAV::history_t res;
-      typedef typename INS_GPS_Back_Propagate<INS_GPS_base>::snapshots_t snapshots_t;
-      const snapshots_t &snapshots(ins_gps->get_snapshots());
-      for(typename snapshots_t::const_iterator it(snapshots.begin());
-          it != snapshots.end();
-          ++it){
-        NAV::history_item_t item = {
-            it->elapsedT_from_last_correct, &(it->ins_gps)};
-        res.push_back(item);
-      }
-      return res;
-    }
-  public:
-    history_t history() const {
-      return history2(ins_gps);
-    }
-
-  protected:
     static void set_matrix_full(Matrix<float_sylph_t> &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
       for(int i(0); i < mat.rows(); i++){
@@ -761,6 +738,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
     MAKE_PROXY_FUNC(euler_theta);
     MAKE_PROXY_FUNC(euler_psi);
     MAKE_PROXY_FUNC(azimuth);
+    MAKE_PROXY_FUNC(time_stamp);
 #undef MAKE_PROXY_FUNC
     
     float_sylph_t &operator[](const unsigned &index){return ins_gps->operator[](index);}
@@ -826,19 +804,30 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
     
     void label(std::ostream &out) const {
-      helper.label(out);
+      ins_gps->label(out);
     }
 
     void dump(std::ostream &out) const {
-      helper.dump(out);
+      ins_gps->dump(out);
+    }
+
+    updated_items_t updated_items() const {
+      return helper.updated_items();
     }
 
     NAV &update(const A_Packet &packet){
+      helper.before_any_update();
       helper.time_update(packet);
       return *this;
     }
     NAV &update(const G_Packet &packet){
+      helper.before_any_update();
       helper.measurement_update(packet);
+      return *this;
+    }
+    NAV &update(const M_Packet &packet){
+      helper.before_any_update();
+      helper.compass(packet);
       return *this;
     }
 };
@@ -881,10 +870,13 @@ struct INS_GPS_NAV_Factory {
 
 template <class INS_GPS>
 class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
+  protected:
+    mutable const char *mode;
+    mutable typename INS_GPS::float_t itow;
   public:
-    INS_GPS_NAVData() : INS_GPS(){}
+    INS_GPS_NAVData() : INS_GPS(), mode("N/A"), itow(0) {}
     INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy){}
+        : INS_GPS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
     ~INS_GPS_NAVData(){}
 #define MAKE_PROXY_FUNC(fname) \
 typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
@@ -900,6 +892,15 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     MAKE_PROXY_FUNC(euler_psi);
     MAKE_PROXY_FUNC(azimuth);
 #undef MAKE_PROXY_FUNC
+    typename INS_GPS::float_t time_stamp() const {return itow;}
+
+    void set_header(const char *_mode) const {
+      mode = _mode;
+    }
+    void set_header(const char *_mode, const typename INS_GPS::float_t &_itow) const {
+      mode = _mode;
+      itow = _itow;
+    }
   protected:
     void label2(std::ostream &out, const void *) const {}
 
@@ -942,6 +943,8 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
      * print label
      */
     void label(std::ostream &out = std::cout) const {
+      out << "mode" << ','
+          << "itow" << ',';
       NAVData<typename INS_GPS::float_t>::label(out);
       label2(out, this);
     }
@@ -994,6 +997,8 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
      * @param itow current time
      */
     void dump(std::ostream &out) const {
+      out << mode << ','
+          << itow << ',';
       NAVData<typename INS_GPS::float_t>::dump(out);
       dump2(out, this);
     }
@@ -1169,6 +1174,54 @@ class StreamProcessor
 
   public:
     static const unsigned int buffer_size;
+    struct latest_packet_t {
+      const Packet *packet_ptr;
+      NAV &(*packet_applier)(NAV &, const Packet *);
+      Packet *(*packet_cloner)(const Packet *);
+      void invalid() {packet_ptr = NULL;}
+      latest_packet_t() {invalid();}
+      bool is_valid() const {return packet_ptr != NULL;}
+      template <class T>
+      static NAV &apply_packet(NAV &nav, const Packet *packet){
+        return nav.update(*static_cast<const T *>(packet));
+      }
+      template <class T>
+      static Packet *new_packet(const Packet *packet){
+        return new T(*static_cast<const T *>(packet));
+      }
+      template <class T>
+      latest_packet_t &operator=(const T &packet){
+        packet_ptr = &packet;
+        packet_applier = &apply_packet<T>;
+        packet_cloner = &new_packet<T>;
+        return *this;
+      }
+      NAV &apply(NAV &nav) const {
+        return (*packet_applier)(nav, packet_ptr);
+      }
+      Packet *clone_packet() const {
+        return (*packet_cloner)(packet_ptr);
+      }
+      void move(const StreamProcessor &self, const StreamProcessor &another){
+        if(!another.latest_packet.is_valid()){return;}
+        struct {
+          const Packet &external;
+          const Packet &internal;
+        } targets[] = {
+          {another.a_handler.packet_latest, self.a_handler.packet_latest},
+          {another.g_handler.packet_latest, self.g_handler.packet_latest},
+          {another.m_handler.packet_latest, self.m_handler.packet_latest},
+        };
+        for(int i(0); i < sizeof(targets) / sizeof(targets[0]); i++){
+          if(another.latest_packet.packet_ptr == &targets[i].external){
+            packet_ptr = &targets[i].internal;
+            packet_applier = another.latest_packet.packet_applier;
+            packet_cloner = another.latest_packet.packet_cloner;
+            break;
+          }
+        }
+      }
+    } latest_packet;
   protected:
     typedef AbstractSylphideProcessor<float_sylph_t> super_t;
     typedef A_Packet_Observer<float_sylph_t> A_Observer_t;
@@ -1179,13 +1232,14 @@ class StreamProcessor
      * A page (ADC value)
      */
     struct AHandler : public A_Observer_t {
+      StreamProcessor &outer;
       bool previous_seek_next;
-      deque<A_Packet> recent_packets;
-      bool packet_updated;
+      A_Packet packet_latest;
       StandardCalibration calibration;
 
-      AHandler() : A_Observer_t(buffer_size),
-          recent_packets(), packet_updated(false),
+      AHandler(StreamProcessor &invoker) : A_Observer_t(buffer_size),
+          outer(invoker),
+          packet_latest(),
           calibration() {
 
         previous_seek_next = A_Observer_t::ready();
@@ -1208,11 +1262,22 @@ class StreamProcessor
         }
       }
       ~AHandler(){}
+      AHandler &operator=(const AHandler &another){
+        A_Observer_t::operator=(another);
+        previous_seek_next = another.previous_seek_next;
+        packet_latest = another.packet_latest;
+        calibration = another.calibration;
+        return *this;
+      }
       void operator()(const A_Observer_t &observer){
         if(!observer.validate()){return;}
 
-        A_Packet packet;
-        packet.itow = observer.fetch_ITOW();
+        float_sylph_t itow(observer.fetch_ITOW());
+        if(options.reduce_1pps_sync_error){
+          float_sylph_t delta_t(itow - packet_latest.itow);
+          if((delta_t >= 1) && (delta_t < 2)){itow -= 1;}
+        }
+        packet_latest.itow = itow;
 
         int ch[9];
         A_Observer_t::values_t values(observer.fetch_values());
@@ -1220,22 +1285,10 @@ class StreamProcessor
           ch[i] = values.values[i];
         }
         ch[8] = values.temperature;
-        packet.accel = calibration.raw2accel(ch);
-        packet.omega = calibration.raw2omega(ch);
+        packet_latest.accel = calibration.raw2accel(ch);
+        packet_latest.omega = calibration.raw2omega(ch);
 
-        while(options.reduce_1pps_sync_error){
-          if(recent_packets.empty()){break;}
-          float_sylph_t delta_t(packet.itow - recent_packets.back().itow);
-          if((delta_t < 1) || (delta_t >= 2)){break;}
-          packet.itow -= 1;
-          break;
-        }
-
-        while(recent_packets.size() >= 128){
-          recent_packets.pop_front();
-        }
-        recent_packets.push_back(packet);
-        packet_updated = true;
+        outer.latest_packet = packet_latest;
       }
     } a_handler;
 
@@ -1243,21 +1296,35 @@ class StreamProcessor
      * G page (u-blox)
      */
     struct GHandler : public G_Observer_t  {
+      StreamProcessor &outer;
       bool previous_seek_next;
+      Vector3<float_sylph_t> lever_arm;
       G_Packet packet_latest;
-      bool packet_updated;
       int itow_ms_0x0102, itow_ms_0x0112;
       unsigned int gps_status;
       int week_number;
 
-      GHandler()
+      GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
-          packet_latest(), packet_updated(false),
+          outer(invoker),
+          lever_arm(),
+          packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0) {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
+      GHandler &operator=(const GHandler &another){
+        G_Observer_t::operator=(another);
+        previous_seek_next = another.previous_seek_next;
+        lever_arm = another.lever_arm;
+        packet_latest = another.packet_latest;
+        itow_ms_0x0102 = another.itow_ms_0x0102;
+        itow_ms_0x0112 = another.itow_ms_0x0112;
+        gps_status = another.gps_status;
+        week_number = another.week_number;
+        return *this;
+      }
 
       /**
        * Extract the following data.
@@ -1327,7 +1394,7 @@ class StreamProcessor
             packet_latest.solution.v_n = packet_latest.solution.v_e = packet_latest.solution.v_d = 0;
             packet_latest.solution.sigma_vel = 1;
           }
-          packet_updated = true;
+          outer.latest_packet = packet_latest;
         }
       }
       /**
@@ -1363,12 +1430,21 @@ class StreamProcessor
     } g_handler;
 
     struct MHandler : public M_Observer_t {
+      StreamProcessor &outer;
       bool previous_seek_next;
-      deque<M_Packet> recent_packets;
-      MHandler() : M_Observer_t(buffer_size), recent_packets() {
+      M_Packet packet_latest;
+      MHandler(StreamProcessor &invoker)
+          : M_Observer_t(buffer_size),
+          outer(invoker),
+          packet_latest() {
         previous_seek_next = M_Observer_t::ready();
       }
       ~MHandler(){}
+      MHandler &operator=(const MHandler &another){
+        previous_seek_next = another.previous_seek_next;
+        packet_latest = another.packet_latest;
+        return *this;
+      }
       void operator()(const M_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1386,61 +1462,63 @@ class StreamProcessor
           }
         }
 
+        float_sylph_t itow(observer.fetch_ITOW());
+        if(options.reduce_1pps_sync_error){
+          float_sylph_t delta_t(itow - packet_latest.itow);
+          if((delta_t >= 1) && (delta_t < 2)){itow -= 1;}
+        }
+        packet_latest.itow = itow;
+
         // TODO: magnetic sensor axes must correspond to ones of accelerometer and gyro.
-        Vector3<float_sylph_t> mag(values.x[3], values.y[3], values.z[3]);
-        M_Packet m_packet;
-        m_packet.itow = observer.fetch_ITOW();
-        m_packet.mag = mag;
+        packet_latest.mag[0] = values.x[3];
+        packet_latest.mag[1] = values.y[3];
+        packet_latest.mag[2] = values.z[3];
 
-        while(options.reduce_1pps_sync_error){
-          if(recent_packets.empty()){break;}
-          float_sylph_t delta_t(m_packet.itow - recent_packets.back().itow);
-          if((delta_t < 1) || (delta_t >= 2)){break;}
-          m_packet.itow -= 1;
-          break;
-        }
-
-        while(recent_packets.size() > 0x40){
-          recent_packets.pop_front();
-        }
-        recent_packets.push_back(m_packet);
+        outer.latest_packet = packet_latest;
       }
     } m_handler;
 
   protected:
     int invoked;
     istream *_in;
-    Vector3<float_sylph_t> *ptr_lever_arm;
     
   public:
-    deque<A_Packet> &a_packets;
-    bool &a_packet_updated;
-    G_Packet &g_packet;
-    bool &g_packet_updated;
-    int &g_packet_wn;
-    deque<M_Packet> &m_packets;
-
     StreamProcessor()
-        : super_t(), _in(NULL), invoked(0),
-        ptr_lever_arm(NULL),
-        a_handler(),
-        a_packets(a_handler.recent_packets), a_packet_updated(a_handler.packet_updated),
-        g_handler(),
-        g_packet(g_handler.packet_latest), g_packet_updated(g_handler.packet_updated), g_packet_wn(g_handler.week_number),
-        m_handler(),
-        m_packets(m_handler.recent_packets) {
+        : super_t(), latest_packet(),
+        _in(NULL), invoked(0),
+        a_handler(*this),
+        g_handler(*this),
+        m_handler(*this) {
 
     }
-    ~StreamProcessor(){
-      delete ptr_lever_arm;
+    StreamProcessor(const StreamProcessor &another)
+        : super_t(another), latest_packet(),
+        _in(another._in), invoked(another.invoked),
+        a_handler(*this),
+        g_handler(*this),
+        m_handler(*this) {
+      a_handler = another.a_handler;
+      g_handler = another.g_handler;
+      m_handler = another.m_handler;
+      latest_packet.move(*this, another);
     }
+    ~StreamProcessor(){}
     
+    StreamProcessor &operator=(const StreamProcessor &another){
+      if(this != &another){
+        super_t::operator=(another);
+        _in = another._in;
+        invoked = another.invoked;
+        a_handler = another.a_handler;
+        g_handler = another.g_handler;
+        m_handler = another.m_handler;
+        latest_packet.move(*this, another);
+      }
+      return *this;
+    }
+
     const StandardCalibration &calibration() const{
       return a_handler.calibration;
-    }
-
-    const Vector3<float_sylph_t> *lever_arm() const {
-      return ptr_lever_arm;
     }
 
     void set_stream(istream *in){_in = in;}
@@ -1479,6 +1557,8 @@ class StreamProcessor
 #endif
       }
       
+      latest_packet.invalid();
+
       switch(buffer[0]){
         case 'A':
           super_t::process_packet(
@@ -1489,6 +1569,15 @@ class StreamProcessor
           super_t::process_packet(
               buffer, read_count,
               g_handler, g_handler.previous_seek_next, g_handler);
+          if(latest_packet.is_valid()){
+            // Time check
+            if(!options.is_time_before_end(latest_packet.packet_ptr->itow, g_handler.week_number)){
+              return false;
+            }
+            if(!options.is_time_after_start(latest_packet.packet_ptr->itow, g_handler.week_number)){
+              latest_packet.invalid();
+            }
+          }
           break;
         case 'M':
           if(!options.use_magnet){break;}
@@ -1524,24 +1613,21 @@ class StreamProcessor
           cerr << "(error!) Lever arm option requires 3 arguments." << endl;
           exit(-1);
         }
-        if(!ptr_lever_arm){
-          ptr_lever_arm = new Vector3<float_sylph_t>(buf[0], buf[1], buf[2]);
-        }else{
-          for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
-            (*ptr_lever_arm)[i] = buf[i];
-          }
+        for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
+          g_handler.lever_arm[i] = buf[i];
         }
-        std::cerr << "lever_arm: " << *ptr_lever_arm << std::endl;
+        g_handler.packet_latest.lever_arm = &(g_handler.lever_arm);
+        std::cerr << "lever_arm: " << g_handler.lever_arm << std::endl;
         return true;
       }
 
       return false;
     }
-} *current_processor;
+};
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
 
-typedef vector<StreamProcessor *> processors_t;
+typedef vector<StreamProcessor> processors_t;
 processors_t processors;
 
 template <class INS_GPS>
@@ -1552,19 +1638,35 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       JUST_INITIALIZED,
       TIME_UPDATED,
       MEASUREMENT_UPDATED,
+      WAITING_UPDATE,
     } status;
     INS_GPS_NAV<INS_GPS> &nav;
     const int min_a_packets_for_init; // must be greater than 0
-    typedef deque<A_Packet> recent_a_packets_t;
-    recent_a_packets_t recent_a_packets;
-    const int max_recent_a_packets;
+
+    template <class T>
+    struct PacketBuffer {
+      const int max_size;
+      typedef deque<T> buf_t;
+      buf_t buf;
+      PacketBuffer(const int &_max_size) : max_size(_max_size), buf() {}
+      void push(const T &packet){
+        if(buf.size() >= max_size){buf.pop_front();}
+        buf.push_back(packet);
+      }
+    };
+
+    typedef PacketBuffer<A_Packet> recent_a_t;
+    recent_a_t recent_a;
+
+    typedef PacketBuffer<M_Packet> recent_m_t;
+    recent_m_t recent_m;
 
     Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
-      if(current_processor->m_packets.size() < 2){
+      if(recent_m.buf.size() < 2){
         return Vector3<float_sylph_t>(1, 0, 0); // heading is north
       }
-      deque<M_Packet>::const_iterator
-          it_a(nearest(current_processor->m_packets, itow, 2)),
+      typename recent_m_t::buf_t::const_iterator
+          it_a(nearest(recent_m.buf, itow, 2)),
           it_b(it_a + 1);
       float_sylph_t
           weight_a((it_b->itow - itow) / (it_b->itow - it_a->itow)),
@@ -1582,56 +1684,34 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
-
   public:
+    void before_any_update(){
+      if(status >= JUST_INITIALIZED){
+        status = WAITING_UPDATE;
+      }
+    }
+
+    void compass(const M_Packet &packet){
+      recent_m.push(packet);
+    }
+
     Helper(INS_GPS_NAV<INS_GPS> &_nav)
         : status(UNINITIALIZED), nav(_nav),
         min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
-        recent_a_packets(), max_recent_a_packets(max(min_a_packets_for_init, 0x100)){
-    }
-  
-  public:
-    void label(std::ostream &out) const {
-      if(options.out_is_N_packet){return;}
-      out << "mode"
-          << ',' << "itow"
-          << ',';
-      nav.ins_gps->label(out);
-      out << endl;
+        recent_a(max(min_a_packets_for_init, 0x100)),
+        recent_m(0x10){
     }
   
   protected:
-    /**
-     * Dump state
-     * 
-     * @param label operation mode string
-     * @param itow current time
-     * @param target NAV to be outputted
-     */
-    static void dump(
-        ostream &out,
-        const char *label, const float_sylph_t &itow,
-        const NAVData<float_sylph_t> &target){
-      
-      if(options.out_is_N_packet){
-        char buf[SYLPHIDE_PAGE_SIZE];
-        target.encode_N0(itow, buf);
-        out.write(buf, sizeof(buf));
-        return;
-      }
-
-      out << label
-          << ',' << itow
-          << ',' << target << endl;
-    }
-
     template <class Base_INS_GPS>
-    void dump(ostream &out, const float_sylph_t &itow,
+    NAV::updated_items_t updated_items(
         const INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps) const {
+      NAV::updated_items_t res;
 
       // When smoothing is activated
       switch(status){
         case MEASUREMENT_UPDATED: {
+          float_sylph_t itow(recent_a.buf.back().itow);
           typedef typename INS_GPS_Back_Propagate<Base_INS_GPS>::snapshots_t snapshots_t;
           const snapshots_t &snapshots(ins_gps->get_snapshots());
           int index(0);
@@ -1642,49 +1722,43 @@ class INS_GPS_NAV<INS_GPS>::Helper {
               break;
             }
 
-            const char *label;
             if(index == 0){
               if(!options.dump_correct){continue;}
-              label = "BP_MU";
+              it->ins_gps.set_header("BP_MU", itow + it->elapsedT_from_last_correct);
+              res.push_back(&(it->ins_gps));
             }else{
               if(!options.dump_update){continue;}
-              label = "BP_TU";
+              it->ins_gps.set_header("BP_TU", itow + it->elapsedT_from_last_correct);
+              res.push_back(&(it->ins_gps));
             }
-            dump(out, label, itow + it->elapsedT_from_last_correct, it->ins_gps);
           }
           break;
         }
-        default:
-          return;
       }
+
+      return res;
     }
 
-    void dump(ostream &out, const float_sylph_t &itow, void *) const {
+    NAV::updated_items_t updated_items(void *) const {
+      NAV::updated_items_t res;
 
       switch(status){
         case TIME_UPDATED:
-          if(!options.dump_update){return;}
-          dump(out, "TU", itow, *(nav.ins_gps));
+          if(!options.dump_update){break;}
+          res.push_back(nav.ins_gps);
           break;
+        case JUST_INITIALIZED:
         case MEASUREMENT_UPDATED:
-          if(!options.dump_correct){return;}
-          dump(out, "MU", itow, *(nav.ins_gps));
+          if(!options.dump_correct){break;}
+          res.push_back(nav.ins_gps);
           break;
-        default:
-          return;
       }
+      return res;
     }
 
   public:
-    void dump(std::ostream &out) const {
-      if(status == UNINITIALIZED){return;}
-
-      const float_sylph_t &itow(recent_a_packets.back().itow);
-      dump(out, itow, nav.ins_gps);
-
-      options.out_debug() << itow << ',';
-      nav.inspect(options.out_debug());
-      options.out_debug() << endl;
+    NAV::updated_items_t updated_items() const {
+      return updated_items(nav.ins_gps);
     }
 
   protected:
@@ -1706,35 +1780,34 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     /**
      * Perform time update by using acceleration and angular speed obtained with accelerometer and gyro.
      * 
-     * @param a_packet raw values of ADC
+     * @param a_packet acceleration and angular speed
      */
     void time_update(const A_Packet &a_packet){
 
       if(status >= JUST_INITIALIZED){
-        const A_Packet &previous(recent_a_packets.back());
+        const A_Packet &previous(recent_a.buf.back());
 
         // Check interval from the last time update
         float_sylph_t deltaT(previous.interval(a_packet));
         time_update(a_packet, deltaT);
+        nav.ins_gps->set_header("TU", a_packet.itow);
       }
 
-      recent_a_packets.push_back(a_packet);
-      if(recent_a_packets.size() > max_recent_a_packets){
-        recent_a_packets.pop_front();
-      }
+      recent_a.push(a_packet);
     }
 
   protected:
     void time_update_after_initialization(Packet packet){
-      recent_a_packets_t::const_reverse_iterator it_r(recent_a_packets.rbegin());
-      for(; it_r != recent_a_packets.rend(); ++it_r){
+      typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
+      for(; it_r != recent_a.buf.rend(); ++it_r){
         if(packet.interval(*it_r) <= 0){break;}
       }
-      for(recent_a_packets_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
-          it != recent_a_packets.end(); ++it){
+      for(typename recent_a_t::buf_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
+          it != recent_a.buf.end(); ++it){
         time_update(*it, packet.interval(*it));
         packet = *it;
       }
+      nav.ins_gps->set_header("MU", packet.itow);
     }
 
     void initialize(
@@ -1758,12 +1831,12 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
         // Normalization
         vec_t acc(0, 0, 0);
-        for(deque<A_Packet>::iterator it(recent_a_packets.begin());
-            it != recent_a_packets.end();
+        for(typename recent_a_t::buf_t::iterator it(recent_a.buf.begin());
+            it != recent_a.buf.end();
             ++it){
           acc += it->accel;
         }
-        acc /= recent_a_packets.size();
+        acc /= recent_a.buf.size();
         vec_t acc_reg(-acc / acc.abs());
 
         // Estimate roll angle
@@ -1774,8 +1847,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         pitch = -asin(acc_reg[0]);
         if(options.initial_attitude.mode >= options.initial_attitude.YAW_ONLY){break;}
 
-        // Estimate yaw when magnetic sensor is available
-        if(!current_processor->m_packets.empty()){
+        // Estimate yaw when magnetic compass is available
+        if(!recent_m.buf.empty()){
           yaw = nav.get_mag_yaw(get_mag(itow), pitch, roll,
               latitude, longitude, height);
         }
@@ -1803,9 +1876,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void time_update_before_measurement_update(const float_sylph_t &advanceT, void *){
       if(advanceT <= 0){return;}
       // Time update up to the GPS observation
-      A_Packet interpolation(recent_a_packets.back());
-      interpolation.itow += advanceT;
-      time_update(interpolation);
+      time_update(recent_a.buf.back(), advanceT);
     }
 
     template <class Base_INS_GPS>
@@ -1829,20 +1900,21 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         
         // calculate GPS data timing;
         // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
-        float_sylph_t gps_advance(recent_a_packets.back().interval(g_packet));
+        float_sylph_t gps_advance(recent_a.buf.back().interval(g_packet));
         time_update_before_measurement_update(gps_advance, nav.ins_gps);
 
-        if(current_processor->lever_arm()){ // When use lever arm effect.
+        if(g_packet.lever_arm){ // When use lever arm effect.
           Vector3<float_sylph_t> omega_b2i_4n;
           int packets_for_mean(0x10), i(0);
-          recent_a_packets_t::const_iterator it(nearest(recent_a_packets, g_packet.itow, packets_for_mean));
-          for(; (i < packets_for_mean) && (it != recent_a_packets.end()); i++, it++){
+          typename recent_a_t::buf_t::const_iterator it(
+              nearest(recent_a.buf, g_packet.itow, packets_for_mean));
+          for(; (i < packets_for_mean) && (it != recent_a.buf.end()); i++, it++){
             omega_b2i_4n += it->omega;
           }
           omega_b2i_4n /= i;
           nav.correct(
               g_packet,
-              *(current_processor->lever_arm()),
+              *g_packet.lever_arm,
               omega_b2i_4n,
               gps_advance);
         }else{ // When do not use lever arm effect.
@@ -1850,16 +1922,16 @@ class INS_GPS_NAV<INS_GPS>::Helper {
               g_packet,
               gps_advance);
         }
-        if(!current_processor->m_packets.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
+        if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
               && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
             nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
           }
         }
         status = MEASUREMENT_UPDATED;
-      }else if((current_processor == processors.front())
-          && (recent_a_packets.size() >= min_a_packets_for_init)
-          && (std::abs(recent_a_packets.front().itow - g_packet.itow) < (0.1 * recent_a_packets.size())) // time synchronization check
+        nav.ins_gps->set_header("MU");
+      }else if((recent_a.buf.size() >= min_a_packets_for_init)
+          && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
           && (g_packet.solution.sigma_height <= options.gps_threshold.init_acc_v)){
 
@@ -1875,11 +1947,32 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 };
 
+struct packet_pool_t {
+  struct item_t {
+    const Packet *packet_ptr;
+    NAV &(*packet_applier)(NAV &, const Packet *);
+    NAV &apply(NAV &nav) const {
+      return (*packet_applier)(nav, packet_ptr);
+    }
+    item_t(const StreamProcessor::latest_packet_t &packet)
+        : packet_ptr(packet.clone_packet()),
+        packet_applier(packet.packet_applier) {}
+    bool operator<(const item_t &another) const {
+      return packet_ptr->itow < another.packet_ptr->itow;
+    }
+  };
+  typedef deque<item_t> buf_t;
+  buf_t buf;
+  void sort() {
+    std::stable_sort(buf.begin(), buf.end());
+  }
+};
+
 void loop(){
   struct NAV_Manager {
     NAV *nav;
     NAV_Manager(){
-      const StandardCalibration &calibration(processors.front()->calibration());
+      const StandardCalibration &calibration(processors.front().calibration());
       if(options.use_udkf){
         if(options.est_bias){
           nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
@@ -1897,122 +1990,67 @@ void loop(){
     ~NAV_Manager(){
       delete nav;
     }
-  } nav_manager;
-  
-  nav_manager.nav->label(options.out());
+    void dump(){
+      const NAV::updated_items_t &updated(nav->updated_items());
+      if(updated.empty()){return;}
 
-  if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
-    // Realtime mode supports only one stream.
-    current_processor = processors.front();
-    StreamProcessor &proc(*current_processor);
-    bool started(false);
-    while(proc.process_1page()){
-      if(proc.a_packet_updated){
-        proc.a_packet_updated = false;
-        A_Packet &packet(proc.a_packets.back());
-        nav_manager.nav->update(packet);
-        options.out() << *(nav_manager.nav);
-      }else if(current_processor->g_packet_updated){
-        proc.g_packet_updated = false;
-        G_Packet &packet(proc.g_packet);
-        if(!started){
-          if(!options.is_time_after_start(packet.itow, proc.g_packet_wn)){ // Time check
-            continue;
-          }else{
-            started = true;
-          }
-        }
-        nav_manager.nav->update(packet);
-        options.out() << *(nav_manager.nav);
-        if(!options.is_time_before_end(packet.itow, proc.g_packet_wn)){
-          break;
+      for(NAV::updated_items_t::const_iterator it(updated.begin());
+          it != updated.end(); ++it){
+        if(options.out_is_N_packet){
+          char buf[SYLPHIDE_PAGE_SIZE];
+          (*it)->encode_N0(buf);
+          options.out().write(buf, sizeof(buf));
+          return;
+        }else{
+          options.out() << (**it) << endl;
         }
       }
+
+      options.out_debug() << nav->time_stamp() << ',';
+      nav->inspect(options.out_debug());
+      options.out_debug() << endl;
+    }
+  } nav_manager;
+  
+  if(!options.out_is_N_packet){
+    nav_manager.nav->label(options.out());
+    options.out() << endl;
+  }
+
+  // TODO multiple log stream will be support.
+  StreamProcessor &proc(processors.front());
+  if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
+    while(proc.process_1page()){
+      if(!proc.latest_packet.is_valid()){continue;}
+      proc.latest_packet.apply(*nav_manager.nav);
+      nav_manager.dump();
     }
     return;
   }
 
+  packet_pool_t packet_pool;
+
   while(true){
-    for(processors_t::iterator it(processors.begin()); it != processors.end(); ++it){
-      while(!((*it)->g_packet_updated)){ // find new GPS data
-        if((*it)->process_1page()){continue;}
-        // when stream read failed
-        if(it == processors.begin()){ // no more GPS data in front processor
-          return;
-        }else{
-          break;
-        }
-      }
+    bool alive(proc.process_1page());
+    int packets;
+    if(alive){
+      if(!proc.latest_packet.is_valid()){continue;}
+      packet_pool.buf.push_back(
+          packet_pool_t::buf_t::value_type(proc.latest_packet));
+      if(packet_pool.buf.size() < 0x200){continue;}
+      packets = packet_pool.buf.size() / 2;
+    }else{
+      packets = packet_pool.buf.size();
     }
-
-    // Check and sort G packets in order of observation time
-    typedef vector<StreamProcessor *> mu_queue_t;
-    mu_queue_t mu_queue;
-    
-    mu_queue.push_back(processors.front());
-    bool require_search_again(false);
-    for(processors_t::iterator it(processors.begin() + 1); it != processors.end(); ++it){
-      // check GPS data synchronization between multiple streams
-      if(!((*it)->g_packet_updated)){continue;}
-      float_sylph_t itow((*it)->g_packet.itow);
-      float_sylph_t interval(
-          itow - processors.front()->g_packet.itow);
-      
-      if(std::abs(interval) <= 0.2){ // When the observation times are near, use the data
-        // mu_queue is chronologically sorted
-        mu_queue_t::iterator it2(mu_queue.begin());
-        while(it2 != mu_queue.end()){
-          if((*it2)->g_packet.itow > itow){break;}
-          ++it2;
-        }
-        mu_queue.insert(it2, *it);
-      }else if(interval < 0){ // When old data, try to search again
-        (*it)->g_packet_updated = false;
-        require_search_again = true;
-        break;
-      }
+    packet_pool.sort();
+    while(packets-- > 0){
+      packet_pool_t::buf_t::reference front(packet_pool.buf.front());
+      front.apply(*nav_manager.nav);
+      nav_manager.dump();
+      delete front.packet_ptr;
+      packet_pool.buf.pop_front();
     }
-    
-    if(require_search_again){continue;} // find another GPS data
-    
-    float_sylph_t latest_measurement_update_itow(0);
-    int latest_measurement_update_gpswn(0);
-
-    for(mu_queue_t::iterator it_mu(mu_queue.begin());
-        it_mu != mu_queue.end();
-        ++it_mu){
-      
-      current_processor = *it_mu;
-      G_Packet &g_packet(current_processor->g_packet);
-      current_processor->g_packet_updated = false;
-
-      if(!options.is_time_after_start(g_packet.itow, current_processor->g_packet_wn)){ // Time check
-        continue;
-      }
-      
-      deque<A_Packet> &a_packets(processors.front()->a_packets);
-      deque<A_Packet>::iterator it_tu(a_packets.begin()), it_tu_end(a_packets.end());
-    
-      // Time update up to the last sample before GPS observation
-      for(; 
-          (it_tu != it_tu_end) && (it_tu->itow < g_packet.itow);
-          ++it_tu){
-        nav_manager.nav->update(*it_tu);
-        options.out() << *(nav_manager.nav);
-      }
-      a_packets.erase(a_packets.begin(), it_tu);
-      
-      // Measurement update
-      nav_manager.nav->update(g_packet);
-      options.out() << *(nav_manager.nav);
-
-      latest_measurement_update_itow = g_packet.itow;
-      latest_measurement_update_gpswn = current_processor->g_packet_wn;
-    }
-    
-    if(!options.is_time_before_end(latest_measurement_update_itow, latest_measurement_update_gpswn)){
-      break;
-    }
+    if(!alive){return;}
   }
 }
 
@@ -2031,30 +2069,29 @@ int main(int argc, char *argv[]){
   // option check...
   cerr << "Option checking..." << endl;
 
-  StreamProcessor *stream_processor(new StreamProcessor());
-
   for(int arg_index(1); arg_index < argc; arg_index++){
+    StreamProcessor stream_processor;
 
-    if(stream_processor->check_spec(argv[arg_index])){continue;}
+    for(; arg_index < argc; arg_index++){
+      if(stream_processor.check_spec(argv[arg_index])){continue;}
+      if(options.check_spec(argv[arg_index])){continue;}
 
-    if(options.check_spec(argv[arg_index])){continue;}
-    
-    if(!processors.empty()){
-      cerr << "(error!) Unknown option or too many log." << endl;
-      exit(-1);
+      cerr << "Log file(" << processors.size() << "): ";
+      istream &in(options.spec2istream(argv[arg_index]));
+      stream_processor.set_stream(
+          options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
+
+      processors.push_back(stream_processor);
+      cerr << stream_processor.calibration() << endl;
     }
-    
-    cerr << "Log file: ";
-    istream &in(options.spec2istream(argv[arg_index]));
-    stream_processor->set_stream(
-        options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
-
-    processors.push_back(stream_processor);
-    cerr << stream_processor->calibration() << endl;
   }
 
   if(processors.empty()){
     cerr << "(error!) No log file." << endl;
+    exit(-1);
+  }
+  if(processors.size() > 1){ // TODO multiple log stream will be support.
+    cerr << "(error!) too many log." << endl;
     exit(-1);
   }
 
@@ -2066,12 +2103,6 @@ int main(int argc, char *argv[]){
   options.out_debug() << setprecision(16);
 
   loop();
-  
-  for(processors_t::iterator it(processors.begin());
-      it != processors.end();
-      ++it){
-    delete *it;
-  }
 
   return 0;
 }
