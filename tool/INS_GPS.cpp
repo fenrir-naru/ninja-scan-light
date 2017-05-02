@@ -538,7 +538,7 @@ struct G_Packet_Raw : public G_Packet {
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
-          pvt = raw_data.solver.solve_user_pvt(
+          pvt = solver_t(raw_data.space_node).solve_user_pvt(
               raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
               raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
               raw_data.gpstime,
@@ -547,7 +547,7 @@ struct G_Packet_Raw : public G_Packet {
           break;
         }
       }
-      pvt = raw_data.solver.solve_user_pvt(
+      pvt = solver_t(raw_data.space_node).solve_user_pvt(
           raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
           raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
           raw_data.gpstime);
@@ -1521,7 +1521,7 @@ class StreamProcessor
         gps_status = another.gps_status;
         week_number = another.week_number;
         space_node_inidividual = another.space_node_inidividual;
-        //packet_raw_latest = another.packet_raw_latest; // TODO
+        packet_raw_latest = another.packet_raw_latest;
         out_raw_pvt = another.out_raw_pvt;
         return *this;
       }
