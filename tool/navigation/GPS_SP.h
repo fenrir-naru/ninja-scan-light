@@ -48,7 +48,8 @@
 
 template <class FloatT>
 class GPS_SinglePositioning {
-
+  private:
+    GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
   public:
     typedef FloatT float_t;
     typedef Matrix<float_t> matrix_t;
@@ -72,7 +73,7 @@ class GPS_SinglePositioning {
 
     ~GPS_SinglePositioning(){}
 
-    const space_node_t &space_node(){return _space_node;}
+    const space_node_t &space_node() const {return _space_node;}
 
   protected:
     struct geometric_matrices_t {

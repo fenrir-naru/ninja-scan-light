@@ -296,10 +296,9 @@ struct GPS_RawData {
   typedef GPS_SpaceNode<FloatT> space_node_t;
   const space_node_t &space_node;
 
-  const unsigned int clock_index;
+  unsigned int clock_index;
 
   typedef GPS_SinglePositioning<float_sylph_t> solver_t;
-  const solver_t solver;
 
   enum measurement_items_t {
     L1_PSEUDORANGE,
@@ -335,9 +334,17 @@ struct GPS_RawData {
   gps_time_t gpstime;
 
   GPS_RawData(const space_node_t &_space_node, const unsigned int &_clock_index = 0)
-      : space_node(_space_node), clock_index(_clock_index),
-      solver(space_node), measurement(), gpstime() {}
+      : clock_index(_clock_index),
+      space_node(_space_node), measurement(), gpstime() {}
   ~GPS_RawData(){}
+  GPS_RawData<FloatT> &operator=(const GPS_RawData<FloatT> &another){
+    if(this != &another){ // only move measurement, not satellite information.
+      clock_index = another.clock_index;
+      measurement = another.measurement;
+      gpstime = another.gpstime;
+    }
+    return *this;
+  }
 };
 
 /**
@@ -414,6 +421,8 @@ class INS_GPS2_Tightly : public BaseFINS{
         };
         typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
 
+        const space_node_t &space_node(gps.space_node);
+
         it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
         if(it_range == gps.measurement.end()){break;}
 
@@ -421,8 +430,8 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
           int prn(it2_range->first);
-          it_sat_t it_sat(gps.space_node.satellites().find(prn));
-          if(it_sat == gps.space_node.satellites().end()){continue;} // registered satellite?
+          it_sat_t it_sat(space_node.satellites().find(prn));
+          if(it_sat == space_node.satellites().end()){continue;} // registered satellite?
 
           const typename solver_t::satellite_t &sat(it_sat->second);
           if(!sat.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
@@ -436,7 +445,7 @@ class INS_GPS2_Tightly : public BaseFINS{
           };
 
           float_t range(it2_range->second);
-          range = gps.solver.range_residual(
+          range = solver_t(space_node).range_residual(
               sat, range, time_arrival,
               pos, BaseFINS::m_clock_error[gps.clock_index],
               residual);
