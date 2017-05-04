@@ -497,7 +497,7 @@ struct G_Packet : public Packet {
 
   G_Packet() : solution(), lever_arm(NULL) {}
 
-  operator GPS_Solution<float_sylph_t>() const {
+  operator const GPS_Solution<float_sylph_t> &() const {
     return solution;
   }
 };
