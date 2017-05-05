@@ -19,6 +19,9 @@
 #ifndef __INS_GPS2_TIGHTLY_H__
 #define __INS_GPS2_TIGHTLY_H__
 
+#include <cmath>
+#include <iostream>
+
 #include "INS.h"
 #include "Filtered_INS2.h"
 #include "INS_GPS2.h"
@@ -406,27 +409,34 @@ class INS_GPS2_Tightly : public BaseFINS{
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
       typedef typename raw_data_t::space_node_t::satellites_t::const_iterator it_sat_t;
 
-      // count up valid measurement, and make observation matrices
-      int z_index(0);
+      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
 
-      while(true){
-        if(gps.clock_index >= CLOCKS_SUPPORTED){break;}
+      float_t clock_error(BaseFINS::m_clock_error[gps.clock_index]);
+      const float_t &clock_error_rate(BaseFINS::m_clock_error_rate[gps.clock_index]);
+
+      typename solver_t::pos_t pos = {
+        BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
+        typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
+      };
+      typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
+
+      const space_node_t &space_node(gps.space_node);
+
+      it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
+      if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
+
+      it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
+
+      // count up valid measurement, and make observation matrices
+      int z_index;
+      for(int trial(0); trial <= 1; trial++){
+
+        z_index = 0;
+        float_t range_residual_sum(0);
+        unsigned int z_ranges(0);
 
         typename raw_data_t::gps_time_t time_arrival(
-            gps.gpstime - BaseFINS::m_clock_error[gps.clock_index] / space_node_t::light_speed);
-
-        typename solver_t::pos_t pos = {
-          BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
-          typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
-        };
-        typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
-
-        const space_node_t &space_node(gps.space_node);
-
-        it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
-        if(it_range == gps.measurement.end()){break;}
-
-        it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
+            gps.gpstime - clock_error / space_node_t::light_speed);
 
         for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
           int prn(it2_range->first);
@@ -447,8 +457,11 @@ class INS_GPS2_Tightly : public BaseFINS{
           float_t range(it2_range->second);
           range = solver_t(space_node).range_residual(
               sat, range, time_arrival,
-              pos, BaseFINS::m_clock_error[gps.clock_index],
+              pos, clock_error,
               residual);
+
+          range_residual_sum += residual.residual;
+          z_ranges++;
 
           { // setup H matrix
 #define pow2(x) ((x) * (x))
@@ -508,7 +521,7 @@ class INS_GPS2_Tightly : public BaseFINS{
           // rate residual
           float_t rate(it2_rate->second);
           typename solver_t::xyz_t rel_vel(sat.velocity(time_arrival, range) - vel_xyz);
-          z_serialized[z_index] = rate - BaseFINS::m_clock_error_rate[gps.clock_index]
+          z_serialized[z_index] = rate - clock_error_rate
               + los_neg[0] * rel_vel.x()
               + los_neg[1] * rel_vel.y()
               + los_neg[2] * rel_vel.z()
@@ -537,6 +550,30 @@ class INS_GPS2_Tightly : public BaseFINS{
 
           ++z_index;
         }
+
+        /*
+         * detection for automatic receiver clock error correction,
+         * which will be performed to adjust clock in its maximum error between +/- 1ms.
+         */
+        float_t range_residual_ms(range_residual_sum / z_ranges / space_node_t::light_speed / 1E-3);
+        if(trial == 0){
+          if((range_residual_ms >= 0.9) || (range_residual_ms <= -0.9)){ // 0.9 ms
+            std::cerr << "Detect receiver clock jump: " << range_residual_ms << " [ms] => ";
+            clock_error += (space_node_t::light_speed * 1E-3 * std::floor(range_residual_ms + 0.5));
+            continue;
+          }
+        }else{
+          if((range_residual_ms < 0.9) && (range_residual_ms > -0.9)){
+            std::cerr << "Fixed." << std::endl;
+            // correct internal clock error
+            // TODO consider realtime mode, in which only snapshot[0] will be fixed.
+            const_cast<float_t &>(BaseFINS::m_clock_error[gps.clock_index]) = clock_error;
+          }else{
+            std::cerr << "Skipped." << std::endl;
+            return CorrectInfo<float_t>::no_info(); // unknown error!
+          }
+        }
+
         break;
       }
 

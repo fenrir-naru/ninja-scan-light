@@ -50,6 +50,10 @@ struct CorrectInfo {
     R = another.R;
     return *this;
   }
+  static CorrectInfo<FloatT> no_info() {
+    return CorrectInfo<FloatT>(
+        Matrix<FloatT>(0, 0), Matrix<FloatT>(0, 0), Matrix<FloatT>(0, 0));
+  }
 };
 
 template <class BaseINS>
