@@ -259,7 +259,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
      *
      * @param info Correction information
      */
-    void correct_with_info(CorrectInfo<float_t> &info, void *dummy = NULL){
+    void correct_with_info(CorrectInfo<float_t> &info){
       mat_t &H(info.H), &R(info.R);
       switch(rt_mode){
         case RT_LIGHT_WEIGHT:
@@ -295,31 +295,103 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
       INS_GPS::correct_primitive(info);
     }
 
-    template <
-      class FloatT,
-      template <class> class Filter,
-      unsigned int Receivers,
-      typename BaseFINS
-    >
-    void correct_with_info(CorrectInfo<float_sylph_t> &info,
-        INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> *){
-      if(info.z.rows() < 1){return;}
+    template <class GPS_Packet>
+    void correct2(const GPS_Packet &gps, void *){
+      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps));
       correct_with_info(info);
+    }
+
+    template <class GPS_Packet>
+    void correct2(const GPS_Packet &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b,
+        void *){
+      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
+      correct_with_info(info);
+    }
+
+    template <class Generator>
+    void correct2_tightly_generic(const GPS_RawData<float_t> &gps, const Generator &generator){
+      CorrectInfo<float_t> info(generator(snapshots[0].ins_gps, gps));
+      if(info.z.rows() < 1){return;}
+
+      /*
+       * detection for automatic receiver clock error correction,
+       * which will be performed to adjust clock in its maximum error between +/- 1ms.
+       */
+      float_t delta_ms(this->range_residual_mean_ms(gps.clock_index, info));
+      if((delta_ms >= 0.9) || (delta_ms <= -0.9)){ // 0.9 ms
+        std::cerr << "Detect receiver clock jump: " << delta_ms << " [ms] => ";
+        float_t clock_error_delta(
+            GPS_RawData<float_t>::space_node_t::light_speed * 1E-3 * std::floor(delta_ms + 0.5));
+        float_t clock_error_mod(
+            snapshots[0].ins_gps.clock_error(gps.clock_index)
+              + clock_error_delta);
+        info = generator(
+            snapshots[0].ins_gps, gps,
+            clock_error_mod,
+            snapshots[0].ins_gps.clock_error_rate(gps.clock_index));
+        delta_ms = this->range_residual_mean_ms(gps.clock_index, info);
+        if((delta_ms < 0.9) && (delta_ms > -0.9)){
+          std::cerr << "Fixed." << std::endl;
+          // correct internal clock error
+          for(typename snapshots_t::iterator it(snapshots.begin());
+              it != snapshots.end();
+              ++it){
+            it->ins_gps.clock_error(gps.clock_index) += clock_error_delta;
+          }
+          this->clock_error(gps.clock_index) += clock_error_delta;
+        }else{
+          std::cerr << "Skipped." << std::endl;
+          return; // unknown error!
+        }
+      }
+
+      correct_with_info(info);
+    }
+
+    template <
+        class GPS_Packet,
+        class FloatT,
+        template <class> class Filter,
+        unsigned int Receivers,
+        typename BaseFINS>
+    void correct2(
+        const GPS_Packet &gps,
+        INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> *){
+
+      correct2_tightly_generic(gps,
+          typename INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS>::CorrectInfoGenerator1());
+    }
+
+    template <
+        class GPS_Packet,
+        class FloatT,
+        template <class> class Filter,
+        unsigned int Receivers,
+        typename BaseFINS>
+    void correct2(
+        const GPS_Packet &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b,
+        INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> *){
+
+      correct2_tightly_generic(gps,
+          typename INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS>::CorrectInfoGenerator2(
+            lever_arm_b, omega_b2i_4b));
     }
 
   public:
     template <class GPS_Packet>
     void correct(const GPS_Packet &gps){
-      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps));
-      correct_with_info(info, this);
+      correct2(gps, this);
     }
 
     template <class GPS_Packet>
     void correct(const GPS_Packet &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
-      correct_with_info(info, this);
+      correct2(gps, lever_arm_b, omega_b2i_4b, this);
     }
 };
 

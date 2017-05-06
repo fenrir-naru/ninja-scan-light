@@ -389,6 +389,8 @@ class INS_GPS2_Tightly : public BaseFINS{
 
     ~INS_GPS2_Tightly(){}
     
+    typedef INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> self_t;
+
     typedef GPS_RawData<float_t> raw_data_t;
     typedef typename raw_data_t::space_node_t space_node_t;
     typedef typename raw_data_t::solver_t solver_t;
@@ -397,7 +399,9 @@ class INS_GPS2_Tightly : public BaseFINS{
     using BaseFINS::P_SIZE;
     using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
 
-    CorrectInfo<float_t> correct_info(const raw_data_t &gps) const {
+    CorrectInfo<float_t> correct_info(
+        const raw_data_t &gps,
+        const float_t &clock_error, const float_t &clock_error_rate) const {
 
       float_t z_serialized[64]; // maximum 64 observation values
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
@@ -409,10 +413,8 @@ class INS_GPS2_Tightly : public BaseFINS{
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
       typedef typename raw_data_t::space_node_t::satellites_t::const_iterator it_sat_t;
 
-      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
-
-      float_t clock_error(BaseFINS::m_clock_error[gps.clock_index]);
-      const float_t &clock_error_rate(BaseFINS::m_clock_error_rate[gps.clock_index]);
+      typename raw_data_t::gps_time_t time_arrival(
+          gps.gpstime - clock_error / space_node_t::light_speed);
 
       typename solver_t::pos_t pos = {
         BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
@@ -428,153 +430,116 @@ class INS_GPS2_Tightly : public BaseFINS{
       it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
 
       // count up valid measurement, and make observation matrices
-      int z_index;
-      for(int trial(0); trial <= 1; trial++){
+      int z_index(0);
 
-        z_index = 0;
-        float_t range_residual_sum(0);
-        unsigned int z_ranges(0);
+      for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
+        int prn(it2_range->first);
+        it_sat_t it_sat(space_node.satellites().find(prn));
+        if(it_sat == space_node.satellites().end()){continue;} // registered satellite?
 
-        typename raw_data_t::gps_time_t time_arrival(
-            gps.gpstime - clock_error / space_node_t::light_speed);
+        const typename solver_t::satellite_t &sat(it_sat->second);
+        if(!sat.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
 
-        for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
-          int prn(it2_range->first);
-          it_sat_t it_sat(space_node.satellites().find(prn));
-          if(it_sat == space_node.satellites().end()){continue;} // registered satellite?
+        // range residual
+        float_t los_neg[3], weight;
+        typename solver_t::residual_t residual = {
+          z_serialized[z_index],
+          los_neg[0], los_neg[1], los_neg[2],
+          weight,
+        };
 
-          const typename solver_t::satellite_t &sat(it_sat->second);
-          if(!sat.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
+        float_t range(it2_range->second);
+        range = solver_t(space_node).range_residual(
+            sat, range, time_arrival,
+            pos, clock_error,
+            residual);
 
-          // range residual
-          float_t los_neg[3], weight;
-          typename solver_t::residual_t residual = {
-            z_serialized[z_index],
-            los_neg[0], los_neg[1], los_neg[2],
-            weight,
-          };
-
-          float_t range(it2_range->second);
-          range = solver_t(space_node).range_residual(
-              sat, range, time_arrival,
-              pos, clock_error,
-              residual);
-
-          range_residual_sum += residual.residual;
-          z_ranges++;
-
-          { // setup H matrix
+        { // setup H matrix
 #define pow2(x) ((x) * (x))
 #define q_e2n(i) BaseFINS::q_e2n.get(i)
-            float_t H_uh[3][4] = {{0}};
-            const float_t
-                q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
-                q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
-                q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
-            const float_t &e(BaseFINS::Earth::epsilon_Earth);
-            const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
-            const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
-            const float_t n_h((n + BaseFINS::h) * 2);
+          float_t H_uh[3][4] = {{0}};
+          const float_t
+              q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
+              q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
+              q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
+          const float_t &e(BaseFINS::Earth::epsilon_Earth);
+          const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
+          const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
+          const float_t n_h((n + BaseFINS::h) * 2);
 #undef q_e2n
-            H_uh[0][0] = -q_gamma * q_beta * sf;
-            H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
-            H_uh[0][2] = -n_h * q_beta;
-            H_uh[0][3] = -q_gamma;
+          H_uh[0][0] = -q_gamma * q_beta * sf;
+          H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
+          H_uh[0][2] = -n_h * q_beta;
+          H_uh[0][3] = -q_gamma;
 
-            H_uh[1][0] = pow2(q_beta) * sf + n_h * q_alpha;
-            H_uh[1][1] = q_beta * q_gamma * sf;
-            H_uh[1][2] = -n_h * q_gamma;
-            H_uh[1][3] = q_beta;
+          H_uh[1][0] = pow2(q_beta) * sf + n_h * q_alpha;
+          H_uh[1][1] = q_beta * q_gamma * sf;
+          H_uh[1][2] = -n_h * q_gamma;
+          H_uh[1][3] = q_beta;
 
-            {
-              const float_t sf2(sf * -(1.0 - pow2(e)));
-              const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
-              H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
-              H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
-              H_uh[2][3] = -q_alpha;
-            }
+          {
+            const float_t sf2(sf * -(1.0 - pow2(e)));
+            const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
+            H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
+            H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
+            H_uh[2][3] = -q_alpha;
+          }
 #undef pow2
 
-            for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
+          for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
+            for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
+              H_serialized[z_index][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
+            }
+          }
+          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2)] = -1; // polarity checked.
+        }
+
+        if(weight < 1E-1){weight = 1E-1;}
+        R_diag[z_index] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
+
+        ++z_index;
+
+        // continue; // activate when range is unsupported.
+
+        if(it_rate == gps.measurement.end()){continue;}
+        it2_t it2_rate(it_rate->second.begin());
+        for(; it2_rate != it_rate->second.end(); ++it2_rate){
+          int prn_rate(it2_rate->first);
+          if(prn == prn_rate){break;}
+        }
+        if(it2_rate == it_rate->second.end()){continue;}
+
+        // rate residual
+        float_t rate(it2_rate->second);
+        typename solver_t::xyz_t rel_vel(sat.velocity(time_arrival, range) - vel_xyz);
+        z_serialized[z_index] = rate - clock_error_rate
+            + los_neg[0] * rel_vel.x()
+            + los_neg[1] * rel_vel.y()
+            + los_neg[2] * rel_vel.z()
+            + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed;
+
+        { // setup H matrix
+          { // velocity
+            mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
+            for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
               for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-                H_serialized[z_index][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
+                H_serialized[z_index][j] -= los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
               }
             }
-            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2)] = -1; // polarity checked.
           }
-
-          if(weight < 1E-1){weight = 1E-1;}
-          R_diag[z_index] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
-
-          ++z_index;
-
-          // continue; // activate when range is unsupported.
-
-          if(it_rate == gps.measurement.end()){continue;}
-          it2_t it2_rate(it_rate->second.begin());
-          for(; it2_rate != it_rate->second.end(); ++it2_rate){
-            int prn_rate(it2_rate->first);
-            if(prn == prn_rate){break;}
+          { // position
+            const float_t &x(vel_xyz.x()), &y(vel_xyz.y()), &z(vel_xyz.z());
+            H_serialized[z_index][3] -= (                  los_neg[1] * -z + los_neg[2] *  y) * 2;  // polarity checked.
+            H_serialized[z_index][4] -= (los_neg[0] *  z                   + los_neg[2] * -x) * 2;
+            H_serialized[z_index][5] -= (los_neg[0] * -y + los_neg[1] *  x                  ) * 2;
           }
-          if(it2_rate == it_rate->second.end()){continue;}
-
-          // rate residual
-          float_t rate(it2_rate->second);
-          typename solver_t::xyz_t rel_vel(sat.velocity(time_arrival, range) - vel_xyz);
-          z_serialized[z_index] = rate - clock_error_rate
-              + los_neg[0] * rel_vel.x()
-              + los_neg[1] * rel_vel.y()
-              + los_neg[2] * rel_vel.z()
-              + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed;
-
-          { // setup H matrix
-            { // velocity
-              mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
-              for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
-                for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-                  H_serialized[z_index][j] -= los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
-                }
-              }
-            }
-            { // position
-              const float_t &x(vel_xyz.x()), &y(vel_xyz.y()), &z(vel_xyz.z());
-              H_serialized[z_index][3] -= (                  los_neg[1] * -z + los_neg[2] *  y) * 2;  // polarity checked.
-              H_serialized[z_index][4] -= (los_neg[0] *  z                   + los_neg[2] * -x) * 2;
-              H_serialized[z_index][5] -= (los_neg[0] * -y + los_neg[1] *  x                  ) * 2;
-            }
-            // error rate
-            H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2) + 1] = -1; // polarity checked.
-          }
-
-          R_diag[z_index] = R_diag[z_index - 1] * 1E-3; // TODO rate error variance
-
-          ++z_index;
+          // error rate
+          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2) + 1] = -1; // polarity checked.
         }
 
-        /*
-         * detection for automatic receiver clock error correction,
-         * which will be performed to adjust clock in its maximum error between +/- 1ms.
-         */
-        float_t range_residual_ms(range_residual_sum / z_ranges / space_node_t::light_speed / 1E-3);
-        if(trial == 0){
-          if((range_residual_ms >= 0.9) || (range_residual_ms <= -0.9)){ // 0.9 ms
-            std::cerr << "Detect receiver clock jump: " << range_residual_ms << " [ms] => ";
-            clock_error += (space_node_t::light_speed * 1E-3 * std::floor(range_residual_ms + 0.5));
-            continue;
-          }
-        }else{
-          if((range_residual_ms < 0.9) && (range_residual_ms > -0.9)){
-            std::cerr << "Fixed." << std::endl;
-            // correct internal clock error
-            // TODO consider realtime mode, in which only snapshot[0] will be fixed.
-            const_cast<float_t &>(BaseFINS::m_clock_error[gps.clock_index]) = clock_error;
-          }else{
-            std::cerr << "Skipped." << std::endl;
-            return CorrectInfo<float_t>::no_info(); // unknown error!
-          }
-        }
+        R_diag[z_index] = R_diag[z_index - 1] * 1E-3; // TODO rate error variance
 
-        break;
+        ++z_index;
       }
 
       mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
@@ -587,22 +552,111 @@ class INS_GPS2_Tightly : public BaseFINS{
       return CorrectInfo<float_t>(H, z, R);
     }
 
+    CorrectInfo<float_t> correct_info(
+        const raw_data_t &gps,
+        const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b,
+        const float_t &clock_error, const float_t &clock_error_rate) const {
+      // TODO
+      return correct_info(gps, clock_error, clock_error_rate);
+    }
+
+    CorrectInfo<float_t> correct_info(const raw_data_t &gps) const {
+      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
+      return correct_info(gps,
+          BaseFINS::m_clock_error[gps.clock_index],
+          BaseFINS::m_clock_error_rate[gps.clock_index]);
+    }
+
+    CorrectInfo<float_t> correct_info(const raw_data_t &gps,
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b) const {
+      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
+      return correct_info(gps, lever_arm_b, omega_b2i_4b,
+          BaseFINS::m_clock_error[gps.clock_index],
+          BaseFINS::m_clock_error_rate[gps.clock_index]);
+    }
+
+  protected:
+    float_t range_residual_mean_ms(
+        const unsigned int &clock_index,
+        const CorrectInfo<float_t> &info) const {
+
+      float_t range_residual_sum(0);
+      unsigned int z_ranges(0);
+
+      for(int i(0); i < info.z.rows(); i++){
+        if(info.H(i, P_SIZE_WITHOUT_CLOCK_ERROR + (clock_index * 2)) > -0.5){continue;}
+        range_residual_sum += info.z(i, 0);
+        z_ranges++;
+      }
+
+      return range_residual_sum / z_ranges / space_node_t::light_speed / 1E-3;
+    }
+
+    struct CorrectInfoGenerator1 {
+      CorrectInfo<float_t> operator()(const self_t &self, const raw_data_t &gps) const {
+        return self.correct_info(gps);
+      }
+      CorrectInfo<float_t> operator()(
+          const self_t &self, const raw_data_t &gps,
+          const float_t &clock_error, const float_t &clock_error_rate) const {
+        return self.correct_info(gps, clock_error, clock_error_rate);
+      }
+    };
+
+    struct CorrectInfoGenerator2 {
+      const vec3_t &lever_arm_b;
+      const vec3_t &omega_b2i_4b;
+      CorrectInfoGenerator2(const vec3_t &lever, const vec3_t &omega)
+          : lever_arm_b(lever), omega_b2i_4b(omega) {}
+      CorrectInfo<float_t> operator()(const self_t &self, const raw_data_t &gps) const {
+        return self.correct_info(gps, lever_arm_b, omega_b2i_4b);
+      }
+      CorrectInfo<float_t> operator()(
+          const self_t &self, const raw_data_t &gps,
+          const float_t &clock_error, const float_t &clock_error_rate) const {
+        return self.correct_info(gps, lever_arm_b, omega_b2i_4b, clock_error, clock_error_rate);
+      }
+    };
+
+    template <class Generator>
+    void correct_generic(const raw_data_t &gps, const Generator &generator){
+      CorrectInfo<float_t> info(generator(*this, gps));
+      if(info.z.rows() < 1){return;}
+
+      /*
+       * detection for automatic receiver clock error correction,
+       * which will be performed to adjust clock in its maximum error between +/- 1ms.
+       */
+      float_t delta_ms(range_residual_mean_ms(gps.clock_index, info));
+      if((delta_ms >= 0.9) || (delta_ms <= -0.9)){ // 0.9 ms
+        std::cerr << "Detect receiver clock jump: " << delta_ms << " [ms] => ";
+        float_t clock_error_mod(BaseFINS::m_clock_error[gps.clock_index] + (space_node_t::light_speed * 1E-3 * std::floor(delta_ms + 0.5)));
+        info = generator(
+            *this, gps,
+            clock_error_mod, BaseFINS::m_clock_error_rate[gps.clock_index]);
+        delta_ms = range_residual_mean_ms(gps.clock_index, info);
+        if((delta_ms < 0.9) && (delta_ms > -0.9)){
+          std::cerr << "Fixed." << std::endl;
+          // correct internal clock error
+          BaseFINS::m_clock_error[gps.clock_index] = clock_error_mod;
+        }else{
+          std::cerr << "Skipped." << std::endl;
+          return; // unknown error!
+        }
+      }
+
+      BaseFINS::correct_primitive(info);
+    }
+
+  public:
     /**
      * Measurement update with GPS raw measurement
      *
      * @param gps GPS measurement
      */
     void correct(const raw_data_t &gps){
-      CorrectInfo<float_t> info(correct_info(gps));
-      if(info.z.rows() < 1){return;}
-      BaseFINS::correct_primitive(info);
-    }
-
-
-    CorrectInfo<float_t> correct_info(const raw_data_t &gps,
-        const vec3_t &lever_arm_b,
-        const vec3_t &omega_b2i_4b) const {
-      return correct_info(gps);
+      correct_generic(gps, CorrectInfoGenerator1());
     }
 
     /**
@@ -615,9 +669,7 @@ class INS_GPS2_Tightly : public BaseFINS{
     void correct(const raw_data_t &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      CorrectInfo<float_t> info(correct_info(gps, lever_arm_b, omega_b2i_4b));
-      if(info.z.rows() < 1){return;}
-      BaseFINS::correct_primitive(info);
+      correct_generic(gps, CorrectInfoGenerator2(lever_arm_b, omega_b2i_4b));
     }
 };
 
