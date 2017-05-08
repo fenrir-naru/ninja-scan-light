@@ -1511,9 +1511,7 @@ class StreamProcessor
       int week_number;
 
       typedef G_Packet_Raw::space_node_t space_node_t;
-      static space_node_t space_node_shared;
-      space_node_t space_node_inidividual;
-      space_node_t &space_node;
+      space_node_t space_node;
       
       G_Packet_Raw packet_raw_latest;
 
@@ -1526,8 +1524,7 @@ class StreamProcessor
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(0),
-          space_node_inidividual(),
-          space_node(true ? space_node_inidividual : space_node_shared),
+          space_node(),
           packet_raw_latest(space_node),
           out_raw_pvt(NULL) {
         previous_seek_next = G_Observer_t::ready();
@@ -1542,7 +1539,7 @@ class StreamProcessor
         itow_ms_0x0112 = another.itow_ms_0x0112;
         gps_status = another.gps_status;
         week_number = another.week_number;
-        space_node_inidividual = another.space_node_inidividual;
+        space_node = another.space_node;
         packet_raw_latest = another.packet_raw_latest;
         out_raw_pvt = another.out_raw_pvt;
         return *this;
@@ -1917,6 +1914,14 @@ class StreamProcessor
       return a_handler.calibration;
     }
 
+    const G_Packet_Raw::space_node_t &gps_space_node() const {
+      return g_handler.space_node;
+    }
+    G_Packet_Raw::space_node_t &gps_space_node() {
+      return const_cast<G_Packet_Raw::space_node_t &>(
+          static_cast<StreamProcessor &>(*this).gps_space_node());
+    }
+
     void set_stream(istream *in){_in = in;}
 
     /**
@@ -2044,8 +2049,6 @@ class StreamProcessor
 };
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
-StreamProcessor::GHandler::space_node_t StreamProcessor::GHandler::space_node_shared
-    = StreamProcessor::GHandler::space_node_t();
 
 typedef vector<StreamProcessor> processors_t;
 processors_t processors;
@@ -2569,6 +2572,15 @@ int main(int argc, char *argv[]){
   if(processors.size() > 1){ // TODO multiple log stream will be support.
     cerr << "(error!) too many log." << endl;
     exit(-1);
+  }
+
+  { // Synchronize GPS space node information before reading log.
+    for(processors_t::iterator it(processors.begin() + 1); it != processors.end(); ++it){
+      processors.front().gps_space_node().merge(it->gps_space_node());
+    } // gather information into the first processor.
+    for(processors_t::iterator it(processors.begin() + 1); it != processors.end(); ++it){
+      it->gps_space_node().merge(processors.front().gps_space_node());
+    } // spread information from the first processor.
   }
 
   if(options.out_sylphide){

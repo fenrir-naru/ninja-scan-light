@@ -991,6 +991,48 @@ class GPS_SpaceNode {
           return is_valid;
         }
 
+        /**
+         * Merge information
+         */
+        void merge(const Satellite &another, const bool &keep_original = true){
+          eph_list_t list_new;
+          list_new.push_back(eph_list[0]);
+          typename eph_list_t::const_iterator
+              it1(eph_list.begin() + 1), it2(another.eph_list.begin() + 1);
+          typename eph_list_t::size_type current_index_new(eph_current_index);
+          int shift_count(eph_current_index - 1);
+          while(true){
+            if(it1 == eph_list.end()){
+              while(it2 != another.eph_list.end()){
+                list_new.push_back(*it2);
+              }
+              break;
+            }else if(it2 == another.eph_list.end()){
+              while(it1 != eph_list.end()){
+                list_new.push_back(*it1);
+              }
+              break;
+            }
+            gps_time_t t1(it1->WN, it1->t_oc), t2(it2->WN, it2->t_oc);
+            if(t1 > t2){
+              list_new.push_back(*it2);
+              ++it2;
+              if(shift_count >= 0){++current_index_new;}
+            }else if(t1 < t2){
+              list_new.push_back(*it1);
+              ++it1;
+              --shift_count;
+            }else{
+              list_new.push_back(keep_original ? *it1 : *it2);
+              ++it1;
+              ++it2;
+              --shift_count;
+            }
+          }
+          eph_list = list_new;
+          eph_current_index = current_index_new;
+        }
+
         const Ephemeris &ephemeris() const {
           return eph_list[eph_current_index];
         }
@@ -1053,6 +1095,19 @@ class GPS_SpaceNode {
       for(typename satellites_t::iterator it(_satellites.begin());
           it != _satellites.end(); ++it){
         it->second.select_ephemeris(target_time);
+      }
+    }
+    void merge(const self_t &another, const bool &keep_original = true){
+      for(typename satellites_t::const_iterator it(another._satellites.begin());
+          it != another._satellites.end();
+          ++it){
+        satellite(it->first).merge(it->second, keep_original);
+      }
+      if(!_iono_utc_initialized){
+        _iono_utc = another._iono_utc;
+        _iono_utc_initialized = another._iono_utc_initialized;
+      }else if((!keep_original) && (!another._iono_utc_initialized)){
+        _iono_utc = another._iono_utc;
       }
     }
 
