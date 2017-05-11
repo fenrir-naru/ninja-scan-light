@@ -468,6 +468,10 @@ class NAV : public NAVData<float_sylph_t> {
  * Base class of log data, which has time stamp.
  */
 struct Packet{
+  virtual ~Packet() {}
+  virtual Packet *clone() const = 0;
+  virtual NAV &apply(NAV &nav) const = 0;
+
   float_sylph_t itow;
 
   /**
@@ -484,6 +488,12 @@ struct Packet{
  * Inertial and temperature sensor data (ADC raw value)
  */
 struct A_Packet : public Packet {
+  Packet *clone() const {
+    return new A_Packet(*this);
+  }
+  NAV &apply(NAV &nav) const {
+    return nav.update(*this);
+  }
   Vector3<float_sylph_t> accel; ///< Acceleration
   Vector3<float_sylph_t> omega; ///< Angular speed
 };
@@ -492,6 +502,13 @@ struct A_Packet : public Packet {
  * GPS data
  */
 struct G_Packet : public Packet {
+  Packet *clone() const {
+    return new G_Packet(*this);
+  }
+  NAV &apply(NAV &nav) const {
+    return nav.update(*this);
+  }
+
   GPS_Solution<float_sylph_t> solution;
   Vector3<float_sylph_t> *lever_arm;
 
@@ -506,6 +523,13 @@ struct G_Packet : public Packet {
  * Magnetic sensor data
  */
 struct M_Packet : public Packet {
+  Packet *clone() const {
+    return new M_Packet(*this);
+  }
+  NAV &apply(NAV &nav) const {
+    return nav.update(*this);
+  }
+
   Vector3<float_sylph_t> mag;
 };
 
@@ -1174,55 +1198,10 @@ class StreamProcessor
 
   public:
     static const unsigned int buffer_size;
-    struct latest_packet_t {
-      const Packet *packet_ptr;
-      NAV &(*packet_applier)(NAV &, const Packet *);
-      Packet *(*packet_cloner)(const Packet *);
-      void invalid() {packet_ptr = NULL;}
-      latest_packet_t() {invalid();}
-      bool is_valid() const {return packet_ptr != NULL;}
-      template <class T>
-      static NAV &apply_packet(NAV &nav, const Packet *packet){
-        return nav.update(*static_cast<const T *>(packet));
-      }
-      template <class T>
-      static Packet *new_packet(const Packet *packet){
-        return new T(*static_cast<const T *>(packet));
-      }
-      template <class T>
-      latest_packet_t &operator=(const T &packet){
-        packet_ptr = &packet;
-        packet_applier = &apply_packet<T>;
-        packet_cloner = &new_packet<T>;
-        return *this;
-      }
-      NAV &apply(NAV &nav) const {
-        return (*packet_applier)(nav, packet_ptr);
-      }
-      Packet *clone_packet() const {
-        return (*packet_cloner)(packet_ptr);
-      }
-      void move(const StreamProcessor &self, const StreamProcessor &another){
-        if(!another.latest_packet.is_valid()){return;}
-        struct {
-          const Packet &external;
-          const Packet &internal;
-        } targets[] = {
-          {another.a_handler.packet_latest, self.a_handler.packet_latest},
-          {another.g_handler.packet_latest, self.g_handler.packet_latest},
-          {another.m_handler.packet_latest, self.m_handler.packet_latest},
-        };
-        for(int i(0); i < sizeof(targets) / sizeof(targets[0]); i++){
-          if(another.latest_packet.packet_ptr == &targets[i].external){
-            packet_ptr = &targets[i].internal;
-            packet_applier = another.latest_packet.packet_applier;
-            packet_cloner = another.latest_packet.packet_cloner;
-            break;
-          }
-        }
-      }
-    } latest_packet;
+
   protected:
+    const Packet *_latest_packet;
+
     typedef AbstractSylphideProcessor<float_sylph_t> super_t;
     typedef A_Packet_Observer<float_sylph_t> A_Observer_t;
     typedef G_Packet_Observer<float_sylph_t> G_Observer_t;
@@ -1288,7 +1267,7 @@ class StreamProcessor
         packet_latest.accel = calibration.raw2accel(ch);
         packet_latest.omega = calibration.raw2omega(ch);
 
-        outer.latest_packet = packet_latest;
+        outer._latest_packet = &packet_latest;
       }
     } a_handler;
 
@@ -1394,7 +1373,7 @@ class StreamProcessor
             packet_latest.solution.v_n = packet_latest.solution.v_e = packet_latest.solution.v_d = 0;
             packet_latest.solution.sigma_vel = 1;
           }
-          outer.latest_packet = packet_latest;
+          outer._latest_packet = &packet_latest;
         }
       }
       /**
@@ -1474,9 +1453,26 @@ class StreamProcessor
         packet_latest.mag[1] = values.y[3];
         packet_latest.mag[2] = values.z[3];
 
-        outer.latest_packet = packet_latest;
+        outer._latest_packet = &packet_latest;
       }
     } m_handler;
+
+    void move_latest_packet(const StreamProcessor &another){
+      struct {
+        const Packet &external;
+        const Packet &internal;
+      } targets[] = {
+        {another.a_handler.packet_latest, a_handler.packet_latest},
+        {another.g_handler.packet_latest, g_handler.packet_latest},
+        {another.m_handler.packet_latest, m_handler.packet_latest},
+      };
+      for(int i(0); i < sizeof(targets) / sizeof(targets[0]); i++){
+        if(another._latest_packet == &targets[i].external){
+          _latest_packet = &targets[i].internal;
+          break;
+        }
+      }
+    }
 
   protected:
     int invoked;
@@ -1484,7 +1480,7 @@ class StreamProcessor
     
   public:
     StreamProcessor()
-        : super_t(), latest_packet(),
+        : super_t(), _latest_packet(NULL),
         _in(NULL), invoked(0),
         a_handler(*this),
         g_handler(*this),
@@ -1492,7 +1488,7 @@ class StreamProcessor
 
     }
     StreamProcessor(const StreamProcessor &another)
-        : super_t(another), latest_packet(),
+        : super_t(another), _latest_packet(NULL),
         _in(another._in), invoked(another.invoked),
         a_handler(*this),
         g_handler(*this),
@@ -1500,7 +1496,7 @@ class StreamProcessor
       a_handler = another.a_handler;
       g_handler = another.g_handler;
       m_handler = another.m_handler;
-      latest_packet.move(*this, another);
+      move_latest_packet(another);
     }
     ~StreamProcessor(){}
     
@@ -1512,9 +1508,13 @@ class StreamProcessor
         a_handler = another.a_handler;
         g_handler = another.g_handler;
         m_handler = another.m_handler;
-        latest_packet.move(*this, another);
+        move_latest_packet(another);
       }
       return *this;
+    }
+
+    const Packet *latest_packet() const {
+      return _latest_packet;
     }
 
     const StandardCalibration &calibration() const{
@@ -1557,7 +1557,7 @@ class StreamProcessor
 #endif
       }
       
-      latest_packet.invalid();
+      _latest_packet = NULL;
 
       switch(buffer[0]){
         case 'A':
@@ -1569,13 +1569,13 @@ class StreamProcessor
           super_t::process_packet(
               buffer, read_count,
               g_handler, g_handler.previous_seek_next, g_handler);
-          if(latest_packet.is_valid()){
+          if(_latest_packet){
             // Time check
-            if(!options.is_time_before_end(latest_packet.packet_ptr->itow, g_handler.week_number)){
+            if(!options.is_time_before_end(_latest_packet->itow, g_handler.week_number)){
               return false;
             }
-            if(!options.is_time_after_start(latest_packet.packet_ptr->itow, g_handler.week_number)){
-              latest_packet.invalid();
+            if(!options.is_time_after_start(_latest_packet->itow, g_handler.week_number)){
+              _latest_packet = NULL;
             }
           }
           break;
@@ -1797,17 +1797,18 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 
   protected:
-    void time_update_after_initialization(Packet packet){
+    void time_update_after_initialization(const G_Packet &g_packet){
       typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
       for(; it_r != recent_a.buf.rend(); ++it_r){
-        if(packet.interval(*it_r) <= 0){break;}
+        if(g_packet.interval(*it_r) <= 0){break;}
       }
+      const Packet *packet(&g_packet);
       for(typename recent_a_t::buf_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
           it != recent_a.buf.end(); ++it){
-        time_update(*it, packet.interval(*it));
-        packet = *it;
+        time_update(*it, packet->interval(*it));
+        packet = &(*it);
       }
-      nav.ins_gps->set_header("MU", packet.itow);
+      nav.ins_gps->set_header("MU", g_packet.itow);
     }
 
     void initialize(
@@ -1947,27 +1948,6 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 };
 
-struct packet_pool_t {
-  struct item_t {
-    const Packet *packet_ptr;
-    NAV &(*packet_applier)(NAV &, const Packet *);
-    NAV &apply(NAV &nav) const {
-      return (*packet_applier)(nav, packet_ptr);
-    }
-    item_t(const StreamProcessor::latest_packet_t &packet)
-        : packet_ptr(packet.clone_packet()),
-        packet_applier(packet.packet_applier) {}
-    bool operator<(const item_t &another) const {
-      return packet_ptr->itow < another.packet_ptr->itow;
-    }
-  };
-  typedef deque<item_t> buf_t;
-  buf_t buf;
-  void sort() {
-    std::stable_sort(buf.begin(), buf.end());
-  }
-};
-
 void loop(){
   struct NAV_Manager {
     NAV *nav;
@@ -2021,34 +2001,36 @@ void loop(){
   StreamProcessor &proc(processors.front());
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
     while(proc.process_1page()){
-      if(!proc.latest_packet.is_valid()){continue;}
-      proc.latest_packet.apply(*nav_manager.nav);
+      const Packet *latest(proc.latest_packet());
+      if(!latest){continue;}
+      latest->apply(*nav_manager.nav);
       nav_manager.dump();
     }
     return;
   }
 
+  typedef deque<const Packet *> packet_pool_t;
   packet_pool_t packet_pool;
 
   while(true){
     bool alive(proc.process_1page());
     int packets;
     if(alive){
-      if(!proc.latest_packet.is_valid()){continue;}
-      packet_pool.buf.push_back(
-          packet_pool_t::buf_t::value_type(proc.latest_packet));
-      if(packet_pool.buf.size() < 0x200){continue;}
-      packets = packet_pool.buf.size() / 2;
+      const Packet *latest(proc.latest_packet());
+      if(!latest){continue;}
+      packet_pool.push_back(latest->clone());
+      if(packet_pool.size() < 0x200){continue;}
+      packets = packet_pool.size() / 2;
     }else{
-      packets = packet_pool.buf.size();
+      packets = packet_pool.size();
     }
-    packet_pool.sort();
+    stable_sort(packet_pool.begin(), packet_pool.end());
     while(packets-- > 0){
-      packet_pool_t::buf_t::reference front(packet_pool.buf.front());
-      front.apply(*nav_manager.nav);
+      packet_pool_t::reference front(packet_pool.front());
+      front->apply(*nav_manager.nav);
       nav_manager.dump();
-      delete front.packet_ptr;
-      packet_pool.buf.pop_front();
+      delete front;
+      packet_pool.pop_front();
     }
     if(!alive){return;}
   }
