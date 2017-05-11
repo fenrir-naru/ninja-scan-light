@@ -601,12 +601,29 @@ struct G_Packet_Raw : public G_Packet {
     return true;
   }
 
+  void label(std::ostream &out) const {
+    out << "week"
+        << ',' << "itow"
+        << ',' << "receiver_error"
+        << ',' << "longitude"
+        << ',' << "latitude"
+        << ',' << "height"
+        << ',' << "gdop"
+        << ',' << "pdop"
+        << ',' << "hdop"
+        << ',' << "vdop"
+        << ',' << "tdop"
+        << ',' << "v_north"
+        << ',' << "v_east"
+        << ',' << "v_down";
+  }
+
   friend std::ostream &operator<<(std::ostream &out, const G_Packet_Raw &packet){
     out << packet.raw_data.gpstime.week
         << ',' << packet.raw_data.gpstime.seconds
         << ',' << packet.pvt.receiver_error / space_node_t::light_speed
-        << ',' << rad2deg(packet.solution.latitude)
         << ',' << rad2deg(packet.solution.longitude)
+        << ',' << rad2deg(packet.solution.latitude)
         << ',' << packet.solution.height
         << ',' << packet.pvt.gdop
         << ',' << packet.pvt.pdop
@@ -1760,9 +1777,6 @@ class StreamProcessor
 #endif
 
             outer._latest_packet = &packet_raw_latest;
-            if(out_raw_pvt && packet_raw_latest.update_solution()){
-              (*out_raw_pvt) << packet_raw_latest << endl;
-            }
             return;
           }
           case 0x11: { // RXM-SFRB
@@ -1970,14 +1984,21 @@ class StreamProcessor
           super_t::process_packet(
               buffer, read_count,
               g_handler, g_handler.previous_seek_next, g_handler);
-          if(_latest_packet){
+          while(_latest_packet){
             // Time check
             if(!options.is_time_before_end(_latest_packet->itow, g_handler.week_number)){
               return false;
             }
             if(!options.is_time_after_start(_latest_packet->itow, g_handler.week_number)){
               _latest_packet = NULL;
+              break;
             }
+            if(g_handler.out_raw_pvt
+                && (_latest_packet == &g_handler.packet_raw_latest)
+                && g_handler.packet_raw_latest.update_solution()){
+              (*(g_handler.out_raw_pvt)) << g_handler.packet_raw_latest << endl;
+            }
+            break;
           }
           break;
         case 'M':
@@ -2039,6 +2060,8 @@ class StreamProcessor
 
       if(value = Options::get_value(spec, "out_raw_pvt", false)){
         g_handler.out_raw_pvt = &options.spec2ostream(value);
+        g_handler.packet_raw_latest.label(*g_handler.out_raw_pvt);
+        (*g_handler.out_raw_pvt) << endl;
         g_handler.out_raw_pvt->precision(12);
         cerr << "out_raw_pvt: " << value << endl;
         return true;
