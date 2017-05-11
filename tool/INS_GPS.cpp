@@ -482,6 +482,9 @@ struct Packet{
   float_sylph_t interval(const Packet &another) const {
     return another.itow - itow;
   }
+  static bool compare(const Packet *a, const Packet *b) {
+    return a->itow < b->itow;
+  }
 };
 
 /**
@@ -2024,7 +2027,7 @@ void loop(){
     }else{
       packets = packet_pool.size();
     }
-    stable_sort(packet_pool.begin(), packet_pool.end());
+    stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare);
     while(packets-- > 0){
       packet_pool_t::reference front(packet_pool.front());
       front->apply(*nav_manager.nav);
