@@ -615,6 +615,31 @@ class INS {
     }
 
     /**
+     * 現在の位置を緯度,経度,高度からECEF座標に変換して取得します。
+     *
+     * @return (Vector3_T) 位置
+     */
+    template <class Vector3_T>
+    Vector3_T position_xyz() const {
+      float_t n(Earth::R_e / std::sqrt(
+          1.0 - pow2(Earth::epsilon_Earth * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3))) * 2))));
+      return Vector3_T(
+          -(n + h) * (q_e2n.get(0) * q_e2n.get(2) + q_e2n.get(1) * q_e2n.get(3)) * 2,
+          (n + h) * (q_e2n.get(0) * q_e2n.get(1) - q_e2n.get(2) * q_e2n.get(3)) * 2,
+          (n * (1.0 - pow2(Earth::epsilon_Earth)) + h) * (1.0 - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3))) * 2));
+    }
+
+    /**
+     * 現在の速度をECEF座標に変換して取得します。
+     *
+     * @return (Vector3_T) 速度
+     */
+    template <class Vector3_T>
+    Vector3_T velocity_xyz() const {
+      return Vector3_T((q_e2n * v_2e_4n * q_e2n.conj()).vector());
+    }
+
+    /**
      * 現在の状態量を見やすい形で出力します。
      * 
      * @param out 出力ストリーム

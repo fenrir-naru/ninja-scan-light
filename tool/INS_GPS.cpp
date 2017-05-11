@@ -142,6 +142,7 @@
 #include <cctype>
 
 #include <vector>
+#include <map>
 #include <utility>
 #include <deque>
 #include <algorithm>
@@ -160,9 +161,13 @@ VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
 QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
 #include "navigation/INS_GPS2.h"
+#include "navigation/INS_GPS2_Tightly.h"
 #include "navigation/INS_GPS_Synchronization.h"
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/BiasEstimation.h"
+#include "navigation/GPS.h"
+#include "navigation/GPS_SP.h"
+#include "navigation/RINEX.h"
 
 #include "navigation/MagneticField.h"
 
@@ -178,6 +183,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool out_is_N_packet; ///< True for NPacket formatted outputs
 
   // Navigation strategies
+  enum {
+    INS_GPS_INTEGRATION_LOOSELY,
+    INS_GPS_INTEGRATION_TIGHTLY,
+  } ins_gps_integration; ///< integration style.
   enum {
     INS_GPS_SYNC_OFFLINE,
     INS_GPS_SYNC_BACK_PROPAGATION, ///< a.k.a, smoothing
@@ -296,6 +305,10 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
 
+    CHECK_ALIAS(tight);
+    CHECK_OPTION(tightly, true,
+        if(is_true(value)){ins_gps_integration = INS_GPS_INTEGRATION_TIGHTLY;},
+        (ins_gps_integration == INS_GPS_INTEGRATION_TIGHTLY ? "on" : "off"));
     CHECK_OPTION(back_propagate, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
@@ -358,6 +371,7 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
 
 struct A_Packet;
 struct G_Packet;
+struct G_Packet_Raw;
 struct M_Packet;
 
 class NAV : public NAVData<float_sylph_t> {
@@ -375,6 +389,9 @@ class NAV : public NAVData<float_sylph_t> {
       return *this;
     }
     virtual NAV &update(const G_Packet &){
+      return *this;
+    }
+    virtual NAV &update(const G_Packet_Raw &){
       return *this;
     }
     virtual NAV &update(const M_Packet &){
@@ -522,6 +539,92 @@ struct G_Packet : public Packet {
   }
 };
 
+struct G_Packet_Raw : public G_Packet {
+  Packet *clone() const {
+    return new G_Packet_Raw(*this);
+  }
+  NAV &apply(NAV &nav) const {
+    return nav.update(*this);
+  }
+
+  typedef GPS_RawData<float_sylph_t> raw_data_t;
+  raw_data_t raw_data;
+
+  operator const raw_data_t &() const {
+    return raw_data;
+  }
+
+  typedef raw_data_t::space_node_t space_node_t;
+  typedef raw_data_t::solver_t solver_t;
+  mutable solver_t::user_pvt_t pvt;
+
+  bool update_pvt() const {
+    while(true){
+      if(pvt.error_code == solver_t::user_pvt_t::ERROR_NO){
+        float_sylph_t delta_t(std::abs(raw_data.gpstime - pvt.receiver_time));
+        if(delta_t < 5E-3){ // 5 ms
+          return true; // already updated
+        }else if(delta_t < 300){ // 300 sec
+          pvt = solver_t(raw_data.space_node).solve_user_pvt(
+              raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
+              raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
+              raw_data.gpstime,
+              pvt.user_position,
+              pvt.receiver_error);
+          break;
+        }
+      }
+      pvt = solver_t(raw_data.space_node).solve_user_pvt(
+          raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
+          raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
+          raw_data.gpstime);
+      break;
+    }
+    return pvt.error_code == solver_t::user_pvt_t::ERROR_NO;
+  }
+
+  bool update_solution(){
+    if(!update_pvt()){
+      return false;
+    }
+    // TODO update solution
+    itow -= (pvt.receiver_error / space_node_t::light_speed);
+    solution.v_n = pvt.user_velocity_enu.north();
+    solution.v_e = pvt.user_velocity_enu.east();
+    solution.v_d = -pvt.user_velocity_enu.up();
+    //solution.sigma_vel;
+    solution.latitude = pvt.user_position.llh.latitude();
+    solution.longitude = pvt.user_position.llh.longitude();
+    solution.height = pvt.user_position.llh.height();
+    //solution.sigma_2d;
+    //solution.sigma_height;
+    return true;
+  }
+
+  friend std::ostream &operator<<(std::ostream &out, const G_Packet_Raw &packet){
+    out << packet.raw_data.gpstime.week
+        << ',' << packet.raw_data.gpstime.seconds
+        << ',' << packet.pvt.receiver_error / space_node_t::light_speed
+        << ',' << rad2deg(packet.solution.latitude)
+        << ',' << rad2deg(packet.solution.longitude)
+        << ',' << packet.solution.height
+        << ',' << packet.pvt.gdop
+        << ',' << packet.pvt.pdop
+        << ',' << packet.pvt.hdop
+        << ',' << packet.pvt.vdop
+        << ',' << packet.pvt.tdop
+        << ',' << packet.solution.v_n
+        << ',' << packet.solution.v_e
+        << ',' << packet.solution.v_d;
+    return out;
+  }
+
+  G_Packet_Raw(const space_node_t &_space_node)
+      : G_Packet(), raw_data(_space_node) {
+  }
+  ~G_Packet_Raw(){}
+};
+
 /**
  * Magnetic sensor data
  */
@@ -548,6 +651,18 @@ typedef INS_GPS2_BiasEstimated<
 typedef INS_GPS2_BiasEstimated<
     float_sylph_t,
     KalmanFilterUD> ins_gps_bias_ekf_ud_t;
+typedef INS_GPS2_Tightly<
+    float_sylph_t,
+    KalmanFilter> ins_gps_tightly_ekf_t;
+typedef INS_GPS2_Tightly<
+    float_sylph_t,
+    KalmanFilterUD> ins_gps_tightly_ekf_ud_t;
+typedef INS_GPS2_Tightly_BiasEstimated<
+    float_sylph_t,
+    KalmanFilter> ins_gps_tightly_bias_ekf_t;
+typedef INS_GPS2_Tightly_BiasEstimated<
+    float_sylph_t,
+    KalmanFilterUD> ins_gps_tightly_bias_ekf_ud_t;
 
 template <class INS_GPS>
 class INS_GPS_NAVData;
@@ -647,6 +762,36 @@ class INS_GPS_NAV : public NAV {
       ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
     }
 
+    template <class Calibration, class BaseFINS>
+    void setup_filter(
+        const Calibration &calibration,
+        Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) {
+
+      setup_filter(calibration, (BaseFINS *)fins);
+
+      {
+        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        static const unsigned NP(Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_WITHOUT_CLOCK_ERROR);
+        for(int i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_CLOCK_ERROR; i += 2){
+          P(NP + i,     NP + i)     = 1E4; // TODO
+          P(NP + i + 1, NP + i + 1) = 1E2;
+        }
+        ins_gps->getFilter().setP(P);
+      }
+
+      {
+        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        static const unsigned NQ(Filtered_INS_ClockErrorEstimated<BaseFINS>::Q_SIZE_WITHOUT_CLOCK_ERROR);
+        for(int i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_CLOCK_ERROR; i += 2){
+          Q(NQ + i,     NQ + i)     = 1E3; // TODO
+          Q(NQ + i + 1, NQ + i + 1) = 1E1;
+        }
+        ins_gps->getFilter().setQ(Q);
+      }
+
+      ins_gps->beta_clock_error() *= 1; // TODO
+    }
+
     template <class Calibration, class Base_INS_GPS>
     void setup_filter(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
       setup_filter(calibration, (Base_INS_GPS *)ins_gps);
@@ -671,6 +816,8 @@ class INS_GPS_NAV : public NAV {
         : NAV(),
         ins_gps(new INS_GPS()), helper(*this) {
       setup_filter(calibration, ins_gps);
+      //std::cerr << "P:" << ins_gps->getFilter().getP() << std::endl;
+      //std::cerr << "Q:" << ins_gps->getFilter().getQ() << std::endl;
     }
     virtual ~INS_GPS_NAV() {
       delete ins_gps;
@@ -781,13 +928,15 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
   
   public:
-    NAV &correct(const G_Packet &gps){
+    template <class GPS_Packet>
+    NAV &correct(const GPS_Packet &gps){
       ins_gps->correct(gps);
       return *this;
     }
 
+    template <class GPS_Packet>
     NAV &correct(
-        const G_Packet &gps,
+        const GPS_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b){
       ins_gps->correct(gps, lever_arm_b, omega_b2i_4b);
@@ -805,8 +954,9 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
 
   public:
+    template <class GPS_Packet>
     NAV &correct(
-        const G_Packet &gps,
+        const GPS_Packet &gps,
         const float_sylph_t &advanceT){
       if(setup_correct(advanceT, ins_gps)){
         return correct(gps);
@@ -815,8 +965,9 @@ float_sylph_t fname() const {return ins_gps->fname();}
       }
     }
 
+    template <class GPS_Packet>
     NAV &correct(
-        const G_Packet &gps,
+        const GPS_Packet &gps,
         const Vector3<float_sylph_t> &lever_arm_b,
         const Vector3<float_sylph_t> &omega_b2i_4b,
         const float_sylph_t &advanceT){
@@ -850,6 +1001,11 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return *this;
     }
     NAV &update(const G_Packet &packet){
+      helper.before_any_update();
+      helper.measurement_update(packet);
+      return *this;
+    }
+    NAV &update(const G_Packet_Raw &packet){
       helper.before_any_update();
       helper.measurement_update(packet);
       return *this;
@@ -981,6 +1137,28 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       }
     }
 
+    template <class BaseINS, unsigned int Clocks>
+    void label2(
+        std::ostream &out, const INS_ClockErrorEstimated<BaseINS, Clocks> *ins) const {
+      label2(out, (const BaseINS *)ins);
+      for(unsigned i(0); i < INS_ClockErrorEstimated<BaseINS, Clocks>::CLOCKS_SUPPORTED; ++i){
+        out << ',' << "receiver_clock_error[" << i << "]"
+            << ',' << "receiver_clock_error_rate[" << i << "]";
+      }
+    }
+
+    template <class BaseFINS>
+    void label2(
+        std::ostream &out, const Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) const {
+      label2(out, (const BaseFINS *)fins);
+      if(options.dump_stddev){
+        for(unsigned i(0); i < Filtered_INS_ClockErrorEstimated<BaseFINS>::CLOCKS_SUPPORTED; ++i){
+          out << ',' << "s1(receiver_clock_error[" << i << "])"
+              << ',' << "s1(receiver_clock_error_rate[" << i << "])";
+        }
+      }
+    }
+
   public:
     /**
      * print label
@@ -1034,6 +1212,30 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
             const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP());
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
             j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
+          out << ',' << sqrt(P(i, i));
+        }
+      }
+    }
+
+    template <class BaseINS, unsigned int Clocks>
+    void dump2(
+        std::ostream &out, const INS_ClockErrorEstimated<BaseINS, Clocks> *ins) const {
+      dump2(out, (const BaseINS *)ins);
+      for(unsigned i(0); i < INS_ClockErrorEstimated<BaseINS, Clocks>::CLOCKS_SUPPORTED; ++i){
+        out << ',' << const_cast<INS_ClockErrorEstimated<BaseINS, Clocks> *>(ins)->clock_error(i)
+            << ',' << const_cast<INS_ClockErrorEstimated<BaseINS, Clocks> *>(ins)->clock_error_rate(i);
+      }
+    }
+
+    template <class BaseFINS>
+    void dump2(
+        std::ostream &out, const Filtered_INS_ClockErrorEstimated<BaseFINS> *fins) const {
+      dump2(out, (const BaseFINS *)fins);
+      if(options.dump_stddev){
+        const Matrix<float_sylph_t> &P(
+            const_cast<Filtered_INS_ClockErrorEstimated<BaseFINS> *>(fins)->getFilter().getP());
+        for(int i(Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_WITHOUT_CLOCK_ERROR), j(0);
+            j < Filtered_INS_ClockErrorEstimated<BaseFINS>::P_SIZE_CLOCK_ERROR; ++i, ++j){
           out << ',' << sqrt(P(i, i));
         }
       }
@@ -1308,13 +1510,26 @@ class StreamProcessor
       unsigned int gps_status;
       int week_number;
 
+      typedef G_Packet_Raw::space_node_t space_node_t;
+      static space_node_t space_node_shared;
+      space_node_t space_node_inidividual;
+      space_node_t &space_node;
+      
+      G_Packet_Raw packet_raw_latest;
+
+      ostream *out_raw_pvt;
+
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
           outer(invoker),
           lever_arm(),
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
-          gps_status(status_t::NO_FIX), week_number(0) {
+          gps_status(status_t::NO_FIX), week_number(0),
+          space_node_inidividual(),
+          space_node(true ? space_node_inidividual : space_node_shared),
+          packet_raw_latest(space_node),
+          out_raw_pvt(NULL) {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
@@ -1327,6 +1542,9 @@ class StreamProcessor
         itow_ms_0x0112 = another.itow_ms_0x0112;
         gps_status = another.gps_status;
         week_number = another.week_number;
+        space_node_inidividual = another.space_node_inidividual;
+        packet_raw_latest = another.packet_raw_latest;
+        out_raw_pvt = another.out_raw_pvt;
         return *this;
       }
 
@@ -1401,6 +1619,91 @@ class StreamProcessor
           outer._latest_packet = &packet_latest;
         }
       }
+
+      static space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
+          const G_Observer_t::subframe_t &subframe){
+
+        space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
+#define get8(index) (subframe.bits2u8_align(index, 8))
+        { // IONO parameter
+          raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
+          raw.alpha1 = (G_Observer_t::s8_t)get8( 76);
+          raw.alpha2 = (G_Observer_t::s8_t)get8( 90);
+          raw.alpha3 = (G_Observer_t::s8_t)get8( 98);
+          raw.beta0  = (G_Observer_t::s8_t)get8(106);
+          raw.beta1  = (G_Observer_t::s8_t)get8(120);
+          raw.beta2  = (G_Observer_t::s8_t)get8(128);
+          raw.beta3  = (G_Observer_t::s8_t)get8(136);
+        }
+        { // UTC parameter
+          {
+            G_Observer_t::u32_t buf(get8(150));
+            if(buf & 0x80){buf |= 0xFF00;}
+            buf <<= 8; buf |= get8(158);
+            buf <<= 8; buf |= get8(166);
+            raw.A1 = (G_Observer_t::s32_t)buf;
+          }
+          {
+            G_Observer_t::u32_t buf(get8(180));
+            buf <<= 8; buf |= get8(188);
+            buf <<= 8; buf |= get8(196);
+            buf <<= 8; buf |= get8(210);
+            raw.A0 = (G_Observer_t::s32_t)buf;
+          }
+          raw.t_ot = get8(218);
+          raw.WN_t = get8(226); // truncated
+          raw.delta_t_LS = (G_Observer_t::s8_t)get8(240);
+          raw.WN_LSF = get8(248);
+          raw.DN = get8(256); // truncated
+          raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
+        }
+#undef get8
+        return (space_node_t::Ionospheric_UTC_Parameters)raw;
+      }
+
+      static space_node_t::Satellite::Ephemeris convert_ephemeris(
+          const G_Observer_t::ephemeris_t &eph_rxm){
+
+        typedef space_node_t::Satellite::Ephemeris eph_t;
+        eph_t eph;
+#define copy(dst, src) eph.dst = eph_rxm.src;
+        // Subframe.1
+        copy(svid,    sv_number);
+        copy(WN,      wn);          // Week number
+        copy(URA,     ura);         // User range accuracy
+        copy(SV_health, sv_health); // Health status
+        copy(iodc,    iodc);        // Issue of clock data
+        copy(t_GD,    t_gd);        // Group delay (s)
+        copy(t_oc,    t_oc);        // Clock data reference time
+        copy(a_f2,    a_f2);        // Clock correction parameter (s/s^2)
+        copy(a_f1,    a_f1);        // Clock correction parameter (s/s)
+        copy(a_f0,    a_f0);        // Clock correction parameter (s)
+
+        // Subframe.2
+        copy(iode,    iode);        // Issue of ephemeris data
+        copy(c_rs,    c_rs);        // Sine correction, orbit (m)
+        copy(delta_n, delta_n);     // Mean motion difference (rad/s)
+        copy(m0,      m_0);         // Mean anomaly (rad)
+        copy(c_uc,    c_uc);        // Cosine correction, latitude (rad)
+        copy(e,       e);           // Eccentricity
+        copy(c_us,    c_us);        // Sine correction, latitude (rad)
+        copy(sqrt_A,  root_a);      // Square root of semi-major axis (sqrt(m))
+        copy(t_oe,    t_oe);        // Reference time ephemeris (s)
+        eph.fit_interval = eph_t::raw_t::fit_interval(eph_rxm.fit, eph_rxm.iodc); // Fit interval
+
+        // Subframe.3
+        copy(c_ic,    c_ic);        // Cosine correction, inclination (rad)
+        copy(Omega0,  omega_0);     // Longitude of ascending node (rad)
+        copy(c_is,    c_is);        // Sine correction, inclination (rad)
+        copy(i0,      i_0);         // Inclination angle (rad)
+        copy(c_rc,    c_rc);        // Cosine correction, orbit (m)
+        copy(omega,   omega);       // Argument of perigee (rad)
+        copy(dot_Omega0, omega_0_dot); // Rate of right ascension (rad/s)
+        copy(dot_i0,  i_0_dot);      // Rate of inclination angle (rad/s)
+#undef copy
+        return eph;
+      }
+
       /**
        * Extract the following data.
        * {class, id} = {0x02, 0x10} : raw measurement (pseudorange, carrier, doppler)
@@ -1410,12 +1713,79 @@ class StreamProcessor
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
         switch(packet_type.mid){
           case 0x10: { // RXM-RAW
+            const unsigned int num_of_sv(observer[6 + 6]);
+            if(num_of_sv == 0){return;}
+
+            typedef G_Packet_Raw::raw_data_t raw_data_t;
+            raw_data_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
+#ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
+            float_sylph_t delta_t(current - packet_raw_latest.raw_data.gpstime);
+#endif
+            packet_raw_latest.raw_data.gpstime = current;
+            packet_raw_latest.itow = current.seconds;
+
+            typedef raw_data_t::measurement_t dst_t;
+            dst_t &dst(packet_raw_latest.raw_data.measurement);
+#ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
+            dst_t::mapped_type previous_pseudo_range(dst[raw_data_t::L1_PSEUDORANGE]);
+#endif
+            dst.clear();
+
+            typedef dst_t::mapped_type::value_type v_t;
+            for(int i(0); i < num_of_sv; i++){
+
+              G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
+
+              int prn(src.sv_number);
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(prn, src.pseudo_range));
+              dst[raw_data_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
+              dst[raw_data_t::L1_DOPPLER].push_back(v_t(prn, src.doppler)); // positive sign for approaching satellite
+
+              // Update ephemeris
+              if(!space_node.has_satellite(prn)){continue;}
+              space_node_t::Satellite &sat(
+                  const_cast<space_node_t &>(space_node).satellite(prn));
+              if(!sat.select_ephemeris(current)){continue;}
+
+              // calculate range rate derived from doppler
+              dst[raw_data_t::L1_RANGE_RATE].push_back(
+                  dst_t::mapped_type::value_type(
+                    prn,
+                    -src.doppler * space_node_t::L1_WaveLength()));
+            }
+
+#ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
+            if(dst[raw_data_t::L1_RANGE_RATE].empty()){
+              // calculate range rate by using difference between current and previous range.
+              dst[raw_data_t::L1_RANGE_RATE] = raw_data_t::difference(
+                  dst[raw_data_t::L1_PSEUDORANGE], previous_pseudo_range, (1.0 / delta_t));
+            }
+#endif
+
+            outer._latest_packet = &packet_raw_latest;
+            if(out_raw_pvt && packet_raw_latest.update_solution()){
+              (*out_raw_pvt) << packet_raw_latest << endl;
+            }
             return;
           }
           case 0x11: { // RXM-SFRB
+            G_Observer_t::subframe_t subframe(observer.fetch_subframe());
+            if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
+              space_node_t::Ionospheric_UTC_Parameters iono_utc(
+                  convert_iono_utc(subframe));
+              /*{ // TODO taking account for truncation
+                iono_utc.WN_t;
+                iono_utc.WN_LSF;
+              }*/
+              space_node.update_iono_utc(iono_utc);
+            }
             return;
           }
           case 0x31: { // RXM-EPH
+            G_Observer_t::ephemeris_t eph_rxm(observer.fetch_ephemeris());
+            if(eph_rxm.valid){
+              space_node.satellite(eph_rxm.sv_number).register_ephemeris(convert_ephemeris(eph_rxm));
+            }
             return;
           }
           default: return;
@@ -1489,6 +1859,7 @@ class StreamProcessor
       } targets[] = {
         {another.a_handler.packet_latest, a_handler.packet_latest},
         {another.g_handler.packet_latest, g_handler.packet_latest},
+        {another.g_handler.packet_raw_latest, g_handler.packet_raw_latest},
         {another.m_handler.packet_latest, m_handler.packet_latest},
       };
       for(int i(0); i < sizeof(targets) / sizeof(targets[0]); i++){
@@ -1642,7 +2013,29 @@ class StreamProcessor
           g_handler.lever_arm[i] = buf[i];
         }
         g_handler.packet_latest.lever_arm = &(g_handler.lever_arm);
+        g_handler.packet_raw_latest.lever_arm = &(g_handler.lever_arm);
         std::cerr << "lever_arm: " << g_handler.lever_arm << std::endl;
+        return true;
+      }
+
+      if(value = Options::get_value(spec, "rinex_nav", false)){
+        cerr << "RINEX Navigation file (" << value << ") reading..." << endl;
+        istream &in(options.spec2istream(value));
+        int ephemeris(RINEX_NAV_Reader<float_sylph_t>::read_all(
+            in, g_handler.space_node));
+        if(ephemeris < 0){
+          cerr << "(error!) Invalid format!" << endl;
+          exit(-1);
+        }else{
+          cerr << "rinex_nav: " << ephemeris << " items captured." << endl;
+        }
+        return true;
+      }
+
+      if(value = Options::get_value(spec, "out_raw_pvt", false)){
+        g_handler.out_raw_pvt = &options.spec2ostream(value);
+        g_handler.out_raw_pvt->precision(12);
+        cerr << "out_raw_pvt: " << value << endl;
         return true;
       }
 
@@ -1651,6 +2044,8 @@ class StreamProcessor
 };
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
+StreamProcessor::GHandler::space_node_t StreamProcessor::GHandler::space_node_shared
+    = StreamProcessor::GHandler::space_node_t();
 
 typedef vector<StreamProcessor> processors_t;
 processors_t processors;
@@ -1836,7 +2231,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       nav.ins_gps->set_header("MU", g_packet.itow);
     }
 
-    void initialize(
+    void initialize_common(
         const float_sylph_t &itow,
         const float_sylph_t &latitude,
         const float_sylph_t &longitude,
@@ -1910,52 +2305,57 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       return;
     }
 
+    template <class GPS_Packet>
+    void measurement_update_common(const GPS_Packet &g_packet){
+      cerr << "MU : " << setprecision(10) << g_packet.itow << endl;
+
+      // calculate GPS data timing;
+      // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
+      float_sylph_t gps_advance(recent_a.buf.back().interval(g_packet));
+      time_update_before_measurement_update(gps_advance, nav.ins_gps);
+
+      if(g_packet.lever_arm){ // When use lever arm effect.
+        Vector3<float_sylph_t> omega_b2i_4n;
+        int packets_for_mean(0x10), i(0);
+        typename recent_a_t::buf_t::const_iterator it(
+            nearest(recent_a.buf, g_packet.itow, packets_for_mean));
+        for(; (i < packets_for_mean) && (it != recent_a.buf.end()); i++, it++){
+          omega_b2i_4n += it->omega;
+        }
+        omega_b2i_4n /= i;
+        nav.correct(
+            g_packet,
+            *g_packet.lever_arm,
+            omega_b2i_4n,
+            gps_advance);
+      }else{ // When do not use lever arm effect.
+        nav.correct(
+            g_packet,
+            gps_advance);
+      }
+      if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
+        if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
+            && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
+          nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
+        }
+      }
+      status = MEASUREMENT_UPDATED;
+      nav.ins_gps->set_header("MU");
+    }
+
   public:
     /**
      * Perform measurement update by using position and velocity obtained with GPS receiver.
      * 
      * @param g_packet observation data of GPS receiver
      */
-    void measurement_update(const G_Packet &g_packet){
+    void measurement_update(const G_Packet &g_packet, void *){
 
       if(g_packet.solution.sigma_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
         return;
       }
       if(status >= JUST_INITIALIZED){
-        cerr << "MU : " << setprecision(10) << g_packet.itow << endl;
-        
-        // calculate GPS data timing;
-        // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
-        float_sylph_t gps_advance(recent_a.buf.back().interval(g_packet));
-        time_update_before_measurement_update(gps_advance, nav.ins_gps);
-
-        if(g_packet.lever_arm){ // When use lever arm effect.
-          Vector3<float_sylph_t> omega_b2i_4n;
-          int packets_for_mean(0x10), i(0);
-          typename recent_a_t::buf_t::const_iterator it(
-              nearest(recent_a.buf, g_packet.itow, packets_for_mean));
-          for(; (i < packets_for_mean) && (it != recent_a.buf.end()); i++, it++){
-            omega_b2i_4n += it->omega;
-          }
-          omega_b2i_4n /= i;
-          nav.correct(
-              g_packet,
-              *g_packet.lever_arm,
-              omega_b2i_4n,
-              gps_advance);
-        }else{ // When do not use lever arm effect.
-          nav.correct(
-              g_packet,
-              gps_advance);
-        }
-        if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
-          if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
-              && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
-            nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
-          }
-        }
-        status = MEASUREMENT_UPDATED;
-        nav.ins_gps->set_header("MU");
+        measurement_update_common(g_packet);
       }else if((recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
@@ -1964,12 +2364,61 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
-        initialize(
+        initialize_common(
             g_packet.itow,
             g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height,
             g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d);
         time_update_after_initialization(g_packet);
       }
+    }
+
+    template <
+        class FloatT, template <class> class Filter, unsigned int Clocks,
+        typename BaseFINS>
+    void measurement_update(const G_Packet &g_packet,
+        INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> *){
+      return;
+    }
+
+    void measurement_update(const G_Packet_Raw &g_packet, void *){
+      return;
+    }
+
+    /**
+     * Perform measurement update by using raw measurement obtained with GPS receiver.
+     *
+     * @param g_packet observation data of GPS receiver
+     */
+    template <
+        class FloatT, template <class> class Filter, unsigned int Clocks,
+        typename BaseFINS>
+    void measurement_update(const G_Packet_Raw &g_packet,
+        INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> *ins_gps){
+      if(status >= JUST_INITIALIZED){
+        measurement_update_common(g_packet);
+      }else if((recent_a.buf.size() >= min_a_packets_for_init)
+          && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
+          && g_packet.update_pvt()){
+
+        initialize_common(
+            g_packet.itow,
+            g_packet.pvt.user_position.llh.latitude(),
+            g_packet.pvt.user_position.llh.longitude(),
+            g_packet.pvt.user_position.llh.height(),
+            g_packet.pvt.user_velocity_enu.north(),
+            g_packet.pvt.user_velocity_enu.east(),
+            -g_packet.pvt.user_velocity_enu.up());
+
+        ins_gps->clock_error(g_packet.raw_data.clock_index) = g_packet.pvt.receiver_error;
+        ins_gps->clock_error_rate(g_packet.raw_data.clock_index) = g_packet.pvt.receiver_error_rate;
+        
+        time_update_after_initialization(g_packet);
+      }
+    }
+  public:
+    template <class GPS_Packet>
+    void measurement_update(const GPS_Packet &g_packet){
+      measurement_update(g_packet, nav.ins_gps);
     }
 };
 
@@ -1978,18 +2427,37 @@ void loop(){
     NAV *nav;
     NAV_Manager(){
       const StandardCalibration &calibration(processors.front().calibration());
-      if(options.use_udkf){
-        if(options.est_bias){
-          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
-        }else{
-          nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
-        }
-      }else{
-        if(options.est_bias){
-          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
-        }else{
-          nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
-        }
+      switch(options.ins_gps_integration){
+        case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
+          if(options.use_udkf){
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
+            }
+          }else{
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
+            }
+          }
+          break;
+        case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
+          if(options.use_udkf){
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_ud_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_ud_t>::get_nav(calibration);
+            }
+          }else{
+            if(options.est_bias){
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_t>::get_nav(calibration);
+            }else{
+              nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_t>::get_nav(calibration);
+            }
+          }
+          break;
       }
     }
     ~NAV_Manager(){
@@ -2025,6 +2493,7 @@ void loop(){
   // TODO multiple log stream will be support.
   StreamProcessor &proc(processors.front());
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
+    // Realtime mode supports only one stream.
     while(proc.process_1page()){
       const Packet *latest(proc.latest_packet());
       if(!latest){continue;}
