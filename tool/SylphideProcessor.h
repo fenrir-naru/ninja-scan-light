@@ -667,7 +667,7 @@ class G_Packet_Observer : public Packet_Observer<>{
           case 4:
           case 5:
             subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
-            // subframe.4 page.2-10 correspond to SV 25-32
+            // subframe.4 page.2-5,7-10 correspond to SV 25-32
             // subframe.5 page.1-24 correspond to SV 1-24
             break;
         }
