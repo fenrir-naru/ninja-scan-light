@@ -477,6 +477,7 @@ template<
 class basic_SylphideStreambuf_out : public std::basic_streambuf<_Elem, _Traits>{
   
   protected:
+    typedef basic_SylphideStreambuf_out<_Elem, _Traits> self_t;
     typedef std::basic_streambuf<_Elem, _Traits> super_t;
     typedef std::streamsize streamsize;
     typedef typename super_t::int_type int_type;
@@ -549,8 +550,11 @@ class basic_SylphideStreambuf_out : public std::basic_streambuf<_Elem, _Traits>{
       delete [] packet;
     }
     
-    unsigned int &sequence_number(){
+    const unsigned int &sequence_number() const {
       return sequence_num;
+    }
+    unsigned int &sequence_number(){
+      return const_cast<unsigned int &>(static_cast<const self_t &>(this)->sequence_number());
     }
     bool &sequence_number_lock(){
       return sequence_num_lock;
@@ -563,9 +567,9 @@ template<
 class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
   
   public:
-    class container_t : public std::deque<_Elem> {
-      typedef std::deque<_Elem> super_t;
+    class container_t : private std::deque<_Elem>{
       protected:
+        typedef std::deque<_Elem> super_t;
         std::istream &in;
       public:
         container_t(std::istream &_in) : super_t(), in(_in) {}
@@ -579,17 +583,17 @@ class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
           }
           return true;
         }
-        void skip(unsigned int n){
-          typename super_t::iterator it1(super_t::begin()), it2(it1);
-          std::advance(it2, n);
-          super_t::erase(it1, it2);
+        void skip(const unsigned int &n){
+          super_t::erase(super_t::begin(), super_t::begin() + n);
         }
         typename super_t::size_type stored() const {
           return super_t::size();
         }
+        using super_t::operator[];
     };
   
   protected:
+    typedef basic_SylphideStreambuf_in<_Elem, _Traits> self_t;
     typedef std::basic_streambuf<_Elem, _Traits> super_t;
     typedef std::streamsize streamsize;
     typedef typename super_t::int_type int_type;
@@ -600,9 +604,8 @@ class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
     _Elem *payload;
     unsigned int payload_bufsize;
     unsigned int sequence_num;
-    bool sequence_num_lock;
     
-    void regulate_payload(unsigned int min_size){
+    void regulate_payload(const unsigned int &min_size){
       if(payload_bufsize < min_size){
         delete [] payload;
         payload_bufsize = min_size;
@@ -657,10 +660,8 @@ class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
         header_checked = false;
       }
       
-      if(!sequence_num_lock){
-        sequence_num 
-            = SylphideProtocol::Decorder::sequence_num(buffer);
-      }
+      sequence_num
+          = SylphideProtocol::Decorder::sequence_num(buffer);
       regulate_payload(payload_size);
       
       SylphideProtocol::Decorder::extract_payload(
@@ -681,9 +682,9 @@ class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
      * @param in 入力ストリーム 
      */
     basic_SylphideStreambuf_in(std::istream &_in)
-        : buffer(_in), payload_size(0), 
+        : buffer(_in), payload_size(0),
         payload(NULL), payload_bufsize(0),
-        sequence_num(0), sequence_num_lock(false), mode_fixed_size(false) {
+        sequence_num(0), mode_fixed_size(false) {
       setg(payload, payload, payload);
     }
     /**
@@ -695,21 +696,18 @@ class basic_SylphideStreambuf_in : public std::basic_streambuf<_Elem, _Traits>{
      * @param payload_size パケット上のペイロードサイズ(0を指定すると様々な長さのパケットを拾う) 
      */
     basic_SylphideStreambuf_in(
-        std::istream &_in, const unsigned int size)
-        : buffer(_in), payload_size(size), 
+        std::istream &_in, const unsigned int &size)
+        : buffer(_in), payload_size(size),
         payload(NULL), payload_bufsize(0),
-        sequence_num(0), sequence_num_lock(false), mode_fixed_size(size > 0) {
+        sequence_num(0), mode_fixed_size(size > 0) {
       setg(payload, payload, payload);
     }
     ~basic_SylphideStreambuf_in(){
       delete [] payload;
     }
     
-    unsigned int sequence_number() const {
+    const unsigned int &sequence_number() const {
       return sequence_num;
-    }
-    bool &sequence_number_lock(){
-      return sequence_num_lock;
     }
 };
 
@@ -723,11 +721,11 @@ class basic_SylphideIStream : public std::istream {
   public:
     basic_SylphideIStream(std::istream &in)
         : buf(in), super_t(&buf){}
-    basic_SylphideIStream(std::istream &in, const unsigned int payload_size)
+    basic_SylphideIStream(std::istream &in, const unsigned int &payload_size)
         : buf(in, payload_size), super_t(&buf){}
     ~basic_SylphideIStream(){}
-    unsigned int current_sequence() const {
-      return const_cast<buf_t &>(buf).sequence_number();
+    const unsigned int &current_sequence() const {
+      return buf.sequence_number();
     }
 };
 
