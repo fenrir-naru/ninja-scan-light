@@ -649,6 +649,110 @@ class G_Packet_Observer : public Packet_Observer<>{
               >> (8 - (length + (index % 30) % 8));
       }
       subframe_t() : subframe_no(0), sv_or_page_id(0) {}
+      
+#define bits2u8(index) (u8_t)(buffer[((index / 30) * 4) + (2 - ((index % 30) / 8))])
+#define bits2s8(index) (s8_t)(bits2u8(index))
+#define bits2u8_align(index, length) \
+((bits2u8(index) \
+  & ((0xFF & (0xFF << (8 - length))) >> ((index % 30) % 8)) ) \
+    >> (8 - (length + (index % 30) % 8)))
+#define bytes2u16(a, b) \
+((((u16_t)a) << 8) | b)
+#define bytes2s16(a, b) \
+(s16_t)(bytes2u16(a, b))
+#define bytes2u32(a, b, c, d) \
+((((((((u32_t)a) << 8) | b) << 8) | c) << 8) | d)
+#define bytes2s32(a, b, c, d) \
+(s32_t)(bytes2u32(a, b, c, d))
+#define GPS_PI 3.1415926535898
+#define DIV_POWER_2(n) (1.0 / (1 << ((n <= 30) ? (n) : 30)) / (1 << ((n <= 30) ? 0 : (n - 30))))
+      template <class EpemerisT>
+      void fetch_as_subfram1(EpemerisT &ephemeris) const {
+        ephemeris.wn
+          = (((u16_t)bits2u8(60)) << 2) | bits2u8_align(68, 2);
+        ephemeris.ura = bits2u8_align(72, 4);
+        ephemeris.sv_health = bits2u8_align(76, 6);
+        ephemeris.iodc 
+          = (((u16_t)bits2u8_align(82, 2)) << 2) | bits2u8(210);
+        ephemeris.t_gd 
+          = (FloatType)bits2s8(196)
+            * DIV_POWER_2(31);
+        ephemeris.t_oc = bytes2u16(bits2u8(218), bits2u8(226)) << 4;
+        ephemeris.a_f2 
+          = (FloatType)bits2s8(240)
+            * DIV_POWER_2(55);
+        ephemeris.a_f1 
+          = (FloatType)bytes2s16(bits2u8(248), bits2u8(256))
+            * DIV_POWER_2(43);
+        ephemeris.a_f0
+          = (FloatType)((((((s32_t)bits2s8(270)) << 8) | bits2u8(278)) << 6)
+            | (bits2u8(286) >> 2))
+            * DIV_POWER_2(31);
+      }
+      template <class EpemerisT>
+      void fetch_as_subfram2(EpemerisT &ephemeris) const {
+        ephemeris.iode = bits2u8(60);
+        ephemeris.c_rs 
+          = (FloatType)bytes2s16(bits2u8(68), bits2u8(76))
+            * DIV_POWER_2(5);
+        ephemeris.delta_n 
+          = (FloatType)bytes2s16(bits2u8(90), bits2u8(98))
+            * DIV_POWER_2(43) * GPS_PI;
+        ephemeris.m_0 
+          = (FloatType)bytes2s32(bits2u8(106), bits2u8(120), bits2u8(128), bits2u8(136))
+            * DIV_POWER_2(31) * GPS_PI;
+        ephemeris.c_uc 
+          = (FloatType)bytes2s16(bits2u8(150), bits2u8(158))
+            * DIV_POWER_2(29);
+        ephemeris.e 
+          = (FloatType)bytes2u32(bits2u8(166), bits2u8(180), bits2u8(188), bits2u8(196))
+            * DIV_POWER_2(33);
+        ephemeris.c_us 
+          = (FloatType)bytes2s16(bits2u8(210), bits2u8(218))
+            * DIV_POWER_2(29);
+        ephemeris.root_a
+          = (FloatType)bytes2u32(bits2u8(226), bits2u8(240), bits2u8(248), bits2u8(256))
+            * DIV_POWER_2(19);
+        ephemeris.t_oe = bytes2u16(bits2u8(270), bits2u8(278)) << 4;
+        ephemeris.fit = (bits2u8_align(286, 1) & 0x01);
+      }
+      template <class EpemerisT>
+      void fetch_as_subfram3(EpemerisT &ephemeris) const {
+        ephemeris.c_ic 
+          = (FloatType)bytes2s16(bits2u8(60), bits2u8(68))
+            * DIV_POWER_2(29);
+        ephemeris.omega_0
+          = (FloatType)bytes2s32(bits2u8(76), bits2u8(90), bits2u8(98), bits2u8(106))
+            * DIV_POWER_2(31) * GPS_PI;
+        ephemeris.c_is 
+          = (FloatType)bytes2s16(bits2u8(120), bits2u8(128))
+            * DIV_POWER_2(29);
+        ephemeris.i_0
+          = (FloatType)bytes2s32(bits2u8(136), bits2u8(150), bits2u8(158), bits2u8(166))
+            * DIV_POWER_2(31) * GPS_PI;
+        ephemeris.c_rc 
+          = (FloatType)bytes2s16(bits2u8(180), bits2u8(188))
+            * DIV_POWER_2(5);
+        ephemeris.omega
+          = (FloatType)bytes2s32(bits2u8(196), bits2u8(210), bits2u8(218), bits2u8(226))
+            * DIV_POWER_2(31) * GPS_PI;
+        ephemeris.omega_0_dot
+          = (FloatType)bytes2s32((bits2u8(240) & 0x80 ? 0xFF : 0), bits2u8(240), bits2u8(248), bits2u8(256))
+            * DIV_POWER_2(43) * GPS_PI;
+        ephemeris.i_0_dot
+          = (FloatType)(s16_t)((((u16_t)bits2u8(278)) << 6) | bits2u8_align(286, 6)
+              | (bits2u8(278) & 0x80 ? 0xC000 : 0x0000))
+            * DIV_POWER_2(43) * GPS_PI;
+      }
+#undef DIV_POWER_2
+#undef GPS_PI
+#undef bytes2u16
+#undef bytes2s16
+#undef bytes2u32
+#undef bytes2s32
+#undef bits2u8_align
+#undef bits2s8
+#undef bits2uchar
     };
     subframe_t fetch_subframe() const {
       //if(!packet_type().equals(0x02, 0x11)){}
@@ -679,25 +783,25 @@ class G_Packet_Observer : public Packet_Observer<>{
     struct ephemeris_t {
       unsigned int sv_number, how;
       bool valid;
-      
+
       // Subframe 1
       unsigned int wn, ura, sv_health, iodc, t_oc;
       FloatType t_gd,  a_f2, a_f1, a_f0;
-      
+
       // Subframe 2
       unsigned int iode, t_oe;
       FloatType c_rs, delta_n, m_0, c_uc, e, c_us, root_a;
       bool fit;
-      
+
       // Subframe 3
       FloatType c_ic, omega_0, c_is, i_0, c_rc, omega, omega_0_dot, i_0_dot;
-      
+
       ephemeris_t() : valid(false) {}
     };
-    ephemeris_t fetch_ephemeris() const {
+    template <class EphemerisT>
+    void fetch_ephemeris(EphemerisT &ephemeris) const {
       //if(!packet_type().equals(0x02, 0x31)){}
-      
-      ephemeris_t ephemeris;
+
       {
         v8_t buf[8];
         this->inspect(buf, sizeof(buf), 6); // SVID, HOW
@@ -706,129 +810,23 @@ class G_Packet_Observer : public Packet_Observer<>{
       }
       if((this->current_packet_size() > (8 + 8)) && ephemeris.how){
         ephemeris.valid = true;
-        v8_t buf[32];
+        subframe_t subframe;
 
-#define get_subframe(n) (this->inspect(buf, 32, 6 + 8 + n * 32))
-#define bits2u8(index) (u8_t)(buf[(((index / 30) - 2) * 4) + (2 - ((index % 30) / 8))])
-#define bits2s8(index) (s8_t)(bits2u8(index))
-#define bits2u8_align(index, length) \
-((bits2u8(index) \
-  & ((0xFF & (0xFF << (8 - length))) >> ((index % 30) % 8)) ) \
-    >> (8 - (length + (index % 30) % 8)))
-#define bytes2u16(a, b) \
-((((u16_t)a) << 8) | b)
-#define bytes2s16(a, b) \
-(s16_t)(bytes2u16(a, b))
-#define bytes2u32(a, b, c, d) \
-((((((((u32_t)a) << 8) | b) << 8) | c) << 8) | d)
-#define bytes2s32(a, b, c, d) \
-(s32_t)(bytes2u32(a, b, c, d))
-#define GPS_PI 3.1415926535898
-#define DIV_POWER_2(n) (1.0 / (1 << ((n <= 30) ? (n) : 30)) / (1 << ((n <= 30) ? 0 : (n - 30))))
-
+#define get_subframe(n) (this->inspect(&(subframe.buffer[8]), 32, 6 + 8 + n * 32))
         get_subframe(0); // Subframe 1
-        ephemeris.wn
-          = (((u16_t)bits2u8(60)) << 2) | bits2u8_align(68, 2);
-        ephemeris.ura = bits2u8_align(72, 4);
-        ephemeris.sv_health = bits2u8_align(76, 6);
-        ephemeris.iodc 
-          = (((u16_t)bits2u8_align(82, 2)) << 2) | bits2u8(210);
-        ephemeris.t_gd 
-          = (FloatType)bits2s8(196)
-            * DIV_POWER_2(31);
-        ephemeris.t_oc = bytes2u16(bits2u8(218), bits2u8(226)) << 4;
-        ephemeris.a_f2 
-          = (FloatType)bits2s8(240)
-            * DIV_POWER_2(55);
-        ephemeris.a_f1 
-          = (FloatType)bytes2s16(bits2u8(248), bits2u8(256))
-            * DIV_POWER_2(43);
-        ephemeris.a_f0
-          = (FloatType)((((((s32_t)bits2s8(270)) << 8) | bits2u8(278)) << 6)
-            | (bits2u8(286) >> 2))
-            * DIV_POWER_2(31);
-        
-        get_subframe(1); // Subframe 2
-        ephemeris.iode = bits2u8(60);
-        ephemeris.c_rs 
-          = (FloatType)bytes2s16(bits2u8(68), bits2u8(76))
-            * DIV_POWER_2(5);
-        ephemeris.delta_n 
-          = (FloatType)bytes2s16(bits2u8(90), bits2u8(98))
-            * DIV_POWER_2(43) * GPS_PI;
-        ephemeris.m_0 
-          = (FloatType)bytes2s32(bits2u8(106), bits2u8(120), bits2u8(128), bits2u8(136))
-            * DIV_POWER_2(31) * GPS_PI;
-        ephemeris.c_uc 
-          = (FloatType)bytes2s16(bits2u8(150), bits2u8(158))
-            * DIV_POWER_2(29);
-        ephemeris.e 
-          = (FloatType)bytes2u32(bits2u8(166), bits2u8(180), bits2u8(188), bits2u8(196))
-            * DIV_POWER_2(33);
-        ephemeris.c_us 
-          = (FloatType)bytes2s16(bits2u8(210), bits2u8(218))
-            * DIV_POWER_2(29);
-        ephemeris.root_a
-          = (FloatType)bytes2u32(bits2u8(226), bits2u8(240), bits2u8(248), bits2u8(256))
-            * DIV_POWER_2(19);
-        ephemeris.t_oe = bytes2u16(bits2u8(270), bits2u8(278)) << 4;
-        ephemeris.fit = (bits2u8_align(286, 1) & 0x01);
-        
-        /*
-        cout << hex;
-        cout << setw(2) << setfill('0') << (u32_t)bits2u8(106) << ","
-             << setw(2) << setfill('0') << (u32_t)bits2u8(120) << ","
-             << setw(2) << setfill('0') << (u32_t)bits2uchar(128) << ","
-             << setw(2) << setfill('0') << (u32_t)bits2uchar(136) << endl;
-        cout << ephemeris.m_0 << endl;
-        cout << dec;
-        */
-        
-        get_subframe(2); // Subframe 3
-        ephemeris.c_ic 
-          = (FloatType)bytes2s16(bits2u8(60), bits2u8(68))
-            * DIV_POWER_2(29);
-        ephemeris.omega_0
-          = (FloatType)bytes2s32(bits2u8(76), bits2u8(90), bits2u8(98), bits2u8(106))
-            * DIV_POWER_2(31) * GPS_PI;
-        ephemeris.c_is 
-          = (FloatType)bytes2s16(bits2u8(120), bits2u8(128))
-            * DIV_POWER_2(29);
-        ephemeris.i_0
-          = (FloatType)bytes2s32(bits2u8(136), bits2u8(150), bits2u8(158), bits2u8(166))
-            * DIV_POWER_2(31) * GPS_PI;
-        ephemeris.c_rc 
-          = (FloatType)bytes2s16(bits2u8(180), bits2u8(188))
-            * DIV_POWER_2(5);
-        ephemeris.omega
-          = (FloatType)bytes2s32(bits2u8(196), bits2u8(210), bits2u8(218), bits2u8(226))
-            * DIV_POWER_2(31) * GPS_PI;
-        ephemeris.omega_0_dot
-          = (FloatType)bytes2s32((bits2u8(240) & 0x80 ? 0xFF : 0), bits2u8(240), bits2u8(248), bits2u8(256))
-            * DIV_POWER_2(43) * GPS_PI;
-        ephemeris.i_0_dot
-          = (FloatType)(s16_t)((((u16_t)bits2u8(278)) << 6) | bits2u8_align(286, 6)
-              | (bits2u8(278) & 0x80 ? 0xC000 : 0x0000))
-            * DIV_POWER_2(43) * GPS_PI;
-        
-        /*
-        cout << hex;
-        cout << setw(2) << setfill('0') << (u32_t)bits2u8(278) << ","
-             << setw(2) << setfill('0') << (u32_t)bits2u8(286) << endl;
-        cout << dec;
-        */
+        subframe.fetch_as_subfram1(ephemeris);
 
-#undef DIV_POWER_2
-#undef GPS_PI
-#undef bytes2u16
-#undef bytes2s16
-#undef bytes2u32
-#undef bytes2s32
-#undef bits2u8_align
-#undef bits2s8
-#undef bits2uchar
+        get_subframe(1); // Subframe 2
+        subframe.fetch_as_subfram2(ephemeris);
+
+        get_subframe(2); // Subframe 3
+        subframe.fetch_as_subfram3(ephemeris);
 #undef get_subframe
       }
+    }
+    ephemeris_t fetch_ephemeris() const {
+      ephemeris_t ephemeris;
+      fetch_ephemeris(ephemeris);
       return ephemeris;
     }
     struct health_utc_iono_t {
