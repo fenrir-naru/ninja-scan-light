@@ -62,8 +62,9 @@
 template <class FloatT = double>
 class CA_Code {
   public:
-    static const FloatT FREQENCY;
-    static inline const FloatT length_1chip() {
+    typedef FloatT float_t;
+    static const float_t FREQENCY;
+    static inline const float_t length_1chip() {
       return 1. / FREQENCY;
     }
   public:
@@ -170,22 +171,23 @@ class CA_Code {
 };
 
 template <class FloatT>
-const FloatT CA_Code<FloatT>::FREQENCY = 1.023E6;
+const typename CA_Code<FloatT>::float_t CA_Code<FloatT>::FREQENCY = 1.023E6;
 
 template <class FloatT = double>
 struct GPS_Time {
+  typedef FloatT float_t;
   static const unsigned int seconds_day = 60U * 60 * 24;
   static const unsigned int seconds_week = (60U * 60 * 24) * 7;
   
   static const int days_of_month[];
   
   int week;
-  FloatT seconds;
+  float_t seconds;
   
   GPS_Time() {}
   GPS_Time(const GPS_Time &t)
       : week(t.week), seconds(t.seconds) {}
-  GPS_Time(const int &_week, const FloatT &_seconds)
+  GPS_Time(const int &_week, const float_t &_seconds)
       : week(_week), seconds(_seconds) {}
   void canonicalize(){
     if(seconds >= seconds_week){
@@ -198,7 +200,7 @@ struct GPS_Time {
       seconds += quot * seconds_week;
     }
   }
-  GPS_Time(const struct tm &t, const FloatT &leap_seconds = 0) {
+  GPS_Time(const struct tm &t, const float_t &leap_seconds = 0) {
     int days(-6);
     int y(t.tm_year - 80);
     if(y < 0){y += 100;}
@@ -216,7 +218,7 @@ struct GPS_Time {
         + t.tm_sec;
     canonicalize();
   }
-  static GPS_Time now(const FloatT &leap_seconds = 0) {
+  static GPS_Time now(const float_t &leap_seconds = 0) {
     time_t timer;
     struct tm t;
     
@@ -232,34 +234,34 @@ struct GPS_Time {
     return GPS_Time(t, leap_seconds);
   }
   
-  GPS_Time &operator+=(const FloatT &sec){
+  GPS_Time &operator+=(const float_t &sec){
     seconds += sec;
     canonicalize();
     return *this;
   }
-  GPS_Time &operator-=(const FloatT &sec){
+  GPS_Time &operator-=(const float_t &sec){
     return operator+=(-sec);
   }
-  GPS_Time operator+(const FloatT &sec) const {
+  GPS_Time operator+(const float_t &sec) const {
     GPS_Time t(*this);
     return (t += sec);
   }
-  GPS_Time operator-(const FloatT &sec) const {
+  GPS_Time operator-(const float_t &sec) const {
     return operator+(-sec);
   }
   /**
    * Get interval in unit of second
    */
-  FloatT operator-(const GPS_Time &t) const {
-    FloatT res(seconds - t.seconds);
-    res += ((FloatT)week - t.week) * seconds_week;
+  float_t operator-(const GPS_Time &t) const {
+    float_t res(seconds - t.seconds);
+    res += ((float_t)week - t.week) * seconds_week;
     return res;
   }
-  friend FloatT operator+(FloatT v, const GPS_Time &t){
-    return v + (((FloatT)t.week * seconds_week) + t.seconds);
+  friend float_t operator+(float_t v, const GPS_Time &t){
+    return v + (((float_t)t.week * seconds_week) + t.seconds);
   }
-  friend FloatT operator-(FloatT v, const GPS_Time &t){
-    return v - (((FloatT)t.week * seconds_week) + t.seconds);
+  friend float_t operator-(float_t v, const GPS_Time &t){
+    return v - (((float_t)t.week * seconds_week) + t.seconds);
   }
   bool operator<(const GPS_Time &t) const {
     return ((week < t.week) ? true : ((week > t.week) ? false : (seconds < t.seconds)));
@@ -280,7 +282,7 @@ struct GPS_Time {
     return t.operator<=(*this);
   }
   
-  struct tm c_tm(const FloatT &leap_seconds = 0) const {
+  struct tm c_tm(const float_t &leap_seconds = 0) const {
     struct tm t;
     
     GPS_Time mod_t((*this) + leap_seconds);
@@ -317,12 +319,12 @@ struct GPS_Time {
    * When t >= self positive value will be returned,
    * otherwise(t  < self), negative.
    */
-  FloatT interval(const unsigned int &t_week, 
-      const FloatT &t_seconds) const {
+  float_t interval(const unsigned int &t_week,
+      const float_t &t_seconds) const {
     return t_seconds - seconds
-        + ((FloatT)t_week - week) * seconds_week;
+        + ((float_t)t_week - week) * seconds_week;
   }
-  FloatT interval(const GPS_Time &t) const {
+  float_t interval(const GPS_Time &t) const {
     return interval(t.week, t.seconds);
   }
 
@@ -340,24 +342,25 @@ const int GPS_Time<FloatT>::days_of_month[] = {
 template <class FloatT = double>
 class GPS_SpaceNode {
   public:
-    static const FloatT light_speed;
-    static const FloatT L1_Frequency;
-    static inline const FloatT L1_WaveLength() {
+    typedef FloatT float_t;
+    static const float_t light_speed;
+    static const float_t L1_Frequency;
+    static inline const float_t L1_WaveLength() {
       return light_speed / L1_Frequency;
     }
-    static const FloatT SC2RAD;
+    static const float_t SC2RAD;
     
   protected:
-    static FloatT rad2sc(const FloatT &rad) {return rad / M_PI;}
-    static FloatT sc2rad(const FloatT &sc)  {return sc * M_PI;}
+    static float_t rad2sc(const float_t &rad) {return rad / M_PI;}
+    static float_t sc2rad(const float_t &sc)  {return sc * M_PI;}
     
   public:
-    typedef GPS_SpaceNode<FloatT> self_t;
-    typedef GPS_Time<FloatT> gps_time_t; 
-    typedef System_XYZ<FloatT, WGS84> xyz_t;
-    typedef System_LLH<FloatT, WGS84> llh_t;
-    typedef System_ENU<FloatT, WGS84> enu_t;
-  protected:
+    typedef GPS_SpaceNode<float_t> self_t;
+    typedef GPS_Time<float_t> gps_time_t;
+    typedef System_XYZ<float_t, WGS84> xyz_t;
+    typedef System_LLH<float_t, WGS84> llh_t;
+    typedef System_ENU<float_t, WGS84> enu_t;
+
     typedef unsigned char u8_t;
     typedef signed char s8_t;
     typedef unsigned short u16_t;
@@ -367,16 +370,16 @@ class GPS_SpaceNode {
     
     typedef int int_t;
     typedef unsigned int uint_t;
-  public:
+
     /**
      * GPS Ionospheric correction and UTC parameters
      * 
      */
     struct Ionospheric_UTC_Parameters {
-      FloatT alpha[4];     ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
-      FloatT beta[4];      ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
-      FloatT A1;           ///< UTC parameter (s/s)
-      FloatT A0;           ///< UTC parameter (s)
+      float_t alpha[4];    ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
+      float_t beta[4];     ///< Ionospheric parameters[0-3] (s, s/sc, s/sc^2, s/sc^3)
+      float_t A1;          ///< UTC parameter (s/s)
+      float_t A0;          ///< UTC parameter (s)
       uint_t t_ot;         ///< Epoch time (UTC) (s)
       uint_t WN_t;         ///< Epoch time (UTC) (weeks)
       int_t delta_t_LS;    ///< Current leap seconds (s)
@@ -410,8 +413,8 @@ class GPS_SpaceNode {
 {converted.dst = sf * src;}
 #define POWER_2(n) \
 (((n) >= 0) \
-  ? (FloatT)(1 << (n)) \
-  : (((FloatT)1) / (1 << (-(n) >= 30 ? 30 : ((n) < 0 ? -(n) : 0))) \
+  ? (float_t)(1 << (n)) \
+  : (((float_t)1) / (1 << (-(n) >= 30 ? 30 : ((n) < 0 ? -(n) : 0))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
             CONVERT2(alpha[0], alpha0, POWER_2(-30));
             CONVERT2(alpha[1], alpha1, POWER_2(-27));
@@ -457,43 +460,43 @@ class GPS_SpaceNode {
           int_t URA;          ///< User range accuracy
           uint_t SV_health;   ///< Health status
           int_t iodc;         ///< Issue of clock data
-          FloatT t_GD;        ///< Group delay (s)
-          FloatT t_oc;        ///< Clock data reference time
-          FloatT a_f2;        ///< Clock correction parameter (s/s^2)
-          FloatT a_f1;        ///< Clock correction parameter (s/s)
-          FloatT a_f0;        ///< Clock correction parameter (s)
+          float_t t_GD;       ///< Group delay (s)
+          float_t t_oc;       ///< Clock data reference time
+          float_t a_f2;       ///< Clock correction parameter (s/s^2)
+          float_t a_f1;       ///< Clock correction parameter (s/s)
+          float_t a_f0;       ///< Clock correction parameter (s)
           
           // Subframe.2
-          int_t iode;          ///< Issue of ephemeris data
-          FloatT c_rs;         ///< Sine correction, orbit (m)
-          FloatT delta_n;      ///< Mean motion difference (rad/s)
-          FloatT m0;           ///< Mean anomaly (rad)
-          FloatT c_uc;         ///< Cosine correction, latitude (rad)
-          FloatT e;            ///< Eccentricity
-          FloatT c_us;         ///< Sine correction, latitude (rad)
-          FloatT sqrt_A;       ///< Square root of semi-major axis (sqrt(m))
-          FloatT t_oe;         ///< Reference time ephemeris (s)
-          FloatT fit_interval; ///< Fit interval; if negative, it indicates invalid ephemeris.
+          int_t iode;           ///< Issue of ephemeris data
+          float_t c_rs;         ///< Sine correction, orbit (m)
+          float_t delta_n;      ///< Mean motion difference (rad/s)
+          float_t m0;           ///< Mean anomaly (rad)
+          float_t c_uc;         ///< Cosine correction, latitude (rad)
+          float_t e;            ///< Eccentricity
+          float_t c_us;         ///< Sine correction, latitude (rad)
+          float_t sqrt_A;       ///< Square root of semi-major axis (sqrt(m))
+          float_t t_oe;         ///< Reference time ephemeris (s)
+          float_t fit_interval; ///< Fit interval; if negative, it indicates invalid ephemeris.
           
           // Subframe.3
-          FloatT c_ic;         ///< Cosine correction, inclination (rad)
-          FloatT Omega0;       ///< Longitude of ascending node (rad)
-          FloatT c_is;         ///< Sine correction, inclination (rad)
-          FloatT i0;           ///< Inclination angle (rad)
-          FloatT c_rc;         ///< Cosine correction, orbit (m)
-          FloatT omega;        ///< Argument of perigee (rad)
-          FloatT dot_Omega0;   ///< Rate of right ascension (rad/s)
-          FloatT dot_i0;       ///< Rate of inclination angle (rad/s)
+          float_t c_ic;         ///< Cosine correction, inclination (rad)
+          float_t Omega0;       ///< Longitude of ascending node (rad)
+          float_t c_is;         ///< Sine correction, inclination (rad)
+          float_t i0;           ///< Inclination angle (rad)
+          float_t c_rc;         ///< Cosine correction, orbit (m)
+          float_t omega;        ///< Argument of perigee (rad)
+          float_t dot_Omega0;   ///< Rate of right ascension (rad/s)
+          float_t dot_i0;       ///< Rate of inclination angle (rad/s)
 
-          inline FloatT period_from_time_of_clock(const gps_time_t &t) const {
+          inline float_t period_from_time_of_clock(const gps_time_t &t) const {
             return -t.interval(WN, t_oc);
           }
         
-          inline FloatT period_from_time_of_ephemeris(const gps_time_t &t) const {
+          inline float_t period_from_time_of_ephemeris(const gps_time_t &t) const {
             return -t.interval(WN, t_oe);
           }
           
-          inline FloatT period_from_first_valid_transmittion(const gps_time_t &t) const {
+          inline float_t period_from_first_valid_transmittion(const gps_time_t &t) const {
             return period_from_time_of_clock(t) + (fit_interval / 2);
           }
 
@@ -512,28 +515,28 @@ class GPS_SpaceNode {
            * @param t GPS time
            */
           bool maybe_better_one_avilable(const gps_time_t &t) const {
-            FloatT delta_t(period_from_first_valid_transmittion(t));
-            FloatT transmittion_interval( // @see IDC 20.3.4.5 Reference Times, Table 20-XIII
+            float_t delta_t(period_from_first_valid_transmittion(t));
+            float_t transmittion_interval( // @see IDC 20.3.4.5 Reference Times, Table 20-XIII
                 (fit_interval > (4 * 60 * 60))
                   ? fit_interval / 2 // fit_interval is more than 4 hour, fit_interval / 2
                   : (1 * 60 * 60));  // fit_interval equals to 4 hour, some SVs transmits every one hour.
             return !((delta_t >= 0) && (delta_t < transmittion_interval));
           }
           
-          FloatT eccentric_anomaly(const FloatT &period_from_toe) const {
+          float_t eccentric_anomaly(const float_t &period_from_toe) const {
 
             // Kepler's Equation for Eccentric Anomaly M(Mk)
-            FloatT n0(std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A));
-            FloatT Mk(m0
+            float_t n0(std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A));
+            float_t Mk(m0
                 + (n0 + delta_n) * period_from_toe);
 
             // Eccentric Anomaly E(Ek)
-            FloatT Ek(Mk);
+            float_t Ek(Mk);
   #ifndef KEPLER_DELTA_LIMIT
   #define KEPLER_DELTA_LIMIT 1E-12
   #endif
             for(int loop(0); loop < 10; loop++){
-              FloatT Ek2(Mk + e * sin(Ek));
+              float_t Ek2(Mk + e * sin(Ek));
               if(std::abs(Ek2 - Ek) < KEPLER_DELTA_LIMIT){break;}
               Ek = Ek2;
             }
@@ -541,12 +544,12 @@ class GPS_SpaceNode {
             return Ek;
           }
 
-          FloatT eccentric_anomaly(const gps_time_t &t) const {
+          float_t eccentric_anomaly(const gps_time_t &t) const {
             return eccentric_anomaly(period_from_time_of_ephemeris(t));
           }
 
-          FloatT eccentric_anomaly_dot(const FloatT &eccentric_anomaly) const {
-            FloatT n((std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A)) + delta_n);
+          float_t eccentric_anomaly_dot(const float_t &eccentric_anomaly) const {
+            float_t n((std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A)) + delta_n);
             return n / (1.0 - e * cos(eccentric_anomaly));
           }
 
@@ -557,77 +560,77 @@ class GPS_SpaceNode {
            * @param pseudo_range pseudo range in meters
            * @return in seconds
            */
-          FloatT clock_error(const gps_time_t &t, const FloatT &pseudo_range = 0) const{
+          float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const{
 
-            FloatT transit_time(pseudo_range / light_speed);
-            FloatT tk(period_from_time_of_clock(t) - transit_time);
-            FloatT Ek(eccentric_anomaly(tk));
+            float_t transit_time(pseudo_range / light_speed);
+            float_t tk(period_from_time_of_clock(t) - transit_time);
+            float_t Ek(eccentric_anomaly(tk));
 
             // Relativistic correction term
-            FloatT tr(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
+            float_t tr(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
                 * e * sqrt_A * sin(Ek));
 
-            FloatT dt(a_f0 + a_f1 * tk + a_f2 * pow2(tk));
+            float_t dt(a_f0 + a_f1 * tk + a_f2 * pow2(tk));
 
             return dt + tr - t_GD;
           }
 
-          FloatT clock_error_dot(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+          float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
 
-            FloatT transit_time(pseudo_range / light_speed);
-            FloatT tk(period_from_time_of_clock(t) - transit_time);
-            FloatT Ek(eccentric_anomaly(tk));
-            FloatT Ek_dot(eccentric_anomaly_dot(Ek));
+            float_t transit_time(pseudo_range / light_speed);
+            float_t tk(period_from_time_of_clock(t) - transit_time);
+            float_t Ek(eccentric_anomaly(tk));
+            float_t Ek_dot(eccentric_anomaly_dot(Ek));
 
             // Derivative of Relativistic correction term
-            FloatT tr_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
+            float_t tr_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
                 * e * sqrt_A * Ek_dot * cos(Ek));
 
-            FloatT dt_dot(a_f1 + a_f2 * 2 * tk);
+            float_t dt_dot(a_f1 + a_f2 * 2 * tk);
 
             return dt_dot + tr_dot;
           }
 
           constellation_t constellation(
-              const gps_time_t &t, const FloatT &pseudo_range = 0,
+              const gps_time_t &t, const float_t &pseudo_range = 0,
               const bool &with_velocity = true) const {
 
             constellation_t res;
 
             // Time from ephemeris reference epoch (tk)
-            FloatT tk0(period_from_time_of_ephemeris(t));
+            float_t tk0(period_from_time_of_ephemeris(t));
 
             // Remove transit time
-            FloatT tk(tk0 - pseudo_range / light_speed);
+            float_t tk(tk0 - pseudo_range / light_speed);
 
             // Eccentric Anomaly (Ek)
-            FloatT Ek(eccentric_anomaly(tk));
+            float_t Ek(eccentric_anomaly(tk));
 
             // Corrected Radius (rk)
-            FloatT rk(pow2(sqrt_A)
+            float_t rk(pow2(sqrt_A)
                 * (1.0 - e * cos(Ek)));
 
             // True Anomaly (vk)
-            FloatT vk(atan2(
+            float_t vk(atan2(
                 sqrt(1.0 - pow2(e)) * sin(Ek),
                 cos(Ek) - e));
 
             // (Corrected) Argument of Latitude (pk) [rad]
-            FloatT pk(vk + omega);
+            float_t pk(vk + omega);
 
             // (Corrected) Inclination (ik)
-            FloatT ik(i0);
+            float_t ik(i0);
 
             { // Correction
-              FloatT pk2_sin(sin(pk * 2)),
+              float_t pk2_sin(sin(pk * 2)),
                   pk2_cos(cos(pk * 2));
-              FloatT d_uk(
+              float_t d_uk(
                   c_us * pk2_sin
                   + c_uc * pk2_cos);
-              FloatT d_rk(
+              float_t d_rk(
                   c_rs * pk2_sin
                   + c_rc * pk2_cos);
-              FloatT d_ik(
+              float_t d_ik(
                   c_is * pk2_sin
                   + c_ic * pk2_cos);
 
@@ -638,11 +641,11 @@ class GPS_SpaceNode {
             }
 
             // Position in orbital plane (xk, yk)
-            FloatT xk(rk * cos(pk)),
+            float_t xk(rk * cos(pk)),
                 yk(rk * sin(pk));
 
             // Corrected longitude of ascending node (Omegak) [rad]
-            FloatT Omegak(Omega0);
+            float_t Omegak(Omega0);
             if(false){ // __MISUNDERSTANDING_ABOUT_OMEGA0_CORRECTION__
               Omegak += (
                   (dot_Omega0 - WGS84::Omega_Earth_IAU) * tk0
@@ -653,9 +656,9 @@ class GPS_SpaceNode {
                   - WGS84::Omega_Earth_IAU * (t_oe + tk0));  // corrected with the time when the wave is received
             }
 
-            FloatT Omegak_sin(sin(Omegak)),
+            float_t Omegak_sin(sin(Omegak)),
                    Omegak_cos(cos(Omegak));
-            FloatT ik_sin(sin(ik)),
+            float_t ik_sin(sin(ik)),
                    ik_cos(cos(ik));
 
             res.position.x() = xk * Omegak_cos - yk * Omegak_sin * ik_cos;
@@ -664,21 +667,21 @@ class GPS_SpaceNode {
 
             // Velocity calculation => GPS solution vol.8 (3) http://www.ngs.noaa.gov/gps-toolbox/bc_velo.htm
             if(with_velocity){
-              FloatT Ek_dot(eccentric_anomaly_dot(Ek));
-              FloatT vk_dot(sin(Ek) * Ek_dot * (1.0 + e * cos(vk))
+              float_t Ek_dot(eccentric_anomaly_dot(Ek));
+              float_t vk_dot(sin(Ek) * Ek_dot * (1.0 + e * cos(vk))
                   / (sin(vk) * (1.0 - e * cos(Ek))));
 
-              FloatT pk2_sin(sin(pk * 2)), pk2_cos(cos(pk * 2));
-              FloatT pk_dot(((c_us * pk2_cos - c_uc * pk2_sin) * 2 + 1.0) * vk_dot);
-              FloatT rk_dot(pow2(sqrt_A) * e * sin(Ek) * Ek_dot
+              float_t pk2_sin(sin(pk * 2)), pk2_cos(cos(pk * 2));
+              float_t pk_dot(((c_us * pk2_cos - c_uc * pk2_sin) * 2 + 1.0) * vk_dot);
+              float_t rk_dot(pow2(sqrt_A) * e * sin(Ek) * Ek_dot
                   + (c_rs * pk2_cos - c_rc * pk2_sin) * 2 * vk_dot);
-              FloatT ik_dot(dot_i0 + (c_is * pk2_cos - c_ic * pk2_sin) * 2 * vk_dot);
+              float_t ik_dot(dot_i0 + (c_is * pk2_cos - c_ic * pk2_sin) * 2 * vk_dot);
 
               // Velocity in orbital plane (xk_dot, yk_dot)
-              FloatT xk_dot(rk_dot * cos(pk) - yk * pk_dot),
+              float_t xk_dot(rk_dot * cos(pk) - yk * pk_dot),
                   yk_dot(rk_dot * sin(pk) + xk * pk_dot);
 
-              FloatT Omegak_dot(dot_Omega0 - WGS84::Omega_Earth_IAU);
+              float_t Omegak_dot(dot_Omega0 - WGS84::Omega_Earth_IAU);
 
               res.velocity.x() = (xk_dot - yk * ik_cos * Omegak_dot) * Omegak_cos
                   - (xk * Omegak_dot + yk_dot * ik_cos - yk * ik_sin * ik_dot) * Omegak_sin;
@@ -723,7 +726,7 @@ class GPS_SpaceNode {
             s32_t dot_Omega0;   ///< Right ascension rate   (-43, sc/s)
             s16_t dot_i0;       ///< Inclination angle rate (-43, sc/s)
             
-            static FloatT fit_interval(const bool &_flag, const u16_t &_iodc){
+            static float_t fit_interval(const bool &_flag, const u16_t &_iodc){
               // Fit interval (ICD:20.3.4.4)
               if(_flag == false){
                 // normal operation
@@ -758,8 +761,8 @@ class GPS_SpaceNode {
 {converted.TARGET = SF * TARGET;}
 #define POWER_2(n) \
 (((n) >= 0) \
-  ? (FloatT)(1 << (n)) \
-  : (((FloatT)1) / (1 << (-(n) >= 30 ? 30 : -(n))) \
+  ? (float_t)(1 << (n)) \
+  : (((float_t)1) / (1 << (-(n) >= 30 ? 30 : -(n))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
               converted.svid = svid;
               
@@ -806,19 +809,19 @@ class GPS_SpaceNode {
          * 
          */
         struct Almanac {
-          uint_t  svid;        ///< Satellite number
+          uint_t  svid;         ///< Satellite number
           
-          FloatT e;            ///< Eccentricity
-          FloatT t_oa;         ///< Almanac reference time (s)
-          FloatT delta_i;      ///< Correction to inclination (rad)
-          FloatT dot_Omega0;   ///< Omega0 rate (rad/s)
-          uint_t SV_health;    ///< Health status
-          FloatT sqrt_A;       ///< Square root of semi-major axis (sqrt(m))
-          FloatT Omega0;       ///< Longitude of ascending node (rad)
-          FloatT omega;        ///< Argument of perigee (rad)
-          FloatT M0;           ///< Mean anomaly (rad)
-          FloatT a_f0;         ///< Clock correction parameter (s/s)
-          FloatT a_f1;         ///< Clock correction parameter (s)
+          float_t e;            ///< Eccentricity
+          float_t t_oa;         ///< Almanac reference time (s)
+          float_t delta_i;      ///< Correction to inclination (rad)
+          float_t dot_Omega0;   ///< Omega0 rate (rad/s)
+          uint_t SV_health;     ///< Health status
+          float_t sqrt_A;       ///< Square root of semi-major axis (sqrt(m))
+          float_t Omega0;       ///< Longitude of ascending node (rad)
+          float_t omega;        ///< Argument of perigee (rad)
+          float_t M0;           ///< Mean anomaly (rad)
+          float_t a_f0;         ///< Clock correction parameter (s/s)
+          float_t a_f1;         ///< Clock correction parameter (s)
           
           /**
            * Up-cast to ephemeris
@@ -886,8 +889,8 @@ class GPS_SpaceNode {
 {converted.TARGET = SF * TARGET;}
 #define POWER_2(n) \
 (((n) >= 0) \
-  ? (FloatT)(1 << (n)) \
-  : (((FloatT)1) / (1 << (-(n) >= 30 ? 30 : -(n))) \
+  ? (float_t)(1 << (n)) \
+  : (((float_t)1) / (1 << (-(n) >= 30 ? 30 : -(n))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
                 converted.svid = svid;
                 CONVERT(e,          POWER_2(-21));
@@ -938,7 +941,7 @@ class GPS_SpaceNode {
           for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
               it != eph_list.rend();
               ++it){
-            FloatT delta_t(it->period_from_time_of_clock(t_new));
+            float_t delta_t(it->period_from_time_of_clock(t_new));
             if(delta_t < 0){continue;}
             if(delta_t > 0){
               eph_list.insert(it.base(), eph);
@@ -965,7 +968,7 @@ class GPS_SpaceNode {
             return true; // conservative
           }
 
-          FloatT delta_t(eph_current->period_from_first_valid_transmittion(target_time));
+          float_t delta_t(eph_current->period_from_first_valid_transmittion(target_time));
 
           typename eph_list_t::iterator it, it_last;
           if(delta_t >= 0){
@@ -980,7 +983,7 @@ class GPS_SpaceNode {
 
           for( ; it != it_last; ++it){
             if(!it->is_valid(target_time)){continue;}
-            FloatT delta_t2(it->period_from_first_valid_transmittion(target_time));
+            float_t delta_t2(it->period_from_first_valid_transmittion(target_time));
             if((!is_valid) || (delta_t > delta_t2)){ // update
               is_valid = true;
               delta_t = delta_t2;
@@ -1037,25 +1040,25 @@ class GPS_SpaceNode {
           return eph_list[eph_current_index];
         }
         
-        FloatT clock_error(const gps_time_t &t, const FloatT &pseudo_range = 0) const{
+        float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const{
           return ephemeris().clock_error(t, pseudo_range);
         }
 
-        FloatT clock_error_dot(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+        float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
           return ephemeris().clock_error_dot(t, pseudo_range);
         }
 
         constellation_t constellation(
-            const gps_time_t &t, const FloatT &pseudo_range = 0,
+            const gps_time_t &t, const float_t &pseudo_range = 0,
             const bool &with_velocity = true) const {
           return ephemeris().constellation(t, pseudo_range, with_velocity);
         }
         
-        xyz_t position(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+        xyz_t position(const gps_time_t &t, const float_t &pseudo_range = 0) const {
           return constellation(t, pseudo_range, false).position;
         }
         
-        xyz_t velocity(const gps_time_t &t, const FloatT &pseudo_range = 0) const {
+        xyz_t velocity(const gps_time_t &t, const float_t &pseudo_range = 0) const {
           return constellation(t, pseudo_range, true).velocity;
         }
     };
@@ -1118,31 +1121,31 @@ class GPS_SpaceNode {
      * @param usrllh user position (absolute position, LLH)
      * @return correction in meters
      */
-    FloatT iono_correction(
+    float_t iono_correction(
         const enu_t &relative_pos,
         const llh_t &usrllh,
         const gps_time_t &t) const {
       
       
       // Elevation and azimuth
-      FloatT el(relative_pos.elevation()),
+      float_t el(relative_pos.elevation()),
              az(relative_pos.azimuth());
-      FloatT sc_el(rad2sc(el)),
+      float_t sc_el(rad2sc(el)),
              sc_az(rad2sc(az));
              
       // Pierce point
-      FloatT psi(0.0137 / (sc_el + 0.11) - 0.022);
-      FloatT phi_i(rad2sc(usrllh.latitude())
+      float_t psi(0.0137 / (sc_el + 0.11) - 0.022);
+      float_t phi_i(rad2sc(usrllh.latitude())
           + psi * cos(az));
       if(phi_i > 0.416){phi_i = 0.416;}
       else if(phi_i < -0.416){phi_i = -0.416;}
-      FloatT lambda_i(rad2sc(usrllh.longitude())
+      float_t lambda_i(rad2sc(usrllh.longitude())
           + psi * sin(az) / cos(sc2rad(phi_i)));
-      FloatT phi_m(phi_i 
+      float_t phi_m(phi_i
           + 0.064 * cos(sc2rad(lambda_i - 1.617)));
       
       // Local time
-      FloatT lt(4.32E4 * lambda_i + t.seconds);
+      float_t lt(4.32E4 * lambda_i + t.seconds);
       while(lt > gps_time_t::seconds_day){
         lt -= gps_time_t::seconds_day;
       }
@@ -1151,8 +1154,8 @@ class GPS_SpaceNode {
       }
       
       // Period and amplitude of cosine function
-      FloatT amp(0), per(0);
-      FloatT phi_mn(1.);
+      float_t amp(0), per(0);
+      float_t phi_mn(1.);
       for(int i(0); i < 4; i++){
         amp += _iono_utc.alpha[i] * phi_mn;
         per += _iono_utc.beta[i] * phi_mn;
@@ -1162,16 +1165,16 @@ class GPS_SpaceNode {
       if(per < 72000){per = 72000;}
       
       // Obliquity factor
-      FloatT F(1.0 + 16.0 * pow((0.53 - sc_el), 3));
+      float_t F(1.0 + 16.0 * pow((0.53 - sc_el), 3));
       
-      FloatT x(M_PI * 2 * (lt - 50400) / per);
+      float_t x(M_PI * 2 * (lt - 50400) / per);
       if(x > M_PI){
         do{x -= M_PI * 2;}while(x > M_PI);
       }else if(x < -M_PI){
         do{x += M_PI * 2;}while(x < -M_PI);
       }
       
-      FloatT T_iono(5E-9);
+      float_t T_iono(5E-9);
       if(std::abs(x) < 1.57){
         T_iono += amp * (1. - pow2(x) * (1.0 / 2 - pow2(x) / 24)); // ICD p.148
       }
@@ -1187,7 +1190,7 @@ class GPS_SpaceNode {
      * @param usr user position (absolute position, XYZ)
      * @return correction in meters
      */
-    FloatT iono_correction(
+    float_t iono_correction(
         const xyz_t &sat,
         const xyz_t &usr,
         const gps_time_t &t) const {
@@ -1204,16 +1207,16 @@ class GPS_SpaceNode {
      * @param usrllh user position (absolute position, LLH)
      * @return correction in meters
      */
-    FloatT tropo_correction(
+    float_t tropo_correction(
         const enu_t &relative_pos,
         const llh_t &usrllh) const {
       
       // Elevation (rad)
-      FloatT el(relative_pos.elevation());
+      float_t el(relative_pos.elevation());
       
       // Altitude (m)
-      const FloatT &h(usrllh.height());
-      FloatT f(1.0);
+      const float_t &h(usrllh.height());
+      float_t f(1.0);
       if(h > (1.0 / 2.3E-5)){
         f = 0;
       }else if(h > 0){
@@ -1230,7 +1233,7 @@ class GPS_SpaceNode {
      * @param usr user position (absolute position, XYZ)
      * @return correction in meters
      */
-    FloatT tropo_correction(
+    float_t tropo_correction(
         const xyz_t &sat,
         const xyz_t &usr) const {
       return tropo_correction(
@@ -1240,13 +1243,13 @@ class GPS_SpaceNode {
 };
 
 template <class FloatT>
-const FloatT GPS_SpaceNode<FloatT>::light_speed = 2.99792458E8;
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::light_speed = 2.99792458E8;
 
 template <class FloatT>
-const FloatT GPS_SpaceNode<FloatT>::L1_Frequency = 1575.42E6;
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::L1_Frequency = 1575.42E6;
 
 template <class FloatT>
-const FloatT GPS_SpaceNode<FloatT>::SC2RAD = 3.1415926535898;
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SC2RAD = 3.1415926535898;
 
 #ifdef POW2_ALREADY_DEFINED
 #undef POW2_ALREADY_DEFINED
