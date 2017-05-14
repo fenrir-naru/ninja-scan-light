@@ -1933,7 +1933,7 @@ class StreamProcessor
     }
     G_Packet_Raw::space_node_t &gps_space_node() {
       return const_cast<G_Packet_Raw::space_node_t &>(
-          static_cast<StreamProcessor &>(*this).gps_space_node());
+          static_cast<const StreamProcessor &>(*this).gps_space_node());
     }
 
     void set_stream(istream *in){_in = in;}
