@@ -780,7 +780,7 @@ class G_Packet_Observer : public Packet_Observer<>{
 #undef bits2s8
 #undef bits2uchar
       template <class EpemerisT>
-      void fetch_as_subfram1(EpemerisT &ephemeris) const {
+      void fetch_as_subframe1(EpemerisT &ephemeris) const {
         ephemeris.wn = ephemeris_wn();
         ephemeris.ura = ephemeris_ura();
         ephemeris.sv_health = ephemeris_sv_health();
@@ -792,7 +792,7 @@ class G_Packet_Observer : public Packet_Observer<>{
         ephemeris.a_f0 = ephemeris_a_f0();
       }
       template <class EpemerisT>
-      void fetch_as_subfram2(EpemerisT &ephemeris) const {
+      void fetch_as_subframe2(EpemerisT &ephemeris) const {
         ephemeris.iode = ephemeris_iode_subframe2();
         ephemeris.c_rs = ephemeris_c_rs();
         ephemeris.delta_n = ephemeris_delta_n();
@@ -805,7 +805,7 @@ class G_Packet_Observer : public Packet_Observer<>{
         ephemeris.fit = ephemeris_fit();
       }
       template <class EpemerisT>
-      void fetch_as_subfram3(EpemerisT &ephemeris) const {
+      void fetch_as_subframe3(EpemerisT &ephemeris) const {
         ephemeris.c_ic = ephemeris_c_ic();
         ephemeris.omega_0 = ephemeris_omega_0();
         ephemeris.c_is = ephemeris_c_is();
@@ -876,13 +876,13 @@ class G_Packet_Observer : public Packet_Observer<>{
 
 #define get_subframe(n) (this->inspect(&(subframe.buffer[8]), 32, 6 + 8 + n * 32))
         get_subframe(0); // Subframe 1
-        subframe.fetch_as_subfram1(ephemeris);
+        subframe.fetch_as_subframe1(ephemeris);
 
         get_subframe(1); // Subframe 2
-        subframe.fetch_as_subfram2(ephemeris);
+        subframe.fetch_as_subframe2(ephemeris);
 
         get_subframe(2); // Subframe 3
-        subframe.fetch_as_subfram3(ephemeris);
+        subframe.fetch_as_subframe3(ephemeris);
 #undef get_subframe
       }
     }
