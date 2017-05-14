@@ -1437,6 +1437,59 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
 
 using namespace std;
 
+struct GPS_Ephemeris : public G_Packet_Raw::space_node_t::Satellite::Ephemeris {
+  typedef G_Packet_Raw::space_node_t::Satellite::Ephemeris super_t;
+  G_Packet_Raw::space_node_t::uint_t &sv_number, how;
+  bool valid;
+  G_Packet_Raw::space_node_t::int_t iode2;
+  GPS_Ephemeris() : sv_number(super_t::svid), valid(false) {}
+};
+
+template <> template <>
+void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
+    GPS_Ephemeris &ephemeris) const {
+  ephemeris.WN = ephemeris_wn();
+  ephemeris.URA = ephemeris_ura();
+  ephemeris.SV_health = ephemeris_sv_health();
+  ephemeris.iodc = ephemeris_iodc();
+  ephemeris.t_GD = ephemeris_t_gd();
+  ephemeris.t_oc = ephemeris_t_oc();
+  ephemeris.a_f2 = ephemeris_a_f2();
+  ephemeris.a_f1 = ephemeris_a_f1();
+  ephemeris.a_f0 = ephemeris_a_f0();
+}
+
+template <> template <>
+void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
+    GPS_Ephemeris &ephemeris) const {
+  ephemeris.iode = ephemeris_iode_subframe2();
+  ephemeris.c_rs = ephemeris_c_rs();
+  ephemeris.delta_n = ephemeris_delta_n();
+  ephemeris.m0 = ephemeris_m_0();
+  ephemeris.c_uc = ephemeris_c_uc();
+  ephemeris.e = ephemeris_e();
+  ephemeris.c_us = ephemeris_c_us();
+  ephemeris.sqrt_A = ephemeris_root_a();
+  ephemeris.t_oe = ephemeris_t_oe();
+  ephemeris.fit_interval
+      = G_Packet_Raw::space_node_t::Satellite::Ephemeris::raw_t::fit_interval(
+          ephemeris_fit(), ephemeris.iodc);
+}
+
+template <> template <>
+void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
+    GPS_Ephemeris &ephemeris) const {
+  ephemeris.c_ic = ephemeris_c_ic();
+  ephemeris.Omega0 = ephemeris_omega_0();
+  ephemeris.c_is = ephemeris_c_is();
+  ephemeris.i0 = ephemeris_i_0();
+  ephemeris.c_rc = ephemeris_c_rc();
+  ephemeris.omega = ephemeris_omega();
+  ephemeris.dot_Omega0 = ephemeris_omega_0_dot();
+  ephemeris.iode2 = ephemeris_iode_subframe3();
+  ephemeris.dot_i0 = ephemeris_i_0_dot();
+}
+
 class StreamProcessor
     : public AbstractSylphideProcessor<float_sylph_t> {
 
@@ -1675,47 +1728,12 @@ class StreamProcessor
         return (space_node_t::Ionospheric_UTC_Parameters)raw;
       }
 
-      static space_node_t::Satellite::Ephemeris convert_ephemeris(
-          const G_Observer_t::ephemeris_t &eph_rxm){
-
-        typedef space_node_t::Satellite::Ephemeris eph_t;
-        eph_t eph;
-#define copy(dst, src) eph.dst = eph_rxm.src;
-        // Subframe.1
-        copy(svid,    sv_number);
-        copy(WN,      wn);          // Week number
-        copy(URA,     ura);         // User range accuracy
-        copy(SV_health, sv_health); // Health status
-        copy(iodc,    iodc);        // Issue of clock data
-        copy(t_GD,    t_gd);        // Group delay (s)
-        copy(t_oc,    t_oc);        // Clock data reference time
-        copy(a_f2,    a_f2);        // Clock correction parameter (s/s^2)
-        copy(a_f1,    a_f1);        // Clock correction parameter (s/s)
-        copy(a_f0,    a_f0);        // Clock correction parameter (s)
-
-        // Subframe.2
-        copy(iode,    iode);        // Issue of ephemeris data
-        copy(c_rs,    c_rs);        // Sine correction, orbit (m)
-        copy(delta_n, delta_n);     // Mean motion difference (rad/s)
-        copy(m0,      m_0);         // Mean anomaly (rad)
-        copy(c_uc,    c_uc);        // Cosine correction, latitude (rad)
-        copy(e,       e);           // Eccentricity
-        copy(c_us,    c_us);        // Sine correction, latitude (rad)
-        copy(sqrt_A,  root_a);      // Square root of semi-major axis (sqrt(m))
-        copy(t_oe,    t_oe);        // Reference time ephemeris (s)
-        eph.fit_interval = eph_t::raw_t::fit_interval(eph_rxm.fit, eph_rxm.iodc); // Fit interval
-
-        // Subframe.3
-        copy(c_ic,    c_ic);        // Cosine correction, inclination (rad)
-        copy(Omega0,  omega_0);     // Longitude of ascending node (rad)
-        copy(c_is,    c_is);        // Sine correction, inclination (rad)
-        copy(i0,      i_0);         // Inclination angle (rad)
-        copy(c_rc,    c_rc);        // Cosine correction, orbit (m)
-        copy(omega,   omega);       // Argument of perigee (rad)
-        copy(dot_Omega0, omega_0_dot); // Rate of right ascension (rad/s)
-        copy(dot_i0,  i_0_dot);      // Rate of inclination angle (rad/s)
-#undef copy
-        return eph;
+      void check_ephemeris(const G_Observer_t &observer){
+        GPS_Ephemeris eph;
+        observer.fetch_ephemeris(eph);
+        if(eph.valid){
+          space_node.satellite(eph.svid).register_ephemeris(eph);
+        }
       }
 
       /**
@@ -1793,10 +1811,7 @@ class StreamProcessor
             return;
           }
           case 0x31: { // RXM-EPH
-            G_Observer_t::ephemeris_t eph_rxm(observer.fetch_ephemeris());
-            if(eph_rxm.valid){
-              space_node.satellite(eph_rxm.sv_number).register_ephemeris(convert_ephemeris(eph_rxm));
-            }
+            check_ephemeris(observer);
             return;
           }
           default: return;
@@ -1810,6 +1825,12 @@ class StreamProcessor
         switch(packet_type.mclass){
           case 0x01: check_nav(observer, packet_type); break;
           case 0x02: check_rxm(observer, packet_type); break;
+          case 0x0B: {
+            if(packet_type.mid == 0x31){
+              check_ephemeris(observer);
+            }
+            break;
+          }
         }
       }
     } g_handler;
