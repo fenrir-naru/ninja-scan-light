@@ -696,7 +696,7 @@ class G_Packet_Observer : public Packet_Observer<>{
             * DIV_POWER_2(31);
       }
 
-      u8_t ephemeris_iode() const {
+      u8_t ephemeris_iode_subframe2() const {
         return bits2u8(60);
       }
       FloatType ephemeris_c_rs() const {
@@ -762,6 +762,9 @@ class G_Packet_Observer : public Packet_Observer<>{
         return (FloatType)bytes2s32((bits2u8(240) & 0x80 ? 0xFF : 0), bits2u8(240), bits2u8(248), bits2u8(256))
             * DIV_POWER_2(43) * GPS_PI;
       }
+      u8_t ephemeris_iode_subframe3() const {
+        return bits2u8(270);
+      }
       FloatType ephemeris_i_0_dot() const {
         return (FloatType)(s16_t)((((u16_t)bits2u8(278)) << 6) | bits2u8_align(286, 6)
               | (bits2u8(278) & 0x80 ? 0xC000 : 0x0000))
@@ -790,7 +793,7 @@ class G_Packet_Observer : public Packet_Observer<>{
       }
       template <class EpemerisT>
       void fetch_as_subfram2(EpemerisT &ephemeris) const {
-        ephemeris.iode = ephemeris_iode();
+        ephemeris.iode = ephemeris_iode_subframe2();
         ephemeris.c_rs = ephemeris_c_rs();
         ephemeris.delta_n = ephemeris_delta_n();
         ephemeris.m_0 = ephemeris_m_0();
