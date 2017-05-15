@@ -942,8 +942,8 @@ class GPS_SpaceNode {
               it != eph_list.rend();
               ++it){
             float_t delta_t(it->period_from_time_of_clock(t_new));
-            if(delta_t < 0){continue;}
-            if(delta_t > 0){
+            if(delta_t < -1E-3){continue;}
+            if(delta_t > 1E-3){
               eph_list.insert(it.base(), eph);
             }else{
               (*it) = eph; // overwrite

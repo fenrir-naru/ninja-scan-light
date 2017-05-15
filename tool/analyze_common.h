@@ -110,7 +110,7 @@ struct GlobalOptions {
   }
   
   GlobalOptions()
-      : start_gpstime(0, 0), end_gpstime(DBL_MAX, INT_MAX),
+      : start_gpstime(0, -1), end_gpstime(DBL_MAX, INT_MAX),
       reduce_1pps_sync_error(true),
       blackhole(),
       _out(&(std::cout)),
