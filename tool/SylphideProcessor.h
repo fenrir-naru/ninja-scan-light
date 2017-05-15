@@ -685,8 +685,8 @@ class G_Packet_Observer : public Packet_Observer<>{
       FloatType ephemeris_t_gd() const {
         return (FloatType)bits2s8(196) * DIV_POWER_2(31);
       }
-      u16_t ephemeris_t_oc() const {
-        return bytes2u16(bits2u8(218), bits2u8(226)) << 4;
+      u32_t ephemeris_t_oc() const {
+        return ((u32_t)bytes2u16(bits2u8(218), bits2u8(226))) << 4;
       }
       FloatType ephemeris_a_f2() const {
         return (FloatType)bits2s8(240) * DIV_POWER_2(55);
@@ -731,8 +731,8 @@ class G_Packet_Observer : public Packet_Observer<>{
         return (FloatType)bytes2u32(bits2u8(226), bits2u8(240), bits2u8(248), bits2u8(256))
             * DIV_POWER_2(19);
       }
-      u16_t ephemeris_t_oe() const {
-        return bytes2u16(bits2u8(270), bits2u8(278)) << 4;
+      u32_t ephemeris_t_oe() const {
+        return ((u32_t)bytes2u16(bits2u8(270), bits2u8(278))) << 4;
       }
       bool ephemeris_fit() const {
         return (bits2u8_align(286, 1) & 0x01) == 0x01;
