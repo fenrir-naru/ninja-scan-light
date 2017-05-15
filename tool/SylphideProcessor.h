@@ -666,6 +666,10 @@ class G_Packet_Observer : public Packet_Observer<>{
 (s32_t)(bytes2u32(a, b, c, d))
 #define GPS_PI 3.1415926535898
 #define DIV_POWER_2(n) (1.0 / (1 << ((n <= 30) ? (n) : 30)) / (1 << ((n <= 30) ? 0 : (n - 30))))
+      u32_t how() const {
+        // 24bits including truncated TOW and excluding 6bit parity
+        return bytes2u32(0, bits2u8(30), bits2u8(38), bits2u8(46));
+      }
       u16_t ephemeris_wn() const {
         return (((u16_t)bits2u8(60)) << 2) | bits2u8_align(68, 2);
       }
