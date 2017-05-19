@@ -1740,6 +1740,31 @@ class StreamProcessor
         return (space_node_t::Ionospheric_UTC_Parameters)raw;
       }
 
+      void check_subframe(const G_Observer_t::subframe_t &subframe){
+        if((subframe.subframe_no <= 3) && (subframe.sv_number <= 32)){
+          GPS_Ephemeris &eph(ephemeris_buf[subframe.sv_number - 1]);
+          switch(subframe.subframe_no){
+            case 1: subframe.fetch_as_subframe1(eph); eph.how = subframe.how(); break;
+            case 2: subframe.fetch_as_subframe2(eph); break;
+            case 3: subframe.fetch_as_subframe3(eph); break;
+          }
+          if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
+              && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
+              && (week_number >= 0)){
+            eph.WN |= (week_number & 0xFC00); // Original WN is truncated to 10 bits.
+            space_node.satellite(eph.svid).register_ephemeris(eph);
+          }
+        }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
+          space_node_t::Ionospheric_UTC_Parameters iono_utc(
+              convert_iono_utc(subframe));
+          /*{ // TODO taking account for truncation
+            iono_utc.WN_t;
+            iono_utc.WN_LSF;
+          }*/
+          space_node.update_iono_utc(iono_utc);
+        }
+      }
+
       void check_ephemeris(const G_Observer_t &observer){
         GPS_Ephemeris eph;
         observer.fetch_ephemeris(eph);
@@ -1805,28 +1830,24 @@ class StreamProcessor
           }
           case 0x11: { // RXM-SFRB
             G_Observer_t::subframe_t subframe(observer.fetch_subframe());
-            if((subframe.subframe_no <= 3) && (subframe.sv_number <= 32)){
-              GPS_Ephemeris &eph(ephemeris_buf[subframe.sv_number - 1]);
-              switch(subframe.subframe_no){
-                case 1: subframe.fetch_as_subframe1(eph); eph.how = subframe.how(); break;
-                case 2: subframe.fetch_as_subframe2(eph); break;
-                case 3: subframe.fetch_as_subframe3(eph); break;
-              }
-              if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
-                  && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
-                  && (week_number >= 0)){
-                eph.WN |= (week_number & 0xFC00); // Original WN is truncated to 10 bits.
-                space_node.satellite(eph.svid).register_ephemeris(eph);
-              }
-            }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-              space_node_t::Ionospheric_UTC_Parameters iono_utc(
-                  convert_iono_utc(subframe));
-              /*{ // TODO taking account for truncation
-                iono_utc.WN_t;
-                iono_utc.WN_LSF;
-              }*/
-              space_node.update_iono_utc(iono_utc);
+            check_subframe(subframe);
+            return;
+          }
+          case 0x13: { // RXM-SFRBX
+            if((G_Observer_t::u8_t)observer[6 + 0] != 0){return;} // gnssID, GPS?
+            G_Observer_t::subframe_t subframe;
+            if((subframe.sv_number = (G_Observer_t::u8_t)observer[6 + 1]) > 32){return;} // svID
+            if((G_Observer_t::u8_t)observer[6 + 4] != 10){return;} // numWords
+            observer.inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 8);
+            // convert data into old structure
+            for(int i(0); i < sizeof(subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
+              *(G_Observer_t::u32_t *)(&subframe.buffer[i]) >>= 6; // remove parity
             }
+            subframe.subframe_no = subframe.bits2u8_align(49, 3);
+            if((subframe.subframe_no == 4) || (subframe.subframe_no == 5)){
+              subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
+            }
+            check_subframe(subframe);
             return;
           }
           case 0x31: { // RXM-EPH
