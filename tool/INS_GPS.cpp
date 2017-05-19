@@ -1765,6 +1765,18 @@ class StreamProcessor
         }
       }
 
+      void check_subframeX(G_Observer_t::subframe_t &subframe){
+        // convert data into old structure
+        for(int i(0); i < sizeof(subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
+          *(G_Observer_t::u32_t *)(&subframe.buffer[i]) >>= 6; // remove parity
+        }
+        subframe.subframe_no = subframe.bits2u8_align(49, 3);
+        if((subframe.subframe_no == 4) || (subframe.subframe_no == 5)){
+          subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
+        }
+        check_subframe(subframe);
+      }
+
       void check_ephemeris(const G_Observer_t &observer){
         GPS_Ephemeris eph;
         observer.fetch_ephemeris(eph);
@@ -1776,8 +1788,8 @@ class StreamProcessor
 
       /**
        * Extract the following data.
-       * {class, id} = {0x02, 0x10} : raw measurement (pseudorange, carrier, doppler)
-       * {class, id} = {0x02, 0x11} : subframe
+       * {class, id} = {0x02, 0x10 / 0x15} : raw measurement (pseudorange, carrier, doppler)
+       * {class, id} = {0x02, 0x11 / 0x13} : subframe
        * {class, id} = {0x02, 0x31} : ephemeris
        */
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
@@ -1839,15 +1851,7 @@ class StreamProcessor
             if((subframe.sv_number = (G_Observer_t::u8_t)observer[6 + 1]) > 32){return;} // svID
             if((G_Observer_t::u8_t)observer[6 + 4] != 10){return;} // numWords
             observer.inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 8);
-            // convert data into old structure
-            for(int i(0); i < sizeof(subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
-              *(G_Observer_t::u32_t *)(&subframe.buffer[i]) >>= 6; // remove parity
-            }
-            subframe.subframe_no = subframe.bits2u8_align(49, 3);
-            if((subframe.subframe_no == 4) || (subframe.subframe_no == 5)){
-              subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
-            }
-            check_subframe(subframe);
+            check_subframeX(subframe);
             return;
           }
           case 0x15: { // RXM-RAWX
@@ -1897,6 +1901,21 @@ class StreamProcessor
         }
       }
 
+      void check_trk(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        switch(packet_type.mid){
+          case 0x0F: { // TRK-SFRBX
+            if((G_Observer_t::u8_t)observer[6 + 1] != 0){return;} // gnssID, GPS?
+            G_Observer_t::subframe_t subframe;
+            if((subframe.sv_number = (G_Observer_t::u8_t)observer[6 + 2]) > 32){return;} // svID
+            if(observer.current_packet_size() != 61){return;}
+            observer.inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 13);
+            check_subframeX(subframe);
+            return;
+          }
+          default: return;
+        }
+      }
+
       void operator()(const G_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1904,6 +1923,7 @@ class StreamProcessor
         switch(packet_type.mclass){
           case 0x01: check_nav(observer, packet_type); break;
           case 0x02: check_rxm(observer, packet_type); break;
+          case 0x03: check_trk(observer, packet_type); break;
           case 0x0B: {
             if(packet_type.mid == 0x31){
               check_ephemeris(observer);
