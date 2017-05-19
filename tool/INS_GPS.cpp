@@ -1850,6 +1850,45 @@ class StreamProcessor
             check_subframe(subframe);
             return;
           }
+          case 0x15: { // RXM-RAWX
+            const unsigned int num_of_measurement(observer[6 + 11]);
+            if(num_of_measurement == 0){return;}
+
+            typedef G_Packet_Raw::raw_data_t raw_data_t;
+            {
+              G_Observer_t::v8_t buf[10];
+              observer.inspect(buf, sizeof(buf), 6);
+              raw_data_t::gps_time_t current(
+                  le_char2_2_num<G_Observer_t::u16_t>(*(buf + 8)), le_char8_2_num<double>(*buf));
+              packet_raw_latest.raw_data.gpstime = current;
+              packet_raw_latest.itow = current.seconds;
+            }
+
+            typedef raw_data_t::measurement_t dst_t;
+            dst_t &dst(packet_raw_latest.raw_data.measurement);
+            dst.clear();
+
+            typedef dst_t::mapped_type::value_type v_t;
+            for(int i(0); i < num_of_measurement; i++){
+              if(observer[6 + 36 + (32 * i)] != 0){continue;} // gnssID (GPS:0)
+              int prn(observer[6 + 37 + (32 * i)]); // svID
+
+              G_Observer_t::v8_t buf[24];
+              observer.inspect(buf, sizeof(buf), 6 + 16 + (32 * i));
+
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(prn, le_char8_2_num<double>(*buf)));
+              dst[raw_data_t::L1_CARRIER_PHASE].push_back(v_t(prn, le_char8_2_num<double>(*(buf + 8))));
+              float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
+              dst[raw_data_t::L1_DOPPLER].push_back(v_t(prn, doppler));
+
+              // calculate range rate derived from doppler
+              dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
+                  prn, -doppler * space_node_t::L1_WaveLength()));
+            }
+
+            outer._latest_packet = &packet_raw_latest;
+            return;
+          }
           case 0x31: { // RXM-EPH
             check_ephemeris(observer);
             return;
