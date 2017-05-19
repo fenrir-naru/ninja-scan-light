@@ -544,6 +544,7 @@ struct G_Packet_Raw : public G_Packet {
     return new G_Packet_Raw(*this);
   }
   NAV &apply(NAV &nav) const {
+    take_consistency();
     return nav.update(*this);
   }
 
@@ -556,9 +557,14 @@ struct G_Packet_Raw : public G_Packet {
 
   typedef raw_data_t::space_node_t space_node_t;
   typedef raw_data_t::solver_t solver_t;
-  mutable solver_t::user_pvt_t pvt;
+  solver_t::user_pvt_t pvt;
 
-  bool update_pvt() const {
+  void take_consistency() const {
+    // Select most preferable ephemeris
+    const_cast<space_node_t &>(raw_data.space_node).update_all_ephemeris(raw_data.gpstime);
+  }
+
+  bool update_pvt(){
     while(true){
       if(pvt.error_code == solver_t::user_pvt_t::ERROR_NO){
         float_sylph_t delta_t(std::abs(raw_data.gpstime - pvt.receiver_time));
@@ -584,6 +590,7 @@ struct G_Packet_Raw : public G_Packet {
   }
 
   bool update_solution(){
+    take_consistency();
     if(!update_pvt()){
       return false;
     }
@@ -1779,17 +1786,10 @@ class StreamProcessor
               dst[raw_data_t::L1_CARRIER_PHASE].push_back(v_t(prn, src.carrier_phase));
               dst[raw_data_t::L1_DOPPLER].push_back(v_t(prn, src.doppler)); // positive sign for approaching satellite
 
-              // Update ephemeris
-              if(!space_node.has_satellite(prn)){continue;}
-              space_node_t::Satellite &sat(
-                  const_cast<space_node_t &>(space_node).satellite(prn));
-              if(!sat.select_ephemeris(current)){continue;}
-
               // calculate range rate derived from doppler
-              dst[raw_data_t::L1_RANGE_RATE].push_back(
-                  dst_t::mapped_type::value_type(
-                    prn,
-                    -src.doppler * space_node_t::L1_WaveLength()));
+              dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
+                  prn,
+                  -src.doppler * space_node_t::L1_WaveLength()));
             }
 
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
@@ -2464,7 +2464,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         measurement_update_common(g_packet);
       }else if((recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
-          && g_packet.update_pvt()){
+          && const_cast<G_Packet_Raw &>(g_packet).update_pvt()){
 
         initialize_common(
             g_packet.itow,
