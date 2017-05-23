@@ -243,6 +243,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   } initial_attitude;
   std::istream *init_misc; ///< other manual initialization
   std::stringstream init_misc_buf; ///< buffer for init_misc string
+  std::ostream *out_raw_pvt;
 
   // Debug
   INS_GPS_Debug_Property debug_property;
@@ -261,6 +262,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       yaw_correct_with_mag_when_speed_less_than_ms(5),
       initial_attitude(),
       init_misc_buf(), init_misc(&init_misc_buf),
+      out_raw_pvt(NULL),
       debug_property() {
     realttime_property.rt_mode = INS_GPS_RealTime_Property::RT_LIGHT_WEIGHT;
   }
@@ -354,11 +356,15 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION(init_yaw_deg, false,
         initial_attitude.parse_yaw(value),
         initial_attitude.yaw_deg << " [deg]");
+
     CHECK_OPTION(init_misc, false,
         {init_misc_buf << value << std::endl; return true;},
         "");
     CHECK_OPTION(init_misc_fname, false,
         {std::cerr << "Checking... "; init_misc = &spec2istream(value);},
+        value);
+    CHECK_OPTION(out_raw_pvt, false,
+        {out_raw_pvt = &spec2ostream(value);},
         value);
 
     CHECK_OPTION(debug, false,
@@ -546,6 +552,10 @@ struct G_Packet_Raw : public G_Packet {
   }
   NAV &apply(NAV &nav) const {
     take_consistency();
+    if(options.out_raw_pvt
+        && const_cast<G_Packet_Raw *>(this)->update_solution()){
+      (*(options.out_raw_pvt)) << (*this) << std::endl;
+    }
     return nav.update(*this);
   }
 
@@ -591,7 +601,6 @@ struct G_Packet_Raw : public G_Packet {
   }
 
   bool update_solution(){
-    take_consistency();
     if(!update_pvt()){
       return false;
     }
@@ -609,7 +618,7 @@ struct G_Packet_Raw : public G_Packet {
     return true;
   }
 
-  void label(std::ostream &out) const {
+  static void label(std::ostream &out) {
     out << "week"
         << ',' << "itow"
         << ',' << "receiver_error"
@@ -1595,8 +1604,6 @@ class StreamProcessor
       G_Packet_Raw packet_raw_latest;
       typedef G_Packet_Raw::raw_data_t raw_data_t;
 
-      ostream *out_raw_pvt;
-
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
           outer(invoker),
@@ -1605,8 +1612,7 @@ class StreamProcessor
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           gps_status(status_t::NO_FIX), week_number(-1),
           space_node(),
-          packet_raw_latest(space_node),
-          out_raw_pvt(NULL) {
+          packet_raw_latest(space_node) {
         previous_seek_next = G_Observer_t::ready();
         for(int i(0); i < sizeof(ephemeris_buf) / sizeof(ephemeris_buf[0]); ++i){
           ephemeris_buf[i].svid = (i + 1);
@@ -1625,7 +1631,6 @@ class StreamProcessor
         week_number = another.week_number;
         space_node = another.space_node;
         packet_raw_latest = another.packet_raw_latest;
-        out_raw_pvt = another.out_raw_pvt;
         return *this;
       }
 
@@ -2223,11 +2228,6 @@ class StreamProcessor
               _latest_packet = NULL;
               break;
             }
-            if(g_handler.out_raw_pvt
-                && (_latest_packet == &g_handler.packet_raw_latest)
-                && g_handler.packet_raw_latest.update_solution()){
-              (*(g_handler.out_raw_pvt)) << g_handler.packet_raw_latest << endl;
-            }
             break;
           }
           break;
@@ -2285,15 +2285,6 @@ class StreamProcessor
         }else{
           cerr << "rinex_nav: " << ephemeris << " items captured." << endl;
         }
-        return true;
-      }
-
-      if(value = Options::get_value(spec, "out_raw_pvt", false)){
-        g_handler.out_raw_pvt = &options.spec2ostream(value);
-        g_handler.packet_raw_latest.label(*g_handler.out_raw_pvt);
-        (*g_handler.out_raw_pvt) << endl;
-        g_handler.out_raw_pvt->precision(12);
-        cerr << "out_raw_pvt: " << value << endl;
         return true;
       }
 
@@ -2842,6 +2833,12 @@ int main(int argc, char *argv[]){
     options.out() << setprecision(10);
   }
   options.out_debug() << setprecision(16);
+
+  if(options.out_raw_pvt){
+    G_Packet_Raw::label(*options.out_raw_pvt);
+    (*options.out_raw_pvt) << endl;
+    options.out_raw_pvt->precision(12);
+  }
 
   loop();
 
