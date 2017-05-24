@@ -436,6 +436,20 @@ static void make_packet(packet_t *packet){
         break;
       case 6:
         ubx_state.size += ((u16)c << 8);
+        { /* packet size check */
+          u8 size_true = 0;
+          switch(ubx_state.packet_type){
+            case NAV_SOL:     size_true = (8 + 52); break;
+            case NAV_TIMEGPS: size_true = (8 + 16); break;
+            case NAV_TIMEUTC: size_true = (8 + 20); break;
+          }
+          if((size_true > 0) && (ubx_state.size != size_true)){
+            // invalid packet, reset to initial state
+            ubx_state.index = 0;
+            ubx_state.packet_type = UNKNOWN;
+            make_telemetry = FALSE;
+          }
+        }
         break;
       default: {
         if(ubx_state.index >= (ubx_state.size - 1)){
