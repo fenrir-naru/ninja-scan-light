@@ -605,7 +605,6 @@ struct G_Packet_Raw : public G_Packet {
       return false;
     }
     // TODO update solution
-    itow -= (pvt.receiver_error / space_node_t::light_speed);
     solution.v_n = pvt.user_velocity_enu.north();
     solution.v_e = pvt.user_velocity_enu.east();
     solution.v_d = -pvt.user_velocity_enu.up();
@@ -1998,8 +1997,8 @@ class StreamProcessor
             if(ranges_valid == 0){return;}
 
             float_sylph_t est_time_of_reception(
-                10E-3 * (int)(((sum_time_of_transmission / ranges_valid) + 85E-3) / 10E-3));
-                // assume 10 ms alignment, 85E-3 = (approx) (20200 + a)(km) / 300000(km/s)
+                25E-3 * (int)(((sum_time_of_transmission / ranges_valid) + 85E-3) / 25E-3));
+                // assume 25 ms alignment, 85E-3 = (approx) (20200 + a)(km) / 300000(km/s)
 
             packet_raw_latest.raw_data.gpstime.week = week_number;
             packet_raw_latest.raw_data.gpstime.seconds = est_time_of_reception;
