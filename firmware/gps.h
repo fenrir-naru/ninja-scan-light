@@ -53,8 +53,8 @@ time_t gps_std_time(time_t *timeptr);
 
 extern volatile __bit gps_time_modified;
 typedef struct {
-  u16 wn;
-  s32 itow_ms;
+  s16 wn;
+  u32 itow_ms;
 } gps_time_t;
 extern __xdata gps_time_t gps_time;
 extern __xdata u8 gps_num_of_sat;

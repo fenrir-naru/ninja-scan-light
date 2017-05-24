@@ -300,15 +300,15 @@ static void poll_aid_hui(){
 }
 
 volatile __bit gps_time_modified = FALSE;
-__xdata gps_time_t gps_time = {0, 0};
+__xdata gps_time_t gps_time = {-1, 0};
 __xdata u8 gps_num_of_sat = 0;
 
 static __xdata s8 leap_seconds = 0;
 #if USE_GPS_STD_TIME
 time_t gps_std_time(time_t *timer) {
   time_t res = 0;
-  if(gps_time.wn > 0){ // valid
-   res = ((time_t)60 * 60 * 24 * 7) * gps_time.wn
+  if(gps_time.wn >= 0){ // valid
+   res = ((time_t)60 * 60 * 24 * 7) * (u16)(gps_time.wn)
        + (global_ms / 1000) 
        - leap_seconds
        + (time_t)315964800; // Jan 01, 1970, 00:00:00 UTC
