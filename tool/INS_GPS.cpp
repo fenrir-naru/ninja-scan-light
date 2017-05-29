@@ -439,8 +439,8 @@ class NAV : public NAVData<float_sylph_t> {
       vec_t mag_horizontal((attitude * quat_t(0, mag) * attitude.conj()).vector());
 
       // Call Earth's magnetic field model
-      MagneticField::filed_components_res_t mag_model(
-          MagneticField::filed_components(IGRF11::IGRF2010,
+      MagneticField::field_components_res_t mag_model(
+          MagneticField::field_components(IGRF12::IGRF2015,
               latitude, longitude, altitude));
       vec_t mag_filed(mag_model.north, mag_model.east, mag_model.down);
 

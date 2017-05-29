@@ -35,8 +35,6 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 
-#include "WGS84.h"
-
 template <class FloatT>
 class MagneticFieldGeneric {
   public:
@@ -76,52 +74,29 @@ class MagneticFieldGeneric {
       }
     }
     
-    struct filed_components_res_t {FloatT north, east, down;};
-    static filed_components_res_t filed_components(
+    struct field_components_res_t {FloatT north, east, down;};
+    static field_components_res_t field_components_geocentric(
         const model_t &model,
-        const FloatT &latitude_rad, const FloatT &longitude_rad,
-        const FloatT &height_meter_wgs84){
+        const FloatT &sin_geocentric_latitude, const FloatT &cos_geocentric_latitude,
+        const FloatT &longitude_rad,
+        const FloatT &radius_meter = 6371.2E3){
       using std::cos;
       using std::sin;
       using std::pow;
       using std::sqrt;
-      filed_components_res_t res;
+      field_components_res_t res;
       
-      FloatT slat(sin(latitude_rad));
-      FloatT clat(cos(latitude_rad));
-      // 緯度の補正
-      {
-        FloatT latitude_deg(latitude_rad / M_PI * 180);
-        if((90.0 - latitude_deg) < 1E-3){
-          clat = cos((90.0 - 1E-3) / 180 * M_PI); // 300 ft. from North pole
-        }else if((90.0 + latitude_deg) < 1E-3){
-          clat = cos((-90.0 + 1E-3) / 180 * M_PI); // 300 ft. from South pole
-        }
-      }
-      
+      // @see http://mooring.ucsd.edu/software/matlab/mfiles/toolbox/geo/IGRF/geomag60.c
+
+      const FloatT slat(sin_geocentric_latitude);
+      const FloatT clat(cos_geocentric_latitude);
+
       FloatT sl[13] = {sin(longitude_rad)};
       FloatT cl[13] = {cos(longitude_rad)};
       
       res.north = res.east = res.down = 0;
       
-      FloatT sd(0), cd(1);
-      FloatT aa, bb, cc, dd, r, rr;
-      
-      // TODO: WGS84高度から地球中心距離への変換(だと思う)
-      {
-        static const FloatT a2(40680631.59);            /* WGS84 */
-        static const FloatT b2(40408299.98);            /* WGS84 */
-        aa = a2 * clat * clat;
-        bb = b2 * slat * slat;
-        cc = aa + bb;
-        dd = sqrt(cc);
-        FloatT height_km_wgs84(1E-3 * height_meter_wgs84);
-        r = sqrt(height_km_wgs84 * (height_km_wgs84 + 2.0 * dd) + (a2 * aa + b2 * bb) / cc);
-        cd = (height_km_wgs84 + dd) / r;
-        sd = (a2 - b2) / dd * slat * clat / r;
-        slat = slat * cd - clat * sd;
-        clat = clat * cd + slat * sd;
-      }
+      FloatT aa, bb, cc, rr;
       
       aa = sqrt(3.0);
       FloatT p[118] = {
@@ -139,8 +114,8 @@ class MagneticFieldGeneric {
         if(m > n){
           m = -1;
           n++;
-          static const FloatT earths_radius(6371.2);
-          rr = pow(earths_radius / r, n + 3);
+          static const FloatT earths_radius(6371.2E3);
+          rr = pow(earths_radius / radius_meter, n + 3);
         }
         FloatT fm(m + 1), fn(n + 1);
         if (k > 3){
@@ -179,11 +154,68 @@ class MagneticFieldGeneric {
           l += 2;
         }
       }
-  
-      aa = res.north;
-      res.north = aa * cd + res.down * sd;
-      res.down = res.down * cd - aa * sd;
-      
+
+      return res;
+    }
+
+    static field_components_res_t field_components_geocentric(
+        const model_t &model,
+        const FloatT &geocentric_latitude,
+        const FloatT &longitude_rad,
+        const FloatT &radius_meter = 6371.2E3){
+
+      return field_components_geocentric(model,
+          std::sin(geocentric_latitude), std::cos(geocentric_latitude),
+          radius_meter);
+    }
+
+    static field_components_res_t field_components(
+        const model_t &model,
+        const FloatT &latitude_rad, const FloatT &longitude_rad,
+        const FloatT &height_meter){
+      using std::cos;
+      using std::sin;
+      using std::pow;
+      using std::sqrt;
+
+      FloatT slat(sin(latitude_rad)), clat(cos(latitude_rad));
+      FloatT sd, cd, r;
+
+      {
+        // 緯度の補正
+        FloatT latitude_deg(latitude_rad / M_PI * 180);
+        if((90.0 - latitude_deg) < 1E-3){
+          clat = cos((90.0 - 1E-3) / 180 * M_PI); // 300 ft. from North pole
+        }else if((90.0 + latitude_deg) < 1E-3){
+          clat = cos((-90.0 + 1E-3) / 180 * M_PI); // 300 ft. from South pole
+        }
+      }
+
+      {
+        // Convert geographic lat/lng(地理緯度経度) to geocentric lat/lng(地心緯度経度)
+        FloatT aa, bb, cc, dd;
+        static const FloatT a2(40680631.59E6);            /* WGS84, a*a (m^2) */
+        static const FloatT b2(40408299.98E6);            /* WGS84, b*b (m^2) */
+        aa = a2 * clat * clat;
+        bb = b2 * slat * slat;
+        cc = aa + bb;
+        dd = sqrt(cc);
+        r = sqrt(height_meter * (height_meter + 2.0 * dd) + (a2 * aa + b2 * bb) / cc);
+        cd = (height_meter + dd) / r;
+        sd = (a2 - b2) / dd * slat * clat / r;
+      }
+
+      field_components_res_t res(field_components_geocentric(
+          model,
+          slat * cd - clat * sd, clat * cd + slat * sd,
+          longitude_rad, r));
+
+      { // coordinate transform
+        FloatT _north(res.north);
+        res.north = _north * cd + res.down * sd;
+        res.down = res.down * cd - _north * sd;
+      }
+
       return res;
     }
 };
@@ -614,7 +646,7 @@ class IGRF12Generic : public IGRF11Generic<FloatT> {
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF2015;
 };
 
-typedef IGRF12Generic<double> IGRF2012;
+typedef IGRF12Generic<double> IGRF12;
 
 template <class FloatT>
 const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::DGRF2010 = {
