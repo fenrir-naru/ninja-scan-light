@@ -215,6 +215,39 @@ class MagneticFieldGeneric {
       
       return res;
     }
+
+    struct latlng_t {
+      FloatT latitude, longitude;
+    };
+    static latlng_t geomagnetic_latlng(
+        const model_t &model,
+        const FloatT &geocentric_latitude, const FloatT &longitude){
+      const FloatT &g10(model.coef[0]), &g11(model.coef[1]), &h11(model.coef[2]);
+      FloatT m[] = {g11, h11, g10};
+      FloatT b0(-std::sqrt(std::pow(m[0], 2) + std::pow(m[1], 2) + std::pow(m[2], 2)));
+      FloatT z_cd[] = {m[0] / b0, m[1] / b0, m[2] / b0};
+      FloatT y_cd_denom(-std::sqrt(pow2(h11) + pow2(g11)));
+      FloatT y_cd[] = {-h11 / y_cd_denom, g11 / y_cd_denom, 0}; /* = [0,0,1] * z_cd */
+      FloatT x_cd[] = { /* y_cd * z_cd */
+        y_cd[1] * z_cd[2] - y_cd[2] * z_cd[1],
+        y_cd[2] * z_cd[0] - y_cd[0] * z_cd[2],
+        y_cd[0] * z_cd[1] - y_cd[1] * z_cd[0],
+      };
+      FloatT
+          clat(std::cos(geocentric_latitude)), slat(std::sin(geocentric_latitude)),
+          clng(std::cos(longitude)), slng(std::sin(longitude));
+      FloatT vec_geoc[] = {clat * clng, clat * slng, slat};
+      FloatT vec_geom[] = {
+        x_cd[0] * vec_geoc[0] + x_cd[1] * vec_geoc[1] + x_cd[2] * vec_geoc[2],
+        y_cd[0] * vec_geoc[0] + y_cd[1] * vec_geoc[1] + y_cd[2] * vec_geoc[2],
+        z_cd[0] * vec_geoc[0] + z_cd[1] * vec_geoc[1] + z_cd[2] * vec_geoc[2],
+      };
+      latlng_t res = {
+        std::asin(vec_geom[2]),
+        std::atan2(vec_geom[1], vec_geom[0])
+      };
+      return res;
+    }
 };
 
 typedef MagneticFieldGeneric<double> MagneticField;
