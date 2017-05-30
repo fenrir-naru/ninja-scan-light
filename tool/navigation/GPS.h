@@ -1146,11 +1146,8 @@ class GPS_SpaceNode {
       
       // Local time
       float_t lt(4.32E4 * lambda_i + t.seconds);
-      while(lt > gps_time_t::seconds_day){
-        lt -= gps_time_t::seconds_day;
-      }
-      while(lt < 0){
-        lt += gps_time_t::seconds_day;
+      if((lt >= gps_time_t::seconds_day) || (lt < 0)){
+        lt -= std::floor(lt / gps_time_t::seconds_day) * gps_time_t::seconds_day;
       }
       
       // Period and amplitude of cosine function
