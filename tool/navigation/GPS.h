@@ -37,6 +37,7 @@
  */
 
 #include <vector>
+#include <iterator>
 #include <map>
 #include <bitset>
 
@@ -944,13 +945,18 @@ class GPS_SpaceNode {
             float_t delta_t(it->period_from_time_of_clock(t_new));
             if(delta_t < -1E-3){continue;}
             if(delta_t > 1E-3){
-              eph_list.insert(it.base(), eph);
+              typename eph_list_t::iterator it2(it.base());
+              if(std::distance(eph_list.begin(), it2) < eph_current_index){
+                eph_current_index++;
+              }
+              eph_list.insert(it2, eph);
             }else{
               (*it) = eph; // overwrite
             }
             return;
           }
           eph_list.insert(eph_list.begin(), eph);
+          eph_current_index++;
         }
 
         /**
