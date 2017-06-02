@@ -41,7 +41,7 @@
 #include "Filtered_INS2.h"
 
 struct INS_GPS_Debug_Property {
-  enum debug_target_t {DEBUG_NONE, DEBUG_KF_P, DEBUG_KF_FULL} debug_target;
+  enum debug_target_t {DEBUG_NONE, DEBUG_KF_P, DEBUG_KF_FULL, DEBUG_PURE_INERTIAL} debug_target;
   INS_GPS_Debug_Property() : debug_target(DEBUG_NONE) {}
 
   bool check_debug_property_spec(const char *spec){
@@ -49,6 +49,8 @@ struct INS_GPS_Debug_Property {
       debug_target = DEBUG_KF_P;
     }else if(std::strcmp(spec, "KF_FULL") == 0){
       debug_target = DEBUG_KF_FULL;
+    }else if(std::strcmp(spec, "pure_inertial") == 0){
+      debug_target = DEBUG_PURE_INERTIAL;
     }else{
       return false;
     }
@@ -63,6 +65,7 @@ struct INS_GPS_Debug_Property {
         case DEBUG_NONE: break;
         case DEBUG_KF_P: out << "KF_P"; break;
         case DEBUG_KF_FULL: out << "KF_FULL"; break;
+        case DEBUG_PURE_INERTIAL: out << "pure_inertial"; break;
       }
       return out;
     }
@@ -175,6 +178,33 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
       snapshot.K = K;
       INS_GPS::before_correct_INS(H, R, K, v, x_hat);
     }
+};
+
+template <class INS_GPS>
+class INS_GPS_Debug_PureInertial : public INS_GPS::ins_t {
+  public:
+    typedef typename INS_GPS::ins_t base_ins_t;
+    INS_GPS_Debug_PureInertial() : base_ins_t() {}
+    INS_GPS_Debug_PureInertial(
+        const INS_GPS_Debug_PureInertial<INS_GPS> &orig, const bool &deepcopy = false)
+        : base_ins_t(orig, deepcopy) {
+
+    }
+    ~INS_GPS_Debug_PureInertial() {}
+
+    /* Dummy functions to resolve difference between INS/GPS and INS */
+    template <class GPS_Packet>
+    void correct(const GPS_Packet &gps){}
+
+    template <class GPS_Packet>
+    void correct(
+        const GPS_Packet &gps,
+        const typename base_ins_t::vec3_t &lever_arm_b,
+        const typename base_ins_t::vec3_t &omega_b2i_4b){}
+
+    void correct_yaw(
+        const typename base_ins_t::float_t &delta_psi,
+        const typename base_ins_t::float_t &sigma2_delta_psi){}
 };
 
 #endif /* __INS_GPS_DEBUG_H__ */

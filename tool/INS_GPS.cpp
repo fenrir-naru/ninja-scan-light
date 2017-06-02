@@ -879,6 +879,9 @@ struct INS_GPS_NAV_Factory {
           return new INS_GPS_NAV<
                 INS_GPS_NAVData<INS_GPS> >(calibration);
       }
+    }else if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL){
+      return new INS_GPS_NAV<INS_GPS_NAVData<
+          INS_GPS_Debug_PureInertial<INS_GPS> > >(calibration);
     }else{
       switch(options.ins_gps_sync_strategy){
         case Options::INS_GPS_SYNC_BACK_PROPAGATION:
@@ -935,6 +938,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
 
     template <class BaseINS, template <class> class Filter>
     void label2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
+      label2(out, (const BaseINS *)fins);
       if(options.dump_stddev){
         out << ',' << "s1(longitude)"
             << ',' << "s1(latitude)"
@@ -948,15 +952,20 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       }
     }
 
-    template <class BaseFINS>
-    void label2(std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      label2(out, (const BaseFINS *)fins);
+    template <class BaseINS>
+    void label2(std::ostream &out, const INS_BiasEstimated<BaseINS> *ins) const {
+      label2(out, (const BaseINS *)ins);
       out << ',' << "bias_accel(X)"   //Bias
           << ',' << "bias_accel(Y)"
           << ',' << "bias_accel(Z)"
           << ',' << "bias_gyro(X)"
           << ',' << "bias_gyro(Y)"
           << ',' << "bias_gyro(Z)" ;
+    }
+
+    template <class BaseFINS>
+    void label2(std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      label2(out, (const BaseFINS *)fins);
       if(options.dump_stddev){
         out << ',' << "s1(bias_accel(X))"
             << ',' << "s1(bias_accel(Y))"
@@ -983,6 +992,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
 
     template <class BaseINS, template <class> class Filter>
     void dump2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
+      dump2(out, (const BaseINS *)fins);
       if(options.dump_stddev){
         typename Filtered_INS2<BaseINS, Filter>::StandardDeviations sigma(fins->getSigma());
         out << ',' << rad2deg(sigma.longitude_rad)
@@ -997,18 +1007,23 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       }
     }
 
-    template <class BaseFINS>
-    void dump2(
-        std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
-      dump2(out, (const BaseFINS *)fins);
-      Vector3<float_sylph_t> &ba(const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->bias_accel());
-      Vector3<float_sylph_t> &bg(const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->bias_gyro());
+    template <class BaseINS>
+    void dump2(std::ostream &out, const INS_BiasEstimated<BaseINS> *ins) const {
+      dump2(out, (const BaseINS *)ins);
+      Vector3<float_sylph_t> &ba(const_cast<INS_BiasEstimated<BaseINS> *>(ins)->bias_accel());
+      Vector3<float_sylph_t> &bg(const_cast<INS_BiasEstimated<BaseINS> *>(ins)->bias_gyro());
       out << ',' << ba.getX()      // Bias
           << ',' << ba.getY()
           << ',' << ba.getZ()
           << ',' << bg.getX()
           << ',' << bg.getY()
-          << ',' << bg.getZ() ;
+          << ',' << bg.getZ();
+    }
+
+    template <class BaseFINS>
+    void dump2(
+        std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+      dump2(out, (const BaseFINS *)fins);
       if(options.dump_stddev){
         const Matrix<float_sylph_t> &P(
             const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP());
