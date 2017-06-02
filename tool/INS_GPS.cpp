@@ -562,10 +562,10 @@ class INS_GPS_NAV : public NAV {
     Helper helper;
 
     template <class Calibration>
-    void setup_filter2(const Calibration &calibration, void *){}
+    void setup_filter(const Calibration &calibration, void *){}
 
     template <class Calibration, class BaseINS, template <class> class Filter>
-    void setup_filter2(
+    void setup_filter(
         const Calibration &calibration,
         Filtered_INS2<BaseINS, Filter> *fins) {
       /**
@@ -619,11 +619,11 @@ class INS_GPS_NAV : public NAV {
     }
 
     template <class Calibration, class BaseFINS>
-    void setup_filter2(
+    void setup_filter(
         const Calibration &calibration,
         Filtered_INS_BiasEstimated<BaseFINS> *fins) {
 
-      setup_filter2(calibration, (BaseFINS *)fins);
+      setup_filter(calibration, (BaseFINS *)fins);
 
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
@@ -648,33 +648,29 @@ class INS_GPS_NAV : public NAV {
     }
 
     template <class Calibration, class Base_INS_GPS>
-    void setup_filter2(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
-      setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
+    void setup_filter(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
+      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
       ins_gps->setup_back_propagation(options.back_propagate_property);
     }
 
     template <class Calibration, class Base_INS_GPS>
-    void setup_filter2(const Calibration &calibration, INS_GPS_RealTime<Base_INS_GPS> *ins_gps){
-      setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
+    void setup_filter(const Calibration &calibration, INS_GPS_RealTime<Base_INS_GPS> *ins_gps){
+      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
       ins_gps->setup_realtime(options.realttime_property);
     }
 
     template <class Calibration, class Base_INS_GPS>
-    void setup_filter2(const Calibration &calibration, INS_GPS_Debug<Base_INS_GPS> *ins_gps){
-      setup_filter2(calibration, (Base_INS_GPS *)ins_gps);
+    void setup_filter(const Calibration &calibration, INS_GPS_Debug<Base_INS_GPS> *ins_gps){
+      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
       ins_gps->setup_debug(options.debug_property);
     }
 
-    template <class Calibration>
-    void setup_filter(const Calibration &calibration){
-      setup_filter2(calibration, ins_gps);
-    }
   public:
     template <class Calibration>
     INS_GPS_NAV(const Calibration &calibration)
         : NAV(),
         ins_gps(new INS_GPS()), helper(*this) {
-      setup_filter(calibration);
+      setup_filter(calibration, ins_gps);
     }
     virtual ~INS_GPS_NAV() {
       delete ins_gps;
@@ -711,14 +707,14 @@ class INS_GPS_NAV : public NAV {
       mat(i, j) = std::strtod(_spec, &_spec);
     }
 
-  public:
-    bool init_misc(const char *line){
-      if(std::strlen(line) == 0){return true;}
-
+    bool init_misc(const char *line, void *){
+      return false;
+    }
+    template <class BaseINS, template <class> class Filter>
+    bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *fins){
       const char *value;
-      bool checked(false);
 
-      while(!checked){
+      while(true){
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
         if(value = Options::get_value2(line, "P")){
           set_matrix_full(P, value);
@@ -728,11 +724,10 @@ class INS_GPS_NAV : public NAV {
           set_matrix_1element(P, value);
         }else{break;}
         ins_gps->getFilter().setP(P);
-        checked = true;
-        break;
+        return true;
       }
 
-      while(!checked){
+      while(true){
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
         if(value = Options::get_value2(line, "Q")){
           set_matrix_full(Q, value);
@@ -742,14 +737,21 @@ class INS_GPS_NAV : public NAV {
           set_matrix_1element(Q, value);
         }else{break;}
         ins_gps->getFilter().setQ(Q);
-        checked = true;
-        break;
+        return true;
       }
 
-      if(!checked){return false;}
+      return false;
+    }
 
-      std::cerr << "Init (misc): " << line << std::endl;
-      return true;
+  public:
+    bool init_misc(const char *line){
+      if(std::strlen(line) == 0){return true;}
+
+      bool res(init_misc(line, ins_gps));
+      if(res){
+        std::cerr << "Init (misc): " << line << std::endl;
+      }
+      return res;
     }
 
 #define MAKE_PROXY_FUNC(fname) \
