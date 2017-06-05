@@ -78,12 +78,35 @@ struct INS_GPS_Debug_Property {
 template <class INS_GPS>
 class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
   public:
+    INS_GPS_Debug()
+        : INS_GPS(), INS_GPS_Debug_Property() {}
+    INS_GPS_Debug(
+        const INS_GPS_Debug &orig,
+        const bool &deepcopy = false)
+        : INS_GPS(orig, deepcopy), INS_GPS_Debug_Property(orig) {}
+    INS_GPS_Debug &operator=(const INS_GPS_Debug &another){
+      INS_GPS::operator=(another);
+      INS_GPS_Debug_Property::operator=(another);
+      return *this;
+    }
+    virtual ~INS_GPS_Debug(){}
+    void setup_debug(const INS_GPS_Debug_Property &property){
+      INS_GPS_Debug_Property::operator=(property);
+    }
+
+    virtual void inspect(std::ostream &out) const {}
+};
+
+template <class INS_GPS>
+class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
+  public:
+    typedef INS_GPS_Debug<INS_GPS> super_t;
 #if defined(__GNUC__) && (__GNUC__ < 5)
-    typedef typename INS_GPS::float_t float_t;
-    typedef typename INS_GPS::mat_t mat_t;
+    typedef typename super_t::float_t float_t;
+    typedef typename super_t::mat_t mat_t;
 #else
-    using typename INS_GPS::float_t;
-    using typename INS_GPS::mat_t;
+    using typename super_t::float_t;
+    using typename super_t::mat_t;
 #endif
   protected:
     enum {ACTION_LAST_NOP, ACTION_LAST_UPDATE, ACTION_LAST_CORRECT} last_action;
@@ -98,14 +121,14 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
             K(deepcopy ? orig.K.copy() : orig.K) {}
     } snapshot;
   public:
-    INS_GPS_Debug()
-        : INS_GPS(), last_action(ACTION_LAST_NOP) {}
-    INS_GPS_Debug(
-        const INS_GPS_Debug &orig,
+    INS_GPS_Debug_Covariance()
+        : super_t(), last_action(ACTION_LAST_NOP) {}
+    INS_GPS_Debug_Covariance(
+        const INS_GPS_Debug_Covariance &orig,
         const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), last_action(orig.last_action), snapshot(orig.snapshot, deepcopy) {}
-    INS_GPS_Debug &operator=(const INS_GPS_Debug &another){
-      INS_GPS::operator=(another);
+        : super_t(orig, deepcopy), last_action(orig.last_action), snapshot(orig.snapshot, deepcopy) {}
+    INS_GPS_Debug_Covariance<INS_GPS> &operator=(const INS_GPS_Debug_Covariance<INS_GPS> &another){
+      INS_GPS_Debug_Covariance<INS_GPS>::operator=(another);
       last_action = another.last_action;
       snapshot.A = another.snapshot.A;
       snapshot.B = another.snapshot.B;
@@ -114,10 +137,7 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
       snapshot.K = another.snapshot.K;
       return *this;
     }
-    virtual ~INS_GPS_Debug(){}
-    void setup_debug(const INS_GPS_Debug_Property &property){
-      INS_GPS_Debug_Property::operator=(property);
-    }
+    virtual ~INS_GPS_Debug_Covariance(){}
 
     static void inspect_matrix(
         std::ostream &out, const mat_t &mat){
@@ -133,11 +153,12 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
       inspect_matrix(out, mat);
     }
     void inspect(std::ostream &out) const {
-      switch(debug_target){
-        case DEBUG_KF_P:
-          inspect_matrix(out, const_cast<INS_GPS_Debug *>(this)->getFilter().getP());
+      typedef INS_GPS_Debug_Covariance<INS_GPS> self_t;
+      switch(super_t::debug_target){
+        case super_t::DEBUG_KF_P:
+          inspect_matrix(out, const_cast<self_t *>(this)->getFilter().getP());
           break;
-        case DEBUG_KF_FULL:
+        case super_t::DEBUG_KF_FULL:
           switch(last_action){
             case ACTION_LAST_UPDATE:
               out << "TU,";
@@ -151,7 +172,7 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
               inspect_matrix2(out, snapshot.K, "K");
               break;
           }
-          inspect_matrix2(out, const_cast<INS_GPS_Debug *>(this)->getFilter().getP(), "P");
+          inspect_matrix2(out, const_cast<self_t *>(this)->getFilter().getP(), "P");
           break;
       }
     }
@@ -163,7 +184,7 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
       last_action = ACTION_LAST_UPDATE;
       snapshot.A = A;
       snapshot.B = B;
-      INS_GPS::before_update_INS(A, B, elapsedT);
+      super_t::before_update_INS(A, B, elapsedT);
     }
 
     void before_correct_INS(
@@ -176,18 +197,26 @@ class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
       snapshot.H = H;
       snapshot.R = R;
       snapshot.K = K;
-      INS_GPS::before_correct_INS(H, R, K, v, x_hat);
+      super_t::before_correct_INS(H, R, K, v, x_hat);
     }
 };
 
 template <class INS_GPS>
-class INS_GPS_Debug_PureInertial : public INS_GPS::ins_t {
+class INS_GPS_Debug_PureInertial : public INS_GPS_Debug<typename INS_GPS::ins_t> {
   public:
-    typedef typename INS_GPS::ins_t base_ins_t;
-    INS_GPS_Debug_PureInertial() : base_ins_t() {}
+    typedef INS_GPS_Debug<typename INS_GPS::ins_t> super_t;
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename super_t::float_t float_t;
+    typedef typename super_t::vec3_t vec3_t;
+#else
+    using typename super_t::float_t;
+    using typename super_t::vec3_t;
+#endif
+  public:
+    INS_GPS_Debug_PureInertial() : super_t() {}
     INS_GPS_Debug_PureInertial(
         const INS_GPS_Debug_PureInertial<INS_GPS> &orig, const bool &deepcopy = false)
-        : base_ins_t(orig, deepcopy) {
+        : super_t(orig, deepcopy) {
 
     }
     ~INS_GPS_Debug_PureInertial() {}
@@ -199,12 +228,12 @@ class INS_GPS_Debug_PureInertial : public INS_GPS::ins_t {
     template <class GPS_Packet>
     void correct(
         const GPS_Packet &gps,
-        const typename base_ins_t::vec3_t &lever_arm_b,
-        const typename base_ins_t::vec3_t &omega_b2i_4b){}
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b){}
 
     void correct_yaw(
-        const typename base_ins_t::float_t &delta_psi,
-        const typename base_ins_t::float_t &sigma2_delta_psi){}
+        const float_t &delta_psi,
+        const float_t &sigma2_delta_psi){}
 };
 
 #endif /* __INS_GPS_DEBUG_H__ */

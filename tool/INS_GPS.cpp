@@ -865,37 +865,42 @@ template <class INS_GPS>
 struct INS_GPS_NAV_Factory {
   template <class Calibration>
   static NAV *get_nav(const Calibration &calibration){
-    if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_NONE){
-      switch(options.ins_gps_sync_strategy){
-        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-          return new INS_GPS_NAV<
-              INS_GPS_Back_Propagate<
-                INS_GPS_NAVData<INS_GPS> > >(calibration);
-        case Options::INS_GPS_SYNC_REALTIME:
-          return new INS_GPS_NAV<
-              INS_GPS_RealTime<
-                INS_GPS_NAVData<INS_GPS> > >(calibration);
-        default:
-          return new INS_GPS_NAV<
-                INS_GPS_NAVData<INS_GPS> >(calibration);
-      }
-    }else if(options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL){
-      return new INS_GPS_NAV<INS_GPS_NAVData<
-          INS_GPS_Debug_PureInertial<INS_GPS> > >(calibration);
-    }else{
-      switch(options.ins_gps_sync_strategy){
-        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-          return new INS_GPS_NAV<INS_GPS_Debug<
-              INS_GPS_Back_Propagate<
-                INS_GPS_NAVData<INS_GPS> > > >(calibration);
-        case Options::INS_GPS_SYNC_REALTIME:
-          return new INS_GPS_NAV<INS_GPS_Debug<
-              INS_GPS_RealTime<
-                INS_GPS_NAVData<INS_GPS> > > >(calibration);
-        default:
-          return new INS_GPS_NAV<INS_GPS_Debug<
-                INS_GPS_NAVData<INS_GPS> > >(calibration);
-      }
+    switch(options.debug_property.debug_target){
+      case INS_GPS_Debug_Property::DEBUG_NONE:
+        switch(options.ins_gps_sync_strategy){
+          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+            return new INS_GPS_NAV<
+                INS_GPS_Back_Propagate<
+                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+          case Options::INS_GPS_SYNC_REALTIME:
+            return new INS_GPS_NAV<
+                INS_GPS_RealTime<
+                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+          default:
+            return new INS_GPS_NAV<
+                  INS_GPS_NAVData<INS_GPS> >(calibration);
+        }
+        break;
+      case INS_GPS_Debug_Property::DEBUG_KF_P:
+      case INS_GPS_Debug_Property::DEBUG_KF_FULL:
+        switch(options.ins_gps_sync_strategy){
+          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
+                INS_GPS_Back_Propagate<
+                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
+          case Options::INS_GPS_SYNC_REALTIME:
+            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
+                INS_GPS_RealTime<
+                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
+          default:
+            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
+                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+        }
+        break;
+      case INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL:
+        return new INS_GPS_NAV<INS_GPS_NAVData<
+            INS_GPS_Debug_PureInertial<INS_GPS> > >(calibration);
+        break;
     }
   }
 };
