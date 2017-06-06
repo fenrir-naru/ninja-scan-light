@@ -35,6 +35,16 @@ class UBX
     @io = io
     @buf = []
   end
+  def UBX.checksum(packet, range = 2..-3)
+    ck_a, ck_b = [0, 0]
+    packet[range].each{|b|
+      ck_a += b
+      ck_b += ck_a
+    }
+    ck_a &= 0xFF
+    ck_b &= 0xFF
+    [ck_a, ck_b]
+  end
   def read_packet
     while !@io.eof?
       if @buf.size < 8 then
@@ -56,14 +66,7 @@ class UBX
         return nil if @buf.size < len + 8
       end
       
-      ck_a, ck_b = [0, 0]
-      @buf[2..(len + 5)].each{|b|
-        ck_a += b
-        ck_b += ck_a
-      }
-      ck_a &= 0xFF
-      ck_b &= 0xFF
-      
+      ck_a, ck_b = UBX::checksum(@buf, 2..(len + 5))
       if (@buf[len + 6] != ck_a) || (@buf[len + 7] != ck_b) then
         @buf = @buf[2..-1]
         next
