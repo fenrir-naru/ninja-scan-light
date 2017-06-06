@@ -137,6 +137,7 @@
 #include <exception>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 #include <cstring>
 #include <cctype>
@@ -1592,6 +1593,7 @@ class StreamProcessor
       GPS_Ephemeris ephemeris_buf[32];
       
       G_Packet_Raw packet_raw_latest;
+      typedef G_Packet_Raw::raw_data_t raw_data_t;
 
       ostream *out_raw_pvt;
 
@@ -1740,6 +1742,43 @@ class StreamProcessor
         return (space_node_t::Ionospheric_UTC_Parameters)raw;
       }
 
+      void check_subframe(const G_Observer_t::subframe_t &subframe){
+        if((subframe.subframe_no <= 3) && (subframe.sv_number <= 32)){
+          GPS_Ephemeris &eph(ephemeris_buf[subframe.sv_number - 1]);
+          switch(subframe.subframe_no){
+            case 1: subframe.fetch_as_subframe1(eph); eph.how = subframe.how(); break;
+            case 2: subframe.fetch_as_subframe2(eph); break;
+            case 3: subframe.fetch_as_subframe3(eph); break;
+          }
+          if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
+              && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
+              && (week_number >= 0)){
+            eph.WN |= (week_number & 0xFC00); // Original WN is truncated to 10 bits.
+            space_node.satellite(eph.svid).register_ephemeris(eph);
+          }
+        }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
+          space_node_t::Ionospheric_UTC_Parameters iono_utc(
+              convert_iono_utc(subframe));
+          /*{ // TODO taking account for truncation
+            iono_utc.WN_t;
+            iono_utc.WN_LSF;
+          }*/
+          space_node.update_iono_utc(iono_utc);
+        }
+      }
+
+      void check_subframeX(G_Observer_t::subframe_t &subframe){
+        // convert data into old structure
+        for(int i(0); i < sizeof(subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
+          *(G_Observer_t::u32_t *)(&subframe.buffer[i]) >>= 6; // remove parity
+        }
+        subframe.subframe_no = subframe.bits2u8_align(49, 3);
+        if((subframe.subframe_no == 4) || (subframe.subframe_no == 5)){
+          subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
+        }
+        check_subframe(subframe);
+      }
+
       void check_ephemeris(const G_Observer_t &observer){
         GPS_Ephemeris eph;
         observer.fetch_ephemeris(eph);
@@ -1751,8 +1790,8 @@ class StreamProcessor
 
       /**
        * Extract the following data.
-       * {class, id} = {0x02, 0x10} : raw measurement (pseudorange, carrier, doppler)
-       * {class, id} = {0x02, 0x11} : subframe
+       * {class, id} = {0x02, 0x10 / 0x15} : raw measurement (pseudorange, carrier, doppler)
+       * {class, id} = {0x02, 0x11 / 0x13} : subframe
        * {class, id} = {0x02, 0x31} : ephemeris
        */
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
@@ -1761,7 +1800,6 @@ class StreamProcessor
             const unsigned int num_of_sv(observer[6 + 6]);
             if(num_of_sv == 0){return;}
 
-            typedef G_Packet_Raw::raw_data_t raw_data_t;
             raw_data_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
             float_sylph_t delta_t(current - packet_raw_latest.raw_data.gpstime);
@@ -1805,32 +1843,183 @@ class StreamProcessor
           }
           case 0x11: { // RXM-SFRB
             G_Observer_t::subframe_t subframe(observer.fetch_subframe());
-            if((subframe.subframe_no <= 3) && (subframe.sv_number <= 32)){
-              GPS_Ephemeris &eph(ephemeris_buf[subframe.sv_number - 1]);
-              switch(subframe.subframe_no){
-                case 1: subframe.fetch_as_subframe1(eph); eph.how = subframe.how(); break;
-                case 2: subframe.fetch_as_subframe2(eph); break;
-                case 3: subframe.fetch_as_subframe3(eph); break;
-              }
-              if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
-                  && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
-                  && (week_number >= 0)){
-                eph.WN |= (week_number & 0xFC00); // Original WN is truncated to 10 bits.
-                space_node.satellite(eph.svid).register_ephemeris(eph);
-              }
-            }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-              space_node_t::Ionospheric_UTC_Parameters iono_utc(
-                  convert_iono_utc(subframe));
-              /*{ // TODO taking account for truncation
-                iono_utc.WN_t;
-                iono_utc.WN_LSF;
-              }*/
-              space_node.update_iono_utc(iono_utc);
+            check_subframe(subframe);
+            return;
+          }
+          case 0x13: { // RXM-SFRBX
+            if((G_Observer_t::u8_t)observer[6 + 0] != 0){return;} // gnssID, GPS?
+            G_Observer_t::subframe_t subframe;
+            if((subframe.sv_number = (G_Observer_t::u8_t)observer[6 + 1]) > 32){return;} // svID
+            if((G_Observer_t::u8_t)observer[6 + 4] != 10){return;} // numWords
+            observer.inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 8);
+            check_subframeX(subframe);
+            return;
+          }
+          case 0x15: { // RXM-RAWX
+            const unsigned int num_of_measurement(observer[6 + 11]);
+            if(num_of_measurement == 0){return;}
+
+            {
+              G_Observer_t::v8_t buf[10];
+              observer.inspect(buf, sizeof(buf), 6);
+              raw_data_t::gps_time_t current(
+                  le_char2_2_num<G_Observer_t::u16_t>(*(buf + 8)), le_char8_2_num<double>(*buf));
+              packet_raw_latest.raw_data.gpstime = current;
+              packet_raw_latest.itow = current.seconds;
             }
+
+            typedef raw_data_t::measurement_t dst_t;
+            dst_t &dst(packet_raw_latest.raw_data.measurement);
+            dst.clear();
+
+            typedef dst_t::mapped_type::value_type v_t;
+            for(int i(0); i < num_of_measurement; i++){
+              if(observer[6 + 36 + (32 * i)] != 0){continue;} // gnssID (GPS:0)
+              int prn(observer[6 + 37 + (32 * i)]); // svID
+
+              G_Observer_t::v8_t buf[24];
+              observer.inspect(buf, sizeof(buf), 6 + 16 + (32 * i));
+
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(prn, le_char8_2_num<double>(*buf)));
+              dst[raw_data_t::L1_CARRIER_PHASE].push_back(v_t(prn, le_char8_2_num<double>(*(buf + 8))));
+              float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
+              dst[raw_data_t::L1_DOPPLER].push_back(v_t(prn, doppler));
+
+              // calculate range rate derived from doppler
+              dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
+                  prn, -doppler * space_node_t::L1_WaveLength()));
+            }
+
+            outer._latest_packet = &packet_raw_latest;
             return;
           }
           case 0x31: { // RXM-EPH
             check_ephemeris(observer);
+            return;
+          }
+          default: return;
+        }
+      }
+
+      static float_sylph_t le_char8_shift32(const char buf[8]) {
+        float_sylph_t v(le_char4_2_num<unsigned int>(buf[0]));
+        (v /= (1 << 16)) /= (1 << 16);
+        return v + le_char4_2_num<unsigned int>(buf[4]);
+      }
+
+      void check_trk(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        switch(packet_type.mid){
+          case 0x0A: { // TRK-TRKD5
+            if(week_number < 0){return;}
+            int type(observer[6]);
+            int offset, ranges, length_per_range;
+            switch(type){
+              case 6: { // currently, type(6) is only supported.
+                offset = 86; length_per_range = 64;
+                ranges = (G_Observer_t::u8_t)observer[7];
+                int packet_size(observer.current_packet_size());
+
+                if(packet_size != (offset + 2)
+                    + (length_per_range * ranges)
+                    + (20 * (G_Observer_t::u8_t)observer[8])){
+                  return; // packet size error
+                }
+                break;
+              }
+              default: return;
+            }
+
+            if(ranges == 0){return;} // no measurement
+
+            typedef raw_data_t::measurement_t dst_t;
+            dst_t &dst(packet_raw_latest.raw_data.measurement);
+            dst.clear();
+
+            typedef dst_t::mapped_type::value_type v_t;
+
+            float_sylph_t sum_time_of_transmission(0);
+            int ranges_valid(0);
+
+            for(int i(ranges); i > 0; --i, offset += length_per_range){
+              int qi((G_Observer_t::u8_t)observer[offset + 41] & 0x07); // quality indicator
+              if((qi < 4) || (qi > 7)){continue;}
+
+              int prn;
+              if(type == 6){
+                //int freq((G_Observer_t::u8_t)observer[offset + 59] - 7);
+                prn = (G_Observer_t::u8_t)observer[offset + 57];
+                switch((G_Observer_t::u8_t)observer[offset + 56]){
+                  case 5: // QZSS(5)
+                    prn += 192;
+                    break;
+                  case 0: case 1: case 2: case 3: case 6:
+                    // GPS(0), SBAS(1), GALILEO(2), BEIDO(3), GLONASS(6)
+                    break;
+                  default:
+                    continue;
+                }
+              }else{
+                prn = (G_Observer_t::u8_t)observer[offset + 34];
+              }
+              if(prn > 32){continue;} // GPS only
+
+              // check phase lock
+              unsigned int flag((G_Observer_t::u8_t)observer[offset + 54]);
+              if((flag & 0x08) == 0){continue;}
+
+              char buf[20];
+              observer.inspect(buf, 20, offset);
+
+              float_sylph_t time_of_transmission(1E-3 * le_char8_shift32(&buf[0]));
+              dst[raw_data_t::MEASUREMENT_ITEMS_PREDEFINED].push_back(v_t(prn, time_of_transmission));
+              sum_time_of_transmission += time_of_transmission;
+              ++ranges_valid;
+
+              if(qi > 6){
+                float_sylph_t carrier(le_char8_shift32(&buf[8]));
+                if(flag & 0x01){carrier += 0.5;}
+                dst[raw_data_t::L1_CARRIER_PHASE].push_back(v_t(prn, -carrier));
+              }
+
+              float_sylph_t doppler(
+                  (float_sylph_t)le_char4_2_num<G_Observer_t::s32_t>(*(buf + 16)) / (1 << 12));
+              dst[raw_data_t::L1_DOPPLER].push_back(v_t(prn, doppler));
+
+              // calculate range rate derived from doppler
+              dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
+                  prn, -doppler * space_node_t::L1_WaveLength()));
+            }
+
+            if(ranges_valid == 0){return;}
+
+            float_sylph_t est_time_of_reception(
+                10E-3 * (int)(((sum_time_of_transmission / ranges_valid) + 85E-3) / 10E-3));
+                // assume 10 ms alignment, 85E-3 = (approx) (20200 + a)(km) / 300000(km/s)
+
+            packet_raw_latest.raw_data.gpstime.week = week_number;
+            packet_raw_latest.raw_data.gpstime.seconds = est_time_of_reception;
+            if(packet_raw_latest.raw_data.gpstime.seconds >= raw_data_t::gps_time_t::seconds_week){
+              ++(packet_raw_latest.raw_data.gpstime.week);
+              packet_raw_latest.raw_data.gpstime.seconds -= raw_data_t::gps_time_t::seconds_week;
+            }
+            packet_raw_latest.itow = packet_raw_latest.raw_data.gpstime.seconds;
+
+            for(dst_t::mapped_type::const_iterator it(dst[raw_data_t::MEASUREMENT_ITEMS_PREDEFINED].begin());
+                it != dst[raw_data_t::MEASUREMENT_ITEMS_PREDEFINED].end(); ++it){
+              float_sylph_t range(space_node_t::light_speed * (est_time_of_reception - it->second));
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(it->first, range));
+            }
+
+            outer._latest_packet = &packet_raw_latest;
+            return;
+          }
+          case 0x0F: { // TRK-SFRBX
+            if((G_Observer_t::u8_t)observer[6 + 1] != 0){return;} // gnssID, GPS?
+            G_Observer_t::subframe_t subframe;
+            if((subframe.sv_number = (G_Observer_t::u8_t)observer[6 + 2]) > 32){return;} // svID
+            if(observer.current_packet_size() != 61){return;}
+            observer.inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 13);
+            check_subframeX(subframe);
             return;
           }
           default: return;
@@ -1844,6 +2033,7 @@ class StreamProcessor
         switch(packet_type.mclass){
           case 0x01: check_nav(observer, packet_type); break;
           case 0x02: check_rxm(observer, packet_type); break;
+          case 0x03: check_trk(observer, packet_type); break;
           case 0x0B: {
             if(packet_type.mid == 0x31){
               check_ephemeris(observer);
@@ -2111,7 +2301,7 @@ class StreamProcessor
     }
 };
 
-const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
+const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 128;
 
 typedef vector<StreamProcessor> processors_t;
 processors_t processors;
