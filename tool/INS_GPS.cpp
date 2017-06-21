@@ -360,7 +360,14 @@ struct A_Packet;
 struct G_Packet;
 struct M_Packet;
 
-class NAV : public NAVData<float_sylph_t> {
+struct Updatable {
+  virtual ~Updatable() {}
+  virtual void update(const A_Packet &){}
+  virtual void update(const G_Packet &){}
+  virtual void update(const M_Packet &){}
+} updatable_blackhole;
+
+class NAV : public NAVData<float_sylph_t>, public Updatable {
   public:
     typedef std::vector<const NAVData<float_sylph_t> *> updated_items_t;
     virtual ~NAV(){}
@@ -370,16 +377,6 @@ class NAV : public NAVData<float_sylph_t> {
     }
     virtual void inspect(std::ostream &out) const {}
     virtual float_sylph_t &operator[](const unsigned &index) = 0;
-    
-    virtual NAV &update(const A_Packet &){
-      return *this;
-    }
-    virtual NAV &update(const G_Packet &){
-      return *this;
-    }
-    virtual NAV &update(const M_Packet &){
-      return *this;
-    }
 
     template <class Container>
     static typename Container::const_iterator nearest(
@@ -464,13 +461,57 @@ class NAV : public NAVData<float_sylph_t> {
     }
 };
 
+template <class BaseNAV>
+struct NAV_Factory {
+  typedef BaseNAV self_t;
+
+  struct NAVDisplay : public BaseNAV {
+    NAVDisplay() : BaseNAV() {}
+    void label(std::ostream &out = std::cout) const {
+      if(options.out_is_N_packet){return;}
+      BaseNAV::label(options.out());
+      options.out() << std::endl;
+    }
+    void updated() const {
+      const NAV::updated_items_t &items(BaseNAV::updated_items());
+      if(items.empty()){return;}
+
+      for(NAV::updated_items_t::const_iterator it(items.begin());
+          it != items.end(); ++it){
+        if(options.out_is_N_packet){
+          char buf[SYLPHIDE_PAGE_SIZE];
+          (*it)->encode_N0(buf);
+          options.out().write(buf, sizeof(buf));
+          return;
+        }else{
+          options.out() << (**it) << std::endl;
+        }
+      }
+
+      options.out_debug() << BaseNAV::time_stamp() << ',';
+      BaseNAV::inspect(options.out_debug());
+      options.out_debug() << std::endl;
+    }
+#define update_func(type) \
+virtual void update(const type &packet){ \
+  BaseNAV::update(packet); \
+  updated(); \
+}
+    update_func(A_Packet);
+    update_func(G_Packet);
+    update_func(M_Packet);
+#undef update_func
+  };
+
+  typedef NAVDisplay disp_t;
+};
+
 /**
  * Base class of log data, which has time stamp.
  */
 struct Packet{
   virtual ~Packet() {}
-  virtual Packet *clone() const = 0;
-  virtual NAV &apply(NAV &nav) const = 0;
+  virtual void apply(NAV &nav) const = 0;
 
   float_sylph_t itow;
 
@@ -491,11 +532,8 @@ struct Packet{
  * Inertial and temperature sensor data (ADC raw value)
  */
 struct A_Packet : public Packet {
-  Packet *clone() const {
-    return new A_Packet(*this);
-  }
-  NAV &apply(NAV &nav) const {
-    return nav.update(*this);
+  void apply(NAV &nav) const {
+    nav.update(*this);
   }
   Vector3<float_sylph_t> accel; ///< Acceleration
   Vector3<float_sylph_t> omega; ///< Angular speed
@@ -505,11 +543,8 @@ struct A_Packet : public Packet {
  * GPS data
  */
 struct G_Packet : public Packet {
-  Packet *clone() const {
-    return new G_Packet(*this);
-  }
-  NAV &apply(NAV &nav) const {
-    return nav.update(*this);
+  void apply(NAV &nav) const {
+    nav.update(*this);
   }
 
   GPS_Solution<float_sylph_t> solution;
@@ -526,11 +561,8 @@ struct G_Packet : public Packet {
  * Magnetic sensor data
  */
 struct M_Packet : public Packet {
-  Packet *clone() const {
-    return new M_Packet(*this);
-  }
-  NAV &apply(NAV &nav) const {
-    return nav.update(*this);
+  void apply(NAV &nav) const {
+    nav.update(*this);
   }
 
   Vector3<float_sylph_t> mag;
@@ -561,13 +593,10 @@ class INS_GPS_NAV : public NAV {
     INS_GPS *ins_gps;
     Helper helper;
 
-    template <class Calibration>
-    void setup_filter(const Calibration &calibration, void *){}
+    void setup_filter(void *){}
 
-    template <class Calibration, class BaseINS, template <class> class Filter>
-    void setup_filter(
-        const Calibration &calibration,
-        Filtered_INS2<BaseINS, Filter> *fins) {
+    template <class BaseINS, template <class> class Filter>
+    void setup_filter(Filtered_INS2<BaseINS, Filter> *) {
       /**
        * Initialization of matrix P, system covariance matrix, of Kalman filter.
        * orthogonal elements are
@@ -600,30 +629,39 @@ class INS_GPS_NAV : public NAV {
        *  6   : gravity variance [m/s^2]^2, normally set small value, such as 1E-6
        */
       {
-        const Vector3<float_sylph_t>
-            accel(calibration.sigma_accel()),
-            gyro(calibration.sigma_gyro());
-
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
         
-        Q(0, 0) = pow(accel.getX(), 2);
-        Q(1, 1) = pow(accel.getY(), 2);
-        Q(2, 2) = pow(accel.getZ(), 2);
-        Q(3, 3) = pow(gyro.getX(), 2);
-        Q(4, 4) = pow(gyro.getY(), 2);
-        Q(5, 5) = pow(gyro.getZ(), 2);
+        Q(0, 0) = Q(1, 1) = Q(2, 2) = 25E-4;
+        Q(3, 3) = Q(4, 4) = Q(5, 5) = 25E-6;
         Q(6, 6) = 1E-6; //1E-14
         
         ins_gps->getFilter().setQ(Q);
       }
     }
 
-    template <class Calibration, class BaseFINS>
     void setup_filter(
-        const Calibration &calibration,
-        Filtered_INS_BiasEstimated<BaseFINS> *fins) {
+        const Vector3<float_sylph_t> &accel_sigma,
+        const Vector3<float_sylph_t> &gyro_sigma,
+        void *) {}
 
-      setup_filter(calibration, (BaseFINS *)fins);
+    template <class BaseINS, template <class> class Filter>
+    void setup_filter(
+        const Vector3<float_sylph_t> &accel_sigma,
+        const Vector3<float_sylph_t> &gyro_sigma,
+        Filtered_INS2<BaseINS, Filter> *) {
+
+      Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+      for(int i(0), j(3); i < 3; i++, j++){
+        Q(i, i) = pow(accel_sigma[i], 2);
+        Q(j, j) = pow(gyro_sigma[i], 2);
+      }
+      ins_gps->getFilter().setQ(Q);
+    }
+
+    template <class BaseFINS>
+    void setup_filter(Filtered_INS_BiasEstimated<BaseFINS> *) {
+
+      setup_filter((BaseFINS *)ins_gps);
 
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
@@ -647,33 +685,38 @@ class INS_GPS_NAV : public NAV {
       ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
     }
 
-    template <class Calibration, class Base_INS_GPS>
-    void setup_filter(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
-      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
+    template <class Base_INS_GPS>
+    void setup_filter(INS_GPS_Back_Propagate<Base_INS_GPS> *){
+      setup_filter((Base_INS_GPS *)ins_gps);
       ins_gps->setup_back_propagation(options.back_propagate_property);
     }
 
-    template <class Calibration, class Base_INS_GPS>
-    void setup_filter(const Calibration &calibration, INS_GPS_RealTime<Base_INS_GPS> *ins_gps){
-      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
+    template <class Base_INS_GPS>
+    void setup_filter(INS_GPS_RealTime<Base_INS_GPS> *){
+      setup_filter((Base_INS_GPS *)ins_gps);
       ins_gps->setup_realtime(options.realttime_property);
     }
 
-    template <class Calibration, class Base_INS_GPS>
-    void setup_filter(const Calibration &calibration, INS_GPS_Debug<Base_INS_GPS> *ins_gps){
-      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
+    template <class Base_INS_GPS>
+    void setup_filter(INS_GPS_Debug<Base_INS_GPS> *){
+      setup_filter((Base_INS_GPS *)ins_gps);
       ins_gps->setup_debug(options.debug_property);
     }
 
   public:
-    template <class Calibration>
-    INS_GPS_NAV(const Calibration &calibration)
+    INS_GPS_NAV()
         : NAV(),
         ins_gps(new INS_GPS()), helper(*this) {
-      setup_filter(calibration, ins_gps);
+      setup_filter(ins_gps);
     }
     virtual ~INS_GPS_NAV() {
       delete ins_gps;
+    }
+
+    void setup_filter(
+        const Vector3<float_sylph_t> &accel_sigma,
+        const Vector3<float_sylph_t> &gyro_sigma){
+      setup_filter(accel_sigma, gyro_sigma, ins_gps);
     }
 
     void inspect(std::ostream &out, void *) const {}
@@ -711,7 +754,7 @@ class INS_GPS_NAV : public NAV {
       return false;
     }
     template <class BaseINS, template <class> class Filter>
-    bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *fins){
+    bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *){
       const char *value;
 
       while(true){
@@ -844,63 +887,62 @@ float_sylph_t fname() const {return ins_gps->fname();}
       return helper.updated_items();
     }
 
-    NAV &update(const A_Packet &packet){
+    void update(const A_Packet &packet){
       helper.before_any_update();
       helper.time_update(packet);
-      return *this;
     }
-    NAV &update(const G_Packet &packet){
+    void update(const G_Packet &packet){
       helper.before_any_update();
       helper.measurement_update(packet);
-      return *this;
     }
-    NAV &update(const M_Packet &packet){
+    void update(const M_Packet &packet){
       helper.before_any_update();
       helper.compass(packet);
-      return *this;
     }
 };
 
 template <class INS_GPS>
-struct INS_GPS_NAV_Factory {
+struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
+  typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
+  typedef INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS> > data_t;
+
+  typedef INS_GPS_NAV_Factory<INS_GPS_Back_Propagate<INS_GPS> > bp_t;
+  typedef INS_GPS_NAV_Factory<INS_GPS_RealTime<INS_GPS> > rt_t;
+
+  typedef INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<INS_GPS> > debug_cov_t;
+  typedef INS_GPS_NAV_Factory<INS_GPS_Debug_PureInertial<INS_GPS> > debug_ins_t;
+
+  template <class Calibration>
+  static NAV *generate(const Calibration &calibration){
+    typename nav_t::disp_t *res(new typename nav_t::disp_t());
+    res->setup_filter(calibration.sigma_accel(), calibration.sigma_gyro());
+    return res;
+  }
+
   template <class Calibration>
   static NAV *get_nav(const Calibration &calibration){
     switch(options.debug_property.debug_target){
       case INS_GPS_Debug_Property::DEBUG_NONE:
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<
-                INS_GPS_Back_Propagate<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+            return data_t::bp_t::generate(calibration);
           case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<
-                INS_GPS_RealTime<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+            return data_t::rt_t::generate(calibration);
           default:
-            return new INS_GPS_NAV<
-                  INS_GPS_NAVData<INS_GPS> >(calibration);
+            return data_t::generate(calibration);
         }
-        break;
       case INS_GPS_Debug_Property::DEBUG_KF_P:
       case INS_GPS_Debug_Property::DEBUG_KF_FULL:
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
-                INS_GPS_Back_Propagate<
-                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
+            return data_t::bp_t::debug_cov_t::generate(calibration);
           case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
-                INS_GPS_RealTime<
-                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
+            return data_t::rt_t::debug_cov_t::generate(calibration);
           default:
-            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+            return data_t::debug_cov_t::generate(calibration);
         }
-        break;
       case INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL:
-        return new INS_GPS_NAV<INS_GPS_NAVData<
-            INS_GPS_Debug_PureInertial<INS_GPS> > >(calibration);
-        break;
+        return debug_ins_t::data_t::generate(calibration);
     }
   }
 };
@@ -1225,7 +1267,7 @@ class StreamProcessor
     static const unsigned int buffer_size;
 
   protected:
-    const Packet *_latest_packet;
+    Updatable *updatable;
 
     typedef AbstractSylphideProcessor<float_sylph_t> super_t;
     typedef A_Packet_Observer<float_sylph_t> A_Observer_t;
@@ -1292,7 +1334,7 @@ class StreamProcessor
         packet_latest.accel = calibration.raw2accel(ch);
         packet_latest.omega = calibration.raw2omega(ch);
 
-        outer._latest_packet = &packet_latest;
+        outer.updatable->update(packet_latest);
       }
     } a_handler;
 
@@ -1305,8 +1347,19 @@ class StreamProcessor
       Vector3<float_sylph_t> lever_arm;
       G_Packet packet_latest;
       int itow_ms_0x0102, itow_ms_0x0112;
-      unsigned int gps_status;
       int week_number;
+      struct status_t {
+        unsigned int gps;
+        enum {
+          TIME_STAMP_INVALID,
+          TIME_STAMP_BEFORE_START,
+          TIME_STAMP_IN_RANGE,
+          TIME_STAMP_AFTER_END,
+        } time_stamp;
+        status_t()
+            : gps(G_Observer_t::status_t::NO_FIX),
+            time_stamp(TIME_STAMP_INVALID) {}
+      } status;
 
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
@@ -1314,7 +1367,7 @@ class StreamProcessor
           lever_arm(),
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
-          gps_status(status_t::NO_FIX), week_number(0) {
+          week_number(0), status() {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
@@ -1325,9 +1378,30 @@ class StreamProcessor
         packet_latest = another.packet_latest;
         itow_ms_0x0102 = another.itow_ms_0x0102;
         itow_ms_0x0112 = another.itow_ms_0x0112;
-        gps_status = another.gps_status;
+        status = another.status;
         week_number = another.week_number;
         return *this;
+      }
+
+      template <class GHandler_Packet>
+      void update(const GHandler_Packet &packet){
+        switch(status.time_stamp){
+          case status_t::TIME_STAMP_INVALID:
+          case status_t::TIME_STAMP_AFTER_END:
+            return;
+          case status_t::TIME_STAMP_BEFORE_START:
+            if(!options.is_time_after_start(packet.itow, week_number)){
+              return;
+            }
+            status.time_stamp = status_t::TIME_STAMP_IN_RANGE;
+          case status_t::TIME_STAMP_IN_RANGE:
+            if(!options.is_time_before_end(packet.itow, week_number)){
+              status.time_stamp = status_t::TIME_STAMP_AFTER_END;
+              return;
+            }
+            break;
+        }
+        outer.updatable->update(packet);
       }
 
       /**
@@ -1358,14 +1432,17 @@ class StreamProcessor
             break;
           }
           case 0x03: { // NAV-STATUS
-            G_Observer_t::status_t status(observer.fetch_status());
-            gps_status = status.fix_type;
+            G_Observer_t::status_t st(observer.fetch_status());
+            status.gps = st.fix_type;
             return;
           }
           case 0x06: { // NAV-SOL
             G_Observer_t::solution_t solution(observer.fetch_solution());
             if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
               week_number = solution.week;
+              if(status.time_stamp == status_t::TIME_STAMP_INVALID){
+                status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
+              }
             }
             return;
           }
@@ -1398,7 +1475,7 @@ class StreamProcessor
             packet_latest.solution.v_n = packet_latest.solution.v_e = packet_latest.solution.v_d = 0;
             packet_latest.solution.sigma_vel = 1;
           }
-          outer._latest_packet = &packet_latest;
+          update(packet_latest);
         }
       }
       /**
@@ -1478,75 +1555,59 @@ class StreamProcessor
         packet_latest.mag[1] = values.y[3];
         packet_latest.mag[2] = values.z[3];
 
-        outer._latest_packet = &packet_latest;
+        outer.updatable->update(packet_latest);
       }
     } m_handler;
 
-    void move_latest_packet(const StreamProcessor &another){
-      struct {
-        const Packet &external;
-        const Packet &internal;
-      } targets[] = {
-        {another.a_handler.packet_latest, a_handler.packet_latest},
-        {another.g_handler.packet_latest, g_handler.packet_latest},
-        {another.m_handler.packet_latest, m_handler.packet_latest},
-      };
-      for(int i(0); i < sizeof(targets) / sizeof(targets[0]); i++){
-        if(another._latest_packet == &targets[i].external){
-          _latest_packet = &targets[i].internal;
-          break;
-        }
-      }
-    }
-
   protected:
     int invoked;
-    istream *_in;
+    istream *in;
     
   public:
     StreamProcessor()
-        : super_t(), _latest_packet(NULL),
-        _in(NULL), invoked(0),
+        : super_t(), updatable(&updatable_blackhole),
+        in(NULL), invoked(0),
         a_handler(*this),
         g_handler(*this),
         m_handler(*this) {
 
     }
     StreamProcessor(const StreamProcessor &another)
-        : super_t(another), _latest_packet(NULL),
-        _in(another._in), invoked(another.invoked),
+        : super_t(another), updatable(another.updatable),
+        in(another.in), invoked(another.invoked),
         a_handler(*this),
         g_handler(*this),
         m_handler(*this) {
       a_handler = another.a_handler;
       g_handler = another.g_handler;
       m_handler = another.m_handler;
-      move_latest_packet(another);
     }
     ~StreamProcessor(){}
     
     StreamProcessor &operator=(const StreamProcessor &another){
       if(this != &another){
         super_t::operator=(another);
-        _in = another._in;
+        updatable = another.updatable;
+        in = another.in;
         invoked = another.invoked;
         a_handler = another.a_handler;
         g_handler = another.g_handler;
         m_handler = another.m_handler;
-        move_latest_packet(another);
       }
       return *this;
     }
 
-    const Packet *latest_packet() const {
-      return _latest_packet;
+    Updatable *&update_target() {
+      return updatable;
     }
 
     const StandardCalibration &calibration() const{
       return a_handler.calibration;
     }
 
-    void set_stream(istream *in){_in = in;}
+    istream *&input() {
+      return in;
+    }
 
     /**
      * Process stream in units of 1 page
@@ -1558,9 +1619,9 @@ class StreamProcessor
       char buffer[SYLPHIDE_PAGE_SIZE];
       
       int read_count;
-      _in->read(buffer, SYLPHIDE_PAGE_SIZE);
-      read_count = static_cast<int>(_in->gcount());
-      if(_in->fail() || (read_count == 0)){return false;}
+      in->read(buffer, SYLPHIDE_PAGE_SIZE);
+      read_count = static_cast<int>(in->gcount());
+      if(in->fail() || (read_count == 0)){return false;}
       invoked++;
     
 #if DEBUG
@@ -1581,8 +1642,6 @@ class StreamProcessor
         cerr << "--skipped-- : " << invoked << " page ; count = " << read_count << endl;
 #endif
       }
-      
-      _latest_packet = NULL;
 
       switch(buffer[0]){
         case 'A':
@@ -1594,14 +1653,8 @@ class StreamProcessor
           super_t::process_packet(
               buffer, read_count,
               g_handler, g_handler.previous_seek_next, g_handler);
-          if(_latest_packet){
-            // Time check
-            if(!options.is_time_before_end(_latest_packet->itow, g_handler.week_number)){
-              return false;
-            }
-            if(!options.is_time_after_start(_latest_packet->itow, g_handler.week_number)){
-              _latest_packet = NULL;
-            }
+          if(g_handler.status.time_stamp == GHandler::status_t::TIME_STAMP_AFTER_END){ // Time check
+            return false;
           }
           break;
         case 'M':
@@ -1995,70 +2048,53 @@ void loop(){
     ~NAV_Manager(){
       delete nav;
     }
-    void dump(){
-      const NAV::updated_items_t &updated(nav->updated_items());
-      if(updated.empty()){return;}
-
-      for(NAV::updated_items_t::const_iterator it(updated.begin());
-          it != updated.end(); ++it){
-        if(options.out_is_N_packet){
-          char buf[SYLPHIDE_PAGE_SIZE];
-          (*it)->encode_N0(buf);
-          options.out().write(buf, sizeof(buf));
-          return;
-        }else{
-          options.out() << (**it) << endl;
-        }
-      }
-
-      options.out_debug() << nav->time_stamp() << ',';
-      nav->inspect(options.out_debug());
-      options.out_debug() << endl;
-    }
   } nav_manager;
   
-  if(!options.out_is_N_packet){
-    nav_manager.nav->label(options.out());
-    options.out() << endl;
-  }
+  nav_manager.nav->label(options.out());
 
   // TODO multiple log stream will be support.
   StreamProcessor &proc(processors.front());
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
-    while(proc.process_1page()){
-      const Packet *latest(proc.latest_packet());
-      if(!latest){continue;}
-      latest->apply(*nav_manager.nav);
-      nav_manager.dump();
-    }
+    // Realtime mode supports only one stream.
+    proc.update_target() = nav_manager.nav;
+    while(proc.process_1page());
     return;
   }
 
-  typedef deque<const Packet *> packet_pool_t;
-  packet_pool_t packet_pool;
+  struct buffer_t : public Updatable {
+    typedef deque<const Packet *> packet_pool_t;
+    packet_pool_t packet_pool;
+    NAV &nav;
+    void sort_and_apply(int packets){
+      stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare);
+      while(packets-- > 0){
+        packet_pool_t::reference front(packet_pool.front());
+        front->apply(nav);
+        delete front;
+        packet_pool.pop_front();
+      }
+    }
+    void sort_and_apply2 () {
+      if(packet_pool.size() < 0x200){return;}
+      sort_and_apply(0x100);
+    }
+    buffer_t(NAV &_nav) : packet_pool(), nav(_nav) {}
+    ~buffer_t() {
+      sort_and_apply(packet_pool.size());
+    }
+#define update_func(type) \
+virtual void update(const type &packet){ \
+  packet_pool.push_back(new type(packet)); \
+  sort_and_apply2(); \
+}
+    update_func(A_Packet);
+    update_func(G_Packet);
+    update_func(M_Packet);
+#undef update_func
+  } buffer(*nav_manager.nav);
+  proc.update_target() = &buffer;
 
-  while(true){
-    bool alive(proc.process_1page());
-    int packets;
-    if(alive){
-      const Packet *latest(proc.latest_packet());
-      if(!latest){continue;}
-      packet_pool.push_back(latest->clone());
-      if(packet_pool.size() < 0x200){continue;}
-      packets = packet_pool.size() / 2;
-    }else{
-      packets = packet_pool.size();
-    }
-    stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare);
-    while(packets-- > 0){
-      packet_pool_t::reference front(packet_pool.front());
-      front->apply(*nav_manager.nav);
-      nav_manager.dump();
-      delete front;
-      packet_pool.pop_front();
-    }
-    if(!alive){return;}
-  }
+  while(proc.process_1page());
 }
 
 int main(int argc, char *argv[]){
@@ -2085,8 +2121,8 @@ int main(int argc, char *argv[]){
 
       cerr << "Log file(" << processors.size() << "): ";
       istream &in(options.spec2istream(argv[arg_index]));
-      stream_processor.set_stream(
-          options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in);
+      stream_processor.input()
+          = options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in;
 
       processors.push_back(stream_processor);
       cerr << stream_processor.calibration() << endl;
