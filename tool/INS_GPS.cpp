@@ -461,6 +461,51 @@ class NAV : public NAVData<float_sylph_t>, public Updatable {
     }
 };
 
+template <class BaseNAV>
+struct NAV_Factory {
+  typedef BaseNAV self_t;
+
+  struct NAVDisplay : public BaseNAV {
+    NAVDisplay() : BaseNAV() {}
+    void label(std::ostream &out = std::cout) const {
+      if(options.out_is_N_packet){return;}
+      BaseNAV::label(options.out());
+      options.out() << std::endl;
+    }
+    void updated() const {
+      const NAV::updated_items_t &items(BaseNAV::updated_items());
+      if(items.empty()){return;}
+
+      for(NAV::updated_items_t::const_iterator it(items.begin());
+          it != items.end(); ++it){
+        if(options.out_is_N_packet){
+          char buf[SYLPHIDE_PAGE_SIZE];
+          (*it)->encode_N0(buf);
+          options.out().write(buf, sizeof(buf));
+          return;
+        }else{
+          options.out() << (**it) << std::endl;
+        }
+      }
+
+      options.out_debug() << BaseNAV::time_stamp() << ',';
+      BaseNAV::inspect(options.out_debug());
+      options.out_debug() << std::endl;
+    }
+#define update_func(type) \
+virtual void update(const type &packet){ \
+  BaseNAV::update(packet); \
+  updated(); \
+}
+    update_func(A_Packet);
+    update_func(G_Packet);
+    update_func(M_Packet);
+#undef update_func
+  };
+
+  typedef NAVDisplay disp_t;
+};
+
 /**
  * Base class of log data, which has time stamp.
  */
@@ -857,7 +902,8 @@ float_sylph_t fname() const {return ins_gps->fname();}
 };
 
 template <class INS_GPS>
-struct INS_GPS_NAV_Factory {
+struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
+  typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
   typedef INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS> > data_t;
 
   typedef INS_GPS_NAV_Factory<INS_GPS_Back_Propagate<INS_GPS> > bp_t;
@@ -868,7 +914,7 @@ struct INS_GPS_NAV_Factory {
 
   template <class Calibration>
   static NAV *generate(const Calibration &calibration){
-    INS_GPS_NAV<INS_GPS> *res(new INS_GPS_NAV<INS_GPS>());
+    typename nav_t::disp_t *res(new typename nav_t::disp_t());
     res->setup_filter(calibration.sigma_accel(), calibration.sigma_gyro());
     return res;
   }
@@ -2002,53 +2048,15 @@ void loop(){
     ~NAV_Manager(){
       delete nav;
     }
-    void dump(){
-      const NAV::updated_items_t &updated(nav->updated_items());
-      if(updated.empty()){return;}
-
-      for(NAV::updated_items_t::const_iterator it(updated.begin());
-          it != updated.end(); ++it){
-        if(options.out_is_N_packet){
-          char buf[SYLPHIDE_PAGE_SIZE];
-          (*it)->encode_N0(buf);
-          options.out().write(buf, sizeof(buf));
-          return;
-        }else{
-          options.out() << (**it) << endl;
-        }
-      }
-
-      options.out_debug() << nav->time_stamp() << ',';
-      nav->inspect(options.out_debug());
-      options.out_debug() << endl;
-    }
   } nav_manager;
   
-  if(!options.out_is_N_packet){
-    nav_manager.nav->label(options.out());
-    options.out() << endl;
-  }
+  nav_manager.nav->label(options.out());
 
   // TODO multiple log stream will be support.
   StreamProcessor &proc(processors.front());
   if(options.ins_gps_sync_strategy == Options::INS_GPS_SYNC_REALTIME){
     // Realtime mode supports only one stream.
-
-    struct buffer_t : public Updatable {
-      NAV_Manager &manager;
-      buffer_t(NAV_Manager &mgr) : manager(mgr) {}
-#define update_func(type) \
-virtual void update(const type &packet){ \
-  manager.nav->update(packet); \
-  manager.dump(); \
-}
-      update_func(A_Packet);
-      update_func(G_Packet);
-      update_func(M_Packet);
-#undef update_func
-    } buffer(nav_manager);
-
-    proc.update_target() = &buffer;
+    proc.update_target() = nav_manager.nav;
     while(proc.process_1page());
     return;
   }
@@ -2056,13 +2064,12 @@ virtual void update(const type &packet){ \
   struct buffer_t : public Updatable {
     typedef deque<const Packet *> packet_pool_t;
     packet_pool_t packet_pool;
-    NAV_Manager &manager;
+    NAV &nav;
     void sort_and_apply(int packets){
       stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare);
       while(packets-- > 0){
         packet_pool_t::reference front(packet_pool.front());
-        front->apply(*manager.nav);
-        manager.dump();
+        front->apply(nav);
         delete front;
         packet_pool.pop_front();
       }
@@ -2071,7 +2078,7 @@ virtual void update(const type &packet){ \
       if(packet_pool.size() < 0x200){return;}
       sort_and_apply(0x100);
     }
-    buffer_t(NAV_Manager &mgr) : packet_pool(), manager(mgr) {}
+    buffer_t(NAV &_nav) : packet_pool(), nav(_nav) {}
     ~buffer_t() {
       sort_and_apply(packet_pool.size());
     }
@@ -2084,7 +2091,7 @@ virtual void update(const type &packet){ \
     update_func(G_Packet);
     update_func(M_Packet);
 #undef update_func
-  } buffer(nav_manager);
+  } buffer(*nav_manager.nav);
   proc.update_target() = &buffer;
 
   while(proc.process_1page());
