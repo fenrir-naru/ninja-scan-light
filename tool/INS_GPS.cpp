@@ -548,13 +548,10 @@ class INS_GPS_NAV : public NAV {
     INS_GPS *ins_gps;
     Helper helper;
 
-    template <class Calibration>
-    void setup_filter(const Calibration &calibration, void *){}
+    void setup_filter(void *){}
 
-    template <class Calibration, class BaseINS, template <class> class Filter>
-    void setup_filter(
-        const Calibration &calibration,
-        Filtered_INS2<BaseINS, Filter> *fins) {
+    template <class BaseINS, template <class> class Filter>
+    void setup_filter(Filtered_INS2<BaseINS, Filter> *) {
       /**
        * Initialization of matrix P, system covariance matrix, of Kalman filter.
        * orthogonal elements are
@@ -587,30 +584,39 @@ class INS_GPS_NAV : public NAV {
        *  6   : gravity variance [m/s^2]^2, normally set small value, such as 1E-6
        */
       {
-        const Vector3<float_sylph_t>
-            accel(calibration.sigma_accel()),
-            gyro(calibration.sigma_gyro());
-
         Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
         
-        Q(0, 0) = pow(accel.getX(), 2);
-        Q(1, 1) = pow(accel.getY(), 2);
-        Q(2, 2) = pow(accel.getZ(), 2);
-        Q(3, 3) = pow(gyro.getX(), 2);
-        Q(4, 4) = pow(gyro.getY(), 2);
-        Q(5, 5) = pow(gyro.getZ(), 2);
+        Q(0, 0) = Q(1, 1) = Q(2, 2) = 25E-4;
+        Q(3, 3) = Q(4, 4) = Q(5, 5) = 25E-6;
         Q(6, 6) = 1E-6; //1E-14
         
         ins_gps->getFilter().setQ(Q);
       }
     }
 
-    template <class Calibration, class BaseFINS>
     void setup_filter(
-        const Calibration &calibration,
-        Filtered_INS_BiasEstimated<BaseFINS> *fins) {
+        const Vector3<float_sylph_t> &accel_sigma,
+        const Vector3<float_sylph_t> &gyro_sigma,
+        void *) {}
 
-      setup_filter(calibration, (BaseFINS *)fins);
+    template <class BaseINS, template <class> class Filter>
+    void setup_filter(
+        const Vector3<float_sylph_t> &accel_sigma,
+        const Vector3<float_sylph_t> &gyro_sigma,
+        Filtered_INS2<BaseINS, Filter> *) {
+
+      Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+      for(int i(0), j(3); i < 3; i++, j++){
+        Q(i, i) = pow(accel_sigma[i], 2);
+        Q(j, j) = pow(gyro_sigma[i], 2);
+      }
+      ins_gps->getFilter().setQ(Q);
+    }
+
+    template <class BaseFINS>
+    void setup_filter(Filtered_INS_BiasEstimated<BaseFINS> *) {
+
+      setup_filter((BaseFINS *)ins_gps);
 
       {
         Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
@@ -634,33 +640,38 @@ class INS_GPS_NAV : public NAV {
       ins_gps->beta_gyro() *= 0.1; //mems_g.BETA;
     }
 
-    template <class Calibration, class Base_INS_GPS>
-    void setup_filter(const Calibration &calibration, INS_GPS_Back_Propagate<Base_INS_GPS> *ins_gps){
-      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
+    template <class Base_INS_GPS>
+    void setup_filter(INS_GPS_Back_Propagate<Base_INS_GPS> *){
+      setup_filter((Base_INS_GPS *)ins_gps);
       ins_gps->setup_back_propagation(options.back_propagate_property);
     }
 
-    template <class Calibration, class Base_INS_GPS>
-    void setup_filter(const Calibration &calibration, INS_GPS_RealTime<Base_INS_GPS> *ins_gps){
-      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
+    template <class Base_INS_GPS>
+    void setup_filter(INS_GPS_RealTime<Base_INS_GPS> *){
+      setup_filter((Base_INS_GPS *)ins_gps);
       ins_gps->setup_realtime(options.realttime_property);
     }
 
-    template <class Calibration, class Base_INS_GPS>
-    void setup_filter(const Calibration &calibration, INS_GPS_Debug<Base_INS_GPS> *ins_gps){
-      setup_filter(calibration, (Base_INS_GPS *)ins_gps);
+    template <class Base_INS_GPS>
+    void setup_filter(INS_GPS_Debug<Base_INS_GPS> *){
+      setup_filter((Base_INS_GPS *)ins_gps);
       ins_gps->setup_debug(options.debug_property);
     }
 
   public:
-    template <class Calibration>
-    INS_GPS_NAV(const Calibration &calibration)
+    INS_GPS_NAV()
         : NAV(),
         ins_gps(new INS_GPS()), helper(*this) {
-      setup_filter(calibration, ins_gps);
+      setup_filter(ins_gps);
     }
     virtual ~INS_GPS_NAV() {
       delete ins_gps;
+    }
+
+    void setup_filter(
+        const Vector3<float_sylph_t> &accel_sigma,
+        const Vector3<float_sylph_t> &gyro_sigma){
+      setup_filter(accel_sigma, gyro_sigma, ins_gps);
     }
 
     void inspect(std::ostream &out, void *) const {}
@@ -698,7 +709,7 @@ class INS_GPS_NAV : public NAV {
       return false;
     }
     template <class BaseINS, template <class> class Filter>
-    bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *fins){
+    bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *){
       const char *value;
 
       while(true){
@@ -847,44 +858,45 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
 template <class INS_GPS>
 struct INS_GPS_NAV_Factory {
+  typedef INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS> > data_t;
+
+  typedef INS_GPS_NAV_Factory<INS_GPS_Back_Propagate<INS_GPS> > bp_t;
+  typedef INS_GPS_NAV_Factory<INS_GPS_RealTime<INS_GPS> > rt_t;
+
+  typedef INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<INS_GPS> > debug_cov_t;
+  typedef INS_GPS_NAV_Factory<INS_GPS_Debug_PureInertial<INS_GPS> > debug_ins_t;
+
+  template <class Calibration>
+  static NAV *generate(const Calibration &calibration){
+    INS_GPS_NAV<INS_GPS> *res(new INS_GPS_NAV<INS_GPS>());
+    res->setup_filter(calibration.sigma_accel(), calibration.sigma_gyro());
+    return res;
+  }
+
   template <class Calibration>
   static NAV *get_nav(const Calibration &calibration){
     switch(options.debug_property.debug_target){
       case INS_GPS_Debug_Property::DEBUG_NONE:
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<
-                INS_GPS_Back_Propagate<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+            return data_t::bp_t::generate(calibration);
           case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<
-                INS_GPS_RealTime<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+            return data_t::rt_t::generate(calibration);
           default:
-            return new INS_GPS_NAV<
-                  INS_GPS_NAVData<INS_GPS> >(calibration);
+            return data_t::generate(calibration);
         }
-        break;
       case INS_GPS_Debug_Property::DEBUG_KF_P:
       case INS_GPS_Debug_Property::DEBUG_KF_FULL:
         switch(options.ins_gps_sync_strategy){
           case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
-                INS_GPS_Back_Propagate<
-                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
+            return data_t::bp_t::debug_cov_t::generate(calibration);
           case Options::INS_GPS_SYNC_REALTIME:
-            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
-                INS_GPS_RealTime<
-                  INS_GPS_NAVData<INS_GPS> > > >(calibration);
+            return data_t::rt_t::debug_cov_t::generate(calibration);
           default:
-            return new INS_GPS_NAV<INS_GPS_Debug_Covariance<
-                  INS_GPS_NAVData<INS_GPS> > >(calibration);
+            return data_t::debug_cov_t::generate(calibration);
         }
-        break;
       case INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL:
-        return new INS_GPS_NAV<INS_GPS_NAVData<
-            INS_GPS_Debug_PureInertial<INS_GPS> > >(calibration);
-        break;
+        return debug_ins_t::data_t::generate(calibration);
     }
   }
 };
