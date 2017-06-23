@@ -141,8 +141,8 @@ config = [:config, # The following is the default, please customize it!
   ],
   [:telemetry_truncate,
     [:a_page, U8, 20], # a_page telemetry is approximate 5 Hz
-    [:p_page, U8, 2], # a_page telemetry is approximate 1 Hz
-    [:m_page, U8, 2], # a_page telemetry is approximate 1 Hz
+    [:p_page, U8, 2], # p_page telemetry is approximate 1 Hz
+    [:m_page, U8, 2], # m_page telemetry is approximate 1 Hz
     [:g_page,
       [:item, C_ARRAY::new(UBX_CFG, 4), # g_page telemetry selection, maximum 4 slots, currently 1 slot has been occupied.
         [0x01, 0x06, 5], # NAV-SOL: approximately 1 Hz]

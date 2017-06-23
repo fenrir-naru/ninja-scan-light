@@ -41,15 +41,6 @@
 #define pow2(x) ((x)*(x))
 #endif
 
-template<class T>
-struct INS_Extender {
-  typedef T type;
-  template<template<class> class Extended>
-  struct extend {
-    typedef INS_Extender<Extended<T> > eval;
-  };
-};
-
 template <class T>
 struct INS_Property {
   static const unsigned STATE_VALUES = 12; ///< 状態量の数
@@ -109,18 +100,18 @@ class INS {
      * 緯度 @f$ \phi @f$を @f$ \Tilde{q}_{e}^{n} @f$から更新します。
      * 内部的。
      * 
-     * @return (float_t) 更新された緯度
+     * @return (float_t &) 更新された緯度
      */
-    inline float_t update_phi(){
+    inline float_t &update_phi(){
       return phi = std::asin(float_t(1) - (pow2(q_e2n.get(0)) + pow2(q_e2n.get(3))) * 2);
     }
     /**
      * 経度 @f$ \lambda @f$を @f$ \Tilde{q}_{e}^{n} @f$から更新します。
      * 内部的。
      * 
-     * @return (float_t) 更新された経度
+     * @return (float_t &) 更新された経度
      */
-    inline float_t update_lambda(){
+    inline float_t &update_lambda(){
       return lambda = std::atan2(
           (q_e2n.get(0) * q_e2n.get(1) - q_e2n.get(2) * q_e2n.get(3)),
           (-q_e2n.get(0) * q_e2n.get(2) - q_e2n.get(1) * q_e2n.get(3)));
@@ -129,9 +120,9 @@ class INS {
      * アジムス角 @f$ \alpha @f$を @f$ \Tilde{q}_{e}^{n} @f$から更新します。
      * 内部的。
      * 
-     * @return (float_t) 更新されたアジムス角
+     * @return (float_t &) 更新されたアジムス角
      */
-    inline float_t update_alpha(){
+    inline float_t &update_alpha(){
       return alpha = std::atan2(
           (-q_e2n.get(0) * q_e2n.get(1) - q_e2n.get(2) * q_e2n.get(3)),
           (q_e2n.get(1) * q_e2n.get(3) - q_e2n.get(0) * q_e2n.get(2)));
@@ -142,9 +133,9 @@ class INS {
      * 
      * @param calpha cos(alpha)
      * @param salpha sin(alpha)
-     * @return (float_t) 更新された北方向速度
+     * @return (float_t &) 更新された北方向速度
      */
-    inline float_t update_v_N(const float_t &calpha, const float_t &salpha){
+    inline float_t &update_v_N(const float_t &calpha, const float_t &salpha){
       return v_N = v_2e_4n.get(0) * calpha - v_2e_4n.get(1) * salpha;
     }
     /**
@@ -153,18 +144,20 @@ class INS {
      * 
      * @param calpha cos(alpha)
      * @param salpha sin(alpha)
-     * @return (float_t) 更新された東方向速度
+     * @return (float_t &) 更新された東方向速度
      */
-    inline float_t update_v_E(const float_t &calpha, const float_t &salpha){
+    inline float_t &update_v_E(const float_t &calpha, const float_t &salpha){
       return v_E = v_2e_4n.get(0) * salpha + v_2e_4n.get(1) * calpha;
     }
     
     /**
      * 現在位置上での@f$ \vec{\omega}_{e/i}^{n} @f$を求めます。
      * 内部的。
+     *
+     * @return (vec3_t &)
      */
-    inline void update_omega_e2i_4n(){
-      omega_e2i_4n = (q_e2n.conj() * omega_e2i_4e * q_e2n).vector();
+    inline vec3_t &update_omega_e2i_4n(){
+      return omega_e2i_4n = (q_e2n.conj() * omega_e2i_4e * q_e2n).vector();
     }
     /**
      * 現在位置上での@f$ \vec{\omega}_{n/e}^{n} @f$を求めます。
@@ -172,20 +165,25 @@ class INS {
      *
      * @param calpha cos(alpha)
      * @param salpha sin(alpha)
+     *
+     * @return (vec3_t &)
      */
-    inline void update_omega_n2e_4n(const float_t &calpha, const float_t &salpha){
+    inline vec3_t &update_omega_n2e_4n(const float_t &calpha, const float_t &salpha){
       float_t omega_n2e_4g_0 = v_E / (Earth::R_normal(phi) + h);
       float_t omega_n2e_4g_1 = -v_N / (Earth::R_meridian(phi) + h);
       
       omega_n2e_4n[0] =  omega_n2e_4g_0 * calpha + omega_n2e_4g_1 * salpha;
       omega_n2e_4n[1] = -omega_n2e_4g_0 * salpha + omega_n2e_4g_1 * calpha;
+      return omega_n2e_4n;
     }
     /**
      * 現在位置上での@f$ \vec{\omega}_{n/e}^{n} @f$を求めます。
      * 内部的。
+     *
+     * @return (vec3_t &)
      */
-    inline void update_omega_n2e_4n(){
-      update_omega_n2e_4n(std::cos(alpha), std::sin(alpha));
+    inline vec3_t &update_omega_n2e_4n(){
+      return update_omega_n2e_4n(std::cos(alpha), std::sin(alpha));
     }
   protected:
     /**
@@ -193,7 +191,7 @@ class INS {
      * 
      * @param regularize 内部のクォータニオンを正規化(ノルムを1にする)かどうか
      */
-    inline void recalc(const bool regularize = true){
+    inline void recalc(const bool &regularize = true){
       //正規化
       if(regularize){
         q_e2n = q_e2n.regularize();
@@ -412,7 +410,7 @@ class INS {
       
       //速度の運動方程式
       vec3_t delta_v_2e_4n((q_n2b * accel * q_n2b.conj()).vector());
-      delta_v_2e_4n[2] += Earth::gravity(phi);
+      delta_v_2e_4n[2] += Earth::gravity(phi, h);
       delta_v_2e_4n -= (omega_e2i_4n * 2 + omega_n2e_4n) * v_2e_4n;
       /*T centripetal_f_scalar(beta() * pow2(Earth::Omega_Earth));
       vec3_t centripetal_f(
@@ -647,8 +645,10 @@ class INS {
      * @return (ostream) 出力ストリーム
      */
     friend std::ostream &operator<<(std::ostream &out, const INS<float_t> &ins){
-      for(unsigned i = 0; i < ins.state_values(); i++){
-        std::cout << (i == 0 ? "" : "\t") << (*const_cast<INS<float_t> *>(&ins))[i];
+      unsigned i_max(ins.state_values());
+      if(i_max > 0){out << ins[0];}
+      for(unsigned i(1); i < i_max; i++){
+        out << ',' << ins[i];
       }
       return out;  
     }

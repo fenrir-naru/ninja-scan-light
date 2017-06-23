@@ -62,7 +62,10 @@ class GPS_UBX < G_Packet_Converter
   def read_chunk
     res = @cache.clone
     while true
-      break unless (packet = @ubx.read_packet)
+      unless (packet = @ubx.read_packet)
+        @cache = {:itow => nil, :data => ""}
+        break
+      end
       next unless (packet = @filter.call(packet))
       
       data_new = packet.pack('C*')
@@ -75,15 +78,20 @@ class GPS_UBX < G_Packet_Converter
       if res[:itow] then
         if itow_new and (res[:itow] != itow_new) then
           @cache = {:itow => itow_new, :data => data_new}
-          res[:data] = G_Packet_Converter::g_packet(res[:data])
-          return res
+          break
         end
       else
         res[:itow] = itow_new  
       end
       res[:data] += data_new
     end
-    return nil
+    
+    unless res[:data].empty?
+      res[:data] = G_Packet_Converter::g_packet(res[:data])
+      return res
+    else
+      return nil
+    end
   end
 end
 

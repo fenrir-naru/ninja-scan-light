@@ -78,16 +78,21 @@ struct GlobalOptions {
   struct gps_time_t {
     FloatT sec; ///< GPS time
     int wn; ///< GPS week number
+    static const int WN_INVALID = -1;
     gps_time_t() : sec(0), wn(0) {}
     gps_time_t(const FloatT &_sec, const int &_wn)
         : sec(_sec), wn(_wn) {}
     template <class T1, class T2>
     bool is_before(const T1 &base_sec, const T2 &base_wn) const {
-      return (base_wn > wn) || ((base_wn == wn) && (base_sec >= sec));
+      return ((WN_INVALID >= wn) || (base_wn == wn))
+          ? (base_sec >= sec)
+          : (base_wn > wn);
     }
     template <class T1, class T2>
     bool is_after(const T1 &base_sec, const T2 &base_wn) const {
-      return (base_wn < wn) || ((base_wn == wn) && (base_sec <= sec));
+      return ((WN_INVALID >= wn) || (base_wn == wn))
+          ? (base_sec <= sec)
+          : (base_wn < wn);
     }
   };
   gps_time_t start_gpstime;  ///< Start GPS time
@@ -361,6 +366,7 @@ if(key_checked){ \
         << prefix ## _gpstime.sec << std::endl; \
   }else{ \
     prefix ## _gpstime.sec = atof(value); \
+    prefix ## _gpstime.wn = gps_time_t::WN_INVALID; \
     std::cerr.write(key, key_length) << ": " << prefix ## _gpstime.sec << std::endl; \
   } \
   return true; \
