@@ -283,12 +283,14 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
               case 0x20: { // NAV-TIMEGPS
                 char buf[2];
                 observer.inspect(buf, sizeof(buf), 6 + 10);
+                if((unsigned char)buf[1] & 0x02){ // valid week number
+                  char buf2[2];
+                  observer.inspect(buf2, sizeof(buf), 6 + 8);
+                  options.gps_utc.gps_time.wn = le_char2_2_num<unsigned short>(*buf2);
+                }
                 if(!((unsigned char)buf[1] & 0x04)){break;}// Invalid UTC
                 char leap_seconds(buf[0]);
-                observer.inspect(buf, sizeof(buf), 6 + 8);
-                unsigned short gps_week(le_char2_2_num<unsigned short>(*buf));
                 options.gps_utc.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
-                options.gps_utc.gps_time.wn = gps_week;
                 options.gps_utc.utc_time = gpstime_zero
                     + (7u * 24 * 60 * 60) * options.gps_utc.gps_time.wn
                     + options.gps_utc.gps_time.sec
