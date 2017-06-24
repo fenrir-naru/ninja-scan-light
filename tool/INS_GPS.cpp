@@ -594,14 +594,14 @@ struct G_Packet_Raw : public G_Packet {
 
   typedef raw_data_t::space_node_t space_node_t;
   typedef raw_data_t::solver_t solver_t;
-  solver_t::user_pvt_t pvt;
 
   void take_consistency() const {
     // Select most preferable ephemeris
     const_cast<space_node_t &>(raw_data.space_node).update_all_ephemeris(raw_data.gpstime);
   }
 
-  bool update_pvt(){
+  typedef solver_t::user_pvt_t pvt_t;
+  bool get_pvt(pvt_t &pvt) const {
     while(true){
       if(pvt.error_code == solver_t::user_pvt_t::ERROR_NO){
         float_sylph_t delta_t(std::abs(raw_data.gpstime - pvt.receiver_time));
@@ -626,11 +626,9 @@ struct G_Packet_Raw : public G_Packet {
     return pvt.error_code == solver_t::user_pvt_t::ERROR_NO;
   }
 
-  bool update_solution(){
-    if(!update_pvt()){
-      return false;
-    }
-    // TODO update solution
+  bool update_solution(pvt_t &pvt){
+    if(!get_pvt(pvt)){return false;}
+    // TODO calculation of estimated accuracy
     solution.v_n = pvt.user_velocity_enu.north();
     solution.v_e = pvt.user_velocity_enu.east();
     solution.v_d = -pvt.user_velocity_enu.up();
@@ -643,6 +641,19 @@ struct G_Packet_Raw : public G_Packet {
     return true;
   }
 
+  bool update_solution(){
+    pvt_t pvt;
+    return update_solution(pvt);
+  }
+
+  G_Packet_Raw(const space_node_t &_space_node)
+      : G_Packet(), raw_data(_space_node) {
+  }
+  ~G_Packet_Raw(){}
+};
+
+struct gps_pvt_t : public G_Packet_Raw::pvt_t {
+  gps_pvt_t() : G_Packet_Raw::pvt_t() {}
   static void label(std::ostream &out) {
     out << "week"
         << ',' << "itow"
@@ -660,28 +671,23 @@ struct G_Packet_Raw : public G_Packet {
         << ',' << "v_down";
   }
 
-  friend std::ostream &operator<<(std::ostream &out, const G_Packet_Raw &packet){
-    out << packet.raw_data.gpstime.week
-        << ',' << packet.raw_data.gpstime.seconds
-        << ',' << packet.pvt.receiver_error / space_node_t::light_speed
-        << ',' << rad2deg(packet.solution.longitude)
-        << ',' << rad2deg(packet.solution.latitude)
-        << ',' << packet.solution.height
-        << ',' << packet.pvt.gdop
-        << ',' << packet.pvt.pdop
-        << ',' << packet.pvt.hdop
-        << ',' << packet.pvt.vdop
-        << ',' << packet.pvt.tdop
-        << ',' << packet.solution.v_n
-        << ',' << packet.solution.v_e
-        << ',' << packet.solution.v_d;
+  friend std::ostream &operator<<(std::ostream &out, const gps_pvt_t &pvt){
+    out << pvt.receiver_time.week
+        << ',' << pvt.receiver_time.seconds
+        << ',' << pvt.receiver_error / G_Packet_Raw::space_node_t::light_speed
+        << ',' << rad2deg(pvt.user_position.llh.longitude())
+        << ',' << rad2deg(pvt.user_position.llh.latitude())
+        << ',' << pvt.user_position.llh.height()
+        << ',' << pvt.gdop
+        << ',' << pvt.pdop
+        << ',' << pvt.hdop
+        << ',' << pvt.vdop
+        << ',' << pvt.tdop
+        << ',' << pvt.user_velocity_enu.north()
+        << ',' << pvt.user_velocity_enu.east()
+        << ',' << -pvt.user_velocity_enu.up();
     return out;
   }
-
-  G_Packet_Raw(const space_node_t &_space_node)
-      : G_Packet(), raw_data(_space_node) {
-  }
-  ~G_Packet_Raw(){}
 };
 
 /**
@@ -1080,11 +1086,6 @@ float_sylph_t fname() const {return ins_gps->fname();}
     }
     void update(const G_Packet_Raw &packet){
       helper.before_any_update();
-      packet.take_consistency();
-      if(options.out_raw_pvt
-          && const_cast<G_Packet_Raw &>(packet).update_solution()){
-        (*(options.out_raw_pvt)) << packet << std::endl;
-      }
       helper.measurement_update(packet);
     }
     void update(const M_Packet &packet){
@@ -2403,6 +2404,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
+
+    gps_pvt_t gps_raw_pvt;
   public:
     void before_any_update(){
       if(status >= JUST_INITIALIZED){
@@ -2418,7 +2421,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         : status(UNINITIALIZED), nav(_nav),
         min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
         recent_a(max(min_a_packets_for_init, 0x100)),
-        recent_m(0x10){
+        recent_m(0x10),
+        gps_raw_pvt() {
     }
   
   protected:
@@ -2693,23 +2697,29 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         typename BaseFINS>
     void measurement_update(const G_Packet_Raw &g_packet,
         INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> *ins_gps){
+
+      g_packet.take_consistency();
+      if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
+        (*(options.out_raw_pvt)) << gps_raw_pvt << std::endl;
+      }
+
       if(status >= JUST_INITIALIZED){
         measurement_update_common(g_packet);
       }else if((recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
-          && const_cast<G_Packet_Raw &>(g_packet).update_pvt()){
+          && g_packet.get_pvt(gps_raw_pvt)){
 
         initialize_common(
             g_packet.itow,
-            g_packet.pvt.user_position.llh.latitude(),
-            g_packet.pvt.user_position.llh.longitude(),
-            g_packet.pvt.user_position.llh.height(),
-            g_packet.pvt.user_velocity_enu.north(),
-            g_packet.pvt.user_velocity_enu.east(),
-            -g_packet.pvt.user_velocity_enu.up());
+            gps_raw_pvt.user_position.llh.latitude(),
+            gps_raw_pvt.user_position.llh.longitude(),
+            gps_raw_pvt.user_position.llh.height(),
+            gps_raw_pvt.user_velocity_enu.north(),
+            gps_raw_pvt.user_velocity_enu.east(),
+            -gps_raw_pvt.user_velocity_enu.up());
 
-        ins_gps->clock_error(g_packet.raw_data.clock_index) = g_packet.pvt.receiver_error;
-        ins_gps->clock_error_rate(g_packet.raw_data.clock_index) = g_packet.pvt.receiver_error_rate;
+        ins_gps->clock_error(g_packet.raw_data.clock_index) = gps_raw_pvt.receiver_error;
+        ins_gps->clock_error_rate(g_packet.raw_data.clock_index) = gps_raw_pvt.receiver_error_rate;
         
         time_update_after_initialization(g_packet);
       }
@@ -2870,7 +2880,7 @@ int main(int argc, char *argv[]){
   options.out_debug() << setprecision(16);
 
   if(options.out_raw_pvt){
-    G_Packet_Raw::label(*options.out_raw_pvt);
+    gps_pvt_t::label(*options.out_raw_pvt);
     (*options.out_raw_pvt) << endl;
     options.out_raw_pvt->precision(12);
   }
