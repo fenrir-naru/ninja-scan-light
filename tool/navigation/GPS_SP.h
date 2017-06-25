@@ -168,7 +168,7 @@ class GPS_SinglePositioning {
         residual.residual += _space_node.tropo_correction(relative_pos, usr_pos.llh);
 
         // Setup weight
-        if(residual.residual > 30.0){
+        if(std::abs(residual.residual) > 30.0){
           // If residual is too big, exclude it by decreasing its weight.
           residual.weight = 1E-8;
         }else{
