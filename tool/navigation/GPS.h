@@ -801,6 +801,51 @@ class GPS_SpaceNode {
               
               return converted;
             }
+
+            raw_t &operator=(const Ephemeris &eph){
+#define CONVERT(TARGET, SF) \
+{TARGET = (s32_t)(SF * eph.TARGET);}
+#define POWER_2(n) \
+(((n) >= 0) \
+  ? (((float_t)1) / (1 << (n <= 0 ? 0 : n))) \
+  : ((float_t)(1 << (-(n) >= 30 ? 30 : -(n))) \
+    * (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
+              svid = eph.svid;
+
+              WN = eph.WN;
+              URA = eph.URA;
+              SV_health = eph.SV_health;
+              iodc = eph.iodc;
+              CONVERT(t_GD, POWER_2(-31));
+              t_oc = eph.t_oc;
+              CONVERT(a_f0, POWER_2(-55));
+              CONVERT(a_f1, POWER_2(-43));
+              CONVERT(a_f2, POWER_2(-31));
+
+              iode = eph.iode;
+              CONVERT(c_rs,       POWER_2(-5));
+              CONVERT(delta_n,    SC2RAD * POWER_2(-43));
+              CONVERT(m0,         SC2RAD * POWER_2(-31));
+              CONVERT(c_uc,       POWER_2(-29));
+              CONVERT(e,          POWER_2(-33));
+              CONVERT(c_us,       POWER_2(-29));
+              CONVERT(sqrt_A,     POWER_2(-19));
+              CONVERT(t_oe,       POWER_2(4));
+
+              CONVERT(c_ic,       POWER_2(-29));
+              CONVERT(Omega0,     SC2RAD * POWER_2(-31));
+              CONVERT(c_is,       POWER_2(-29));
+              CONVERT(i0,         SC2RAD * POWER_2(-31));
+              CONVERT(c_rc,       POWER_2(-5));
+              CONVERT(omega,      SC2RAD * POWER_2(-31));
+              CONVERT(dot_Omega0, SC2RAD * POWER_2(-43));
+              CONVERT(dot_i0,     SC2RAD * POWER_2(-43));
+#undef POWER_2
+#undef CONVERT
+              fit_interval_flag = (eph.fit_interval > 5 * 60 * 60);
+
+              return *this;
+            }
           };
         };
         
