@@ -1034,8 +1034,21 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           };
         };
       protected:
-        typedef std::vector<Ephemeris> eph_list_t;
-        eph_list_t eph_list; // ephemeris list in chronological order
+        struct eph_list_item_t : public Ephemeris {
+          unsigned int priority;
+          eph_list_item_t() : priority(0) {}
+          eph_list_item_t(const Ephemeris &eph)
+              : Ephemeris(eph), priority(0) {}
+          eph_list_item_t &operator=(const Ephemeris &eph){
+            Ephemeris::operator=(eph);
+            return *this;
+          }
+          bool operator==(const Ephemeris &eph){
+            return Ephemeris::is_equivalent(eph);
+          }
+        };
+        typedef std::vector<eph_list_item_t> eph_list_t;
+        eph_list_t eph_list; // ephemeris list in chronological and higher priority order
         typename eph_list_t::size_type eph_current_index;
 
         typename eph_list_t::iterator current_ephemeris_iterator() {
@@ -1061,24 +1074,44 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          */
         void register_ephemeris(const Ephemeris &eph){
           gps_time_t t_new(eph.WN, eph.t_oc);
+          typename eph_list_t::iterator it_insert(eph_list.begin());
+
           for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
               it != eph_list.rend();
               ++it){
             float_t delta_t(it->period_from_time_of_clock(t_new));
-            if(delta_t < -1E-3){continue;}
-            if(delta_t > 1E-3){
-              typename eph_list_t::iterator it2(it.base());
-              if(std::distance(eph_list.begin(), it2) < eph_current_index){
-                eph_current_index++;
-              }
-              eph_list.insert(it2, eph);
-            }else{
-              (*it) = eph; // overwrite
+            if(delta_t < -10){continue;}
+            if(delta_t < 10){ // same time stamp(s)
+              typename eph_list_t::reverse_iterator it2(it);
+              do{
+                if(it2->is_equivalent(eph)){
+                  (it2->priority)++; // increase priority
+                  typename eph_list_t::reverse_iterator it3(it2 + 1);
+                  if(it3 != eph_list.rend()
+                      && (it3->period_from_time_of_clock(t_new) < 10)
+                      && (it3->priority <= it2->priority)){ // if priority is same or higher, then swap.
+                    if(std::distance(eph_list.begin(), it3.base()) == eph_current_index){
+                      eph_current_index++;
+                    }
+                    eph_list_item_t tmp(*it2);
+                    *it3 = *it2;
+                    *it2 = tmp;
+                  }
+                  return;
+                }
+                if(((++it2) == eph_list.rend())
+                    || (it2->period_from_time_of_clock(t_new) >= 10)){break;}
+              }while(true);
             }
-            return;
+            it_insert = it.base();
+            break;
           }
-          eph_list.insert(eph_list.begin(), eph);
-          eph_current_index++;
+
+          // insert new one.
+          if(std::distance(eph_list.begin(), it_insert) < eph_current_index){
+            eph_current_index++;
+          }
+          eph_list.insert(it_insert, eph_list_item_t(eph));
         }
 
         /**
