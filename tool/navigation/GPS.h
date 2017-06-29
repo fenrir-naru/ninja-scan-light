@@ -1039,6 +1039,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           eph_list_item_t() : priority(0) {}
           eph_list_item_t(const Ephemeris &eph)
               : Ephemeris(eph), priority(0) {}
+          eph_list_item_t(const Ephemeris &eph, const unsigned int &priority_init)
+              : Ephemeris(eph), priority(priority_init) {}
           eph_list_item_t &operator=(const Ephemeris &eph){
             Ephemeris::operator=(eph);
             return *this;
@@ -1072,7 +1074,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          *
          * @param eph ephemeris, assuming the latest one
          */
-        void register_ephemeris(const Ephemeris &eph){
+        void register_ephemeris(const Ephemeris &eph, const unsigned int &priority_delta = 1){
           gps_time_t t_new(eph.WN, eph.t_oc);
           typename eph_list_t::iterator it_insert(eph_list.begin());
 
@@ -1081,29 +1083,38 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               ++it){
             float_t delta_t(it->period_from_time_of_clock(t_new));
             if(delta_t < -10){continue;}
+
+            it_insert = it.base();
             if(delta_t < 10){ // same time stamp(s)
-              typename eph_list_t::reverse_iterator it2(it);
               do{
-                if(it2->is_equivalent(eph)){
-                  (it2->priority)++; // increase priority
-                  typename eph_list_t::reverse_iterator it3(it2 + 1);
-                  if(it3 != eph_list.rend()
-                      && (it3->period_from_time_of_clock(t_new) < 10)
-                      && (it3->priority <= it2->priority)){ // if priority is same or higher, then swap.
-                    if(std::distance(eph_list.begin(), it3.base()) == eph_current_index){
-                      eph_current_index++;
-                    }
-                    eph_list_item_t tmp(*it2);
-                    *it3 = *it2;
-                    *it2 = tmp;
+                if(it->is_equivalent(eph)){
+                  int rel_pos(eph_current_index - (std::distance(eph_list.begin(), it.base()) - 1));
+                  int shift(0);
+                  (it->priority) += priority_delta; // increase priority
+                  for(typename eph_list_t::reverse_iterator it_previous(it + 1);
+                      it_previous != eph_list.rend()
+                        && (it_previous->period_from_time_of_clock(t_new) < 10)
+                        && (it_previous->priority <= it->priority); // if priority is same or higher, then swap.
+                      ++it, ++it_previous, --shift){
+                    eph_list_item_t tmp(*it);
+                    *it = *it_previous;
+                    *it_previous = tmp;
+                  }
+                  if(rel_pos == 0){ // when selected as current ephemeris
+                    eph_current_index += shift;
+                  }else if((rel_pos < 0) && (rel_pos >= shift)){
+                    // when current ephemeris has same time stamp and different content, and its priority is lower.
+                    eph_current_index++;
                   }
                   return;
                 }
-                if(((++it2) == eph_list.rend())
-                    || (it2->period_from_time_of_clock(t_new) >= 10)){break;}
+                if(((++it) == eph_list.rend())
+                    || (it->period_from_time_of_clock(t_new) >= 10)){break;}
+                if(it->priority <= priority_delta){
+                  it_insert = it.base();
+                }
               }while(true);
             }
-            it_insert = it.base();
             break;
           }
 
@@ -1111,7 +1122,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           if(std::distance(eph_list.begin(), it_insert) < eph_current_index){
             eph_current_index++;
           }
-          eph_list.insert(it_insert, eph_list_item_t(eph));
+          eph_list.insert(it_insert, eph_list_item_t(eph, priority_delta));
         }
 
         /**
