@@ -75,11 +75,12 @@ class MagneticFieldGeneric {
     }
     
     struct field_components_res_t {FloatT north, east, down;};
+  protected:
     static field_components_res_t field_components_geocentric(
         const model_t &model,
         const FloatT &sin_geocentric_latitude, const FloatT &cos_geocentric_latitude,
         const FloatT &longitude_rad,
-        const FloatT &radius_meter = 6371.2E3){
+        const FloatT &radius_meter){
       using std::cos;
       using std::sin;
       using std::pow;
@@ -158,6 +159,7 @@ class MagneticFieldGeneric {
       return res;
     }
 
+  public:
     static field_components_res_t field_components_geocentric(
         const model_t &model,
         const FloatT &geocentric_latitude,
@@ -166,6 +168,7 @@ class MagneticFieldGeneric {
 
       return field_components_geocentric(model,
           std::sin(geocentric_latitude), std::cos(geocentric_latitude),
+          longitude_rad,
           radius_meter);
     }
 
