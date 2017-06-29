@@ -226,7 +226,7 @@ class MagneticFieldGeneric {
       FloatT m[] = {g11, h11, g10};
       FloatT b0(-std::sqrt(std::pow(m[0], 2) + std::pow(m[1], 2) + std::pow(m[2], 2)));
       FloatT z_cd[] = {m[0] / b0, m[1] / b0, m[2] / b0};
-      FloatT y_cd_denom(-std::sqrt(pow2(h11) + pow2(g11)));
+      FloatT y_cd_denom(-std::sqrt((h11 * h11) + (g11 * g11)));
       FloatT y_cd[] = {-h11 / y_cd_denom, g11 / y_cd_denom, 0}; /* = [0,0,1] * z_cd */
       FloatT x_cd[] = { /* y_cd * z_cd */
         y_cd[1] * z_cd[2] - y_cd[2] * z_cd[1],
