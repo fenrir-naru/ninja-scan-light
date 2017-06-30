@@ -76,6 +76,14 @@ class MagneticFieldGeneric {
             + factor * (model_late.coef[i] - model_early.coef[i]);
       }
     }
+    static model_t model_inter_extra_polation(
+        const FloatT &year,
+        const model_t &model_early, const model_t &model_late){
+      model_t model_new;
+      model_new.year = year;
+      model_inter_extra_polation(model_new, model_early, model_late);
+      return model_new;
+    }
     
     static void make_model(
         model_t &model_new, const model_t *models[], const unsigned int &models_size){
