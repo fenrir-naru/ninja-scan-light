@@ -10,6 +10,8 @@
 #include <string>
 
 #include "navigation/MagneticField.h"
+#include "navigation/WGS84.h"
+#include "navigation/NTCM.h"
 %}
 
 %include typemaps.i
@@ -41,6 +43,10 @@ struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
   const type *coef() const {return super_t::coef;}
 };
 %}
+
+%template(WGS84) WGS84Generic<type>;
+
+%template(NTCM_GL) NTCM_GL_Generic<type>;
 %enddef
 
 %extend MagneticFieldGeneric {
@@ -69,5 +75,7 @@ struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
 }
 
 %include navigation/MagneticField.h
+%include navigation/WGS84.h
+%include navigation/NTCM.h
 
 CONCRETIZE(double);
