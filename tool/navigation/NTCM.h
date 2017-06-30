@@ -35,7 +35,7 @@
 #include <cmath>
 
 template <class FloatT>
-class NTCM_GL {
+class NTCM_GL_Generic {
   public:
     typedef FloatT float_t;
     static const float_t C[];
@@ -94,7 +94,7 @@ class NTCM_GL {
 };
 
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::C[] = {
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::C[] = {
   0.89656,
   0.16984,
   -0.02166,
@@ -110,22 +110,24 @@ const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::C[] = {
 };
 
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::lt_D = 14;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::lt_D = 14;
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::P_F1 = 0.4;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::P_F1 = 0.4;
 
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::doy_A = 18;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::doy_A = 18;
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::doy_SA = 6;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::doy_SA = 6;
 
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::phi_c1 = M_PI / 180 * 16;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::phi_c1 = M_PI / 180 * 16;
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::phi_c2 = M_PI / 180 * -10;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::phi_c2 = M_PI / 180 * -10;
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::sigma_c1 = M_PI / 180 * 12;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::sigma_c1 = M_PI / 180 * 12;
 template <class FloatT>
-const typename NTCM_GL<FloatT>::float_t NTCM_GL<FloatT>::sigma_c2 = M_PI / 180 * 13;
+const typename NTCM_GL_Generic<FloatT>::float_t NTCM_GL_Generic<FloatT>::sigma_c2 = M_PI / 180 * 13;
+
+typedef NTCM_GL_Generic<double> NTCM_GL;
 
 #endif /* __NTCM_H__ */
