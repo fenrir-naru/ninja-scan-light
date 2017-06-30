@@ -41,6 +41,23 @@ struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
   const type year() const {return super_t::year;}
   const int dof() const {return super_t::dof;}
   const type *coef() const {return super_t::coef;}
+  typename MagneticFieldGeneric<type>::field_components_res_t field_components_geocentric(
+      const type &geocentric_latitude,
+      const type &longitude_rad,
+      const type &radius_meter = 6371.2E3){
+    return MagneticFieldGeneric<type>::field_components_geocentric(*this, geocentric_latitude, longitude_rad, radius_meter);
+  }
+  typename MagneticFieldGeneric<type>::field_components_res_t field_components(
+      const type &latitude_rad,
+      const type &longitude_rad,
+      const type &height_meter){
+    return MagneticFieldGeneric<type>::field_components_geocentric(*this, latitude_rad, longitude_rad, height_meter);
+  }
+  typename MagneticFieldGeneric<type>::latlng_t geomagnetic_latlng(
+      const type &geocentric_latitude,
+      const type &longitude){
+    return MagneticFieldGeneric<type>::geomagnetic_latlng(*this, geocentric_latitude, longitude);
+  }
 };
 %}
 
