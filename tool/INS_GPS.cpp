@@ -437,10 +437,10 @@ class NAV : public NAVData<float_sylph_t>, public Updatable {
       MagneticField::field_components_res_t mag_model(
           MagneticField::field_components(IGRF12::IGRF2015,
               latitude, longitude, altitude));
-      vec_t mag_filed(mag_model.north, mag_model.east, mag_model.down);
+      vec_t mag_field(mag_model.north, mag_model.east, mag_model.down);
 
       // Get the correction angle with the model
-      return std::atan2(mag_filed[1], mag_filed[0])
+      return std::atan2(mag_field[1], mag_field[0])
           - std::atan2(mag_horizontal[1], mag_horizontal[0]);
     }
 
