@@ -44,6 +44,7 @@
 #include <ctime>
 #define _USE_MATH_DEFINES
 #include <cmath>
+#include <climits>
 
 #include "WGS84.h"
 
@@ -233,6 +234,9 @@ struct GPS_Time {
 #endif
     
     return GPS_Time(t, leap_seconds);
+  }
+  float_t serialize() const {
+    return seconds + (float_t)seconds_week * week;
   }
   
   GPS_Time &operator+=(const float_t &sec){
@@ -503,11 +507,14 @@ class GPS_SpaceNode {
           inline float_t period_from_time_of_clock(const gps_time_t &t) const {
             return -t.interval(WN, t_oc);
           }
-        
+
           inline float_t period_from_time_of_ephemeris(const gps_time_t &t) const {
             return -t.interval(WN, t_oe);
           }
           
+          /**
+           * @return (float_t) if valid ephemeris, the return value is always positive.
+           */
           inline float_t period_from_first_valid_transmittion(const gps_time_t &t) const {
             return period_from_time_of_clock(t) + (fit_interval / 2);
           }
@@ -876,7 +883,7 @@ class GPS_SpaceNode {
             }
           };
 
-          bool is_equivalent(const Ephemeris &eph){
+          bool is_equivalent(const Ephemeris &eph) const {
             do{
               if(WN != eph.WN){break;}
               if(URA != eph.URA){break;}
@@ -1036,15 +1043,29 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       protected:
         struct eph_list_item_t : public Ephemeris {
           unsigned int priority;
-          eph_list_item_t() : priority(0) {}
+          int_t t_tag;
+
+          static int calc_t_tag(const float_t &t, const int &threshold = 10){
+            float_t res(std::floor((t + (0.5 * threshold)) / threshold));
+            if(res >= INT_MAX){return INT_MAX;}
+            if(res <= INT_MIN){return INT_MIN;}
+            return (int)res;
+          }
+          static int calc_t_tag(const Ephemeris &eph, const int &threshold = 10){
+            return calc_t_tag(gps_time_t(eph.WN, eph.t_oc).serialize());
+          }
+
+          eph_list_item_t() : priority(0), t_tag(0) {}
           eph_list_item_t(const Ephemeris &eph)
-              : Ephemeris(eph), priority(0) {}
+              : Ephemeris(eph), priority(0), t_tag(calc_t_tag(eph)) {}
           eph_list_item_t(const Ephemeris &eph, const unsigned int &priority_init)
-              : Ephemeris(eph), priority(priority_init) {}
+              : Ephemeris(eph), priority(priority_init), t_tag(calc_t_tag(eph)) {}
           eph_list_item_t &operator=(const Ephemeris &eph){
             Ephemeris::operator=(eph);
+            t_tag = calc_t_tag(eph);
             return *this;
           }
+
           bool operator==(const Ephemeris &eph){
             return Ephemeris::is_equivalent(eph);
           }
@@ -1075,17 +1096,18 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          * @param eph ephemeris, assuming the latest one
          */
         void register_ephemeris(const Ephemeris &eph, const unsigned int &priority_delta = 1){
-          gps_time_t t_new(eph.WN, eph.t_oc);
+          int t_tag_new(eph_list_item_t::calc_t_tag(eph));
           typename eph_list_t::iterator it_insert(eph_list.begin());
 
           for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
               it != eph_list.rend();
               ++it){
-            float_t delta_t(it->period_from_time_of_clock(t_new));
-            if(delta_t < -10){continue;}
+
+            int delta_t_tag(t_tag_new - it->t_tag);
+            if(delta_t_tag < 0){continue;} // input ephemeris is older.
 
             it_insert = it.base();
-            if(delta_t < 10){ // same time stamp(s)
+            if(delta_t_tag == 0){ // same time stamp(s)
               do{
                 if(it->is_equivalent(eph)){
                   int rel_pos(eph_current_index - (std::distance(eph_list.begin(), it.base()) - 1));
@@ -1093,7 +1115,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                   (it->priority) += priority_delta; // increase priority
                   for(typename eph_list_t::reverse_iterator it_previous(it + 1);
                       it_previous != eph_list.rend()
-                        && (it_previous->period_from_time_of_clock(t_new) < 10)
+                        && (it_previous->t_tag == t_tag_new)
                         && (it_previous->priority <= it->priority); // if priority is same or higher, then swap.
                       ++it, ++it_previous, --shift){
                     eph_list_item_t tmp(*it);
@@ -1108,8 +1130,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                   }
                   return;
                 }
-                if(((++it) == eph_list.rend())
-                    || (it->period_from_time_of_clock(t_new) >= 10)){break;}
+                if(((++it) == eph_list.rend()) || (it->t_tag < t_tag_new)){break;}
                 if(it->priority <= priority_delta){
                   it_insert = it.base();
                 }
@@ -1140,6 +1161,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return true; // conservative
           }
 
+          int t_tag(eph_current->t_tag);
           float_t delta_t(eph_current->period_from_first_valid_transmittion(target_time));
 
           typename eph_list_t::iterator it, it_last;
@@ -1154,10 +1176,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           }
 
           for( ; it != it_last; ++it){
+            if(is_valid && (t_tag == it->t_tag)){continue;} // skip one having same time tag, because highest priority one is head.
             if(!it->is_valid(target_time)){continue;}
             float_t delta_t2(it->period_from_first_valid_transmittion(target_time));
             if((!is_valid) || (delta_t > delta_t2)){ // update
               is_valid = true;
+              t_tag = it->t_tag;
               delta_t = delta_t2;
               eph_current_index = std::distance(eph_list.begin(), it);
             }
@@ -1188,20 +1212,30 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               }
               break;
             }
-            gps_time_t t1(it1->WN, it1->t_oc), t2(it2->WN, it2->t_oc);
-            if(t1 > t2){
-              list_new.push_back(*it2);
-              ++it2;
-              if(shift_count >= 0){++current_index_new;}
-            }else if(t1 < t2){
+            int delta_t(it1->t_tag - it2->t_tag);
+            bool use_it1(true);
+            if(delta_t == 0){
+              if(it1->is_equivalent(*it2)){
+                list_new.push_back(keep_original ? *it1 : *it2);
+                ++it1;
+                ++it2;
+                --shift_count;
+                continue;
+              }else if(it1->priority < it2->priority){
+                use_it1 = false;
+              }
+            }else if(delta_t > 0){
+              use_it1 = false;
+            }
+
+            if(use_it1){
               list_new.push_back(*it1);
               ++it1;
               --shift_count;
             }else{
-              list_new.push_back(keep_original ? *it1 : *it2);
-              ++it1;
+              list_new.push_back(*it2);
               ++it2;
-              --shift_count;
+              if(shift_count >= 0){++current_index_new;}
             }
           }
           eph_list = list_new;
