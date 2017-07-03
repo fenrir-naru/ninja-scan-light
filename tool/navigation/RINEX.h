@@ -726,7 +726,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
       // 8th line
       buf << std::string(3, ' ')
           << RINEX_FloatD(data.t_ot, 19, 12)
-          << RINEX_FloatD(data.ephemeris.fit_interval, 19, 12)
+          << RINEX_FloatD(data.ephemeris.fit_interval / (60 * 60), 19, 12)
           << RINEX_FloatD(0.0, 19, 12)
           << RINEX_FloatD(0.0, 19, 12)
           << std::endl;
