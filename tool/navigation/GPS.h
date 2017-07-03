@@ -1090,6 +1090,15 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           eph_current.fit_interval = -1;
         }
 
+        template <class Functor>
+        void each_ephemeris(Functor functor) const {
+          for(typename eph_list_t::const_iterator it(eph_list.begin() + 1);
+              it != eph_list.end();
+              ++it){
+            functor(*it);
+          }
+        }
+
         /**
          * Add new ephemeris
          *

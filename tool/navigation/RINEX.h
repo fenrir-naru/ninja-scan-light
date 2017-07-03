@@ -101,6 +101,7 @@ class RINEX_Reader {
 template <class FloatT>
 struct RINEX_NAV {
   typedef GPS_SpaceNode<FloatT> space_node_t;
+  typedef typename space_node_t::Ionospheric_UTC_Parameters iono_utc_t;
   typedef typename space_node_t::Satellite::Ephemeris ephemeris_t;
   struct SatelliteInfo {
     unsigned int svid;
@@ -543,7 +544,9 @@ class RINEX_Writer {
       
     }
     virtual ~RINEX_Writer() {_header.clear();}
-    header_t &header(){return _header;}
+
+    const header_t &header() const {return _header;}
+    header_t &header(){return const_cast<header_t &>(static_cast<const RINEX_Writer *>(this)->header());}
     
     template <class FloatT>
     static std::string RINEX_Float(
@@ -588,7 +591,7 @@ class RINEX_Writer {
       return ss.str();
     }
     
-    void leap_seconds(const int seconds){
+    void leap_seconds(const int &seconds){
       std::stringstream ss;
       ss << RINEX_Value(seconds, 6);
       _header["LEAP SECONDS"] = ss.str();
@@ -610,7 +613,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
   public:
     static const super_t::header_item_t default_header[];
     static const int default_header_size;
-    void ion_alpha(
+    void iono_alpha(
         const FloatT &a0, const FloatT &a1, 
         const FloatT &a2, const FloatT &a3){
       std::stringstream ss;
@@ -621,7 +624,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
           << RINEX_FloatD(a3, 12, 4);
       _header["ION ALPHA"] = ss.str();
     }
-    void ion_beta(
+    void iono_beta(
         const FloatT &b0, const FloatT &b1, 
         const FloatT &b2, const FloatT &b3){
       std::stringstream ss;
@@ -631,6 +634,17 @@ class RINEX_NAV_Writer : public RINEX_Writer {
           << RINEX_FloatD(b2, 12, 4)
           << RINEX_FloatD(b3, 12, 4);
       _header["ION BETA"] = ss.str();
+    }
+    void utc_params(
+        const FloatT &A0, const FloatT &A1,
+        const int &T, const int &W){
+      std::stringstream ss;
+      ss << "   "
+          << RINEX_FloatD(A0, 19, 12)
+          << RINEX_FloatD(A1, 19, 12)
+          << RINEX_Value(T, 9)
+          << RINEX_Value(W, 9);
+      _header["DELTA UTC: A0,A1,T,W"] = ss.str();
     }
     RINEX_NAV_Writer(std::ostream &out)
         : super_t(out, default_header, default_header_size) {}
@@ -720,6 +734,43 @@ class RINEX_NAV_Writer : public RINEX_Writer {
       dist << buf.str();
       return *this;
     }
+
+  protected:
+    struct WriteAllFunctor {
+      typename content_t::SatelliteInfo info;
+      RINEX_NAV_Writer &w;
+      int &counter;
+      void operator()(const typename content_t::ephemeris_t &eph) {
+        info.svid = eph.svid;
+        info.ephemeris = eph;
+        w << info;
+        counter++;
+      }
+    };
+
+  public:
+    static int write_all(std::ostream &out, const typename content_t::space_node_t &space_node){
+      int res(-1);
+      RINEX_NAV_Writer writer(out);
+      if(!space_node.is_valid_iono_utc()){return res;}
+      {
+        const typename content_t::iono_utc_t &iu(space_node.iono_utc());
+        writer.iono_alpha(iu.alpha[0], iu.alpha[1], iu.alpha[2], iu.alpha[3]);
+        writer.iono_beta(iu.beta[0], iu.beta[1], iu.beta[2], iu.beta[3]);
+        writer.utc_params(iu.A0, iu.A1, iu.t_ot, iu.WN_t);
+        writer.leap_seconds(iu.delta_t_LS);
+      }
+      out << writer.header();
+      res++;
+
+      WriteAllFunctor functor = {{0, 0}, writer, res};
+      for(typename content_t::space_node_t::satellites_t::const_iterator
+            it(space_node.satellites().begin()), it_end(space_node.satellites().end());
+          it != it_end; ++it){
+        it->second.each_ephemeris(functor);
+      }
+      return res;
+    }
 };
 template <class FloatT>
 const RINEX_Writer::header_item_t RINEX_NAV_Writer<FloatT>::default_header[] = {
@@ -728,7 +779,7 @@ const RINEX_Writer::header_item_t RINEX_NAV_Writer<FloatT>::default_header[] = {
     {"COMMENT", NULL},
     {"ION ALPHA", NULL},
     {"ION BETA", NULL},
-    {"DELTA UTC: A0,A1,T,W ", NULL},
+    {"DELTA UTC: A0,A1,T,W", NULL},
     {"LEAP SECONDS", NULL}};
 template <class FloatT>
 const int RINEX_NAV_Writer<FloatT>::default_header_size
