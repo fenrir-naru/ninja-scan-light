@@ -1090,12 +1090,61 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           eph_current.fit_interval = -1;
         }
 
+        enum each_ephemeris_mode_t {
+          EACH_EPHEMERIS_ALL,
+          EACH_EPHEMERIS_ALL_INVERTED,
+          EACH_EPHEMERIS_NO_REDUNDANT,
+        };
+
+        /**
+         * Iterate each ephemeris.
+         *
+         * @param mode If EACH_EPHEMERIS_ALL, all ephemeris will be passed, and when multiple ephemeris have same t_tag,
+         * their order will be unchanged (highest to lowest priorities).
+         * If EACH_EPHEMERIS_ALL_INVERTED, all ephemeris will be passed, and when multiple ephemeris have same t_tag,
+         * their order will be inverted (lowest to highest priorities).
+         * If EACH_EPHEMERIS_NO_REDUNDANT, when multiple ephemeris have same t_tag,
+         * then, only ephemeris which has highest priority will be passed.
+         */
         template <class Functor>
-        void each_ephemeris(Functor functor) const {
-          for(typename eph_list_t::const_iterator it(eph_list.begin() + 1);
-              it != eph_list.end();
-              ++it){
-            functor(*it);
+        void each_ephemeris(
+            Functor &functor,
+            const each_ephemeris_mode_t &mode = EACH_EPHEMERIS_ALL) const {
+          switch(mode){
+            case EACH_EPHEMERIS_ALL_INVERTED: {
+              typename eph_list_t::const_iterator it(eph_list.begin() + 1);
+              while(it != eph_list.end()){
+                typename eph_list_t::const_iterator it2(it + 1);
+                while((it2 != eph_list.end()) && (it->t_tag == it2->t_tag)){
+                  ++it2;
+                }
+                typename eph_list_t::const_iterator it_next(it2);
+                do{
+                  functor(*(--it2));
+                }while(it2 != it);
+                it = it_next;
+              }
+              break;
+            }
+            case EACH_EPHEMERIS_NO_REDUNDANT: {
+              int_t t_tag(0);
+              for(typename eph_list_t::const_iterator it(eph_list.begin() + 1);
+                  it != eph_list.end();
+                  ++it){
+                if(t_tag == it->t_tag){continue;}
+                functor(*it);
+                t_tag = it->t_tag;
+              }
+              break;
+            }
+            case EACH_EPHEMERIS_ALL:
+            default:
+              for(typename eph_list_t::const_iterator it(eph_list.begin() + 1);
+                  it != eph_list.end();
+                  ++it){
+                functor(*it);
+              }
+              break;
           }
         }
 

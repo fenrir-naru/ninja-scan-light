@@ -767,7 +767,9 @@ class RINEX_NAV_Writer : public RINEX_Writer {
       for(typename content_t::space_node_t::satellites_t::const_iterator
             it(space_node.satellites().begin()), it_end(space_node.satellites().end());
           it != it_end; ++it){
-        it->second.each_ephemeris(functor);
+        it->second.each_ephemeris(
+            functor,
+            content_t::space_node_t::Satellite::EACH_EPHEMERIS_ALL_INVERTED);
       }
       return res;
     }

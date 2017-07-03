@@ -2181,11 +2181,13 @@ class StreamProcessor
   protected:
     int invoked;
     istream *in;
+    ostream *out_rinex_nav;
     
   public:
     StreamProcessor()
         : super_t(), updatable(&updatable_blackhole),
         in(NULL), invoked(0),
+        out_rinex_nav(NULL),
         a_handler(*this),
         g_handler(*this),
         m_handler(*this) {
@@ -2194,6 +2196,7 @@ class StreamProcessor
     StreamProcessor(const StreamProcessor &another)
         : super_t(another), updatable(another.updatable),
         in(another.in), invoked(another.invoked),
+        out_rinex_nav(another.out_rinex_nav),
         a_handler(*this),
         g_handler(*this),
         m_handler(*this) {
@@ -2201,7 +2204,13 @@ class StreamProcessor
       g_handler = another.g_handler;
       m_handler = another.m_handler;
     }
-    ~StreamProcessor(){}
+    ~StreamProcessor(){
+      if(invoked > 0){
+        if(out_rinex_nav){
+          RINEX_NAV_Writer<float_sylph_t>::write_all(*out_rinex_nav, g_handler.space_node);
+        }
+      }
+    }
     
     StreamProcessor &operator=(const StreamProcessor &another){
       if(this != &another){
@@ -2338,6 +2347,11 @@ class StreamProcessor
         }else{
           cerr << "rinex_nav: " << ephemeris << " items captured." << endl;
         }
+        return true;
+      }
+      if(value = Options::get_value(spec, "out_rinex_nav", false)){
+        out_rinex_nav = &options.spec2ostream(value);
+        cerr << "out_rinex_nav: " << value << endl;
         return true;
       }
 
