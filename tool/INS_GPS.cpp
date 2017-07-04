@@ -1819,8 +1819,8 @@ class StreamProcessor
           raw.t_ot = get8(218);
           raw.WN_t = get8(226); // truncated
           raw.delta_t_LS = (G_Observer_t::s8_t)get8(240);
-          raw.WN_LSF = get8(248);
-          raw.DN = get8(256); // truncated
+          raw.WN_LSF = get8(248); // truncated
+          raw.DN = get8(256);
           raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
         }
 #undef get8
@@ -1838,16 +1838,17 @@ class StreamProcessor
           if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
               && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
               && (week_number >= 0)){
-            eph.WN |= (week_number & 0xFC00); // Original WN is truncated to 10 bits.
+            eph.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
             space_node.satellite(eph.svid).register_ephemeris(eph);
           }
         }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
           space_node_t::Ionospheric_UTC_Parameters iono_utc(
               convert_iono_utc(subframe));
-          /*{ // TODO taking account for truncation
-            iono_utc.WN_t;
-            iono_utc.WN_LSF;
-          }*/
+          if(week_number >= 0){ // taking account for truncation
+            int week_number_base(week_number - (week_number % 0x100));
+            iono_utc.WN_t += week_number_base;
+            iono_utc.WN_LSF += week_number_base;
+          }
           space_node.update_iono_utc(iono_utc);
         }
       }
@@ -1868,7 +1869,7 @@ class StreamProcessor
         GPS_Ephemeris eph;
         observer.fetch_ephemeris(eph);
         if((week_number >= 0) && eph.valid){
-          eph.WN |= (week_number & 0xFC00); // Original WN is truncated to 10 bits.
+          eph.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
           space_node.satellite(eph.svid).register_ephemeris(eph);
         }
       }
