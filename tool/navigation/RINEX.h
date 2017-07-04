@@ -204,9 +204,9 @@ case line_num: { \
             info.ephemeris.dot_Omega0);
           READ_AND_STORE(5,
             info.ephemeris.dot_i0,
-            dummy,
+            dummy,  // Codes on L2 channel
             info.ephemeris.WN,
-            dummy);
+            dummy); // L2 P data flag
           READ_AND_STORE(6,
             info.ephemeris.URA,
             info.ephemeris.SV_health,
@@ -215,13 +215,25 @@ case line_num: { \
           READ_AND_STORE(7,
             info.t_ot,
             info.ephemeris.fit_interval, // in hours
-            dummy,
-            dummy);
+            dummy,  // spare
+            dummy); // spare
 #undef READ_AND_STORE
 #undef GET_SS
         }
       }
       
+      /* @see ftp://igs.org/pub/data/format/rinex210.txt
+       * 6.7 Satellite Health
+       * RINEX Value:   0    Health OK
+       * RINEX Value:   1    Health not OK (bits 18-22 not stored)
+       * RINEX Value: >32    Health not OK (bits 18-22 stored)
+       */
+      if(info.ephemeris.SV_health > 32){
+        info.ephemeris.SV_health &= 0x3F; // 0b111111
+      }else if(info.ephemeris.SV_health > 0){
+        info.ephemeris.SV_health = 0x20; // 0b100000
+      }
+
       if(info.ephemeris.fit_interval < 4){
         info.ephemeris.fit_interval = 4; // At least 4 hour validity
       }
@@ -675,7 +687,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
           << RINEX_FloatD(data.ephemeris.a_f2, 19, 12)
           << std::endl;
       
-      // 2ns line
+      // 2nd line
       buf << std::string(3, ' ')
           << RINEX_FloatD(data.ephemeris.iode, 19, 12)
           << RINEX_FloatD(data.ephemeris.c_rs, 19, 12)
@@ -710,15 +722,19 @@ class RINEX_NAV_Writer : public RINEX_Writer {
       // 6th line
       buf << std::string(3, ' ')
           << RINEX_FloatD(data.ephemeris.dot_i0, 19, 12)
-          << RINEX_FloatD(0.0, 19, 12)
+          << RINEX_FloatD(0.0, 19, 12) // Codes on L2 channel
           << RINEX_FloatD(data.ephemeris.WN, 19, 12)
-          << RINEX_FloatD(0.0, 19, 12)
+          << RINEX_FloatD(0.0, 19, 12) // L2 P data flag
           << std::endl;
       
       // 7th line
+      unsigned int health(data.ephemeris.SV_health);
+      if((health & 0x20) && (health & 0x1F == 0)){
+        health = 1;
+      }
       buf << std::string(3, ' ')
           << RINEX_FloatD(data.ephemeris.URA, 19, 12)
-          << RINEX_FloatD(data.ephemeris.SV_health, 19, 12)
+          << RINEX_FloatD(health, 19, 12)
           << RINEX_FloatD(data.ephemeris.t_GD, 19, 12)
           << RINEX_FloatD(data.ephemeris.iodc, 19, 12)
           << std::endl;
@@ -727,8 +743,8 @@ class RINEX_NAV_Writer : public RINEX_Writer {
       buf << std::string(3, ' ')
           << RINEX_FloatD(data.t_ot, 19, 12)
           << RINEX_FloatD(data.ephemeris.fit_interval / (60 * 60), 19, 12)
-          << RINEX_FloatD(0.0, 19, 12)
-          << RINEX_FloatD(0.0, 19, 12)
+          << RINEX_FloatD(0.0, 19, 12) // spare
+          << RINEX_FloatD(0.0, 19, 12) // spare
           << std::endl;
       
       dist << buf.str();
