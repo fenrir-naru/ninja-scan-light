@@ -473,7 +473,7 @@ class GPS_SpaceNode {
           
           // Subframe.1
           uint_t WN;          ///< Week number
-          int_t URA;          ///< User range accuracy
+          int_t URA;          ///< User range accuracy (index)
           uint_t SV_health;   ///< Health status
           int_t iodc;         ///< Issue of clock data
           float_t t_GD;       ///< Group delay (s)
@@ -542,6 +542,24 @@ class GPS_SpaceNode {
             return !((delta_t >= 0) && (delta_t < transmittion_interval));
           }
           
+          static const float_t URA_limits[];
+          static const int URA_MAX_INDEX;
+
+          static float_t URA_meter(const int_t &index){
+            if(index < 0){return -1;}
+            return (index < URA_MAX_INDEX)
+                ? URA_limits[index]
+                : URA_limits[URA_MAX_INDEX - 1] * 2;
+          }
+
+          static int_t URA_index(const float_t &meter){
+            if(meter < 0){return -1;}
+            for(int i(0); i < URA_MAX_INDEX; ++i){
+              if(meter <= URA_limits[i]){return i;}
+            }
+            return URA_MAX_INDEX;
+          }
+
           float_t eccentric_anomaly(const float_t &period_from_toe) const {
 
             // Kepler's Equation for Eccentric Anomaly M(Mk)
@@ -1574,6 +1592,29 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::
 };
 #undef POWER_2
 #undef GPS_SC2RAD
+
+template <class FloatT>
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::Ephemeris::URA_limits[] = {
+  2.40,
+  3.40,
+  4.85,
+  6.85,
+  9.65,
+  13.65,
+  24.00,
+  48.00,
+  96.00,
+  192.00,
+  384.00,
+  768.00,
+  1536.00,
+  3072.00,
+  6144.00,
+};
+
+template <class FloatT>
+const int GPS_SpaceNode<FloatT>::Satellite::Ephemeris::URA_MAX_INDEX
+    = sizeof(URA_limits) / sizeof(URA_limits[0]);
 
 #ifdef POW2_ALREADY_DEFINED
 #undef POW2_ALREADY_DEFINED

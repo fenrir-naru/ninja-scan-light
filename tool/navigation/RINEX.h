@@ -139,6 +139,7 @@ class RINEX_NAV_Reader : public RINEX_Reader {
     void seek_next() {
       char buf[256];
       
+      FloatT ura_meter;
       for(int i = 0; (i < 8) && (super_t::src.good()); i++){
         if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
         std::string line_data(buf);
@@ -208,7 +209,7 @@ case line_num: { \
             info.ephemeris.WN,
             dummy); // L2 P data flag
           READ_AND_STORE(6,
-            info.ephemeris.URA,
+            ura_meter,
             info.ephemeris.SV_health,
             info.ephemeris.t_GD,
             info.ephemeris.iodc);
@@ -222,6 +223,8 @@ case line_num: { \
         }
       }
       
+      info.ephemeris.URA = ephemeris_t::URA_index(ura_meter); // meter to index
+
       /* @see ftp://igs.org/pub/data/format/rinex210.txt
        * 6.7 Satellite Health
        * RINEX Value:   0    Health OK
@@ -623,6 +626,9 @@ class RINEX_NAV_Writer : public RINEX_Writer {
     using super_t::_header;
     using super_t::dist;
   public:
+    typedef typename content_t::space_node_t space_node_t;
+    typedef typename content_t::ephemeris_t ephemeris_t;
+
     static const super_t::header_item_t default_header[];
     static const int default_header_size;
     void iono_alpha(
@@ -733,7 +739,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
         health = 1;
       }
       buf << std::string(3, ' ')
-          << RINEX_FloatD(data.ephemeris.URA, 19, 12)
+          << RINEX_FloatD(ephemeris_t::URA_meter(data.ephemeris.URA), 19, 12)
           << RINEX_FloatD(health, 19, 12)
           << RINEX_FloatD(data.ephemeris.t_GD, 19, 12)
           << RINEX_FloatD(data.ephemeris.iodc, 19, 12)
@@ -765,7 +771,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
     };
 
   public:
-    static int write_all(std::ostream &out, const typename content_t::space_node_t &space_node){
+    static int write_all(std::ostream &out, const space_node_t &space_node){
       int res(-1);
       RINEX_NAV_Writer writer(out);
       if(!space_node.is_valid_iono_utc()){return res;}
@@ -780,12 +786,12 @@ class RINEX_NAV_Writer : public RINEX_Writer {
       res++;
 
       WriteAllFunctor functor = {{0, 0}, writer, res};
-      for(typename content_t::space_node_t::satellites_t::const_iterator
+      for(typename space_node_t::satellites_t::const_iterator
             it(space_node.satellites().begin()), it_end(space_node.satellites().end());
           it != it_end; ++it){
         it->second.each_ephemeris(
             functor,
-            content_t::space_node_t::Satellite::EACH_EPHEMERIS_ALL_INVERTED);
+            space_node_t::Satellite::EACH_EPHEMERIS_ALL_INVERTED);
       }
       return res;
     }
