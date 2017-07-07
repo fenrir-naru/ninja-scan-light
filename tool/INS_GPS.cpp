@@ -2079,8 +2079,9 @@ class StreamProcessor
             if(ranges_valid == 0){return;}
 
             float_sylph_t est_time_of_reception(
-                25E-3 * (int)(((sum_time_of_transmission / ranges_valid) + 85E-3) / 25E-3));
-                // assume 25 ms alignment, 85E-3 = (approx) (20200 + a)(km) / 300000(km/s)
+                25E-3 * std::ceil(((sum_time_of_transmission / ranges_valid) + 66E-3) / 25E-3));
+                // assume 25 ms alignment, transmission time is assumed to be between
+                // 67ms(20200km, inc90deg) to 86ms(25785km, inc0deg); ref 72ms(21674km, inc45deg)
 
             packet_raw_latest.raw_data.gpstime.week = week_number;
             packet_raw_latest.raw_data.gpstime.seconds = est_time_of_reception;
