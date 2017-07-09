@@ -2023,8 +2023,9 @@ class StreamProcessor
 
             typedef dst_t::mapped_type::value_type v_t;
 
-            float_sylph_t sum_time_of_transmission(0);
+            float_sylph_t last_time_of_transmission(0);
             int ranges_valid(0);
+            static const int TIME_OF_TRANSMISSION(raw_data_t::MEASUREMENT_ITEMS_PREDEFINED);
 
             for(int i(ranges); i > 0; --i, offset += length_per_range){
               int qi((G_Observer_t::u8_t)observer[offset + 41] & 0x07); // quality indicator
@@ -2057,8 +2058,10 @@ class StreamProcessor
               observer.inspect(buf, 20, offset);
 
               float_sylph_t time_of_transmission(1E-3 * le_char8_shift32(&buf[0]));
-              dst[raw_data_t::MEASUREMENT_ITEMS_PREDEFINED].push_back(v_t(prn, time_of_transmission));
-              sum_time_of_transmission += time_of_transmission;
+              dst[TIME_OF_TRANSMISSION].push_back(v_t(prn, time_of_transmission));
+              if(time_of_transmission > last_time_of_transmission){
+                last_time_of_transmission = time_of_transmission;
+              }
               ++ranges_valid;
 
               if(qi > 6){
@@ -2079,7 +2082,7 @@ class StreamProcessor
             if(ranges_valid == 0){return;}
 
             float_sylph_t est_time_of_reception(
-                25E-3 * std::ceil(((sum_time_of_transmission / ranges_valid) + 66E-3) / 25E-3));
+                25E-3 * std::ceil((last_time_of_transmission + 66E-3) / 25E-3));
                 // assume 25 ms alignment, transmission time is assumed to be between
                 // 67ms(20200km, inc90deg) to 86ms(25785km, inc0deg); ref 72ms(21674km, inc45deg)
 
@@ -2091,10 +2094,11 @@ class StreamProcessor
             }
             packet_raw_latest.itow = packet_raw_latest.raw_data.gpstime.seconds;
 
-            for(dst_t::mapped_type::const_iterator it(dst[raw_data_t::MEASUREMENT_ITEMS_PREDEFINED].begin());
-                it != dst[raw_data_t::MEASUREMENT_ITEMS_PREDEFINED].end(); ++it){
-              float_sylph_t range(space_node_t::light_speed * (est_time_of_reception - it->second));
-              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(it->first, range));
+            for(dst_t::mapped_type::const_iterator it(dst[TIME_OF_TRANSMISSION].begin());
+                it != dst[TIME_OF_TRANSMISSION].end(); ++it){
+              float_sylph_t delta_t(est_time_of_reception - it->second);
+              if(delta_t > 100E-3){continue;} // Remove abnormal time lag (normally, from 67 to 86 ms);
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(it->first, space_node_t::light_speed * delta_t));
             }
 
             update(packet_raw_latest);
