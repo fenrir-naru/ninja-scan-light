@@ -412,7 +412,7 @@ class INS {
       
       //‘¬“x‚Ì‰^“®•û’öŽ®
       vec3_t delta_v_2e_4n((q_n2b * accel * q_n2b.conj()).vector());
-      delta_v_2e_4n[2] += Earth::gravity(phi);
+      delta_v_2e_4n[2] += Earth::gravity(phi, h);
       delta_v_2e_4n -= (omega_e2i_4n * 2 + omega_n2e_4n) * v_2e_4n;
       /*T centripetal_f_scalar(beta() * pow2(Earth::Omega_Earth));
       vec3_t centripetal_f(
