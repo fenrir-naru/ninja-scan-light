@@ -753,6 +753,16 @@ class INS_GPS_NAV : public NAV {
     bool init_misc(const char *line, void *){
       return false;
     }
+    bool init_misc(const char *line, INS<float_sylph_t> *){
+      const char *value;
+      if(value = Options::get_value2(line, "x")){
+        char *spec(const_cast<char *>(value));
+        int i((int)std::strtol(spec, &spec, 10));
+        (*ins_gps)[i] = std::strtod(spec, &spec);
+        return true;
+      }
+      return false;
+    }
     template <class BaseINS, template <class> class Filter>
     bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *){
       const char *value;
@@ -783,7 +793,7 @@ class INS_GPS_NAV : public NAV {
         return true;
       }
 
-      return false;
+      return init_misc(line, (BaseINS *)ins_gps);
     }
 
   public:
