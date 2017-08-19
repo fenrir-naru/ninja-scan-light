@@ -112,6 +112,32 @@ class WGS84Generic{
             + (3.0 / pow2(R_e) * pow2(altitude)));
       }
     }
+
+    struct xz_t {
+      FloatT x, z;
+      FloatT geocentric_latitude() const {
+        return std::atan2(z, x);
+      }
+      FloatT distance2() const {
+        return (x * x) + (z * z);
+      }
+      FloatT distance() const {
+        return std::sqrt(distance2());
+      }
+    };
+
+    static xz_t xz(const FloatT &geographic_latitude, const FloatT &height = 0){
+      FloatT cphi(std::cos(geographic_latitude)), sphi(std::sin(geographic_latitude));
+      FloatT cphi2(pow2(cphi)), sphi2(pow2(sphi)), ba2(1.0 - pow2(epsilon_Earth)), denom(cphi2 + (ba2 * sphi2));
+      FloatT x2(pow2(R_e) * cphi2 / denom), z2(pow2(R_e) * pow2(ba2) * sphi2 / denom);
+      FloatT x(std::sqrt(x2)), z(std::sqrt(z2) * (geographic_latitude >= 0 ? 1 : -1));
+      xz_t res = {x + cphi * height, z + sphi * height};
+      return res;
+    }
+
+    static FloatT geocentric_latitude(const FloatT &geographic_latitude, const FloatT &height = 0){
+      return xz(geographic_latitude, height).geocentric_latitude();
+    }
 #ifdef ALREADY_POW2_DEFINED
 #undef ALREADY_POW2_DEFINED
 #else 
