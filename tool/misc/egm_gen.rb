@@ -55,27 +55,30 @@ print_proc = proc{|n_max, opt|
       decl << "static const FloatT P_#{n}_#{m}[];"
       upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
     #{f.collect{|v| "%a"%[v.to_f]}.join(', ')}};"
-      lower << "{#{n}, #{m}, #{c_bar}, #{s_bar}, #{"%a"%[c]}, P_#{n}_#{m}},"
+      lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}, #{"%a"%[c]}}, // #{n}, #{m}"
     }
   }
   puts(<<__TEXT__)
 template <class FloatT>
-struct EGM {
-  static const struct coefficients_t {
-    const int n;
-    const int m;
+struct EGM_Generic {
+  struct coefficients_t {
+    const FloatT *p_nm;
     const FloatT c_bar;
     const FloatT s_bar;
     const FloatT p_nm_bar;
-    const FloatT *p_nm;
-  } coefficients[];
+  };
+};
+
+template <class FloatT>
+struct EGM : public EGM_Generic<FloatT> {
+  static const typename EGM_Generic<FloatT>::coefficients_t coefficients[];
   #{decl.join("\n  ")}
 };
 
 #{upper.join("\n")}
 
 template<class FloatT>
-const typename EGM<FloatT>::coefficients_t EGM<FloatT>::coefficients[] = {
+const typename EGM_Generic<FloatT>::coefficients_t EGM<FloatT>::coefficients[] = {
   #{lower.join("\n  ")}
 };
 __TEXT__
