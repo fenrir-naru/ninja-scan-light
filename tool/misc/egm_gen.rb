@@ -51,10 +51,11 @@ print_proc = proc{|n_max, opt|
     }
     p_nm.each_with_index{|f, m|
       c = Math::sqrt(p_nm_bar_coef[m] * (m == 0 ? 1 : 2))
+      c_bar, s_bar = (opt[:CS_Bar][[n, m]] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
       decl << "static const FloatT P_#{n}_#{m}[];"
       upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
     #{f.collect{|v| "%a"%[v.to_f]}.join(', ')}};"
-      lower << "{#{n}, #{m}, #{0}, #{0}, #{"%a"%[c]}, P_#{n}_#{m}},"
+      lower << "{#{n}, #{m}, #{c_bar}, #{s_bar}, #{"%a"%[c]}, P_#{n}_#{m}},"
     }
   }
   puts(<<__TEXT__)
@@ -68,7 +69,7 @@ struct EGM {
     const FloatT p_nm_bar;
     const FloatT *p_nm;
   } coefficients[];
-#{decl.join("\n  ")}
+  #{decl.join("\n  ")}
 };
 
 #{upper.join("\n")}
@@ -80,4 +81,31 @@ const typename EGM<FloatT>::coefficients_t EGM<FloatT>::coefficients[] = {
 __TEXT__
 }
 
-print_proc.call(3)
+read_coef_file = proc{|f|
+  next nil unless f
+  require 'open-uri' if f =~ /^https?:\/\//
+  data = open(f){|io|
+    case f
+    when /\.z$/
+      require 'tempfile'
+      Tempfile.open(File::basename(__FILE__, '.*')){|f_tmp|
+        f_tmp.write(io.read)
+        IO::popen("gunzip -c #{f_tmp.path}", 'r'){|io2|
+          io2.read
+        }
+      }
+    else
+      io.read
+    end
+  }
+  res = {}
+  data.each_line{|line|
+    values = line.chomp.sub(/^ +/, '').split(/ +/)
+    res[[0, 1].collect{|i| values[i].to_i}] = [2, 3].collect{|i| values[i]}
+  }
+  res
+}
+
+$stderr.puts "Usage #{$0} n [CS_bar_file]"
+$stderr.puts "ex) #{$0} 10 http://earth-info.nga.mil/GandG/wgs84/gravitymod/egm96/egm96.z"
+print_proc.call(ARGV.shift.to_i, {:CS_Bar => read_coef_file.call(ARGV.shift)})
