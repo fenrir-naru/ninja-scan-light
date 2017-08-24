@@ -95,7 +95,7 @@ struct EGM_Generic {
       for(int k(0); k <= N_MAX; k++){
         a_r_n[k] = std::pow(a_r, k);
         cos_ml[k] = std::cos(lambda * k);
-        sin_ml[k] = std::cos(lambda * k);
+        sin_ml[k] = std::sin(lambda * k);
         cos_mp[k] = std::pow(std::cos(phi), k);
         sin_mp[k] = std::pow(std::sin(phi), k);
       }
