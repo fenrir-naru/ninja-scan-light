@@ -58,6 +58,20 @@ print_proc = proc{|n_max, opt|
       lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}, #{"%a"%[c]}}, // #{n}, #{m}"
     }
   }
+  make_func_without_cache = proc{|fname, extra_cache|
+    cache_size = "N_MAX"
+    cache_size += " + #{extra_cache}" if extra_cache
+    <<__TEXT__
+  template <int N_MAX>
+  static FloatT #{fname}(
+      const coefficients_t coefs[],
+      const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
+    cache_t<#{cache_size}> x(a_r, phi, lambda);
+    return #{fname}<N_MAX, #{cache_size}>(coefs, x);
+  }
+__TEXT__
+  }
+  
   puts(<<__TEXT__)
 #include <cmath>
 #include "WGS84.h"
@@ -74,24 +88,24 @@ struct EGM_Generic {
   protected:  
   template <int N_MAX>
   struct cache_t {
+    FloatT a_r_n[N_MAX + 1];
     FloatT cos_ml[N_MAX + 1], sin_ml[N_MAX + 1];
     FloatT cos_mp[N_MAX + 1], sin_mp[N_MAX + 1];
-    cache_t(const FloatT &phi, const FloatT &lambda){
-      for(int m(0); m <= N_MAX; m++){
-        cos_ml[m] = std::cos(lambda * m);
-        sin_ml[m] = std::cos(lambda * m);
-        cos_mp[m] = std::pow(std::cos(phi), m);
-        sin_mp[m] = std::pow(std::sin(phi), m);
+    cache_t(const FloatT &a_r, const FloatT &phi, const FloatT &lambda){
+      for(int k(0); k <= N_MAX; k++){
+        a_r_n[k] = std::pow(a_r, k);
+        cos_ml[k] = std::cos(lambda * k);
+        sin_ml[k] = std::cos(lambda * k);
+        cos_mp[k] = std::pow(std::cos(phi), k);
+        sin_mp[k] = std::pow(std::sin(phi), k);
       }
     }
   };
 
-  template <int N_MAX>
+  template <int N_MAX, int N_CACHE>
   static FloatT gravity_potential_scale_n_fixed(
       const coefficients_t coefs[],
-      const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
-
-    cache_t<N_MAX> x(phi, lambda);
+      const cache_t<N_CACHE> &x) {
 
     FloatT res(1);
     for(int n(2), coef_i(0); n <= N_MAX; n++){
@@ -104,16 +118,16 @@ struct EGM_Generic {
         sum_m += coefs[coef_i].p_nm_bar * x.cos_mp[m] * p_nm
             * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
       }
-      res += std::pow(a_r, n) * sum_m;
+      res += x.a_r_n[n] * sum_m;
     }
     return res;
   }
-  template <int N_MAX>
+#{make_func_without_cache.call(:gravity_potential_scale_n_fixed)}
+  
+  template <int N_MAX, int N_CACHE>
   static FloatT gravity_r_scale_n_fixed(
       const coefficients_t coefs[],
-      const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
-
-    cache_t<N_MAX> x(phi, lambda);
+      const cache_t<N_CACHE> &x) {
 
     FloatT res(-1);
     for(int n(2), coef_i(0); n <= N_MAX; n++){
@@ -126,17 +140,16 @@ struct EGM_Generic {
         sum_m += coefs[coef_i].p_nm_bar * x.cos_mp[m] * p_nm
             * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
       }
-      res += std::pow(a_r, n) * -(n + 1) * sum_m;
+      res += x.a_r_n[n] * -(n + 1) * sum_m;
     }
     return res;
   }
+#{make_func_without_cache.call(:gravity_r_scale_n_fixed)}
   
-  template <int N_MAX>
+  template <int N_MAX, int N_CACHE>
   static FloatT gravity_phi_scale_n_fixed(
       const coefficients_t coefs[],
-      const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
-
-    cache_t<N_MAX + 1> x(phi, lambda);
+      const cache_t<N_CACHE> &x) {
 
     FloatT res(0);
     for(int n(2), coef_i(0); n <= N_MAX; n++){
@@ -160,16 +173,16 @@ struct EGM_Generic {
         sum_m += coefs[coef_i].p_nm_bar * p_nm
             * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
       }
-      res += std::pow(a_r, n) * sum_m;
+      res += x.a_r_n[n] * sum_m;
     }
     return res;
   }
-  template <int N_MAX>
+#{make_func_without_cache.call(:gravity_phi_scale_n_fixed, 1)}
+  
+  template <int N_MAX, int N_CACHE>
   static FloatT gravity_lambda_scale_n_fixed(
       const coefficients_t coefs[],
-      const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
-
-    cache_t<N_MAX> x(phi, lambda);
+      const cache_t<N_CACHE> &x) {
 
     FloatT res(0);
     for(int n(2), coef_i(0); n <= N_MAX; n++){
@@ -182,8 +195,26 @@ struct EGM_Generic {
         sum_m += coefs[coef_i].p_nm_bar * x.cos_mp[m] * p_nm
             * m * (coefs[coef_i].c_bar * -x.sin_ml[m] + coefs[coef_i].s_bar * x.cos_ml[m]);
       }
-      res += std::pow(a_r, n) * sum_m;
+      res += x.a_r_n[n] * sum_m;
     }
+    return res;
+  }
+#{make_func_without_cache.call(:gravity_lambda_scale_n_fixed)}
+  
+  public:
+  struct gravity_t {
+    FloatT r, phi, lambda;
+  };
+  protected:
+  template <int N_MAX>
+  static gravity_t gravity_scale_n_fixed(
+      const coefficients_t coefs[],
+      const FloatT &a_r, const FloatT &phi, const FloatT &lambda){
+    cache_t<N_MAX + 1> x(a_r, phi, lambda);
+    gravity_t res = {
+        gravity_r_scale_n_fixed<N_MAX, N_MAX + 1>(coefs, x),
+        gravity_phi_scale_n_fixed<N_MAX, N_MAX + 1>(coefs, x),
+        gravity_lambda_scale_n_fixed<N_MAX, N_MAX + 1>(coefs, x)};
     return res;
   }
 };
@@ -214,6 +245,17 @@ struct EGM : public EGM_Generic<FloatT> {
     return WGS84Generic<FloatT>::mu_Earth * std::pow(r, -2)
         * EGM_Generic<FloatT>::template gravity_lambda_scale_n_fixed<#{n_max}>(
             coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda);
+  }
+  static typename EGM_Generic<FloatT>::gravity_t gravity(
+      const FloatT &r, const FloatT &phi, const FloatT &lambda){
+    typename EGM_Generic<FloatT>::gravity_t res(
+        EGM_Generic<FloatT>::template gravity_scale_n_fixed<#{n_max}>(
+            coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda));
+    FloatT sf(WGS84Generic<FloatT>::mu_Earth * std::pow(r, -2));
+    res.r *= sf;
+    res.phi *= sf;
+    res.lambda *= sf;
+    return res;
   }
   #{decl.join("\n  ")}
 };
