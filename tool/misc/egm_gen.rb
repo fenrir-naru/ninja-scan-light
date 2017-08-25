@@ -24,6 +24,54 @@ def legendre(n, cache = {})
   when 1
     [Rational(0), Rational(1)]
   else
+    proc{ # definition: (2 ** (-n)) * (1/n!) * (d/dx)^n (x^2 - 1)^n
+      coefs = proc{ # (x^2 - 1)^n
+        res = []
+        sign = n % 2 == 0 ? 1 : -1
+        proc{ # binomial expansion
+          binexp = [1, 1]
+          if cache[:b] then
+            (2..n).to_a.reverse_each{|i|
+              if cache[:b][i] then
+                binexp = cache[:b][i]
+                break
+              end
+            }
+          else
+            cache[:b] = {}  
+          end
+          (n + 1 - binexp.size).times{
+            last = 0
+            binexp.collect!{|v|
+              temp = last
+              last = v
+              temp + v
+            }
+            binexp << 1
+          }
+          #cache[:b][n] = binexp
+          binexp
+        }.call.each{|v, i|
+          res += [v * sign, 0]
+          sign *= -1
+        }
+        res.pop
+        res
+      }.call
+      
+      n.times{ # differential n times
+        coefs.derivative!
+      }
+      
+      # scale factor
+      denom = 2 ** (-n)
+      (2..n).each{|i| denom /= i}
+      coefs.collect!{|v|
+        v * denom
+      }
+    }.call
+=begin
+    # definition: n legendre(n) = (2*n - 1) * x * legendre(n-1) - (n-1) * legendre(n-2)
     ([Rational(0)] + legendre(n - 1).collect{|v|
       v / n * (n * 2 - 1)
     }).zip(legendre(n - 2).collect{|v|
@@ -31,6 +79,7 @@ def legendre(n, cache = {})
     }).collect{|a, b|
       b ? a - b : a
     }
+=end
   end
   cache[n] = res
   return res
@@ -50,6 +99,7 @@ print_proc = proc{|n_max, opt|
       p_nm_bar_coef << p_nm_bar_coef[-1] / ((n - m) * (n + 1 + m))
     }
     p_nm.each_with_index{|f, m|
+      $stderr.puts "n, m = [#{n}, #{m}]"
       c = Math::sqrt(p_nm_bar_coef[m] * (m == 0 ? 1 : 2))
       c_bar, s_bar = (opt[:CS_Bar][[n, m]] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
       decl << "static const FloatT P_#{n}_#{m}[];"
