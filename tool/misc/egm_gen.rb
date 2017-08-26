@@ -104,8 +104,8 @@ print_proc = proc{|n_max, opt|
       c_bar, s_bar = (opt[:CS_Bar][[n, m]] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
       decl << "static const FloatT P_#{n}_#{m}[];"
       upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
-    #{f.collect{|v| "%a"%[v.to_f]}.join(', ')}};"
-      lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}, #{"%a"%[c]}}, // #{n}, #{m}"
+    #{f.collect{|v| "%a"%[c * v]}.join(', ')}};"
+      lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}}, // #{n}, #{m}"
     }
   }
   make_func_without_cache = proc{|fname, extra_cache|
@@ -132,7 +132,6 @@ struct EGM_Generic {
     const FloatT *p_nm;
     const FloatT c_bar;
     const FloatT s_bar;
-    const FloatT p_nm_bar;
   };
   
   protected:  
@@ -165,7 +164,7 @@ struct EGM_Generic {
         for(int pn(0); pn <= n - m; pn++){
           p_nm += coefs[coef_i].p_nm[pn] * x.sin_mp[pn];
         }
-        sum_m += coefs[coef_i].p_nm_bar * x.cos_mp[m] * p_nm
+        sum_m += x.cos_mp[m] * p_nm
             * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
       }
       res += x.a_r_n[n] * sum_m;
@@ -187,7 +186,7 @@ struct EGM_Generic {
         for(int pn(0); pn <= n - m; pn++){
           p_nm += coefs[coef_i].p_nm[pn] * x.sin_mp[pn];
         }
-        sum_m += coefs[coef_i].p_nm_bar * x.cos_mp[m] * p_nm
+        sum_m += x.cos_mp[m] * p_nm
             * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
       }
       res += x.a_r_n[n] * -(n + 1) * sum_m;
@@ -220,7 +219,7 @@ struct EGM_Generic {
           }
           p_nm += x.cos_mp[m + 1] * p_nm_mpos;
         }
-        sum_m += coefs[coef_i].p_nm_bar * p_nm
+        sum_m += p_nm
             * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
       }
       res += x.a_r_n[n] * sum_m;
@@ -242,7 +241,7 @@ struct EGM_Generic {
         for(int pn(0); pn <= n - m; pn++){
           p_nm += coefs[coef_i].p_nm[pn] * x.sin_mp[pn];
         }
-        sum_m += coefs[coef_i].p_nm_bar * x.cos_mp[m] * p_nm
+        sum_m += x.cos_mp[m] * p_nm
             * m * (coefs[coef_i].c_bar * -x.sin_ml[m] + coefs[coef_i].s_bar * x.cos_ml[m]);
       }
       res += x.a_r_n[n] * sum_m;
