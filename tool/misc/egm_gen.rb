@@ -27,13 +27,14 @@ def legendre(n, cache = {})
     proc{ # definition: (2 ** (-n)) * (1/n!) * (d/dx)^n (x^2 - 1)^n
       coefs = proc{ # (x^2 - 1)^n
         res = []
-        sign = n % 2 == 0 ? 1 : -1
+        sign = ((n % 2 == 0) ? 1 : -1)
         proc{ # binomial expansion
           binexp = [1, 1]
           if cache[:b] then
-            (2..n).to_a.reverse_each{|i|
+            next cache[:b][n] if cache[:b][n]
+            (2..(n-1)).to_a.reverse_each{|i|
               if cache[:b][i] then
-                binexp = cache[:b][i]
+                binexp = cache[:b][i].clone
                 break
               end
             }
@@ -49,26 +50,22 @@ def legendre(n, cache = {})
             }
             binexp << 1
           }
-          #cache[:b][n] = binexp
-          binexp
+          cache[:b][n] = binexp
         }.call.each{|v, i|
-          res += [v * sign, 0]
+          res += [Rational(v * sign), 0]
           sign *= -1
         }
         res.pop
         res
       }.call
       
-      n.times{ # differential n times
-        coefs.derivative!
+      (1..n).to_a.reverse_each{|i| # differential n times and divide by scale factor
+        coefs.derivative!.collect!{|v|
+          v / 2 / i
+        }
       }
       
-      # scale factor
-      denom = 2 ** (-n)
-      (2..n).each{|i| denom /= i}
-      coefs.collect!{|v|
-        v * denom
-      }
+      coefs
     }.call
 =begin
     # definition: n legendre(n) = (2*n - 1) * x * legendre(n-1) - (n-1) * legendre(n-2)
@@ -93,18 +90,18 @@ print_proc = proc{|n_max, opt|
   (2..n_max).each{|n|
     p_n = legendre(n, legendre_cache)
     p_nm = [p_n]
-    p_nm_bar_coef = [(n * 2 + 1).to_f]
-    n.times{|m|
+    p_nm_bar_coef = [Rational(n * 2 + 1)]
+    (1..n).each{|m|
       p_nm << p_nm[-1].clone.derivative!
-      p_nm_bar_coef << p_nm_bar_coef[-1] / ((n - m) * (n + 1 + m))
+      p_nm_bar_coef << p_nm_bar_coef[-1] / ((n + 1 - m) * (n + m))
     }
     p_nm.each_with_index{|f, m|
       $stderr.puts "n, m = [#{n}, #{m}]"
-      c = Math::sqrt(p_nm_bar_coef[m] * (m == 0 ? 1 : 2))
+      c = p_nm_bar_coef[m] * (m == 0 ? 1 : 2)
       c_bar, s_bar = (opt[:CS_Bar][[n, m]] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
       decl << "static const FloatT P_#{n}_#{m}[];"
       upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
-    #{f.collect{|v| "%a"%[c * v]}.join(', ')}};"
+    #{f.collect{|v| "%a"%[Math::sqrt(c * v * v)]}.join(', ')}};"
       lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}}, // #{n}, #{m}"
     }
   }
