@@ -16,7 +16,7 @@ end
 
 # @return [coefficient(c) of sin^0, c of sin^1, ...]
 def legendre(n, cache = {})
-  return n if cache.include?(n)
+  return cache[n] if cache.include?(n)
   
   res = case n
   when 0
@@ -82,28 +82,58 @@ def legendre(n, cache = {})
   return res
 end
 
-print_proc = proc{|n_max, opt|
-  legendre_cache = {}
-  decl = []
-  upper = []
-  lower = []
+def iterate_p_nm(n_max, cache = {}, &b)
   (2..n_max).each{|n|
-    p_n = legendre(n, legendre_cache)
+    p_n = legendre(n, cache)
     p_nm = [p_n]
     p_nm_bar_coef = [Rational(n * 2 + 1)]
     (1..n).each{|m|
       p_nm << p_nm[-1].clone.derivative!
       p_nm_bar_coef << p_nm_bar_coef[-1] / ((n + 1 - m) * (n + m))
     }
-    p_nm.each_with_index{|f, m|
-      $stderr.puts "n, m = [#{n}, #{m}]"
-      c = p_nm_bar_coef[m] * (m == 0 ? 1 : 2)
-      c_bar, s_bar = (opt[:CS_Bar][[n, m]] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
-      decl << "static const FloatT P_#{n}_#{m}[];"
-      upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
-    #{f.collect{|v| "%a"%[Math::sqrt(c * v * v)]}.join(', ')}};"
-      lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}}, // #{n}, #{m}"
+    p_nm.each_with_index{|poly, m|
+      b.call(n, m, p_nm_bar_coef[m] * (m == 0 ? 1 : 2), poly)
     }
+  }
+end
+
+calc_potential = proc{|n_max, opt|
+  r, phi, lamb = [:r, :phi, :lamb].collect{|k| opt[k]}
+  a_r = 6378137.0 / r
+  
+  a_r_n = (0..n_max).to_a.collect{|n| a_r ** n}
+  c_mp, s_mp = (0..n_max).to_a.collect{|m|
+    [:cos, :sin].collect{|f| Math::send(f, phi) ** m}
+  }.transpose
+  c_ml, s_ml = (0..n_max).to_a.collect{|m|
+    [:cos, :sin].collect{|f| Math::send(f, lamb * m)}
+  }.transpose
+  opt[:legendre] ||= {}
+  
+  sum_n = 1.0
+  iterate_p_nm(n_max, opt[:legendre]){|n, m, c2, poly|
+    c_bar, s_bar = opt[:CS_Bar][n][m].collect{|v| v.to_f}
+    sum_poly = 0.0
+    poly.each_with_index{|k, i|
+      sum_poly += k.to_f * s_mp[i]
+    }
+    sum_n += a_r_n[n] * sum_poly * c_mp[m] * Math::sqrt(c2) * (c_bar * c_ml[m] + s_bar * s_ml[m])
+  }
+  
+  3986004.418E8 / r * sum_n
+}
+
+print_cpp = proc{|n_max, opt|
+  decl = []
+  upper = []
+  lower = []
+  iterate_p_nm(n_max){|n, m, c2, poly|
+    $stderr.puts "n, m = [#{n}, #{m}]"
+    c_bar, s_bar = (opt[:CS_Bar][n][m] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
+    decl << "static const FloatT P_#{n}_#{m}[];"
+    upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
+    #{poly.collect{|v| "%a"%[Math::sqrt(c2 * v * v)]}.join(', ')}};"
+    lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}}, // #{n}, #{m}"
   }
   make_func_without_cache = proc{|fname, extra_cache|
     cache_size = "N_MAX"
@@ -335,11 +365,36 @@ read_coef_file = proc{|f|
   res = {}
   data.each_line{|line|
     values = line.chomp.sub(/^ +/, '').split(/ +/)
-    res[[0, 1].collect{|i| values[i].to_i}] = [2, 3].collect{|i| values[i]}
+    n, m = [0, 1].collect{|i| values[i].to_i}
+    res[n] ||= []
+    res[n][m] = [2, 3].collect{|i| values[i]}
   }
   res
 }
 
 $stderr.puts "Usage #{$0} n [CS_bar_file]"
 $stderr.puts "ex) #{$0} 10 http://earth-info.nga.mil/GandG/wgs84/gravitymod/egm96/egm96.z"
-print_proc.call(ARGV.shift.to_i, {:CS_Bar => read_coef_file.call(ARGV.shift)})
+
+opt = {
+  :n_max => ARGV.shift.to_i,
+  :CS_Bar => read_coef_file.call(ARGV.shift),
+}
+print_cpp.call(opt[:n_max], opt)
+
+proc{
+  require 'WGS84'
+  (-90..90).to_a.reverse_each{|lat_deg|
+    $stderr.puts lat_deg
+    phi_gd = Math::PI / 180 * lat_deg
+    x, z = WGS84::xz(phi_gd, opt[:alt] || 0)
+    r = ((x ** 2) + (z ** 2)) ** 0.5
+    phi_gc = Math::atan2(z, x)
+    puts (0..359).to_a.collect{|lng_deg|
+      calc_potential.call(opt[:n_max], opt.merge!({
+        :r => r,
+        :phi => phi_gc,
+        :lamb => Math::PI / 180 * lng_deg,
+      }))
+    }.join(',')
+  }
+}.call if false
