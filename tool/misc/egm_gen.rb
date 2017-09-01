@@ -3,150 +3,13 @@
 
 require 'stringio'
 
-# derivative
-class Array
-  def derivative!
-    self.size.times{|i|
-      self[i] *= i
-    }
-    self.shift
-    self
-  end
-end
-
-# @return [coefficient(c) of sin^0, c of sin^1, ...]
-def legendre(n, cache = {})
-  return cache[n] if cache.include?(n)
-  
-  res = case n
-  when 0
-    [Rational(1)]
-  when 1
-    [Rational(0), Rational(1)]
-  else
-    proc{ # definition: (2 ** (-n)) * (1/n!) * (d/dx)^n (x^2 - 1)^n
-      coefs = proc{ # (x^2 - 1)^n
-        res = []
-        sign = ((n % 2 == 0) ? 1 : -1)
-        proc{ # binomial expansion
-          binexp = [1, 1]
-          if cache[:b] then
-            next cache[:b][n] if cache[:b][n]
-            (2..(n-1)).to_a.reverse_each{|i|
-              if cache[:b][i] then
-                binexp = cache[:b][i].clone
-                break
-              end
-            }
-          else
-            cache[:b] = {}  
-          end
-          (n + 1 - binexp.size).times{
-            last = 0
-            binexp.collect!{|v|
-              temp = last
-              last = v
-              temp + v
-            }
-            binexp << 1
-          }
-          cache[:b][n] = binexp
-        }.call.each{|v, i|
-          res += [Rational(v * sign), 0]
-          sign *= -1
-        }
-        res.pop
-        res
-      }.call
-      
-      (1..n).to_a.reverse_each{|i| # differential n times and divide by scale factor
-        coefs.derivative!.collect!{|v|
-          v / 2 / i
-        }
-      }
-      
-      coefs
-    }.call
-=begin
-    # definition: n legendre(n) = (2*n - 1) * x * legendre(n-1) - (n-1) * legendre(n-2)
-    ([Rational(0)] + legendre(n - 1).collect{|v|
-      v / n * (n * 2 - 1)
-    }).zip(legendre(n - 2).collect{|v|
-      v / n * (n - 1)
-    }).collect{|a, b|
-      b ? a - b : a
-    }
-=end
-  end
-  cache[n] = res
-  return res
-end
-
-def iterate_p_nm(n_max, cache = {}, &b)
-  (2..n_max).each{|n|
-    p_n = legendre(n, cache)
-    p_nm = [p_n]
-    p_nm_bar_coef = [Rational(n * 2 + 1)]
-    (1..n).each{|m|
-      p_nm << p_nm[-1].clone.derivative!
-      p_nm_bar_coef << p_nm_bar_coef[-1] / ((n + 1 - m) * (n + m))
-    }
-    p_nm.each_with_index{|poly, m|
-      b.call(n, m, p_nm_bar_coef[m] * (m == 0 ? 1 : 2), poly)
-    }
-  }
-end
-
-calc_potential = proc{|n_max, opt|
-  r, phi, lamb = [:r, :phi, :lamb].collect{|k| opt[k]}
-  a_r = 6378137.0 / r
-  
-  a_r_n = (0..n_max).to_a.collect{|n| a_r ** n}
-  c_mp, s_mp = (0..n_max).to_a.collect{|m|
-    [:cos, :sin].collect{|f| Math::send(f, phi) ** m}
-  }.transpose
-  c_ml, s_ml = (0..n_max).to_a.collect{|m|
-    [:cos, :sin].collect{|f| Math::send(f, lamb * m)}
-  }.transpose
-  opt[:legendre] ||= {}
-  
-  sum_n = 1.0
-  iterate_p_nm(n_max, opt[:legendre]){|n, m, c2, poly|
-    c_bar, s_bar = opt[:CS_Bar][n][m].collect{|v| v.to_f}
-    sum_poly = 0.0
-    poly.each_with_index{|k, i|
-      sum_poly += k.to_f * s_mp[i]
-    }
-    sum_n += a_r_n[n] * sum_poly * c_mp[m] * Math::sqrt(c2) * (c_bar * c_ml[m] + s_bar * s_ml[m])
-  }
-  
-  3986004.418E8 / r * sum_n
-}
-
 print_cpp = proc{|n_max, opt|
-  decl = []
-  upper = []
-  lower = []
-  iterate_p_nm(n_max){|n, m, c2, poly|
-    $stderr.puts "n, m = [#{n}, #{m}]"
-    c_bar, s_bar = (opt[:CS_Bar][n][m] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
-    decl << "static const FloatT P_#{n}_#{m}[];"
-    upper << "template<class FloatT> const FloatT EGM<FloatT>::P_#{n}_#{m}[] = {
-    #{poly.collect{|v| "%a"%[Math::sqrt(c2 * v * v)]}.join(', ')}};"
-    lower << "{P_#{n}_#{m}, #{c_bar}, #{s_bar}}, // #{n}, #{m}"
-  }
-  make_func_without_cache = proc{|fname, extra_cache|
-    cache_size = "N_MAX"
-    cache_size += " + #{extra_cache}" if extra_cache
-    <<__TEXT__
-  template <int N_MAX>
-  static FloatT #{fname}(
-      const coefficients_t coefs[],
-      const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
-    cache_t<#{cache_size}> x(a_r, phi, lambda);
-    return #{fname}<N_MAX, #{cache_size}>(coefs, x);
-  }
-__TEXT__
+  coefs = []
+  (2..n_max).each{|n|
+    (0..n).each{|m|
+      c_bar, s_bar = (opt[:CS_Bar][n][m] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
+      coefs << "{#{c_bar}#{", #{s_bar}" if m > 0}}, // #{n}, #{m}"
+    }
   }
   
   puts(<<__TEXT__)
@@ -156,191 +19,212 @@ __TEXT__
 template <class FloatT>
 struct EGM_Generic {
   struct coefficients_t {
-    const FloatT *p_nm;
     const FloatT c_bar;
     const FloatT s_bar;
   };
-  
-  protected:  
+
+  protected:
+
+  template <int N_MAX>
+  struct p_bar_nm_t{
+    unsigned int n_current;
+    const FloatT sp, cp;
+    FloatT p_bar_cache[3][N_MAX + 1];
+    FloatT *p_bar[3];
+
+    void next(
+        const unsigned int &n,
+        FloatT *p_bar_n,
+        const FloatT *p_bar_n1, const FloatT *p_bar_n2) const {
+
+      { // m = 0
+        FloatT b(std::sqrt(FloatT(2 * n + 1) / (2 * n - 1)));
+        FloatT c(std::sqrt(FloatT(2 * n + 1) / (2 * n - 3)));
+        p_bar_n[0] = (p_bar_n1[0] * sp * (2 * n - 1) * b - p_bar_n2[0] * (n - 1) * c) / n;
+      }
+      for(int m(1); m <= n - 2; ++m){ // 0 < m < n-1
+        FloatT a(std::pow(((2 * n - 1) * (n + m - 1)), -0.5) * (m == 1 ? std::sqrt(2) : 1));
+        FloatT b(std::sqrt(FloatT(n - m) / (2 * n - 1)));
+        FloatT c(std::sqrt(FloatT((n - m) * (n - m - 1)) / ((2 * n - 3) * (n + m - 1))));
+        p_bar_n[m] = (p_bar_n1[m - 1] * m * (2 * n - 1) * cp * a \
+            + (p_bar_n1[m] * sp * (2 * n - 1) * b - p_bar_n2[m] * (n - 1) * c)) \
+              / n * std::sqrt(FloatT(2 * n + 1) / (n + m));
+      }
+      { // m = n-1
+        FloatT a(std::sqrt(FloatT((2 * n + 1) * (n - 1)) / 2) * (n == 2 ? std::sqrt(2) : 1));
+        FloatT b(std::sqrt(2 * n + 1));
+        p_bar_n[n - 1] = (p_bar_n1[n - 2] * cp * a + p_bar_n1[n - 1] * sp * b) / n;
+      }
+      { // m = n
+        p_bar_n[n] = p_bar_n1[n - 1] * cp * std::sqrt(0.5 / n + 1);
+      }
+    }
+    p_bar_nm_t<N_MAX> &operator++(){
+      { // rotate
+        FloatT *temp(p_bar[2]);
+        p_bar[2] = p_bar[1];
+        p_bar[1] = p_bar[0];
+        p_bar[0] = temp;
+      }
+      next(++n_current, p_bar[0], p_bar[1], p_bar[2]);
+      return *this;
+    }
+    p_bar_nm_t(const FloatT &phi)
+        : n_current(0), sp(std::sin(phi)), cp(std::cos(phi)) {
+      p_bar[0] = p_bar_cache[0];
+      p_bar[1] = p_bar_cache[1];
+      p_bar[2] = p_bar_cache[2];
+      for(int i(0); i <= N_MAX; ++i){
+        p_bar[0][i] = p_bar[1][i] = p_bar[2][i] = 0;
+      }
+      if(N_MAX <= 0){
+        p_bar[0][0] = 1;
+      }else{
+        ++n_current;
+        p_bar[0][0] = sp * std::sqrt(3);
+        p_bar[0][1] = cp * std::sqrt(3);
+        p_bar[1][0] = 1;
+      }
+    }
+  };
+
+  public:
+
   template <int N_MAX>
   struct cache_t {
+    unsigned int n_max;
     FloatT a_r_n[N_MAX + 1];
-    FloatT cos_ml[N_MAX + 1], sin_ml[N_MAX + 1];
-    FloatT cos_mp[N_MAX + 1], sin_mp[N_MAX + 1];
-    cache_t(const FloatT &a_r, const FloatT &phi, const FloatT &lambda){
+    FloatT p_bar[N_MAX + 1][N_MAX + 1];
+    FloatT c_ml[N_MAX + 1], s_ml[N_MAX + 1];
+    cache_t() : n_max(N_MAX) {}
+    cache_t &update_a_r(const FloatT &a_r){
       for(int k(0); k <= N_MAX; k++){
         a_r_n[k] = std::pow(a_r, k);
-        cos_ml[k] = std::cos(lambda * k);
-        sin_ml[k] = std::sin(lambda * k);
-        cos_mp[k] = std::pow(std::cos(phi), k);
-        sin_mp[k] = std::pow(std::sin(phi), k);
       }
+      return *this;
+    }
+    cache_t &update_phi(const FloatT &phi){
+      p_bar_nm_t<N_MAX> p_bar_gen(phi);
+      p_bar_gen.next(2, p_bar[2], p_bar_gen.p_bar[0], p_bar_gen.p_bar[1]);
+      p_bar_gen.next(3, p_bar[3], p_bar[2], p_bar_gen.p_bar[0]);
+      for(int n(4); n <= N_MAX; n++){
+        p_bar_gen.next(n, p_bar[n], p_bar[n - 1], p_bar[n - 2]);
+      }
+      return *this;
+    }
+    cache_t &update_lambda(const FloatT &lambda){
+      for(int k(0); k <= N_MAX; k++){
+        c_ml[k] = std::cos(lambda * k);
+        s_ml[k] = std::sin(lambda * k);
+      }
+      return *this;
+    }
+    cache_t &update(const FloatT &a_r, const FloatT &phi, const FloatT &lambda){
+      update_a_r(a_r);
+      update_phi(phi);
+      update_lambda(lambda);
+      return *this;
     }
   };
 
-  template <int N_MAX, int N_CACHE>
-  static FloatT gravity_potential_scale_n_fixed(
-      const coefficients_t coefs[],
-      const cache_t<N_CACHE> &x) {
-
-    FloatT res(1);
-    for(int n(2), coef_i(0); n <= N_MAX; n++){
-      FloatT sum_m(0);
-      for(int m(0); m <= n; m++, coef_i++){
-        FloatT p_nm(0);
-        for(int pn(0); pn <= n - m; pn++){
-          p_nm += coefs[coef_i].p_nm[pn] * x.sin_mp[pn];
-        }
-        sum_m += x.cos_mp[m] * p_nm
-            * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
-      }
-      res += x.a_r_n[n] * sum_m;
-    }
-    return res;
-  }
-#{make_func_without_cache.call(:gravity_potential_scale_n_fixed)}
-  
-  template <int N_MAX, int N_CACHE>
-  static FloatT gravity_r_scale_n_fixed(
-      const coefficients_t coefs[],
-      const cache_t<N_CACHE> &x) {
-
-    FloatT res(-1);
-    for(int n(2), coef_i(0); n <= N_MAX; n++){
-      FloatT sum_m(0);
-      for(int m(0); m <= n; m++, coef_i++){
-        FloatT p_nm(0);
-        for(int pn(0); pn <= n - m; pn++){
-          p_nm += coefs[coef_i].p_nm[pn] * x.sin_mp[pn];
-        }
-        sum_m += x.cos_mp[m] * p_nm
-            * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
-      }
-      res += x.a_r_n[n] * -(n + 1) * sum_m;
-    }
-    return res;
-  }
-#{make_func_without_cache.call(:gravity_r_scale_n_fixed)}
-  
-  template <int N_MAX, int N_CACHE>
-  static FloatT gravity_phi_scale_n_fixed(
-      const coefficients_t coefs[],
-      const cache_t<N_CACHE> &x) {
-
-    FloatT res(0);
-    for(int n(2), coef_i(0); n <= N_MAX; n++){
-      FloatT sum_m(0);
-      for(int m(0); m <= n; m++, coef_i++){
-        FloatT p_nm(0);
-        if(m >= 1){
-          FloatT p_nm_mneg(0);
-          for(int pn(0); pn <= n - m; pn++){
-            p_nm_mneg += coefs[coef_i].p_nm[pn] * x.sin_mp[pn + 1];
-          }
-          p_nm += x.cos_mp[m - 1] * p_nm_mneg * -m;
-        }
-        {
-          FloatT p_nm_mpos(0);
-          for(int pn(1); pn <= n - m; pn++){
-            p_nm_mpos += coefs[coef_i].p_nm[pn] * x.sin_mp[pn - 1] * pn;
-          }
-          p_nm += x.cos_mp[m + 1] * p_nm_mpos;
-        }
-        sum_m += p_nm
-            * (coefs[coef_i].c_bar * x.cos_ml[m] + coefs[coef_i].s_bar * x.sin_ml[m]);
-      }
-      res += x.a_r_n[n] * sum_m;
-    }
-    return res;
-  }
-#{make_func_without_cache.call(:gravity_phi_scale_n_fixed, 1)}
-  
-  template <int N_MAX, int N_CACHE>
-  static FloatT gravity_lambda_scale_n_fixed(
-      const coefficients_t coefs[],
-      const cache_t<N_CACHE> &x) {
-
-    FloatT res(0);
-    for(int n(2), coef_i(0); n <= N_MAX; n++){
-      FloatT sum_m(0);
-      for(int m(1); m <= n; m++, coef_i++){
-        FloatT p_nm(0);
-        for(int pn(0); pn <= n - m; pn++){
-          p_nm += coefs[coef_i].p_nm[pn] * x.sin_mp[pn];
-        }
-        sum_m += x.cos_mp[m] * p_nm
-            * m * (coefs[coef_i].c_bar * -x.sin_ml[m] + coefs[coef_i].s_bar * x.cos_ml[m]);
-      }
-      res += x.a_r_n[n] * sum_m;
-    }
-    return res;
-  }
-#{make_func_without_cache.call(:gravity_lambda_scale_n_fixed)}
-  
-  public:
-  struct gravity_t {
-    FloatT r, phi, lambda;
-  };
-  protected:
   template <int N_MAX>
-  static gravity_t gravity_scale_n_fixed(
+  static FloatT gravity_potential_dimless(
       const coefficients_t coefs[],
-      const FloatT &a_r, const FloatT &phi, const FloatT &lambda){
-    cache_t<N_MAX + 1> x(a_r, phi, lambda);
-    gravity_t res = {
-        gravity_r_scale_n_fixed<N_MAX, N_MAX + 1>(coefs, x),
-        gravity_phi_scale_n_fixed<N_MAX, N_MAX + 1>(coefs, x),
-        gravity_lambda_scale_n_fixed<N_MAX, N_MAX + 1>(coefs, x)};
-    return res;
+      const cache_t<N_MAX> &x) {
+
+    FloatT sum_n(1);
+    for(int n(2), coef_i(0); n <= x.n_max; n++){
+      FloatT sum_m(0);
+      for(int m(0); m <= n; m++, coef_i++){
+        sum_m += x.p_bar[n][m]
+            * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+      }
+      sum_n += x.a_r_n[n] * sum_m;
+    }
+    return sum_n;
+  }
+
+  template <int N_MAX>
+  static FloatT gravity_r_dimless(
+      const coefficients_t coefs[],
+      const cache_t<N_MAX> &x) {
+
+    FloatT sum_n(1);
+    for(int n(2), coef_i(0); n <= x.n_max; n++){
+      FloatT sum_m(0);
+      for(int m(0); m <= n; m++, coef_i++){
+        sum_m += x.p_bar[n][m]
+            * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+      }
+      sum_n += x.a_r_n[n] * sum_m * (n + 1);
+    }
+    return sum_n;
+  }
+
+  template <int N_MAX>
+  static FloatT gravity_phi_dimless(
+      const coefficients_t coefs[],
+      const cache_t<N_MAX> &x) {
+
+    FloatT sum_n(0);
+    for(int n(2), coef_i(0); n <= x.n_max; n++){
+      FloatT sum_m(0);
+      for(int m(0); m <= n; m++, coef_i++){
+        sum_m += (-x.p_bar[n][m] * m * x.c_ml[1] * x.s_ml[1] \
+              + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[n][m+1]))
+            * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+      }
+      sum_n += x.a_r_n[n] * sum_m;
+    }
+    return sum_n;
+  }
+
+  template <int N_MAX>
+  static FloatT gravity_lambda_dimless(
+      const coefficients_t coefs[],
+      const cache_t<N_MAX> &x) {
+
+    FloatT sum_n(0);
+    for(int n(2), coef_i(0); n <= x.n_max; n++){
+      FloatT sum_m(0);
+      for(int m(0); m <= n; m++, coef_i++){
+        sum_m += x.p_bar[n][m] * m
+            * (-coefs[coef_i].c_bar * x.s_ml[m] + coefs[coef_i].s_bar * x.c_ml[m]);
+      }
+      sum_n += x.a_r_n[n] * sum_m;
+    }
+    return sum_n;
   }
 };
 
 template <class FloatT>
-struct EGM : public EGM_Generic<FloatT> {
+struct EGM_#{n_max} : public EGM_Generic<FloatT> {
   static const typename EGM_Generic<FloatT>::coefficients_t coefficients[];
-  static FloatT gravity_potential(
-      const FloatT &r, const FloatT &phi, const FloatT &lambda){
-    return (WGS84Generic<FloatT>::mu_Earth / r)
-        * EGM_Generic<FloatT>::template gravity_potential_scale_n_fixed<#{n_max}>(
-            coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda);
-  }
-  static FloatT gravity_r(
-      const FloatT &r, const FloatT &phi, const FloatT &lambda){
-    return WGS84Generic<FloatT>::mu_Earth * std::pow(r, -2)
-        * EGM_Generic<FloatT>::template gravity_r_scale_n_fixed<#{n_max}>(
-            coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda);
-  }
-  static FloatT gravity_phi(
-      const FloatT &r, const FloatT &phi, const FloatT &lambda){
-    return WGS84Generic<FloatT>::mu_Earth * std::pow(r, -2)
-        * EGM_Generic<FloatT>::template gravity_phi_scale_n_fixed<#{n_max}>(
-            coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda);
-  }
-  static FloatT gravity_lambda(
-      const FloatT &r, const FloatT &phi, const FloatT &lambda){
-    return WGS84Generic<FloatT>::mu_Earth * std::pow(r, -2)
-        * EGM_Generic<FloatT>::template gravity_lambda_scale_n_fixed<#{n_max}>(
-            coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda);
-  }
-  static typename EGM_Generic<FloatT>::gravity_t gravity(
-      const FloatT &r, const FloatT &phi, const FloatT &lambda){
-    typename EGM_Generic<FloatT>::gravity_t res(
-        EGM_Generic<FloatT>::template gravity_scale_n_fixed<#{n_max}>(
-            coefficients, WGS84Generic<FloatT>::R_e / r, phi, lambda));
-    FloatT sf(WGS84Generic<FloatT>::mu_Earth * std::pow(r, -2));
-    res.r *= sf;
-    res.phi *= sf;
-    res.lambda *= sf;
-    return res;
-  }
-  #{decl.join("\n  ")}
+  typedef typename EGM_Generic<FloatT>::template cache_t<#{n_max}> cache_t;
+
+#define make_func(fname, sf) \\
+static FloatT fname( \\
+    const FloatT &r, const FloatT &phi, const FloatT &lambda){ \\
+  return (sf) * EGM_Generic<FloatT>::template fname ## _dimless<#{n_max}>( \\
+      coefficients, \\
+      cache_t().update(WGS84Generic<FloatT>::R_e / r, phi, lambda)); \\
+} \\
+static FloatT fname( \\
+    const cache_t &cache, \\
+    const FloatT &r, const FloatT &phi, const FloatT &lambda){ \\
+  return (sf) * EGM_Generic<FloatT>::template fname ## _dimless<#{n_max}>( \\
+      coefficients, cache); \\
+}
+
+  make_func(gravity_potential, WGS84Generic<FloatT>::mu_Earth / r);
+  make_func(gravity_r, -WGS84Generic<FloatT>::mu_Earth / std::pow(r, 2));
+  make_func(gravity_phi, WGS84Generic<FloatT>::mu_Earth / std::pow(r, 2));
+  make_func(gravity_lambda, WGS84Generic<FloatT>::mu_Earth / std::pow(r, 2) / std::cos(phi));
 };
 
-#{upper.join("\n")}
-
 template<class FloatT>
-const typename EGM_Generic<FloatT>::coefficients_t EGM<FloatT>::coefficients[] = {
-  #{lower.join("\n  ")}
+const typename EGM_Generic<FloatT>::coefficients_t EGM_#{n_max}<FloatT>::coefficients[] = {
+  #{coefs.join("\n  ")}
 };
 __TEXT__
 }
@@ -380,21 +264,3 @@ opt = {
   :CS_Bar => read_coef_file.call(ARGV.shift),
 }
 print_cpp.call(opt[:n_max], opt)
-
-proc{
-  require 'WGS84'
-  (-90..90).to_a.reverse_each{|lat_deg|
-    $stderr.puts lat_deg
-    phi_gd = Math::PI / 180 * lat_deg
-    x, z = WGS84::xz(phi_gd, opt[:alt] || 0)
-    r = ((x ** 2) + (z ** 2)) ** 0.5
-    phi_gc = Math::atan2(z, x)
-    puts (0..359).to_a.collect{|lng_deg|
-      calc_potential.call(opt[:n_max], opt.merge!({
-        :r => r,
-        :phi => phi_gc,
-        :lamb => Math::PI / 180 * lng_deg,
-      }))
-    }.join(',')
-  }
-}.call if false
