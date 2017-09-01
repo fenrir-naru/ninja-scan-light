@@ -229,38 +229,48 @@ const typename EGM_Generic<FloatT>::coefficients_t EGM_#{n_max}<FloatT>::coeffic
 __TEXT__
 }
 
-read_coef_file = proc{|f|
+read_coef_file = proc{|f, n_max|
   next nil unless f
-  require 'open-uri' if f =~ /^https?:\/\//
-  data = open(f){|io|
-    case f
-    when /\.z$/
-      require 'tempfile'
-      Tempfile.open(File::basename(__FILE__, '.*')){|f_tmp|
-        f_tmp.write(io.read)
-        IO::popen("gunzip -c #{f_tmp.path}", 'r'){|io2|
-          io2.read
-        }
-      }
-    else
-      io.read
-    end
+  parse = proc{|io|
+    res = []
+    io.each{|line|
+      values = line.chomp.sub(/^ +/, '').split(/ +/)
+      n, m = [0, 1].collect{|i| values[i].to_i}
+      unless res[n]
+        break if ((n > n_max) rescue false)
+        res[n] = []
+      end
+      res[n][m] = [2, 3].collect{|i| values[i].gsub(/[dD]([+-]?\d+)/, 'e\1')}
+    }
+    res
   }
-  res = {}
-  data.each_line{|line|
-    values = line.chomp.sub(/^ +/, '').split(/ +/)
-    n, m = [0, 1].collect{|i| values[i].to_i}
-    res[n] ||= []
-    res[n][m] = [2, 3].collect{|i| values[i]}
-  }
-  res
+  f_orig = f
+  if f_orig =~ /^https?:\/\//
+    require 'open-uri'
+    require 'tempfile'
+    f_tmp = Tempfile.open(File::basename(__FILE__, '.*'))
+    open(f_orig){|io|
+      f_tmp.write(io.read)
+    }
+    f = f_tmp.path
+  end
+  case f_orig
+  when /\.g?z$/
+    IO::popen("gunzip -c #{f}", 'r'){|io|
+      parse.call(io)
+    }
+  else
+    open(f){|io|
+      parse.call(io)
+    }
+  end
 }
 
-$stderr.puts "Usage #{$0} n [CS_bar_file]"
+$stderr.puts "Usage: #{$0} n [CS_bar_file]"
 $stderr.puts "ex) #{$0} 10 http://earth-info.nga.mil/GandG/wgs84/gravitymod/egm96/egm96.z"
 
+n_max = ARGV.shift.to_i
 opt = {
-  :n_max => ARGV.shift.to_i,
-  :CS_Bar => read_coef_file.call(ARGV.shift),
+  :CS_Bar => read_coef_file.call(ARGV.shift, n_max),
 }
-print_cpp.call(opt[:n_max], opt)
+print_cpp.call(n_max, opt)
