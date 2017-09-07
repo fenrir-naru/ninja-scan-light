@@ -11,6 +11,7 @@ print_cpp = proc{|n_max, opt|
       coefs << "{#{c_bar}#{", #{s_bar}" if m > 0}}, // #{n}, #{m}"
     }
   }
+  egm = (opt[:version] || 'EGM')
   
   print(<<__TEXT__)
 #include <cmath>
@@ -198,7 +199,7 @@ struct EGM_Generic {
 };
 
 template <class FloatT>
-struct #{opt[:version]}_#{n_max}_Generic : public EGM_Generic<FloatT> {
+struct #{egm}_#{n_max}_Generic : public EGM_Generic<FloatT> {
   static const typename EGM_Generic<FloatT>::coefficients_t coefficients[];
   typedef typename EGM_Generic<FloatT>::template cache_t<#{n_max}> cache_t;
 
@@ -223,16 +224,56 @@ static FloatT fname( \\
 };
 
 template<class FloatT>
-const typename EGM_Generic<FloatT>::coefficients_t #{opt[:version]}_#{n_max}_Generic<FloatT>::coefficients[] = {
+const typename EGM_Generic<FloatT>::coefficients_t #{egm}_#{n_max}_Generic<FloatT>::coefficients[] = {
   #{coefs.join("\n  ")}
 };
 
-typedef #{opt[:version]}_#{n_max}_Generic<double> #{opt[:version]}_#{n_max};
+typedef #{egm}_#{n_max}_Generic<double> #{egm}_#{n_max};
+__TEXT__
+
+  puts(<<__TEXT__) if opt[:test_cpp]
+
+#include <iostream>
+#include <iomanip>
+
+using namespace std;
+
+int main(){
+
+  cout << setprecision(16);
+
+  double alt(0);
+
+  typedef #{egm}_#{n_max} egm_t;
+  typedef egm_t::cache_t cache_t;
+
+  cache_t #{n_max <= 100 ? "cache_i" : "*cache_p(new cache_t())"};
+  cache_t &cache(#{n_max <= 100 ? "cache_i" : "*cache_p"});
+
+  for(int lat_deg(90); lat_deg >= -90; lat_deg--){
+
+    cerr << lat_deg << std::endl;
+    double lat(M_PI / 180 * lat_deg);
+    typename WGS84::xz_t xz(WGS84::xz(lat, alt));
+    double phi(xz.geocentric_latitude()), r(xz.distance());
+    cache.update_phi(phi);
+    cache.update_a_r(r / WGS84::R_e);
+
+    for(int lng_deg(0); lng_deg <= 359; lng_deg++){
+      double lng(M_PI / 180 * lng_deg);
+      double lambda(lng);
+      cache.update_lambda(lambda);
+
+      cout << egm_t::gravity_potential(cache, r, phi, lambda) << ", ";
+    }
+    cout << endl;
+  }
+}
 __TEXT__
 }
 
 read_coef_file = proc{|f, n_max|
-  next nil unless f
+  next [nil, n_max] unless f
   parse = proc{|io|
     res = []
     io.each{|line|
@@ -244,7 +285,7 @@ read_coef_file = proc{|f, n_max|
       end
       res[n][m] = [2, 3].collect{|i| values[i].gsub(/[dD]([+-]?\d+)/, 'e\1')}
     }
-    res
+    [res, res.size - 1]
   }
   f_orig = f
   if f_orig =~ /^https?:\/\//
@@ -281,6 +322,11 @@ ARGV.reject!{|arg|
   true
 }
 
-n_max = ARGV.shift.to_i
-opt[:CS_Bar] = read_coef_file.call(ARGV.shift, n_max)
+n_max = begin
+  i = Integer(ARGV.shift)
+  i < 2 ? nil : i
+rescue
+  nil
+end
+opt[:CS_Bar], n_max = read_coef_file.call(ARGV.shift, n_max)
 print_cpp.call(n_max, opt)
