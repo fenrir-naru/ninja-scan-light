@@ -79,7 +79,9 @@ struct EGM_Generic {
         FloatT a(std::pow(((2 * n - 1) * (n + m - 1)), -0.5) * (m == 1 ? std::sqrt(2) : 1));
         FloatT b(std::sqrt(FloatT(n - m) / (2 * n - 1)));
         FloatT c(std::sqrt(FloatT((n - m) * (n - m - 1)) / ((2 * n - 3) * (n + m - 1))));
-        p_bar_n[m] = (p_bar_n1[m - 1] * m * (2 * n - 1) * cp * a             + (p_bar_n1[m] * sp * (2 * n - 1) * b - p_bar_n2[m] * (n - 1) * c))               / n * std::sqrt(FloatT(2 * n + 1) / (n + m));
+        p_bar_n[m] = (p_bar_n1[m - 1] * m * (2 * n - 1) * cp * a
+            + (p_bar_n1[m] * sp * (2 * n - 1) * b - p_bar_n2[m] * (n - 1) * c))
+              / n * std::sqrt(FloatT(2 * n + 1) / (n + m));
       }
       { // m = n-1
         FloatT a(std::sqrt(FloatT((2 * n + 1) * (n - 1)) / 2) * (n == 2 ? std::sqrt(2) : 1));
@@ -201,7 +203,8 @@ struct EGM_Generic {
     for(int n(2), coef_i(0); n <= x.n_max; n++){
       FloatT sum_m(0);
       for(int m(0); m <= n; m++, coef_i++){
-        sum_m += (-x.p_bar[n][m] * m * x.c_ml[1] * x.s_ml[1]               + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[n][m+1]))
+        sum_m += (-x.p_bar[n][m] * m * x.c_ml[1] * x.s_ml[1]
+              + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[n][m+1]))
             * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
       }
       sum_n += x.a_r_n[n] * sum_m;
