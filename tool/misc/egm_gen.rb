@@ -127,75 +127,110 @@ struct EGM_Generic {
       return *this;
     }
   };
+  
+  template <int N_MAX>
+  struct buffer_t : public p_bar_nm_t<N_MAX> {
+    const FloatT &a_r_orig;
+    FloatT a_r_n;
+    FloatT c_ml[N_MAX + 1], s_ml[N_MAX + 1];
+    buffer_t(const FloatT &a_r, const FloatT &phi, const FloatT &lambda)
+        : p_bar_nm_t<N_MAX>(phi), a_r_orig(a_r), a_r_n(a_r) {
+      for(int m(0); m <= N_MAX; ++m){
+        c_ml[m] = std::cos(lambda * m);
+        s_ml[m] = std::sin(lambda * m);
+      }
+    }
+    buffer_t &operator++(){
+      p_bar_nm_t<N_MAX>::operator ++();
+      a_r_n *= a_r_orig; // a_r_n = std::pow(a_r_orig, p_bar_nm_t<N_MAX>::n_current);
+      return *this;
+    }
+  };
 
+#{[true, false].collect{|use_cache|
+  <<__FUNC__
   template <int N_MAX>
   static FloatT gravity_potential_dimless(
       const coefficients_t coefs[],
-      const cache_t<N_MAX> &x) {
+      #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
 
-    FloatT sum_n(1);
-    for(int n(2), coef_i(0); n <= x.n_max; n++){
-      FloatT sum_m(0);
+    FloatT sum_n(1);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
+    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
+      FloatT sum_m(0);#{" ++x;" unless use_cache}
       for(int m(0); m <= n; m++, coef_i++){
-        sum_m += x.p_bar[n][m]
+        sum_m += x.p_bar[#{use_cache ? 'n' : '0'}][m]
             * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
       }
-      sum_n += x.a_r_n[n] * sum_m;
+      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m;
     }
     return sum_n;
   }
+__FUNC__
+}.join}
 
+#{[true, false].collect{|use_cache|
+  <<__FUNC__
   template <int N_MAX>
   static FloatT gravity_r_dimless(
       const coefficients_t coefs[],
-      const cache_t<N_MAX> &x) {
+      #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
 
-    FloatT sum_n(1);
-    for(int n(2), coef_i(0); n <= x.n_max; n++){
-      FloatT sum_m(0);
+    FloatT sum_n(1);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
+    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
+      FloatT sum_m(0);#{" ++x;" unless use_cache}
       for(int m(0); m <= n; m++, coef_i++){
-        sum_m += x.p_bar[n][m]
+        sum_m += x.p_bar[#{use_cache ? 'n' : '0'}][m]
             * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
       }
-      sum_n += x.a_r_n[n] * sum_m * (n + 1);
+      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m * (n + 1);
     }
     return sum_n;
   }
+__FUNC__
+}.join}
 
+#{[true, false].collect{|use_cache|
+  <<__FUNC__
   template <int N_MAX>
   static FloatT gravity_phi_dimless(
       const coefficients_t coefs[],
-      const cache_t<N_MAX> &x) {
+      #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
 
-    FloatT sum_n(0);
-    for(int n(2), coef_i(0); n <= x.n_max; n++){
-      FloatT sum_m(0);
+    FloatT sum_n(0);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
+    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
+      FloatT sum_m(0);#{" ++x;" unless use_cache}
       for(int m(0); m <= n; m++, coef_i++){
-        sum_m += (-x.p_bar[n][m] * m * x.c_ml[1] * x.s_ml[1]
-              + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[n][m+1]))
+        sum_m += (-x.p_bar[#{use_cache ? 'n' : '0'}][m] * m * x.c_ml[1] * x.s_ml[1]
+              + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[#{use_cache ? 'n' : '0'}][m+1]))
             * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
       }
-      sum_n += x.a_r_n[n] * sum_m;
+      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m;
     }
     return sum_n;
   }
+__FUNC__
+}.join}
 
+#{[true, false].collect{|use_cache|
+  <<__FUNC__
   template <int N_MAX>
   static FloatT gravity_lambda_dimless(
       const coefficients_t coefs[],
-      const cache_t<N_MAX> &x) {
+      #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
 
-    FloatT sum_n(0);
-    for(int n(2), coef_i(0); n <= x.n_max; n++){
-      FloatT sum_m(0);
+    FloatT sum_n(0);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
+    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
+      FloatT sum_m(0);#{" ++x;" unless use_cache}
       for(int m(0); m <= n; m++, coef_i++){
-        sum_m += x.p_bar[n][m] * m
+        sum_m += x.p_bar[#{use_cache ? 'n' : '0'}][m] * m
             * (-coefs[coef_i].c_bar * x.s_ml[m] + coefs[coef_i].s_bar * x.c_ml[m]);
       }
-      sum_n += x.a_r_n[n] * sum_m;
+      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m;
     }
     return sum_n;
   }
+__FUNC__
+}.join}
 };
 
 template <class FloatT>
@@ -208,7 +243,7 @@ static FloatT fname( \\
     const FloatT &r, const FloatT &phi, const FloatT &lambda){ \\
   return (sf) * EGM_Generic<FloatT>::template fname ## _dimless<#{n_max}>( \\
       coefficients, \\
-      cache_t().update(WGS84Generic<FloatT>::R_e / r, phi, lambda)); \\
+      WGS84Generic<FloatT>::R_e / r, phi, lambda); \\
 } \\
 static FloatT fname( \\
     const cache_t &cache, \\
@@ -242,7 +277,8 @@ int main(){
 
   cout << setprecision(16);
 
-  double alt(0);
+  const double alt(0);
+  const bool use_cache(true);
 
   typedef #{egm}_#{n_max} egm_t;
   typedef egm_t::cache_t cache_t;
@@ -257,14 +293,16 @@ int main(){
     typename WGS84::xz_t xz(WGS84::xz(lat, alt));
     double phi(xz.geocentric_latitude()), r(xz.distance());
     cache.update_phi(phi);
-    cache.update_a_r(r / WGS84::R_e);
+    cache.update_a_r(WGS84::R_e / r);
 
     for(int lng_deg(0); lng_deg <= 359; lng_deg++){
       double lng(M_PI / 180 * lng_deg);
       double lambda(lng);
       cache.update_lambda(lambda);
 
-      cout << egm_t::gravity_potential(cache, r, phi, lambda) << ", ";
+      cout << (use_cache 
+          ? egm_t::gravity_potential(cache, r, phi, lambda)
+          : egm_t::gravity_potential(r, phi, lambda)) << ", ";
     }
     cout << endl;
   }
