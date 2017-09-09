@@ -337,10 +337,10 @@ static FloatT fname( \
       coefficients, cache); \
 }
 
-  make_func(gravity_potential, WGS84Generic<FloatT>::mu_Earth / r);
-  make_func(gravity_r, -WGS84Generic<FloatT>::mu_Earth / std::pow(r, 2));
-  make_func(gravity_phi, WGS84Generic<FloatT>::mu_Earth / std::pow(r, 2));
-  make_func(gravity_lambda, WGS84Generic<FloatT>::mu_Earth / std::pow(r, 2) / std::cos(phi));
+  make_func(gravity_potential, WGS84Generic<FloatT>::mu_Earth_refined / r);
+  make_func(gravity_r, -WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2));
+  make_func(gravity_phi, WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2));
+  make_func(gravity_lambda, WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2) / std::cos(phi));
 };
 
 template<class FloatT>
