@@ -701,30 +701,16 @@ struct M_Packet : public Packet {
   Vector3<float_sylph_t> mag;
 };
 
-typedef INS_GPS2<
-    float_sylph_t,
-    KalmanFilter> ins_gps_ekf_t;
-typedef INS_GPS2<
-    float_sylph_t,
-    KalmanFilterUD> ins_gps_ekf_ud_t;
-typedef INS_GPS2_BiasEstimated<
-    float_sylph_t,
-    KalmanFilter> ins_gps_bias_ekf_t;
-typedef INS_GPS2_BiasEstimated<
-    float_sylph_t,
-    KalmanFilterUD> ins_gps_bias_ekf_ud_t;
-typedef INS_GPS2_Tightly<
-    float_sylph_t,
-    KalmanFilter> ins_gps_tightly_ekf_t;
-typedef INS_GPS2_Tightly<
-    float_sylph_t,
-    KalmanFilterUD> ins_gps_tightly_ekf_ud_t;
-typedef INS_GPS2_Tightly_BiasEstimated<
-    float_sylph_t,
-    KalmanFilter> ins_gps_tightly_bias_ekf_t;
-typedef INS_GPS2_Tightly_BiasEstimated<
-    float_sylph_t,
-    KalmanFilterUD> ins_gps_tightly_bias_ekf_ud_t;
+template <
+    class PureINS = INS<float_sylph_t>,
+    template <class> class Filter = KalmanFilter>
+struct INS_GPS_Factory {
+  typedef INS_GPS2<PureINS, Filter> loosely_t;
+  typedef INS_GPS2_BiasEstimated<PureINS, Filter> loosely_bias_t;
+  typedef INS_GPS2_Tightly<PureINS, Filter> tightly_t;
+  typedef INS_GPS2_Tightly_BiasEstimated<PureINS, Filter> tightly_bias_t;
+  typedef INS_GPS_Factory<PureINS, KalmanFilterUD> udkf_t;
+};
 
 template <class INS_GPS>
 class INS_GPS_NAVData;
@@ -2696,10 +2682,10 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 
     template <
-        class FloatT, template <class> class Filter, unsigned int Clocks,
+        class PureINS, template <class> class Filter, unsigned int Clocks,
         typename BaseFINS>
     void measurement_update(const G_Packet &g_packet,
-        INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> *){
+        INS_GPS2_Tightly<PureINS, Filter, Clocks, BaseFINS> *){
       return;
     }
 
@@ -2713,10 +2699,10 @@ class INS_GPS_NAV<INS_GPS>::Helper {
      * @param g_packet observation data of GPS receiver
      */
     template <
-        class FloatT, template <class> class Filter, unsigned int Clocks,
+        class PureINS, template <class> class Filter, unsigned int Clocks,
         typename BaseFINS>
     void measurement_update(const G_Packet_Raw &g_packet,
-        INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> *ins_gps){
+        INS_GPS2_Tightly<PureINS, Filter, Clocks, BaseFINS> *ins_gps){
 
       g_packet.take_consistency();
       if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
@@ -2760,30 +2746,30 @@ void loop(){
         case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
           if(options.use_udkf){
             if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::loosely_bias_t>::get_nav(calibration);
             }else{
-              nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::loosely_t>::get_nav(calibration);
             }
           }else{
             if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::loosely_bias_t>::get_nav(calibration);
             }else{
-              nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::loosely_t>::get_nav(calibration);
             }
           }
           break;
         case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
           if(options.use_udkf){
             if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_ud_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::tightly_bias_t>::get_nav(calibration);
             }else{
-              nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_ud_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::tightly_t>::get_nav(calibration);
             }
           }else{
             if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<ins_gps_tightly_bias_ekf_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::tightly_bias_t>::get_nav(calibration);
             }else{
-              nav = INS_GPS_NAV_Factory<ins_gps_tightly_ekf_t>::get_nav(calibration);
+              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::tightly_t>::get_nav(calibration);
             }
           }
           break;

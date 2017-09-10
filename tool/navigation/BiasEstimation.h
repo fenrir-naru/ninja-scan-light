@@ -418,13 +418,13 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
 };
 
 template <
-  class FloatT,
+  class PureINS = INS<>,
   template <class> class Filter = KalmanFilterUD,
   typename BaseFINS = Filtered_INS_BiasEstimated<Filtered_INS2<
-      INS_BiasEstimated<INS<FloatT> >, Filter> >
+      INS_BiasEstimated<PureINS>, Filter> >
 >
 class INS_GPS2_BiasEstimated
-    : public INS_GPS2<FloatT, Filter, BaseFINS>{
+    : public INS_GPS2<PureINS, Filter, BaseFINS>{
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseFINS::float_t float_t;
@@ -433,7 +433,7 @@ class INS_GPS2_BiasEstimated
     using typename BaseFINS::float_t;
     using typename BaseFINS::vec3_t;
 #endif
-    typedef INS_GPS2<FloatT, Filter, BaseFINS> super_t;
+    typedef INS_GPS2<PureINS, Filter, BaseFINS> super_t;
 
   public:
     INS_GPS2_BiasEstimated() : super_t(){}
@@ -455,16 +455,16 @@ class INS_GPS2_BiasEstimated
 };
 
 template <
-  class FloatT,
+  class PureINS = INS<>,
   template <class> class Filter = KalmanFilterUD,
   unsigned int Receivers = 1,
   typename BaseFINS =
       Filtered_INS_BiasEstimated<Filtered_INS_ClockErrorEstimated<Filtered_INS2<
-        INS_BiasEstimated<INS_ClockErrorEstimated<INS<FloatT>, Receivers> >, Filter> > >
+        INS_BiasEstimated<INS_ClockErrorEstimated<PureINS, Receivers> >, Filter> > >
 >
 class INS_GPS2_Tightly_BiasEstimated
-    : public INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS>{
-    typedef INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> super_t;
+    : public INS_GPS2_Tightly<PureINS, Filter, Receivers, BaseFINS>{
+    typedef INS_GPS2_Tightly<PureINS, Filter, Receivers, BaseFINS> super_t;
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseFINS::float_t float_t;

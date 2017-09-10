@@ -355,17 +355,17 @@ struct GPS_RawData {
  *
  * Tightly coupled INS/GPS
  *
- * @param FloatT precision
+ * @param PureINS pure INS
  * @param Filter type of Kalman filter
  * @param BaseFINS Filtered INS, which mainly supports for time update procedure.
  * @see Filtered_INS2
  */
 template <
-  class FloatT,
+  class PureINS = INS<>,
   template <class> class Filter = KalmanFilterUD,
   unsigned int Clocks = 1,
   typename BaseFINS = Filtered_INS_ClockErrorEstimated<
-      Filtered_INS2<INS_ClockErrorEstimated<INS<FloatT>, Clocks>, Filter> >
+      Filtered_INS2<INS_ClockErrorEstimated<PureINS, Clocks>, Filter> >
 >
 class INS_GPS2_Tightly : public BaseFINS{
   public:
@@ -389,7 +389,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
     ~INS_GPS2_Tightly(){}
     
-    typedef INS_GPS2_Tightly<FloatT, Filter, Clocks, BaseFINS> self_t;
+    typedef INS_GPS2_Tightly<PureINS, Filter, Clocks, BaseFINS> self_t;
 
     typedef GPS_RawData<float_t> raw_data_t;
     typedef typename raw_data_t::space_node_t space_node_t;

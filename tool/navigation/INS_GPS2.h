@@ -86,15 +86,15 @@ struct GPS_Solution{
  * INS/GPS Loose-couplingをカルマンフィルタで実現したクラス。
  * INSのシステム誤差方程式は積算型で表現されています。
  * 
- * @param FloatT 演算精度
+ * @param PureINS 純慣性
  * @param Filter カルマンフィルタ
  * @param BaseFINS 他の航法装置を統合する為のINS拡張クラス
  * @see Filtered_INS2
  */
 template <
-  class FloatT, 
+  class PureINS = INS<>,
   template <class> class Filter = KalmanFilterUD,
-  typename BaseFINS = Filtered_INS2<INS<FloatT>, Filter>
+  typename BaseFINS = Filtered_INS2<PureINS, Filter>
 >
 class INS_GPS2 : public BaseFINS{
   public:

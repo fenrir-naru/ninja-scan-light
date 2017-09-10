@@ -399,6 +399,15 @@ class INS {
     }
     
     /**
+     * Return gravity vector in accordance to current position.
+     *
+     * @return (vec3_t) gravity
+     */
+    virtual vec3_t gravity() const {
+      return vec3_t(0, 0, Earth::gravity(phi, h));
+    }
+
+    /**
      * INSを更新します。
      * 内部的にはオイラー積分(1次)を利用しています。
      * 
@@ -410,7 +419,7 @@ class INS {
       
       //速度の運動方程式
       vec3_t delta_v_2e_4n((q_n2b * accel * q_n2b.conj()).vector());
-      delta_v_2e_4n[2] += Earth::gravity(phi, h);
+      delta_v_2e_4n += gravity();
       delta_v_2e_4n -= (omega_e2i_4n * 2 + omega_n2e_4n) * v_2e_4n;
       /*T centripetal_f_scalar(beta() * pow2(Earth::Omega_Earth));
       vec3_t centripetal_f(
