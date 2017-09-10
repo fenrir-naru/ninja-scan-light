@@ -417,13 +417,13 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
 };
 
 template <
-  class FloatT,
+  class PureINS = INS<>,
   template <class> class Filter = KalmanFilterUD,
   typename BaseFINS = Filtered_INS_BiasEstimated<Filtered_INS2<
-      INS_BiasEstimated<INS<FloatT> >, Filter> >
+      INS_BiasEstimated<PureINS>, Filter> >
 >
 class INS_GPS2_BiasEstimated
-    : public INS_GPS2<FloatT, Filter, BaseFINS>{
+    : public INS_GPS2<PureINS, Filter, BaseFINS>{
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseFINS::float_t float_t;
@@ -432,7 +432,7 @@ class INS_GPS2_BiasEstimated
     using typename BaseFINS::float_t;
     using typename BaseFINS::vec3_t;
 #endif
-    typedef INS_GPS2<FloatT, Filter, BaseFINS> super_t;
+    typedef INS_GPS2<PureINS, Filter, BaseFINS> super_t;
 
   public:
     INS_GPS2_BiasEstimated() : super_t(){}

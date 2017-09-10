@@ -569,16 +569,16 @@ struct M_Packet : public Packet {
 };
 
 typedef INS_GPS2<
-    float_sylph_t,
+    INS<float_sylph_t>,
     KalmanFilter> ins_gps_ekf_t;
 typedef INS_GPS2<
-    float_sylph_t,
+    INS<float_sylph_t>,
     KalmanFilterUD> ins_gps_ekf_ud_t;
 typedef INS_GPS2_BiasEstimated<
-    float_sylph_t,
+    INS<float_sylph_t>,
     KalmanFilter> ins_gps_bias_ekf_t;
 typedef INS_GPS2_BiasEstimated<
-    float_sylph_t,
+    INS<float_sylph_t>,
     KalmanFilterUD> ins_gps_bias_ekf_ud_t;
 
 template <class INS_GPS>

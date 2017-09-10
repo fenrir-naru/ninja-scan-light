@@ -94,7 +94,7 @@ const unsigned Filtered_INS2_Property<BaseINS>::Q_SIZE = BaseINS::STATE_VALUES -
  * @f]
  * で定義されています。
  * 
- * @param FloatT 演算精度
+ * @param BaseINS 基底となるINS
  * @param Filter カルマンフィルタ
  */
 template <
