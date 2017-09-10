@@ -568,18 +568,14 @@ struct M_Packet : public Packet {
   Vector3<float_sylph_t> mag;
 };
 
-typedef INS_GPS2<
-    INS<float_sylph_t>,
-    KalmanFilter> ins_gps_ekf_t;
-typedef INS_GPS2<
-    INS<float_sylph_t>,
-    KalmanFilterUD> ins_gps_ekf_ud_t;
-typedef INS_GPS2_BiasEstimated<
-    INS<float_sylph_t>,
-    KalmanFilter> ins_gps_bias_ekf_t;
-typedef INS_GPS2_BiasEstimated<
-    INS<float_sylph_t>,
-    KalmanFilterUD> ins_gps_bias_ekf_ud_t;
+template <
+    class PureINS = INS<float_sylph_t>,
+    template <class> class Filter = KalmanFilter>
+struct INS_GPS_Factory {
+  typedef INS_GPS2<PureINS, Filter> loosely_t;
+  typedef INS_GPS2_BiasEstimated<PureINS, Filter> loosely_bias_t;
+  typedef INS_GPS_Factory<PureINS, KalmanFilterUD> udkf_t;
+};
 
 template <class INS_GPS>
 class INS_GPS_NAVData;
@@ -2043,15 +2039,15 @@ void loop(){
       const StandardCalibration &calibration(processors.front().calibration());
       if(options.use_udkf){
         if(options.est_bias){
-          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_ud_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::loosely_bias_t>::get_nav(calibration);
         }else{
-          nav = INS_GPS_NAV_Factory<ins_gps_ekf_ud_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::loosely_t>::get_nav(calibration);
         }
       }else{
         if(options.est_bias){
-          nav = INS_GPS_NAV_Factory<ins_gps_bias_ekf_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::loosely_bias_t>::get_nav(calibration);
         }else{
-          nav = INS_GPS_NAV_Factory<ins_gps_ekf_t>::get_nav(calibration);
+          nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::loosely_t>::get_nav(calibration);
         }
       }
     }
