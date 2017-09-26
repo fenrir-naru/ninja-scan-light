@@ -118,6 +118,9 @@ class WGS84Generic{
       FloatT geocentric_latitude() const {
         return std::atan2(z, x);
       }
+      FloatT geodetic_latitude() const {
+        return std::atan2(z / (1. - pow2(epsilon_Earth)), x);
+      }
       FloatT distance2() const {
         return (x * x) + (z * z);
       }
@@ -126,17 +129,25 @@ class WGS84Generic{
       }
     };
 
-    static xz_t xz(const FloatT &geographic_latitude, const FloatT &height = 0){
-      FloatT cphi(std::cos(geographic_latitude)), sphi(std::sin(geographic_latitude));
+    static xz_t xz(const FloatT &phi_geodetic, const FloatT &height = 0){
+      FloatT cphi(std::cos(phi_geodetic)), sphi(std::sin(phi_geodetic));
       FloatT cphi2(pow2(cphi)), sphi2(pow2(sphi)), ba2(1.0 - pow2(epsilon_Earth)), denom(cphi2 + (ba2 * sphi2));
       FloatT x2(pow2(R_e) * cphi2 / denom), z2(pow2(R_e) * pow2(ba2) * sphi2 / denom);
-      FloatT x(std::sqrt(x2)), z(std::sqrt(z2) * (geographic_latitude >= 0 ? 1 : -1));
+      FloatT x(std::sqrt(x2)), z(std::sqrt(z2) * (phi_geodetic >= 0 ? 1 : -1));
       xz_t res = {x + cphi * height, z + sphi * height};
       return res;
     }
 
-    static FloatT geocentric_latitude(const FloatT &geographic_latitude, const FloatT &height = 0){
-      return xz(geographic_latitude, height).geocentric_latitude();
+    static FloatT geocentric_latitude(const FloatT &phi_geodetic, const FloatT &height = 0){
+      return xz(phi_geodetic, height).geocentric_latitude();
+    }
+
+    static FloatT geodetic_latitude(const FloatT &phi_geocentric){
+      return std::atan2(std::sin(phi_geocentric) / (1.0 - pow2(epsilon_Earth)), std::cos(phi_geocentric));
+    }
+
+    static xz_t xz_geocentric(const FloatT &phi_geocentric, const FloatT &height = 0){
+      return xz(geodetic_latitude(phi_geocentric), height);
     }
 #ifdef ALREADY_POW2_DEFINED
 #undef ALREADY_POW2_DEFINED
