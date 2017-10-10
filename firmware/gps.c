@@ -334,7 +334,7 @@ static void push_telemetry(char c){
     char content[SYLPHIDE_PAGESIZE - 1];
   } buf = {{'G'}};
   static __xdata unsigned char index = 0;
-  buf.content[++index] = c;
+  buf.content[index++] = c;
   if(index >= sizeof(buf.content)){
     telemeter_send((char *)&buf);
     index = 0;
