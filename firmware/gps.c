@@ -346,7 +346,7 @@ static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
   u8 size = packet->buf_end - dst;
   
-  //if(size == 0){return;} // guranteed that size > 0
+  //if(size == 0){return;} // guaranteed that size > 0
   
   *(dst++) = 'G';
 
