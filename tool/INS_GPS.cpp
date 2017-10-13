@@ -703,13 +703,36 @@ struct M_Packet : public Packet {
 
 template <
     class PureINS = INS<float_sylph_t>,
-    template <class> class Filter = KalmanFilter>
+    template <class> class Filter = KalmanFilter,
+    bool BiasEstimator = false,
+    bool TightlyIntegration = false>
 struct INS_GPS_Factory {
-  typedef INS_GPS2<PureINS, Filter> loosely_t;
-  typedef INS_GPS2_BiasEstimated<PureINS, Filter> loosely_bias_t;
-  typedef INS_GPS2_Tightly<PureINS, Filter> tightly_t;
-  typedef INS_GPS2_Tightly_BiasEstimated<PureINS, Filter> tightly_bias_t;
-  typedef INS_GPS_Factory<PureINS, KalmanFilterUD> udkf_t;
+  typedef INS_GPS2<PureINS, Filter> product_t;
+  typedef INS_GPS_Factory<PureINS, Filter, BiasEstimator, true> tightly_t;
+  typedef INS_GPS_Factory<PureINS, Filter, true, TightlyIntegration> bias_t;
+  typedef INS_GPS_Factory<PureINS, KalmanFilterUD, BiasEstimator, TightlyIntegration> udkf_t;
+};
+
+template <
+    class PureINS,
+    template <class> class Filter>
+struct INS_GPS_Factory<PureINS, Filter, true, false> {
+  typedef INS_GPS2_BiasEstimated<PureINS, Filter> product_t;
+  typedef INS_GPS_Factory<PureINS, Filter, true, true> tightly_t;
+};
+
+template <
+    class PureINS,
+    template <class> class Filter>
+struct INS_GPS_Factory<PureINS, Filter, false, true> {
+  typedef INS_GPS2_Tightly<PureINS, Filter> product_t;
+};
+
+template <
+    class PureINS,
+    template <class> class Filter>
+struct INS_GPS_Factory<PureINS, Filter, true, true> {
+  typedef INS_GPS2_Tightly_BiasEstimated<PureINS, Filter> product_t;
 };
 
 template <class INS_GPS>
@@ -2737,44 +2760,40 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 };
 
+class NAV_Generator {
+  private:
+    template <class T>
+    static NAV *final(){
+      return INS_GPS_NAV_Factory<typename T::product_t>::get_nav(processors.front().calibration());
+    }
+    template <class T>
+    static NAV *check_coupling(){
+      switch(options.ins_gps_integration){
+        case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
+          return final<typename T::tightly_t>();
+        case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
+        default:
+          return final<T>();
+      }
+    }
+    template <class T>
+    static NAV *check_bias(){
+      return options.est_bias ? check_coupling<typename T::bias_t>() : check_coupling<T>();
+    }
+    template <class T>
+    static NAV *check_udkf(){
+      return options.use_udkf ? check_bias<typename T::udkf_t>() : check_bias<T>();
+    }
+  public:
+    static NAV *generate(){
+      return check_udkf<INS_GPS_Factory<> >();
+    }
+};
+
 void loop(){
   struct NAV_Manager {
     NAV *nav;
-    NAV_Manager(){
-      const StandardCalibration &calibration(processors.front().calibration());
-      switch(options.ins_gps_integration){
-        case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
-          if(options.use_udkf){
-            if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::loosely_bias_t>::get_nav(calibration);
-            }else{
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::loosely_t>::get_nav(calibration);
-            }
-          }else{
-            if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::loosely_bias_t>::get_nav(calibration);
-            }else{
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::loosely_t>::get_nav(calibration);
-            }
-          }
-          break;
-        case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
-          if(options.use_udkf){
-            if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::tightly_bias_t>::get_nav(calibration);
-            }else{
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::udkf_t::tightly_t>::get_nav(calibration);
-            }
-          }else{
-            if(options.est_bias){
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::tightly_bias_t>::get_nav(calibration);
-            }else{
-              nav = INS_GPS_NAV_Factory<INS_GPS_Factory<>::tightly_t>::get_nav(calibration);
-            }
-          }
-          break;
-      }
-    }
+    NAV_Manager() : nav(NAV_Generator::generate()){}
     ~NAV_Manager(){
       delete nav;
     }
