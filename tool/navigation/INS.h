@@ -72,7 +72,7 @@ class INS {
            lambda,        ///< 経度 @f$ \lambda @f$
            alpha;         ///< Azimuth角 @f$ \alpha @f$
     
-    quat_t q_n2b;         ///< n-frame -> b-frmae、すなわち現在の姿勢
+    quat_t q_n2b;         ///< n-frame -> b-frame、すなわち現在の姿勢
     
     vec3_t omega_e2i_4e;  ///< Earth Rate @f$ \Omega_{e/i}^{e} @f$
   
@@ -262,7 +262,7 @@ class INS {
     
   protected:
     /**
-     * オイラー角からquarternionに変換します。
+     * オイラー角からquaternionに変換します。
      * 
      * @param yaw ヨー@f$ \Psi @f$
      * @param pitch ピッチ@f$ \Theta @f$
@@ -288,7 +288,7 @@ class INS {
     
   public:
     /**
-     * オイラー角からquarternionに変換します。
+     * オイラー角からquaternionに変換します。
      * 
      * @param yaw ヨー@f$ \Psi @f$
      * @param pitch ピッチ@f$ \Theta @f$
@@ -315,7 +315,7 @@ class INS {
     /**
      * 姿勢を初期化します。
      * 
-     * @param q 姿勢をあらわすquarternion
+     * @param q 姿勢をあらわすquaternion
      */
     void initAttitude(const quat_t &q){
       q_n2b = q.copy();

@@ -322,10 +322,10 @@ __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
 typedef enum {
+  UNKNOWN = 0,
   NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, NAV_SVINFO,
   RXM_RAW, RXM_SFRB,
   AID_HUI, AID_EPH,
-  UNKNOWN = 0
 } packet_type_t;
 
 static void push_telemetry(char c){
@@ -334,7 +334,7 @@ static void push_telemetry(char c){
     char content[SYLPHIDE_PAGESIZE - 1];
   } buf = {{'G'}};
   static __xdata unsigned char index = 0;
-  buf.content[++index] = c;
+  buf.content[index++] = c;
   if(index >= sizeof(buf.content)){
     telemeter_send((char *)&buf);
     index = 0;
@@ -346,7 +346,7 @@ static void make_packet(packet_t *packet){
   payload_t *dst = packet->current;
   u8 size = packet->buf_end - dst;
   
-  //if(size == 0){return;} // guranteed that size > 0
+  //if(size == 0){return;} // guaranteed that size > 0
   
   *(dst++) = 'G';
 
