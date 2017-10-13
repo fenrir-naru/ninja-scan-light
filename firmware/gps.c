@@ -322,10 +322,10 @@ __bit gps_utc_valid = FALSE;
 __xdata struct tm gps_utc;
 
 typedef enum {
+  UNKNOWN = 0,
   NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, NAV_SVINFO,
   RXM_RAW, RXM_SFRB,
   AID_HUI, AID_EPH,
-  UNKNOWN = 0
 } packet_type_t;
 
 static void push_telemetry(char c){
