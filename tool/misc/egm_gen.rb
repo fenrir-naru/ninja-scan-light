@@ -146,88 +146,81 @@ struct EGM_Generic {
       return *this;
     }
   };
+  
+  struct calc_res_t {
+    FloatT potential, gravity_r, gravity_phi, gravity_lambda;
+  };
 
 #{[true, false].collect{|use_cache|
   <<__FUNC__
-  template <int N_MAX>
-  static FloatT gravity_potential_dimless(
+  template <int N_MAX, 
+      bool Potential, bool GravityR, bool GravityPhi, bool GravityLambda>
+  static calc_res_t calc_dimless(
       const coefficients_t coefs[],
       #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
 
-    FloatT sum_n(1);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
+    calc_res_t sum_n = {1, 1, 0, 0}, sum_m;#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
     for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
-      FloatT sum_m(0);#{" ++x;" unless use_cache}
+      calc_res_t sum_m = {0, 0, 0, 0};#{" ++x;" unless use_cache}
       for(int m(0); m <= n; m++, coef_i++){
-        sum_m += x.p_bar[#{use_cache ? 'n' : '0'}][m]
-            * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+        if(Potential){
+          sum_m.potential += x.p_bar[#{use_cache ? 'n' : '0'}][m]
+              * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+        }
+        if(GravityR){
+          sum_m.gravity_r += x.p_bar[#{use_cache ? 'n' : '0'}][m]
+              * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+        }
+        if(GravityPhi){
+          sum_m.gravity_phi += (-x.p_bar[#{use_cache ? 'n' : '0'}][m] * m * x.c_ml[1] * x.s_ml[1]
+                + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[#{use_cache ? 'n' : '0'}][m+1]))
+              * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
+        }
+        if(GravityLambda){
+          sum_m.gravity_lambda += x.p_bar[#{use_cache ? 'n' : '0'}][m] * m
+              * (-coefs[coef_i].c_bar * x.s_ml[m] + coefs[coef_i].s_bar * x.c_ml[m]);
+        }
       }
-      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m;
+      sum_n.potential += x.a_r_n#{'[n]' if use_cache} * sum_m.potential;
+      sum_n.gravity_r += x.a_r_n#{'[n]' if use_cache} * sum_m.gravity_r * (n + 1);
+      sum_n.gravity_phi += x.a_r_n#{'[n]' if use_cache} * sum_m.gravity_phi;
+      sum_n.gravity_lambda += x.a_r_n#{'[n]' if use_cache} * sum_m.gravity_lambda;
     }
     return sum_n;
   }
 __FUNC__
-}.join}
+}.join}  
 
-#{[true, false].collect{|use_cache|
-  <<__FUNC__
+#{[:potential, :gravity_r, :gravity_phi, :gravity_lambda].collect{|k|
+  [true, false].collect{|use_cache|
+    <<__FUNC__
   template <int N_MAX>
-  static FloatT gravity_r_dimless(
+  static FloatT #{k}_dimless(
       const coefficients_t coefs[],
       #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
 
-    FloatT sum_n(1);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
-    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
-      FloatT sum_m(0);#{" ++x;" unless use_cache}
-      for(int m(0); m <= n; m++, coef_i++){
-        sum_m += x.p_bar[#{use_cache ? 'n' : '0'}][m]
-            * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
-      }
-      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m * (n + 1);
-    }
-    return sum_n;
+    return calc_dimless<N_MAX, 
+        #{[:potential, :gravity_r, :gravity_phi, :gravity_lambda].collect{|k2| (k == k2).to_s}.join(', ')}>(
+        coefs, #{use_cache ? "x" : "a_r, phi, lambda"}).#{k};
   }
 __FUNC__
-}.join}
-
-#{[true, false].collect{|use_cache|
-  <<__FUNC__
-  template <int N_MAX>
-  static FloatT gravity_phi_dimless(
-      const coefficients_t coefs[],
-      #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
-
-    FloatT sum_n(0);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
-    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
-      FloatT sum_m(0);#{" ++x;" unless use_cache}
-      for(int m(0); m <= n; m++, coef_i++){
-        sum_m += (-x.p_bar[#{use_cache ? 'n' : '0'}][m] * m * x.c_ml[1] * x.s_ml[1]
-              + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[#{use_cache ? 'n' : '0'}][m+1]))
-            * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
-      }
-      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m;
-    }
-    return sum_n;
   }
-__FUNC__
 }.join}
-
+  struct gravity_res_t {
+    FloatT r, phi, lambda;
+  };
 #{[true, false].collect{|use_cache|
   <<__FUNC__
   template <int N_MAX>
-  static FloatT gravity_lambda_dimless(
+  static gravity_res_t gravity_dimless(
       const coefficients_t coefs[],
       #{use_cache ? "const cache_t<N_MAX> &x" : "const FloatT &a_r, const FloatT &phi, const FloatT &lambda"}) {
-
-    FloatT sum_n(0);#{" buffer_t<N_MAX> x(a_r, phi, lambda);" unless use_cache}
-    for(int n(2), coef_i(0); n <= #{use_cache ? 'x.n_max' : 'N_MAX'}; n++){
-      FloatT sum_m(0);#{" ++x;" unless use_cache}
-      for(int m(0); m <= n; m++, coef_i++){
-        sum_m += x.p_bar[#{use_cache ? 'n' : '0'}][m] * m
-            * (-coefs[coef_i].c_bar * x.s_ml[m] + coefs[coef_i].s_bar * x.c_ml[m]);
-      }
-      sum_n += x.a_r_n#{'[n]' if use_cache} * sum_m;
-    }
-    return sum_n;
+  
+    calc_res_t res(calc_dimless<N_MAX, 
+        false, true, true, true>(
+        coefs, #{use_cache ? "x" : "a_r, phi, lambda"}));
+    gravity_res_t g = {#{[:r, :phi, :lambda].collect{|k| "res.gravity_#{k}"}.join(', ')}};
+    return g;
   }
 __FUNC__
 }.join}
@@ -237,6 +230,12 @@ template <class FloatT>
 struct #{egm}_#{n_max}_Generic : public EGM_Generic<FloatT> {
   static const typename EGM_Generic<FloatT>::coefficients_t coefficients[];
   typedef typename EGM_Generic<FloatT>::template cache_t<#{n_max}> cache_t;
+#if defined(__GNUC__) && (__GNUC__ < 5)
+  typedef typename EGM_Generic<FloatT>::gravity_res_t gravity_res_t;
+#else
+  using typename EGM_Generic<FloatT>::gravity_res_t;
+#endif
+  
 
 #define make_func(fname, sf) \\
 static FloatT fname( \\
@@ -252,10 +251,26 @@ static FloatT fname( \\
       coefficients, cache); \\
 }
 
-  make_func(gravity_potential, WGS84Generic<FloatT>::mu_Earth_refined / r);
+  make_func(potential, WGS84Generic<FloatT>::mu_Earth_refined / r);
   make_func(gravity_r, -WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2));
   make_func(gravity_phi, WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2));
   make_func(gravity_lambda, WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2) / std::cos(phi));
+  
+#{[true, false].collect{|use_cache|
+  <<__FUNC__
+  static gravity_res_t gravity(
+      #{"const cache_t &cache, " if use_cache}const FloatT &r, const FloatT &phi, const FloatT &lambda){
+    FloatT sf(WGS84Generic<FloatT>::mu_Earth_refined / std::pow(r, 2));
+    gravity_res_t res(EGM_Generic<FloatT>::template gravity_dimless<#{n_max}>(
+        coefficients,
+        #{use_cache ? "cache" : "WGS84Generic<FloatT>::R_e / r, phi, lambda"}));
+    res.r *= -sf;
+    res.phi *= sf;
+    res.lambda *= (sf / std::cos(phi));
+    return res;
+  }
+__FUNC__
+}.join}
 };
 
 template<class FloatT>
