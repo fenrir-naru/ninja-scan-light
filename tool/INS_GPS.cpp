@@ -161,6 +161,7 @@ typedef double float_sylph_t;
 VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
 QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
+#include "navigation/INS_EGM.h"
 #include "navigation/INS_GPS2.h"
 #include "navigation/INS_GPS2_Tightly.h"
 #include "navigation/INS_GPS_Synchronization.h"
@@ -195,6 +196,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   } ins_gps_sync_strategy;
   bool est_bias; ///< True for performing bias estimation
   bool use_udkf; ///< True for UD Kalman filtering
+  bool use_egm; ///< True for precise Earth gravity model
 
   INS_GPS_Back_Propagate_Property<float_sylph_t> back_propagate_property;
   INS_GPS_RealTime_Property realttime_property;
@@ -253,7 +255,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       dump_update(true), dump_correct(false), dump_stddev(false),
       out_is_N_packet(false),
       ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
-      est_bias(true), use_udkf(false),
+      est_bias(true), use_udkf(false), use_egm(false),
       back_propagate_property(),
       realttime_property(),
       gps_fake_lock(false), gps_threshold(),
@@ -320,6 +322,7 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
         (ins_gps_sync_strategy == INS_GPS_SYNC_REALTIME ? "on" : "off"));
     CHECK_OPTION_BOOL(est_bias);
     CHECK_OPTION_BOOL(use_udkf);
+    CHECK_OPTION_BOOL(use_egm);
     CHECK_OPTION(bp_depth, false,
         back_propagate_property.back_propagate_depth = std::atof(value),
         back_propagate_property.back_propagate_depth);
@@ -711,6 +714,7 @@ struct INS_GPS_Factory {
   typedef INS_GPS_Factory<PureINS, Filter, BiasEstimator, true> tightly_t;
   typedef INS_GPS_Factory<PureINS, Filter, true, TightlyIntegration> bias_t;
   typedef INS_GPS_Factory<PureINS, KalmanFilterUD, BiasEstimator, TightlyIntegration> udkf_t;
+  typedef INS_GPS_Factory<INS_EGM<typename PureINS::float_t>, Filter> egm_t;
 };
 
 template <
@@ -2784,9 +2788,13 @@ class NAV_Generator {
     static NAV *check_udkf(){
       return options.use_udkf ? check_bias<typename T::udkf_t>() : check_bias<T>();
     }
+    template <class T>
+    static NAV *check_egm(){
+      return options.use_egm ? check_udkf<typename T::egm_t>() : check_udkf<T>();
+    }
   public:
     static NAV *generate(){
-      return check_udkf<INS_GPS_Factory<> >();
+      return check_egm<INS_GPS_Factory<> >();
     }
 };
 
