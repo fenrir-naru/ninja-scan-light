@@ -8,7 +8,7 @@ print_cpp = proc{|n_max, opt|
   (2..n_max).each{|n|
     (0..n).each{|m|
       c_bar, s_bar = (opt[:CS_Bar][n][m] rescue ["C_BAR_#{n}_#{m}", "S_BAR_#{n}_#{m}"])
-      coefs << "{#{c_bar}#{", #{s_bar}" if m > 0}}, // #{n}, #{m}"
+      coefs << "{#{c_bar}, #{m > 0 ? s_bar : 0}}, // #{n}, #{m}"
     }
   }
   egm = (opt[:version] || 'EGM')
@@ -44,7 +44,7 @@ struct EGM_Generic {
         p_bar_n[0] = (p_bar_n1[0] * sp * (2 * n - 1) * b - p_bar_n2[0] * (n - 1) * c) / n;
       }
       for(int m(1); m <= n - 2; ++m){ // 0 < m < n-1
-        FloatT a(std::pow(((2 * n - 1) * (n + m - 1)), -0.5) * (m == 1 ? std::sqrt(2) : 1));
+        FloatT a(std::pow(((2 * n - 1) * (n + m - 1)), -0.5) * std::sqrt(m == 1 ? 2.0 : 1.0));
         FloatT b(std::sqrt(FloatT(n - m) / (2 * n - 1)));
         FloatT c(std::sqrt(FloatT((n - m) * (n - m - 1)) / ((2 * n - 3) * (n + m - 1))));
         p_bar_n[m] = (p_bar_n1[m - 1] * m * (2 * n - 1) * cp * a
@@ -52,8 +52,8 @@ struct EGM_Generic {
               / n * std::sqrt(FloatT(2 * n + 1) / (n + m));
       }
       { // m = n-1
-        FloatT a(std::sqrt(FloatT((2 * n + 1) * (n - 1)) / 2) * (n == 2 ? std::sqrt(2) : 1));
-        FloatT b(std::sqrt(2 * n + 1));
+        FloatT a(std::sqrt(FloatT((2 * n + 1) * (n - 1)) / 2) * std::sqrt(n == 2 ? 2.0 : 1.0));
+        FloatT b(std::sqrt(FloatT(2 * n + 1)));
         p_bar_n[n - 1] = (p_bar_n1[n - 2] * cp * a + p_bar_n1[n - 1] * sp * b) / n;
       }
       { // m = n
@@ -82,8 +82,8 @@ struct EGM_Generic {
         p_bar[0][0] = 1;
       }else{
         ++n_current;
-        p_bar[0][0] = sp * std::sqrt(3);
-        p_bar[0][1] = cp * std::sqrt(3);
+        p_bar[0][0] = sp * std::sqrt(3.0);
+        p_bar[0][1] = cp * std::sqrt(3.0);
         p_bar[1][0] = 1;
       }
     }
@@ -173,7 +173,7 @@ struct EGM_Generic {
         }
         if(GravityPhi){
           sum_m.gravity_phi += (-x.p_bar[#{use_cache ? 'n' : '0'}][m] * m * x.c_ml[1] * x.s_ml[1]
-                + ((m == n) ? 0 : std::sqrt((n - m) * (n + m + 1)) * x.p_bar[#{use_cache ? 'n' : '0'}][m+1]))
+                + ((m == n) ? 0 : std::sqrt(FloatT(n - m) * (n + m + 1)) * x.p_bar[#{use_cache ? 'n' : '0'}][m+1]))
               * (coefs[coef_i].c_bar * x.c_ml[m] + coefs[coef_i].s_bar * x.s_ml[m]);
         }
         if(GravityLambda){
