@@ -249,7 +249,12 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         tm_utc.tm_mon = 0;
         tm_utc.tm_year = 80;
         tm_utc.tm_isdst = 0;
-        gpstime_zero = timegm(&tm_utc); // 1980/1/6 00:00:00
+        gpstime_zero
+#if defined(_MSC_VER)
+            = _mkgmtime(&tm_utc);
+#else
+            = timegm(&tm_utc); // 1980/1/6 00:00:00
+#endif
       }
       ~HandlerG(){}
       
