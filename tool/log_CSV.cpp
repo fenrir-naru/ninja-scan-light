@@ -77,23 +77,23 @@ struct Options : public GlobalOptions<float_sylph_t> {
     };
     template <class T>
     converted<T> convert(const T &itow) const {
-      converted<T> res;
       if(valid){
         T gap(itow - gps_time.sec);
         std::time_t gap_sec(gap);
         std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
-        tm *t(gmtime(&current));
-        res = {
+        tm *t(std::gmtime(&current));
+        converted<T> res = {
             t->tm_year + 1900,
             t->tm_mon + 1,
             t->tm_mday,
             t->tm_hour,
             t->tm_min,
             gap - gap_sec + t->tm_sec};
+        return res;
       }else{
-        res = {0, 0, 0, 0, 0, itow};
+        converted<T> res = {0, 0, 0, 0, 0, itow};
+        return res;
       }
-      return res;
     };
   } time_gps2local;
   bool use_calendar_time;
