@@ -38,7 +38,6 @@ typedef __int64 int64_t;
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#include <string>
 #include <sstream>
 #include <exception>
 #include <ctime>
@@ -114,15 +113,30 @@ struct Options : public GlobalOptions<float_sylph_t> {
   ~Options(){}
   
   template <class T>
-  string str_time(const T &itow){
-    stringstream ss;
-    ss.precision(10);
-    if(use_calendar_time){ // year, month, mday, hour, min, sec
-      ss << time_gps2local.convert(itow);
-    }else{
-      ss << itow;
+  struct formatted_time_t {
+    const Options &options;
+    T itow;
+    friend ostream &operator<<(ostream &out, const formatted_time_t<T> &t){
+      if(t.options.use_calendar_time){ // year, month, mday, hour, min, sec
+        typename Options::time_gps2local_t::converted<T> t2(
+            t.options.time_gps2local.convert(t.itow));
+        out << t2.year << ", "
+            << t2.month << ", "
+            << t2.mday << ", "
+            << t2.hour << ", "
+            << t2.min << ", "
+            << t2.sec;
+      }else{
+        out << t.itow;
+      }
+      return out;
     }
-    return ss.str();
+  };
+
+  template <class T>
+  formatted_time_t<T> format_time(const T &itow){
+    formatted_time_t<T> res = {*this, itow};
+    return res;
   }
 
   template <class T>
@@ -196,17 +210,6 @@ struct Options : public GlobalOptions<float_sylph_t> {
   }
 } options;
 
-template <class T>
-  std::ostream &operator<<(std::ostream &out, const typename Options::time_gps2local_t::converted<T> &t){
-    out << t.year << ", "
-        << t.month << ", "
-        << t.mday << ", "
-        << t.hour << ", "
-        << t.min << ", "
-        << t.sec;
-    return out;
-  }
-
 class StreamProcessor : public SylphideProcessor<float_sylph_t> {
   protected:
     int invoked;
@@ -243,7 +246,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         
         options.out() 
             << (count++) << ", "
-            << options.str_time(current) << ", ";
+            << options.format_time(current) << ", ";
         
         A_Observer_t::values_t values(observer.fetch_values());
         for(int i(0); i < 8; i++){
@@ -344,7 +347,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           float_sylph_t current(1E-3 * itow_ms_0x0102);
           if(!options.is_time_in_range(current)){return;}
           
-          options.out() << options.str_time(current) << ", "
+          options.out() << options.format_time(current) << ", "
               << position.latitude << ", "
               << position.longitude << ", "
               << position.altitude << ", "
@@ -373,7 +376,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         if(!options.is_time_in_range(current)){return;}
         
         options.out() << (count++)
-             << ", " << options.str_time(current);
+             << ", " << options.format_time(current);
         
         F_Observer_t::values_t values(observer.fetch_values());
         for(int i = 0; i < 8; i++){
@@ -443,7 +446,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             }
 
             for(int i(0), j(-1); i < 2; i++, j++){
-              options.out() << options.str_time(current) << ", " << j << ", ";
+              options.out() << options.format_time(current) << ", " << j << ", ";
               char buf[2][4];
               buf[0][0] = buf[1][0] = 0;
               observer.inspect(&buf[0][1], 3, 7 + 6 * i);
@@ -480,14 +483,14 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         switch(options.page_M_mode){
           case 1: // -atan2(y, x)‚µ‚½Œ‹‰Ê[deg]‚ð•\Ž¦
             for(int i(0), j(-3); i < 4; i++, j++){
-              options.out() << options.str_time(current) << ", "
+              options.out() << options.format_time(current) << ", "
                    << j << ", "
                    << rad2deg(-atan2((double)values.y[i], (double)values.x[i])) << endl;
             }
             break;
           default:
             for(int i(0), j(-3); i < 4; i++, j++){
-              options.out() << options.str_time(current) << ", "
+              options.out() << options.format_time(current) << ", "
                    << j << ", "
                    << values.x[i] << ", "
                    << values.y[i] << ", "
@@ -513,7 +516,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           case 0: {
             N_Observer_t::navdata_t values(observer.fetch_navdata());
             
-            options.out() << options.str_time(values.itow) << ", "
+            options.out() << options.format_time(values.itow) << ", "
                 << values.longitude << ", "
                 << values.latitude << ", "
                 << values.altitude << ", "
