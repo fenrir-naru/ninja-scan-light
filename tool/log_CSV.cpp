@@ -63,14 +63,42 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool page_other;
   int page_P_mode, page_F_mode, page_M_mode;
   int debug_level;
-  struct {
+  struct time_gps2local_t {
     bool valid;
-    time_t utc_time;
     super_t::gps_time_t gps_time;
-  } gps_utc;
+    time_t utc_time;
+    int local_time_correction_in_seconds;
+    time_gps2local_t()
+        : valid(false),
+        local_time_correction_in_seconds(0) {}
+    template <class T>
+    struct converted {
+      int year, month, mday, hour, min;
+      T sec;
+    };
+    template <class T>
+    converted<T> convert(const T &itow) const {
+      converted<T> res;
+      if(valid){
+        T gap(itow - gps_time.sec);
+        std::time_t gap_sec(gap);
+        std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
+        tm *t(gmtime(&current));
+        res = {
+            t->tm_year + 1900,
+            t->tm_mon + 1,
+            t->tm_mday,
+            t->tm_hour,
+            t->tm_min,
+            gap - gap_sec + t->tm_sec};
+      }else{
+        res = {0, 0, 0, 0, 0, itow};
+      }
+      return res;
+    };
+  } time_gps2local;
   bool use_calendar_time;
-  int localtime_correction_in_seconds;
-  
+
   Options() 
       : super_t(),
       page_A(false), page_G(false), page_F(false), 
@@ -80,8 +108,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
       page_F_mode(3),
       page_M_mode(0),
       debug_level(0),
-      use_calendar_time(false), localtime_correction_in_seconds(0) {
-    gps_utc.valid = false;
+      use_calendar_time(false) {
+
   }
   ~Options(){}
   
@@ -90,20 +118,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
     stringstream ss;
     ss.precision(10);
     if(use_calendar_time){ // year, month, mday, hour, min, sec
-      if(gps_utc.valid){
-        T interval(itow - gps_utc.gps_time.sec);
-        time_t interval_time(interval);
-        time_t current(gps_utc.utc_time + interval_time + localtime_correction_in_seconds);
-        tm *current_tm(gmtime(&current));
-        ss << current_tm->tm_year + 1900 << ", "
-            << current_tm->tm_mon + 1 << ", "
-            << current_tm->tm_mday << ", "
-            << current_tm->tm_hour << ", "
-            << current_tm->tm_min << ", "
-            << (interval - interval_time + current_tm->tm_sec);
-      }else{
-        ss << "0, 0, 0, 0, 0, " << itow;
-      }
+      ss << time_gps2local.convert(itow);
     }else{
       ss << itow;
     }
@@ -112,7 +127,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
   template <class T>
   bool is_time_in_range(const T &sec) const {
-    return super_t::is_time_in_range(sec, gps_utc.gps_time.wn);
+    return super_t::is_time_in_range(sec, time_gps2local.gps_time.wn);
   }
 
   /**
@@ -151,7 +166,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
         correction_hr = atoi(value); // Specify time zone by hour.
       }
       use_calendar_time = true;
-      localtime_correction_in_seconds = 60 * 60 * correction_hr;
+      time_gps2local.local_time_correction_in_seconds = 60 * 60 * correction_hr;
       cerr << "use_calendar_time: UTC "
           << (correction_hr >= 0 ? '+' : '-')
           << correction_hr << " [hr]" << endl;
@@ -180,6 +195,17 @@ struct Options : public GlobalOptions<float_sylph_t> {
     return super_t::check_spec(spec);
   }
 } options;
+
+template <class T>
+  std::ostream &operator<<(std::ostream &out, const typename Options::time_gps2local_t::converted<T> &t){
+    out << t.year << ", "
+        << t.month << ", "
+        << t.mday << ", "
+        << t.hour << ", "
+        << t.min << ", "
+        << t.sec;
+    return out;
+  }
 
 class StreamProcessor : public SylphideProcessor<float_sylph_t> {
   protected:
@@ -291,16 +317,16 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 if((unsigned char)buf[1] & 0x02){ // valid week number
                   char buf2[2];
                   observer.inspect(buf2, sizeof(buf), 6 + 8);
-                  options.gps_utc.gps_time.wn = le_char2_2_num<unsigned short>(*buf2);
+                  options.time_gps2local.gps_time.wn = le_char2_2_num<unsigned short>(*buf2);
                 }
                 if(!((unsigned char)buf[1] & 0x04)){break;}// Invalid UTC
                 char leap_seconds(buf[0]);
-                options.gps_utc.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
-                options.gps_utc.utc_time = gpstime_zero
-                    + (7u * 24 * 60 * 60) * options.gps_utc.gps_time.wn
-                    + options.gps_utc.gps_time.sec
+                options.time_gps2local.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
+                options.time_gps2local.utc_time = gpstime_zero
+                    + (7u * 24 * 60 * 60) * options.time_gps2local.gps_time.wn
+                    + options.time_gps2local.gps_time.sec
                     - leap_seconds; // POSIX time ignores leap seconds.
-                options.gps_utc.valid = true;
+                options.time_gps2local.valid = true;
                 break;
               }
             }
