@@ -521,13 +521,30 @@ struct Packet{
   /**
    * Get interval time between another one
    *
-   * @param another one
+   * @param another
+   * @return if another is bigger, positive number will be returned.
    */
   float_sylph_t interval(const Packet &another) const {
     return another.itow - itow;
   }
   static bool compare(const Packet *a, const Packet *b) {
     return a->itow < b->itow;
+  }
+  /**
+   * Get interval time between another one
+   * in consideration of one week roll over
+   *
+   * @param another
+   * @return The returned number range is [-one_week/2, +one_week/2)
+   * if another is bigger, positive number will be returned.
+   */
+  float_sylph_t interval_rollover(const Packet &another) const {
+    float_sylph_t delta(another.itow - itow);
+    static const int one_week(60 * 60 * 24 * 7);
+    return delta - (std::floor((delta / one_week) + 0.5) * one_week);
+  }
+  static bool compare_rollover(const Packet *a, const Packet *b) {
+    return a->interval_rollover(*b) > 0;
   }
 };
 
@@ -1860,12 +1877,16 @@ class INS_GPS_NAV<INS_GPS>::Helper {
   protected:
     void time_update(const A_Packet &a_packet, float_sylph_t deltaT){
 
+      static const int one_week(60 * 60 * 7 * 24);
+      if(deltaT <= -(one_week / 2)){ // Check roll over
+        deltaT += one_week;
+      }
+
       // Check interval from the last time update
 #define INTERVAL_THRESHOLD 10
-#define INTERVAL_FORCE_VALUE 0.01
-      if((deltaT < 0) || (deltaT >= INTERVAL_THRESHOLD)){
-        // Rewrite time stamp forcedly when discontinuity is too large.
-        deltaT = INTERVAL_FORCE_VALUE;
+      if((deltaT <= 0) || (deltaT >= INTERVAL_THRESHOLD)){
+        // Skip update when discontinuity is too large.
+        return;
       }
 
       nav.update(a_packet.accel, a_packet.omega, deltaT);
@@ -1896,7 +1917,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void time_update_after_initialization(const G_Packet &g_packet){
       typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
       for(; it_r != recent_a.buf.rend(); ++it_r){
-        if(g_packet.interval(*it_r) <= 0){break;}
+        if(g_packet.interval_rollover(*it_r) <= 0){break;}
       }
       const Packet *packet(&g_packet);
       for(typename recent_a_t::buf_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
@@ -2093,7 +2114,7 @@ void loop(){
     packet_pool_t packet_pool;
     NAV &nav;
     void sort_and_apply(int packets){
-      stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare);
+      stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare_rollover);
       while(packets-- > 0){
         packet_pool_t::reference front(packet_pool.front());
         front->apply(nav);
