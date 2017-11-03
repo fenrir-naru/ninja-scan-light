@@ -40,7 +40,6 @@ typedef __int64 int64_t;
 #include <iomanip>
 #include <sstream>
 #include <exception>
-#include <ctime>
 
 #define IS_LITTLE_ENDIAN 1
 #include "SylphideStream.h"
@@ -62,40 +61,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool page_other;
   int page_P_mode, page_F_mode, page_M_mode;
   int debug_level;
-  struct time_gps2local_t {
-    bool valid;
-    super_t::gps_time_t gps_time;
-    time_t utc_time;
-    int local_time_correction_in_seconds;
-    time_gps2local_t()
-        : valid(false),
-        local_time_correction_in_seconds(0) {}
-    template <class T>
-    struct converted {
-      int year, month, mday, hour, min;
-      T sec;
-    };
-    template <class T>
-    converted<T> convert(const T &itow) const {
-      if(valid){
-        T gap(itow - gps_time.sec);
-        std::time_t gap_sec(gap);
-        std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
-        tm *t(std::gmtime(&current));
-        converted<T> res = {
-            t->tm_year + 1900,
-            t->tm_mon + 1,
-            t->tm_mday,
-            t->tm_hour,
-            t->tm_min,
-            gap - gap_sec + t->tm_sec};
-        return res;
-      }else{
-        converted<T> res = {0, 0, 0, 0, 0, itow};
-        return res;
-      }
-    };
-  } time_gps2local;
+  super_t::time_gps2local_t time_gps2local;
   bool use_calendar_time;
 
   Options() 
@@ -107,6 +73,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       page_F_mode(3),
       page_M_mode(0),
       debug_level(0),
+      time_gps2local(),
       use_calendar_time(false) {
 
   }
@@ -267,23 +234,10 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       super_t::G_Observer_t::position_acc_t position_acc;
       super_t::G_Observer_t::velocity_t velocity;
       super_t::G_Observer_t::velocity_acc_t velocity_acc;
-      time_t gpstime_zero;
       HandlerG() 
           : itow_ms_0x0102(0), itow_ms_0x0112(0),
           position(0, 0, 0), position_acc(0, 0),
           velocity(0, 0, 0), velocity_acc(0) {
-        tm tm_utc;
-        tm_utc.tm_hour = tm_utc.tm_min = tm_utc.tm_sec = 0;
-        tm_utc.tm_mday = 6;
-        tm_utc.tm_mon = 0;
-        tm_utc.tm_year = 80;
-        tm_utc.tm_isdst = 0;
-        gpstime_zero
-#if defined(_MSC_VER)
-            = _mkgmtime(&tm_utc);
-#else
-            = timegm(&tm_utc); // 1980/1/6 00:00:00
-#endif
       }
       ~HandlerG(){}
       
@@ -325,7 +279,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 if(!((unsigned char)buf[1] & 0x04)){break;}// Invalid UTC
                 char leap_seconds(buf[0]);
                 options.time_gps2local.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
-                options.time_gps2local.utc_time = gpstime_zero
+                options.time_gps2local.utc_time = options.time_gps2local.gps_time_zero
                     + (7u * 24 * 60 * 60) * options.time_gps2local.gps_time.wn
                     + options.time_gps2local.gps_time.sec
                     - leap_seconds; // POSIX time ignores leap seconds.

@@ -42,6 +42,7 @@
 #include <cstdlib>
 #include <climits>
 #include <cfloat>
+#include <ctime>
 #if defined(_MSC_VER) || defined(__CYGWIN__)
 #include <io.h>
 #include <fcntl.h>
@@ -67,6 +68,25 @@ FloatT deg2rad(const FloatT &degrees){return degrees * M_PI / 180;}
  */
 template <class FloatT>
 FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
+
+static std::time_t utc2time_t(
+    const int &year, const int &month, const int &mday,
+    const int &hour = 0, const int &min = 0, const int &sec = 0){
+  std::tm utc;
+  utc.tm_sec = sec;
+  utc.tm_min = min;
+  utc.tm_hour = hour;
+  utc.tm_mday = mday;
+  utc.tm_mon = month - 1;
+  utc.tm_year = year - 1900;
+  utc.tm_isdst = 0;
+  return
+#if defined(_MSC_VER)
+      _mkgmtime(&utc);
+#else
+      timegm(&utc);
+#endif
+}
 
 template <class FloatT>
 struct GlobalOptions {
@@ -97,6 +117,41 @@ struct GlobalOptions {
   };
   gps_time_t start_gpstime;  ///< Start GPS time
   gps_time_t end_gpstime;    ///< End GPS time
+  struct time_gps2local_t {
+    bool valid;
+    gps_time_t gps_time;
+    std::time_t utc_time;
+    int local_time_correction_in_seconds;
+    static const std::time_t gps_time_zero;
+    time_gps2local_t()
+        : valid(false),
+        local_time_correction_in_seconds(0) {}
+    template <class T>
+    struct converted {
+      int year, month, mday, hour, min;
+      T sec;
+    };
+    template <class T>
+    converted<T> convert(const T &itow) const {
+      if(valid){
+        T gap(itow - gps_time.sec);
+        std::time_t gap_sec(gap);
+        std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
+        tm *t(std::gmtime(&current));
+        converted<T> res = {
+            t->tm_year + 1900,
+            t->tm_mon + 1,
+            t->tm_mday,
+            t->tm_hour,
+            t->tm_min,
+            gap - gap_sec + t->tm_sec};
+        return res;
+      }else{
+        converted<T> res = {0, 0, 0, 0, 0, itow};
+        return res;
+      }
+    };
+  };
   bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated
   NullStream blackhole;
   std::ostream *_out; ///< Pointer for output stream
@@ -409,6 +464,10 @@ if(key_checked){ \
     return false;
   }
 };
+
+template <class FloatT>
+const std::time_t GlobalOptions<FloatT>::time_gps2local_t::gps_time_zero
+    = utc2time_t(1980, 1, 6); // 1980/1/6 00:00:00
 
 template <class FloatT>
 class NAVData {
