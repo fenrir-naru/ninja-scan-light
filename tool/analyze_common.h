@@ -153,12 +153,31 @@ struct GlobalOptions {
         return res;
       }
     }
-    struct leap_seconds_db_item_t {
-      std::time_t t;
-      int sec;
-    };
-    static const leap_seconds_db_item_t leap_seconds_db[];
     static int estimate_leap_seconds(const std::time_t &gps_sec){
+      static const struct {
+        std::time_t t;
+        int sec;
+      } leap_seconds_db[] = {
+        {utc2time_t(1981, 7, 1), 1},
+        {utc2time_t(1982, 7, 1), 2},
+        {utc2time_t(1983, 7, 1), 3},
+        {utc2time_t(1985, 7, 1), 4},
+        {utc2time_t(1988, 1, 1), 5},
+        {utc2time_t(1990, 1, 1), 6},
+        {utc2time_t(1991, 1, 1), 7},
+        {utc2time_t(1992, 7, 1), 8},
+        {utc2time_t(1993, 7, 1), 9},
+        {utc2time_t(1994, 7, 1), 10},
+        {utc2time_t(1996, 1, 1), 11},
+        {utc2time_t(1997, 7, 1), 12},
+        {utc2time_t(1999, 1, 1), 13},
+        {utc2time_t(2006, 1, 1), 14},
+        {utc2time_t(2009, 1, 1), 15},
+        {utc2time_t(2012, 7, 1), 16},
+        {utc2time_t(2015, 7, 1), 17},
+        {utc2time_t(2017, 1, 1), 18},
+      };
+
       int res(0);
       for(int i(0); i < sizeof(leap_seconds_db) / sizeof(leap_seconds_db[0]); ++i){
         if(gps_sec < (leap_seconds_db[i].t + leap_seconds_db[i].sec)){
@@ -485,30 +504,6 @@ if(key_checked){ \
 template <class FloatT>
 const std::time_t GlobalOptions<FloatT>::time_gps2local_t::gps_time_zero
     = utc2time_t(1980, 1, 6); // 1980/1/6 00:00:00
-
-template <class FloatT>
-const typename GlobalOptions<FloatT>::time_gps2local_t::leap_seconds_db_item_t
-    GlobalOptions<FloatT>::time_gps2local_t::leap_seconds_db[]
-      = {
-          {utc2time_t(1981, 7, 1), 1},
-          {utc2time_t(1982, 7, 1), 2},
-          {utc2time_t(1983, 7, 1), 3},
-          {utc2time_t(1985, 7, 1), 4},
-          {utc2time_t(1988, 1, 1), 5},
-          {utc2time_t(1990, 1, 1), 6},
-          {utc2time_t(1991, 1, 1), 7},
-          {utc2time_t(1992, 7, 1), 8},
-          {utc2time_t(1993, 7, 1), 9},
-          {utc2time_t(1994, 7, 1), 10},
-          {utc2time_t(1996, 1, 1), 11},
-          {utc2time_t(1997, 7, 1), 12},
-          {utc2time_t(1999, 1, 1), 13},
-          {utc2time_t(2006, 1, 1), 14},
-          {utc2time_t(2009, 1, 1), 15},
-          {utc2time_t(2012, 7, 1), 16},
-          {utc2time_t(2015, 7, 1), 17},
-          {utc2time_t(2017, 1, 1), 18},
-        };
 
 template <class FloatT>
 class NAVData {
