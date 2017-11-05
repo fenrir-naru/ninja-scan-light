@@ -137,6 +137,10 @@ struct GlobalOptions {
     converted<T> convert(const T &itow) const {
       if(valid){
         T gap(itow - gps_time.sec);
+        static const int one_week(60 * 60 * 7 * 24);
+        if(gap <= -(one_week / 2)){ // Check roll over
+          gap += one_week;
+        }
         std::time_t gap_sec(gap);
         std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
         tm *t(std::gmtime(&current));
