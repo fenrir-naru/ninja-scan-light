@@ -38,10 +38,8 @@ typedef __int64 int64_t;
 #include <iostream>
 #include <fstream>
 #include <iomanip>
-#include <string>
 #include <sstream>
 #include <exception>
-#include <ctime>
 
 #define IS_LITTLE_ENDIAN 1
 #include "SylphideStream.h"
@@ -63,14 +61,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool page_other;
   int page_P_mode, page_F_mode, page_M_mode;
   int debug_level;
-  struct {
-    bool valid;
-    time_t utc_time;
-    super_t::gps_time_t gps_time;
-  } gps_utc;
+  typedef TimeConverter<float_sylph_t> time_gps2local_t;
+  time_gps2local_t time_gps2local;
   bool use_calendar_time;
-  int localtime_correction_in_seconds;
-  
+
   Options() 
       : super_t(),
       page_A(false), page_G(false), page_F(false), 
@@ -80,39 +74,42 @@ struct Options : public GlobalOptions<float_sylph_t> {
       page_F_mode(3),
       page_M_mode(0),
       debug_level(0),
-      use_calendar_time(false), localtime_correction_in_seconds(0) {
-    gps_utc.valid = false;
+      time_gps2local(),
+      use_calendar_time(false) {
+
   }
   ~Options(){}
   
   template <class T>
-  string str_time(const T &itow){
-    stringstream ss;
-    ss.precision(10);
-    if(use_calendar_time){ // year, month, mday, hour, min, sec
-      if(gps_utc.valid){
-        T interval(itow - gps_utc.gps_time.sec);
-        time_t interval_time(interval);
-        time_t current(gps_utc.utc_time + interval_time + localtime_correction_in_seconds);
-        tm *current_tm(gmtime(&current));
-        ss << current_tm->tm_year + 1900 << ", "
-            << current_tm->tm_mon + 1 << ", "
-            << current_tm->tm_mday << ", "
-            << current_tm->tm_hour << ", "
-            << current_tm->tm_min << ", "
-            << (interval - interval_time + current_tm->tm_sec);
+  struct formatted_time_t {
+    const Options &options;
+    T itow;
+    friend ostream &operator<<(ostream &out, const formatted_time_t<T> &t){
+      if(t.options.use_calendar_time){ // year, month, mday, hour, min, sec
+        typename Options::time_gps2local_t::converted<T> t2(
+            t.options.time_gps2local.convert(t.itow));
+        out << t2.year << ", "
+            << t2.month << ", "
+            << t2.mday << ", "
+            << t2.hour << ", "
+            << t2.min << ", "
+            << t2.sec;
       }else{
-        ss << "0, 0, 0, 0, 0, " << itow;
+        out << t.itow;
       }
-    }else{
-      ss << itow;
+      return out;
     }
-    return ss.str();
+  };
+
+  template <class T>
+  formatted_time_t<T> format_time(const T &itow){
+    formatted_time_t<T> res = {*this, itow};
+    return res;
   }
 
   template <class T>
   bool is_time_in_range(const T &sec) const {
-    return super_t::is_time_in_range(sec, gps_utc.gps_time.wn);
+    return super_t::is_time_in_range(sec, time_gps2local.gps_time.wn);
   }
 
   /**
@@ -151,7 +148,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
         correction_hr = atoi(value); // Specify time zone by hour.
       }
       use_calendar_time = true;
-      localtime_correction_in_seconds = 60 * 60 * correction_hr;
+      time_gps2local.local_time_correction_in_seconds = 60 * 60 * correction_hr;
       cerr << "use_calendar_time: UTC "
           << (correction_hr >= 0 ? '+' : '-')
           << correction_hr << " [hr]" << endl;
@@ -217,7 +214,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         
         options.out() 
             << (count++) << ", "
-            << options.str_time(current) << ", ";
+            << options.format_time(current) << ", ";
         
         A_Observer_t::values_t values(observer.fetch_values());
         for(int i(0); i < 8; i++){
@@ -238,23 +235,10 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       super_t::G_Observer_t::position_acc_t position_acc;
       super_t::G_Observer_t::velocity_t velocity;
       super_t::G_Observer_t::velocity_acc_t velocity_acc;
-      time_t gpstime_zero;
       HandlerG() 
           : itow_ms_0x0102(0), itow_ms_0x0112(0),
           position(0, 0, 0), position_acc(0, 0),
           velocity(0, 0, 0), velocity_acc(0) {
-        tm tm_utc;
-        tm_utc.tm_hour = tm_utc.tm_min = tm_utc.tm_sec = 0;
-        tm_utc.tm_mday = 6;
-        tm_utc.tm_mon = 0;
-        tm_utc.tm_year = 80;
-        tm_utc.tm_isdst = 0;
-        gpstime_zero
-#if defined(_MSC_VER)
-            = _mkgmtime(&tm_utc);
-#else
-            = timegm(&tm_utc); // 1980/1/6 00:00:00
-#endif
       }
       ~HandlerG(){}
       
@@ -286,21 +270,20 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 break;
               }
               case 0x20: { // NAV-TIMEGPS
-                char buf[2];
-                observer.inspect(buf, sizeof(buf), 6 + 10);
-                if((unsigned char)buf[1] & 0x02){ // valid week number
-                  char buf2[2];
-                  observer.inspect(buf2, sizeof(buf), 6 + 8);
-                  options.gps_utc.gps_time.wn = le_char2_2_num<unsigned short>(*buf2);
+                float_sylph_t itow(observer.fetch_ITOW());
+                char buf[4];
+                observer.inspect(buf, sizeof(buf), 6 + 8);
+                if((unsigned char)buf[3] & 0x02){ // valid week number
+                  int wn(le_char2_2_num<unsigned short>(*buf));
+
+                  if((unsigned char)buf[3] & 0x04){ // valid UTC (leap seconds)
+                    options.time_gps2local.update(itow, wn, (char)(buf[2]));
+                  }else{
+                    options.time_gps2local.update(itow, wn);
+                  }
+                }else{
+                  options.time_gps2local.update(itow);
                 }
-                if(!((unsigned char)buf[1] & 0x04)){break;}// Invalid UTC
-                char leap_seconds(buf[0]);
-                options.gps_utc.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
-                options.gps_utc.utc_time = gpstime_zero
-                    + (7u * 24 * 60 * 60) * options.gps_utc.gps_time.wn
-                    + options.gps_utc.gps_time.sec
-                    - leap_seconds; // POSIX time ignores leap seconds.
-                options.gps_utc.valid = true;
                 break;
               }
             }
@@ -318,7 +301,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           float_sylph_t current(1E-3 * itow_ms_0x0102);
           if(!options.is_time_in_range(current)){return;}
           
-          options.out() << options.str_time(current) << ", "
+          options.out() << options.format_time(current) << ", "
               << position.latitude << ", "
               << position.longitude << ", "
               << position.altitude << ", "
@@ -347,7 +330,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         if(!options.is_time_in_range(current)){return;}
         
         options.out() << (count++)
-             << ", " << options.str_time(current);
+             << ", " << options.format_time(current);
         
         F_Observer_t::values_t values(observer.fetch_values());
         for(int i = 0; i < 8; i++){
@@ -417,7 +400,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             }
 
             for(int i(0), j(-1); i < 2; i++, j++){
-              options.out() << options.str_time(current) << ", " << j << ", ";
+              options.out() << options.format_time(current) << ", " << j << ", ";
               char buf[2][4];
               buf[0][0] = buf[1][0] = 0;
               observer.inspect(&buf[0][1], 3, 7 + 6 * i);
@@ -454,14 +437,14 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         switch(options.page_M_mode){
           case 1: // -atan2(y, x)‚µ‚½Œ‹‰Ê[deg]‚ð•\Ž¦
             for(int i(0), j(-3); i < 4; i++, j++){
-              options.out() << options.str_time(current) << ", "
+              options.out() << options.format_time(current) << ", "
                    << j << ", "
                    << rad2deg(-atan2((double)values.y[i], (double)values.x[i])) << endl;
             }
             break;
           default:
             for(int i(0), j(-3); i < 4; i++, j++){
-              options.out() << options.str_time(current) << ", "
+              options.out() << options.format_time(current) << ", "
                    << j << ", "
                    << values.x[i] << ", "
                    << values.y[i] << ", "
@@ -487,7 +470,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           case 0: {
             N_Observer_t::navdata_t values(observer.fetch_navdata());
             
-            options.out() << options.str_time(values.itow) << ", "
+            options.out() << options.format_time(values.itow) << ", "
                 << values.longitude << ", "
                 << values.latitude << ", "
                 << values.altitude << ", "

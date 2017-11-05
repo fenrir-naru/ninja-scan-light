@@ -1402,7 +1402,7 @@ class StreamProcessor
           lever_arm(),
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
-          week_number(0), status() {
+          week_number(Options::gps_time_t::WN_INVALID), status() {
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
