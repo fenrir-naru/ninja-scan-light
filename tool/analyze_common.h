@@ -117,99 +117,6 @@ struct GlobalOptions {
   };
   gps_time_t start_gpstime;  ///< Start GPS time
   gps_time_t end_gpstime;    ///< End GPS time
-  struct time_gps2local_t {
-    bool valid;
-    enum {LEAP_SECONDS_UNKNOWN, LEAP_SECONDS_ESTIMATED, LEAP_SECONDS_CORRECTED} leap_seconds;
-    gps_time_t gps_time; ///< base GPS time
-    std::time_t utc_time; ///< corresponding base UTC time in time_t
-    int local_time_correction_in_seconds;
-    static const std::time_t gps_time_zero;
-    time_gps2local_t()
-        : valid(false),
-        leap_seconds(LEAP_SECONDS_UNKNOWN),
-        local_time_correction_in_seconds(0) {}
-    template <class T>
-    struct converted {
-      int year, month, mday, hour, min;
-      T sec;
-    };
-    template <class T>
-    converted<T> convert(const T &itow) const {
-      if(valid){
-        T gap(itow - gps_time.sec);
-        static const int one_week(60 * 60 * 7 * 24);
-        if(gap <= -(one_week / 2)){ // Check roll over
-          gap += one_week;
-        }
-        std::time_t gap_sec(gap);
-        std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
-        tm *t(std::gmtime(&current));
-        converted<T> res = {
-            t->tm_year + 1900,
-            t->tm_mon + 1,
-            t->tm_mday,
-            t->tm_hour,
-            t->tm_min,
-            gap - gap_sec + t->tm_sec};
-        return res;
-      }else{
-        converted<T> res = {0, 0, 0, 0, 0, itow};
-        return res;
-      }
-    }
-    static int estimate_leap_seconds(const std::time_t &t){
-      static const struct {
-        std::time_t t;
-        int sec;
-      } leap_seconds_db[] = {
-        {utc2time_t(1981, 7, 1), 1},
-        {utc2time_t(1982, 7, 1), 2},
-        {utc2time_t(1983, 7, 1), 3},
-        {utc2time_t(1985, 7, 1), 4},
-        {utc2time_t(1988, 1, 1), 5},
-        {utc2time_t(1990, 1, 1), 6},
-        {utc2time_t(1991, 1, 1), 7},
-        {utc2time_t(1992, 7, 1), 8},
-        {utc2time_t(1993, 7, 1), 9},
-        {utc2time_t(1994, 7, 1), 10},
-        {utc2time_t(1996, 1, 1), 11},
-        {utc2time_t(1997, 7, 1), 12},
-        {utc2time_t(1999, 1, 1), 13},
-        {utc2time_t(2006, 1, 1), 14},
-        {utc2time_t(2009, 1, 1), 15},
-        {utc2time_t(2012, 7, 1), 16},
-        {utc2time_t(2015, 7, 1), 17},
-        {utc2time_t(2017, 1, 1), 18},
-      };
-
-      int res(0);
-      for(int i(0); i < sizeof(leap_seconds_db) / sizeof(leap_seconds_db[0]); ++i){
-        if(t < (leap_seconds_db[i].t + leap_seconds_db[i].sec)){
-          break;
-        }
-        res = leap_seconds_db[i].sec;
-      }
-      return res;
-    }
-    void update(const FloatT &gps_sec){
-      gps_time.sec = gps_sec;
-      valid = false;
-    }
-    void update(const FloatT &gps_sec, const int &gps_wn, const int &leap_secs){
-      gps_time.sec = gps_sec;
-      gps_time.wn = gps_wn;
-      utc_time = gps_time_zero
-          + (7u * 24 * 60 * 60) * gps_time.wn
-          + gps_time.sec - leap_secs; // POSIX time ignores leap seconds.
-      valid = true;
-      leap_seconds = LEAP_SECONDS_CORRECTED;
-    }
-    void update(const FloatT &gps_sec, const int &gps_wn){
-      update(gps_sec, gps_wn, 0);
-      utc_time -= estimate_leap_seconds(utc_time);
-      leap_seconds = LEAP_SECONDS_ESTIMATED;
-    }
-  };
   bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated
   NullStream blackhole;
   std::ostream *_out; ///< Pointer for output stream
@@ -524,7 +431,105 @@ if(key_checked){ \
 };
 
 template <class FloatT>
-const std::time_t GlobalOptions<FloatT>::time_gps2local_t::gps_time_zero
+struct TimeConverter {
+  typedef typename GlobalOptions<FloatT>::gps_time_t gps_time_t;
+  enum {
+    LEAP_SECONDS_UNKNOWN,
+    LEAP_SECONDS_ESTIMATED,
+    LEAP_SECONDS_CORRECTED
+  } leap_seconds;
+  gps_time_t gps_time; ///< base GPS time
+  std::time_t utc_time; ///< corresponding base UTC time in time_t
+  int local_time_correction_in_seconds;
+  static const std::time_t gps_time_zero;
+  TimeConverter()
+      : gps_time(0, gps_time_t::WN_INVALID),
+      leap_seconds(LEAP_SECONDS_UNKNOWN),
+      local_time_correction_in_seconds(0) {}
+  template <class T>
+  struct converted {
+    int year, month, mday, hour, min;
+    T sec;
+  };
+  template <class T>
+  converted<T> convert(const T &itow) const {
+    if(gps_time.wn != gps_time_t::WN_INVALID){
+      T gap(itow - gps_time.sec);
+      static const int one_week(60 * 60 * 7 * 24);
+      if(gap <= -(one_week / 2)){ // Check roll over
+        gap += one_week;
+      }
+      std::time_t gap_sec(gap);
+      std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
+      tm *t(std::gmtime(&current));
+      converted<T> res = {
+          t->tm_year + 1900,
+          t->tm_mon + 1,
+          t->tm_mday,
+          t->tm_hour,
+          t->tm_min,
+          gap - gap_sec + t->tm_sec};
+      return res;
+    }else{
+      converted<T> res = {0, 0, 0, 0, 0, itow};
+      return res;
+    }
+  }
+  static int estimate_leap_seconds(const std::time_t &t_gps){
+    static const struct {
+      std::time_t t;
+      int sec;
+    } leap_seconds_db[] = {
+      {utc2time_t(1981, 7, 1), 1},
+      {utc2time_t(1982, 7, 1), 2},
+      {utc2time_t(1983, 7, 1), 3},
+      {utc2time_t(1985, 7, 1), 4},
+      {utc2time_t(1988, 1, 1), 5},
+      {utc2time_t(1990, 1, 1), 6},
+      {utc2time_t(1991, 1, 1), 7},
+      {utc2time_t(1992, 7, 1), 8},
+      {utc2time_t(1993, 7, 1), 9},
+      {utc2time_t(1994, 7, 1), 10},
+      {utc2time_t(1996, 1, 1), 11},
+      {utc2time_t(1997, 7, 1), 12},
+      {utc2time_t(1999, 1, 1), 13},
+      {utc2time_t(2006, 1, 1), 14},
+      {utc2time_t(2009, 1, 1), 15},
+      {utc2time_t(2012, 7, 1), 16},
+      {utc2time_t(2015, 7, 1), 17},
+      {utc2time_t(2017, 1, 1), 18},
+    };
+
+    int res(0);
+    for(int i(0); i < sizeof(leap_seconds_db) / sizeof(leap_seconds_db[0]); ++i){
+      if(t_gps < (leap_seconds_db[i].t + leap_seconds_db[i].sec)){
+        break;
+      }
+      res = leap_seconds_db[i].sec;
+    }
+    return res;
+  }
+  void update(const FloatT &gps_sec){
+    gps_time.sec = gps_sec;
+    gps_time.wn = gps_time_t::WN_INVALID;
+  }
+  void update(const FloatT &gps_sec, const int &gps_wn, const int &leap_secs){
+    gps_time.sec = gps_sec;
+    gps_time.wn = gps_wn;
+    utc_time = gps_time_zero
+        + (7u * 24 * 60 * 60) * gps_time.wn
+        + gps_time.sec - leap_secs; // POSIX time ignores leap seconds.
+    leap_seconds = LEAP_SECONDS_CORRECTED;
+  }
+  void update(const FloatT &gps_sec, const int &gps_wn){
+    update(gps_sec, gps_wn, 0);
+    utc_time -= estimate_leap_seconds(utc_time);
+    leap_seconds = LEAP_SECONDS_ESTIMATED;
+  }
+};
+
+template <class FloatT>
+const std::time_t TimeConverter<FloatT>::gps_time_zero
     = utc2time_t(1980, 1, 6); // 1980/1/6 00:00:00
 
 template <class FloatT>

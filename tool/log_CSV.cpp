@@ -61,7 +61,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool page_other;
   int page_P_mode, page_F_mode, page_M_mode;
   int debug_level;
-  super_t::time_gps2local_t time_gps2local;
+  typedef TimeConverter<float_sylph_t> time_gps2local_t;
+  time_gps2local_t time_gps2local;
   bool use_calendar_time;
 
   Options() 
