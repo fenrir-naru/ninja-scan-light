@@ -120,8 +120,8 @@ struct GlobalOptions {
   struct time_gps2local_t {
     bool valid;
     enum {LEAP_SECONDS_UNKNOWN, LEAP_SECONDS_ESTIMATED, LEAP_SECONDS_CORRECTED} leap_seconds;
-    gps_time_t gps_time;
-    std::time_t utc_time;
+    gps_time_t gps_time; ///< base GPS time
+    std::time_t utc_time; ///< corresponding base UTC time in time_t
     int local_time_correction_in_seconds;
     static const std::time_t gps_time_zero;
     time_gps2local_t()
@@ -153,7 +153,7 @@ struct GlobalOptions {
         return res;
       }
     }
-    static int estimate_leap_seconds(const std::time_t &gps_sec){
+    static int estimate_leap_seconds(const std::time_t &t){
       static const struct {
         std::time_t t;
         int sec;
@@ -180,12 +180,30 @@ struct GlobalOptions {
 
       int res(0);
       for(int i(0); i < sizeof(leap_seconds_db) / sizeof(leap_seconds_db[0]); ++i){
-        if(gps_sec < (leap_seconds_db[i].t + leap_seconds_db[i].sec)){
+        if(t < (leap_seconds_db[i].t + leap_seconds_db[i].sec)){
           break;
         }
         res = leap_seconds_db[i].sec;
       }
       return res;
+    }
+    void update(const FloatT &gps_sec){
+      gps_time.sec = gps_sec;
+      valid = false;
+    }
+    void update(const FloatT &gps_sec, const int &gps_wn, const int &leap_secs){
+      gps_time.sec = gps_sec;
+      gps_time.wn = gps_wn;
+      utc_time = gps_time_zero
+          + (7u * 24 * 60 * 60) * gps_time.wn
+          + gps_time.sec - leap_secs; // POSIX time ignores leap seconds.
+      valid = true;
+      leap_seconds = LEAP_SECONDS_CORRECTED;
+    }
+    void update(const FloatT &gps_sec, const int &gps_wn){
+      update(gps_sec, gps_wn, 0);
+      utc_time -= estimate_leap_seconds(utc_time);
+      leap_seconds = LEAP_SECONDS_ESTIMATED;
     }
   };
   bool reduce_1pps_sync_error; ///< True when auto correction for 1pps sync. error is activated

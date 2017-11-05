@@ -269,28 +269,19 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 break;
               }
               case 0x20: { // NAV-TIMEGPS
-                options.time_gps2local.gps_time.sec = (observer.fetch_ITOW_ms() / 1000);
-                char buf[2];
-                observer.inspect(buf, sizeof(buf), 6 + 10);
-                if((unsigned char)buf[1] & 0x02){ // valid week number
-                  char buf2[2];
-                  observer.inspect(buf2, sizeof(buf), 6 + 8);
-                  options.time_gps2local.gps_time.wn = le_char2_2_num<unsigned short>(*buf2);
+                float_sylph_t itow(observer.fetch_ITOW());
+                char buf[4];
+                observer.inspect(buf, sizeof(buf), 6 + 8);
+                if((unsigned char)buf[3] & 0x02){ // valid week number
+                  int wn(le_char2_2_num<unsigned short>(*buf));
 
-                  options.time_gps2local.utc_time = options.time_gps2local.gps_time_zero
-                      + (7u * 24 * 60 * 60) * options.time_gps2local.gps_time.wn
-                      + options.time_gps2local.gps_time.sec;
-
-                  // POSIX time ignores leap seconds.
-                  if((unsigned char)buf[1] & 0x04){
-                    options.time_gps2local.utc_time -= (char)(buf[0]); // valid UTC (leap seconds)
-                    options.time_gps2local.leap_seconds = Options::time_gps2local_t::LEAP_SECONDS_CORRECTED;
+                  if((unsigned char)buf[3] & 0x04){ // valid UTC (leap seconds)
+                    options.time_gps2local.update(itow, wn, (char)(buf[2]));
                   }else{
-                    options.time_gps2local.utc_time
-                        -= Options::time_gps2local_t::estimate_leap_seconds(options.time_gps2local.utc_time);
-                    options.time_gps2local.leap_seconds = Options::time_gps2local_t::LEAP_SECONDS_ESTIMATED;
+                    options.time_gps2local.update(itow, wn);
                   }
-                  options.time_gps2local.valid = true;
+                }else{
+                  options.time_gps2local.update(itow);
                 }
                 break;
               }
