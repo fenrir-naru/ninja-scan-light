@@ -135,7 +135,7 @@ struct GlobalOptions {
   }
   
   GlobalOptions()
-      : start_gpstime(0, 0), end_gpstime(DBL_MAX, INT_MAX),
+      : start_gpstime(0, gps_time_t::WN_INVALID), end_gpstime(DBL_MAX, gps_time_t::WN_INVALID),
       reduce_1pps_sync_error(true),
       blackhole(),
       _out(&(std::cout)),
@@ -459,7 +459,7 @@ struct TimeConverter {
       if(gap <= -(one_week / 2)){ // Check roll over
         gap += one_week;
       }
-      std::time_t gap_sec(gap);
+      int gap_sec(std::floor(gap));
       std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
       tm *t(std::gmtime(&current));
       converted<T> res = {
