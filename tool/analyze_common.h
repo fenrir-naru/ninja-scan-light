@@ -99,8 +99,7 @@ struct GlobalOptions {
     FloatT sec; ///< GPS time
     int wn; ///< GPS week number
     static const int WN_INVALID = -1;
-    gps_time_t() : sec(0), wn(0) {}
-    gps_time_t(const FloatT &_sec, const int &_wn)
+    gps_time_t(const FloatT &_sec = 0, const int &_wn = WN_INVALID)
         : sec(_sec), wn(_wn) {}
     template <class T1, class T2>
     bool is_before(const T1 &base_sec, const T2 &base_wn) const {
@@ -135,7 +134,7 @@ struct GlobalOptions {
   }
   
   GlobalOptions()
-      : start_gpstime(0, gps_time_t::WN_INVALID), end_gpstime(DBL_MAX, gps_time_t::WN_INVALID),
+      : start_gpstime(0), end_gpstime(DBL_MAX),
       reduce_1pps_sync_error(true),
       blackhole(),
       _out(&(std::cout)),
@@ -443,7 +442,7 @@ struct TimeConverter {
   int local_time_correction_in_seconds;
   static const std::time_t gps_time_zero;
   TimeConverter()
-      : gps_time(0, gps_time_t::WN_INVALID),
+      : gps_time(0),
       leap_seconds(LEAP_SECONDS_UNKNOWN),
       local_time_correction_in_seconds(0) {}
   template <class T>

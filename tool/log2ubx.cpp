@@ -104,7 +104,7 @@ typedef Processor_t::G_Observer_t G_Observer_t;
 int good_packet(0);
 int bad_packet(0);
 
-Options::gps_time_t gps_time_0x0106(0, 0);
+Options::gps_time_t gps_time_0x0106(0);
 bool read_continue(true);
 
 /**
@@ -134,6 +134,8 @@ void g_packet_handler(const G_Observer_t &observer){
     }
     if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
       gps_time_0x0106.wn = solution.week;
+    }else{
+      gps_time_0x0106.wn = Options::gps_time_t::WN_INVALID;
     }
     if(!options.is_time_before_end(gps_time_0x0106.sec, gps_time_0x0106.wn)){
       read_continue = false;
