@@ -479,31 +479,31 @@ struct TimeConverter {
       std::time_t t;
       int sec;
     } leap_seconds_db[] = {
-      {utc2time_t(1981, 7, 1), 1},
-      {utc2time_t(1982, 7, 1), 2},
-      {utc2time_t(1983, 7, 1), 3},
-      {utc2time_t(1985, 7, 1), 4},
-      {utc2time_t(1988, 1, 1), 5},
-      {utc2time_t(1990, 1, 1), 6},
-      {utc2time_t(1991, 1, 1), 7},
-      {utc2time_t(1992, 7, 1), 8},
-      {utc2time_t(1993, 7, 1), 9},
-      {utc2time_t(1994, 7, 1), 10},
-      {utc2time_t(1996, 1, 1), 11},
-      {utc2time_t(1997, 7, 1), 12},
-      {utc2time_t(1999, 1, 1), 13},
-      {utc2time_t(2006, 1, 1), 14},
-      {utc2time_t(2009, 1, 1), 15},
-      {utc2time_t(2012, 7, 1), 16},
-      {utc2time_t(2015, 7, 1), 17},
-      {utc2time_t(2017, 1, 1), 18},
+#define make_entry(y, m, d, sec) {utc2time_t(y, m, d) + sec, sec}
+      make_entry(1981, 7, 1,  1),
+      make_entry(1982, 7, 1,  2),
+      make_entry(1983, 7, 1,  3),
+      make_entry(1985, 7, 1,  4),
+      make_entry(1988, 1, 1,  5),
+      make_entry(1990, 1, 1,  6),
+      make_entry(1991, 1, 1,  7),
+      make_entry(1992, 7, 1,  8),
+      make_entry(1993, 7, 1,  9),
+      make_entry(1994, 7, 1, 10),
+      make_entry(1996, 1, 1, 11),
+      make_entry(1997, 7, 1, 12),
+      make_entry(1999, 1, 1, 13),
+      make_entry(2006, 1, 1, 14),
+      make_entry(2009, 1, 1, 15),
+      make_entry(2012, 7, 1, 16),
+      make_entry(2015, 7, 1, 17),
+      make_entry(2017, 1, 1, 18),
+#undef make_entry
     };
 
     int res(0);
     for(int i(0); i < sizeof(leap_seconds_db) / sizeof(leap_seconds_db[0]); ++i){
-      if(t_gps < (leap_seconds_db[i].t + leap_seconds_db[i].sec)){
-        break;
-      }
+      if(t_gps < leap_seconds_db[i].t){break;}
       res = leap_seconds_db[i].sec;
     }
     return res;
