@@ -362,12 +362,14 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
 struct A_Packet;
 struct G_Packet;
 struct M_Packet;
+struct TimePacket;
 
 struct Updatable {
   virtual ~Updatable() {}
   virtual void update(const A_Packet &){}
   virtual void update(const G_Packet &){}
   virtual void update(const M_Packet &){}
+  virtual void update(const TimePacket &){}
 } updatable_blackhole;
 
 class NAV : public NAVData<float_sylph_t>, public Updatable {
@@ -582,6 +584,11 @@ struct G_Packet : public BasicPacket<G_Packet> {
  */
 struct M_Packet : public BasicPacket<M_Packet> {
   Vector3<float_sylph_t> mag;
+};
+
+struct TimePacket : public BasicPacket<TimePacket> {
+  int week_number, leap_seconds;
+  bool valid_week_number, valid_leap_seconds;
 };
 
 template <
@@ -1526,6 +1533,22 @@ class StreamProcessor
 
             break;
           }
+          case 0x20: { // NAV-TIMEGPS
+            TimePacket packet;
+            packet.itow = observer.fetch_ITOW();
+            char buf[4];
+            observer.inspect(buf, sizeof(buf), 6 + 8);
+            if(packet.valid_week_number = ((unsigned char)buf[3] & 0x02)){
+              // valid week number
+              packet.week_number = le_char2_2_num<unsigned short>(*buf);
+              if(packet.valid_leap_seconds = ((unsigned char)buf[3] & 0x04)){
+                // valid UTC (leap seconds)
+                packet.leap_seconds = (char)(buf[2]);
+              }
+            }
+            outer.updatable->update(packet);
+            break;
+          }
           default: return;
         }
 
@@ -2164,6 +2187,7 @@ virtual void update(const type &packet){ \
     update_func(A_Packet);
     update_func(G_Packet);
     update_func(M_Packet);
+    update_func(TimePacket);
 #undef update_func
   } buffer(*nav_manager.nav);
   proc.update_target() = &buffer;
