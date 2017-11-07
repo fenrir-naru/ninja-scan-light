@@ -548,13 +548,17 @@ struct Packet{
   }
 };
 
+template <class T>
+struct BasicPacket : public Packet {
+  void apply(NAV &nav) const {
+    nav.update(static_cast<const T &>(*this));
+  }
+};
+
 /**
  * Inertial and temperature sensor data (ADC raw value)
  */
-struct A_Packet : public Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
+struct A_Packet : public BasicPacket<A_Packet> {
   Vector3<float_sylph_t> accel; ///< Acceleration
   Vector3<float_sylph_t> omega; ///< Angular speed
 };
@@ -562,11 +566,7 @@ struct A_Packet : public Packet {
 /**
  * GPS data
  */
-struct G_Packet : public Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
-
+struct G_Packet : public BasicPacket<G_Packet> {
   GPS_Solution<float_sylph_t> solution;
   Vector3<float_sylph_t> *lever_arm;
 
@@ -580,11 +580,7 @@ struct G_Packet : public Packet {
 /**
  * Magnetic sensor data
  */
-struct M_Packet : public Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
-
+struct M_Packet : public BasicPacket<M_Packet> {
   Vector3<float_sylph_t> mag;
 };
 
