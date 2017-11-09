@@ -587,8 +587,18 @@ struct M_Packet : public BasicPacket<M_Packet> {
 };
 
 struct TimePacket : public BasicPacket<TimePacket> {
+  typedef BasicPacket<TimePacket> super_t;
   int week_number, leap_seconds;
   bool valid_week_number, valid_leap_seconds;
+  using super_t::apply;
+  template <class FloatT>
+  void apply(TimeConverter<FloatT> &converter) const {
+    valid_week_number
+        ? (valid_leap_seconds
+            ? converter.update(super_t::itow, week_number, leap_seconds)
+            : converter.update(super_t::itow, week_number))
+        : converter.update(super_t::itow);
+  }
 };
 
 template <
