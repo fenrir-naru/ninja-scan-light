@@ -359,6 +359,43 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
+template <class FloatT>
+struct CalendarTimeStamp : public CalendarTime<FloatT> {
+  typedef CalendarTime<FloatT> super_t;
+#if defined(__GNUC__) && (__GNUC__ < 5)
+  typedef typename super_t::float_t float_t;
+#else
+  using typename super_t::float_t;
+#endif
+  float_t itow;
+  CalendarTimeStamp &operator=(const float_t &t){
+    year = month = mday = hour = min = 0;
+    sec = itow = t;
+    return *this;
+  }
+  CalendarTimeStamp(const float_t &t = 0) : super_t(), itow(t) {
+    operator=(t);
+  }
+  operator float_t() const {return itow;}
+  static void label(std::ostream &out){
+    out << "year" << ','
+        << "month" << ','
+        << "day" << ','
+        << "hour" << ','
+        << "min" << ','
+        << "sec";
+  }
+  friend std::ostream &operator<<(std::ostream &out, const CalendarTimeStamp &time){
+    out << time.year << ','
+        << time.month << ','
+        << time.mday << ','
+        << time.hour << ','
+        << time.min << ','
+        << time.sec;
+    return out;
+  }
+};
+
 struct A_Packet;
 struct G_Packet;
 struct M_Packet;
@@ -1105,13 +1142,22 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       }
     }
 
+    static void label_time(std::ostream &out, const void *){
+      out << "itow";
+    }
+
+    static void label_time(std::ostream &out, const CalendarTimeStamp *){
+      CalendarTimeStamp::label(out);
+    }
+
   public:
     /**
      * print label
      */
     void label(std::ostream &out = std::cout) const {
-      out << "mode" << ','
-          << "itow" << ',';
+      out << "mode" << ',';
+      label_time(out, &itow);
+      out << ',';
       super_data_t::label(out);
       label2(out, this);
     }
