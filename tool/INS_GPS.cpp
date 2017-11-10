@@ -1033,10 +1033,10 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       itow = _itow;
     }
   protected:
-    void label2(std::ostream &out, const void *) const {}
+    static void label2(std::ostream &out, const void *){}
 
     template <class BaseINS, template <class> class Filter>
-    void label2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins) const {
+    static void label2(std::ostream &out, const Filtered_INS2<BaseINS, Filter> *fins){
       label2(out, (const BaseINS *)fins);
       if(options.dump_stddev){
         out << ',' << "s1(longitude)"
@@ -1052,7 +1052,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     }
 
     template <class BaseINS>
-    void label2(std::ostream &out, const INS_BiasEstimated<BaseINS> *ins) const {
+    static void label2(std::ostream &out, const INS_BiasEstimated<BaseINS> *ins){
       label2(out, (const BaseINS *)ins);
       out << ',' << "bias_accel(X)"   //Bias
           << ',' << "bias_accel(Y)"
@@ -1063,7 +1063,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     }
 
     template <class BaseFINS>
-    void label2(std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
+    static void label2(std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins){
       label2(out, (const BaseFINS *)fins);
       if(options.dump_stddev){
         out << ',' << "s1(bias_accel(X))"
