@@ -61,8 +61,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool page_other;
   int page_P_mode, page_F_mode, page_M_mode;
   int debug_level;
-  typedef TimeConverter<float_sylph_t> time_gps2local_t;
-  time_gps2local_t time_gps2local;
+  typedef CalendarTime<float_sylph_t> calendar_time_t;
+  calendar_time_t::Converter time_gps2local;
   bool use_calendar_time;
 
   Options() 
@@ -80,13 +80,12 @@ struct Options : public GlobalOptions<float_sylph_t> {
   }
   ~Options(){}
   
-  template <class T>
   struct formatted_time_t {
     const Options &options;
-    T itow;
-    friend ostream &operator<<(ostream &out, const formatted_time_t<T> &t){
+    float_sylph_t itow;
+    friend ostream &operator<<(ostream &out, const formatted_time_t &t){
       if(t.options.use_calendar_time){ // year, month, mday, hour, min, sec
-        typename Options::time_gps2local_t::converted<T> t2(
+        typename Options::calendar_time_t t2(
             t.options.time_gps2local.convert(t.itow));
         out << t2.year << ", "
             << t2.month << ", "
@@ -102,8 +101,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
   };
 
   template <class T>
-  formatted_time_t<T> format_time(const T &itow){
-    formatted_time_t<T> res = {*this, itow};
+  formatted_time_t format_time(const T &itow){
+    formatted_time_t res = {*this, itow};
     return res;
   }
 

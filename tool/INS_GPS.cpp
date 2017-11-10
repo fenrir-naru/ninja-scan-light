@@ -592,7 +592,7 @@ struct TimePacket : public BasicPacket<TimePacket> {
   bool valid_week_number, valid_leap_seconds;
   using super_t::apply;
   template <class FloatT>
-  void apply(TimeConverter<FloatT> &converter) const {
+  void apply(typename CalendarTime<FloatT>::Converter &converter) const {
     valid_week_number
         ? (valid_leap_seconds
             ? converter.update(super_t::itow, week_number, leap_seconds)
@@ -1029,6 +1029,8 @@ class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t
     using typename INS_GPS::vec3_t;
     using typename INS_GPS::mat_t;
 #endif
+    typedef NAVData<typename INS_GPS::float_t> super_data_t;
+    typedef TimeStamp time_stamp_t;
   protected:
     mutable const char *mode;
     mutable TimeStamp itow;
@@ -1110,7 +1112,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     void label(std::ostream &out = std::cout) const {
       out << "mode" << ','
           << "itow" << ',';
-      NAVData<typename INS_GPS::float_t>::label(out);
+      super_data_t::label(out);
       label2(out, this);
     }
   
@@ -1170,7 +1172,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     void dump(std::ostream &out) const {
       out << mode << ','
           << itow << ',';
-      NAVData<typename INS_GPS::float_t>::dump(out);
+      super_data_t::dump(out);
       dump2(out, this);
     }
 };
