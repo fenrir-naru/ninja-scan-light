@@ -1070,10 +1070,10 @@ class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t
     typedef TimeStamp time_stamp_t;
   protected:
     mutable const char *mode;
-    mutable TimeStamp itow;
+    mutable time_stamp_t itow;
   public:
     INS_GPS_NAVData() : INS_GPS(), mode("N/A"), itow(0) {}
-    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS, TimeStamp> &orig, const bool &deepcopy = false)
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS, time_stamp_t> &orig, const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
     ~INS_GPS_NAVData(){}
 #define MAKE_PROXY_FUNC(fname) \
@@ -1095,7 +1095,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     void set_header(const char *_mode) const {
       mode = _mode;
     }
-    void set_header(const char *_mode, const TimeStamp &_itow) const {
+    void set_header(const char *_mode, const time_stamp_t &_itow) const {
       mode = _mode;
       itow = _itow;
     }
