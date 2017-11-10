@@ -619,7 +619,7 @@ struct INS_GPS_Factory<PureINS, Filter, true> {
   typedef INS_GPS2_BiasEstimated<PureINS, Filter> product_t;
 };
 
-template <class INS_GPS>
+template <class INS_GPS, class TimeStamp = typename INS_GPS::float_t>
 class INS_GPS_NAVData;
 
 template <class INS_GPS>
@@ -1019,7 +1019,7 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   }
 };
 
-template <class INS_GPS>
+template <class INS_GPS, class TimeStamp>
 class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
@@ -1031,10 +1031,10 @@ class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t
 #endif
   protected:
     mutable const char *mode;
-    mutable typename INS_GPS::float_t itow;
+    mutable TimeStamp itow;
   public:
     INS_GPS_NAVData() : INS_GPS(), mode("N/A"), itow(0) {}
-    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS, TimeStamp> &orig, const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
     ~INS_GPS_NAVData(){}
 #define MAKE_PROXY_FUNC(fname) \
@@ -1051,12 +1051,12 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     MAKE_PROXY_FUNC(euler_psi);
     MAKE_PROXY_FUNC(azimuth);
 #undef MAKE_PROXY_FUNC
-    typename INS_GPS::float_t time_stamp() const {return itow;}
+    typename INS_GPS::float_t time_stamp() const {return (typename INS_GPS::float_t)itow;}
 
     void set_header(const char *_mode) const {
       mode = _mode;
     }
-    void set_header(const char *_mode, const typename INS_GPS::float_t &_itow) const {
+    void set_header(const char *_mode, const TimeStamp &_itow) const {
       mode = _mode;
       itow = _itow;
     }
