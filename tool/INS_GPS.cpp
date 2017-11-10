@@ -373,6 +373,8 @@ struct CalendarTimeStamp : public CalendarTime<FloatT> {
     super_t::sec = itow = t;
     return *this;
   }
+  CalendarTimeStamp(const super_t &t1, const float_t &t2)
+      : super_t(t1), itow(t2) {}
   CalendarTimeStamp(const float_t &t = 0) : super_t(), itow(t) {
     operator=(t);
   }
@@ -986,6 +988,9 @@ float_t fname() const {return ins_gps->fname();}
     void update(const M_Packet &packet){
       helper.before_any_update();
       helper.compass(packet);
+    }
+    void update(const TimePacket &packet){
+      helper.t_stamp_generator.update(packet);
     }
 };
 
@@ -1908,6 +1913,29 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
   public:
+    template <class TimeStamp>
+    struct TimeStampGenerator {
+      void update(const TimePacket &packet){}
+      TimeStamp operator()(const float_t &t) const {
+        return (TimeStamp)t;
+      }
+    };
+
+    template <class FloatT>
+    struct TimeStampGenerator<CalendarTimeStamp<FloatT> > {
+      typedef CalendarTimeStamp<FloatT> stamp_t;
+      typename stamp_t::Converter itow2calendar;
+      TimeStampGenerator() : itow2calendar() {}
+      void update(const TimePacket &packet){
+        packet.apply<FloatT>(itow2calendar);
+      }
+      stamp_t operator()(const FloatT &itow) const {
+        return stamp_t(itow2calendar.convert(itow), itow);
+      }
+    };
+
+    TimeStampGenerator<typename INS_GPS::time_stamp_t> t_stamp_generator;
+
     void before_any_update(){
       if(status >= JUST_INITIALIZED){
         status = WAITING_UPDATE;
@@ -1922,7 +1950,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         : status(UNINITIALIZED), nav(_nav),
         min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
         recent_a(max(min_a_packets_for_init, 0x100)),
-        recent_m(0x10){
+        recent_m(0x10),
+        t_stamp_generator() {
     }
   
   protected:
@@ -1947,11 +1976,11 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
             if(index == 0){
               if(!options.dump_correct){continue;}
-              it->ins_gps.set_header("BP_MU", itow + it->elapsedT_from_last_correct);
+              it->ins_gps.set_header("BP_MU", t_stamp_generator(itow + it->elapsedT_from_last_correct));
               res.push_back(&(it->ins_gps));
             }else{
               if(!options.dump_update){continue;}
-              it->ins_gps.set_header("BP_TU", itow + it->elapsedT_from_last_correct);
+              it->ins_gps.set_header("BP_TU",  t_stamp_generator(itow + it->elapsedT_from_last_correct));
               res.push_back(&(it->ins_gps));
             }
           }
@@ -2017,7 +2046,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         // Check interval from the last time update
         float_t deltaT(previous.interval(a_packet));
         time_update(a_packet, deltaT);
-        nav.ins_gps->set_header("TU", a_packet.itow);
+        nav.ins_gps->set_header("TU",  t_stamp_generator(a_packet.itow));
       }
 
       recent_a.push(a_packet);
@@ -2035,7 +2064,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         time_update(*it, packet->interval(*it));
         packet = &(*it);
       }
-      nav.ins_gps->set_header("MU", g_packet.itow);
+      nav.ins_gps->set_header("MU",  t_stamp_generator(g_packet.itow));
     }
 
     void initialize(
