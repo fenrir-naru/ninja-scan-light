@@ -212,6 +212,7 @@ class INS_GPS_Debug_PureInertial : public INS_GPS_Debug<typename INS_GPS::ins_t>
     using typename super_t::float_t;
     using typename super_t::vec3_t;
 #endif
+    typedef Matrix<float_t> mat_t;
   public:
     INS_GPS_Debug_PureInertial() : super_t() {}
     INS_GPS_Debug_PureInertial(

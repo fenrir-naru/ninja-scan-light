@@ -609,9 +609,12 @@ template <class INS_GPS>
 class INS_GPS_NAV : public NAV {
   public:
     typedef INS_GPS ins_gps_t;
+    typedef typename ins_gps_t::float_t float_t;
+    typedef typename ins_gps_t::mat_t mat_t;
+    typedef typename ins_gps_t::vec3_t vec3_t;
     class Helper;
   protected:
-    INS_GPS *ins_gps;
+    ins_gps_t *ins_gps;
     Helper helper;
 
     void setup_filter(void *){}
@@ -631,7 +634,7 @@ class INS_GPS_NAV : public NAV {
        *        default values are sufficiently big.
        */
       {
-        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        mat_t P(ins_gps->getFilter().getP());
 
         P(0, 0) = P(1, 1) = P(2, 2) = 1E+1;
         P(3, 3) = P(4, 4) = P(5, 5) = 1E-8;
@@ -650,7 +653,7 @@ class INS_GPS_NAV : public NAV {
        *  6   : gravity variance [m/s^2]^2, normally set small value, such as 1E-6
        */
       {
-        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        mat_t Q(ins_gps->getFilter().getQ());
         
         Q(0, 0) = Q(1, 1) = Q(2, 2) = 25E-4;
         Q(3, 3) = Q(4, 4) = Q(5, 5) = 25E-6;
@@ -661,17 +664,17 @@ class INS_GPS_NAV : public NAV {
     }
 
     void setup_filter(
-        const Vector3<float_sylph_t> &accel_sigma,
-        const Vector3<float_sylph_t> &gyro_sigma,
+        const vec3_t &accel_sigma,
+        const vec3_t &gyro_sigma,
         void *) {}
 
     template <class BaseINS, template <class> class Filter>
     void setup_filter(
-        const Vector3<float_sylph_t> &accel_sigma,
-        const Vector3<float_sylph_t> &gyro_sigma,
+        const vec3_t &accel_sigma,
+        const vec3_t &gyro_sigma,
         Filtered_INS2<BaseINS, Filter> *) {
 
-      Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+      mat_t Q(ins_gps->getFilter().getQ());
       for(int i(0), j(3); i < 3; i++, j++){
         Q(i, i) = pow(accel_sigma[i], 2);
         Q(j, j) = pow(gyro_sigma[i], 2);
@@ -685,7 +688,7 @@ class INS_GPS_NAV : public NAV {
       setup_filter((BaseFINS *)ins_gps);
 
       {
-        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        mat_t P(ins_gps->getFilter().getP());
         static const unsigned NP(
             Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS);
         P(NP,     NP)     = P(NP + 1, NP + 1) = P(NP + 2, NP + 2) = 1E-4; // for accelerometer bias drift
@@ -694,7 +697,7 @@ class INS_GPS_NAV : public NAV {
       }
 
       {
-        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        mat_t Q(ins_gps->getFilter().getQ());
         static const unsigned NQ(
             Filtered_INS_BiasEstimated<BaseFINS>::Q_SIZE_WITHOUT_BIAS);
         Q(NQ,     NQ)     = Q(NQ + 1, NQ + 1) = Q(NQ + 2, NQ + 2) = 1E-6; // for accelerometer bias drift
@@ -735,8 +738,8 @@ class INS_GPS_NAV : public NAV {
     }
 
     void setup_filter(
-        const Vector3<float_sylph_t> &accel_sigma,
-        const Vector3<float_sylph_t> &gyro_sigma){
+        const vec3_t &accel_sigma,
+        const vec3_t &gyro_sigma){
       setup_filter(accel_sigma, gyro_sigma, ins_gps);
     }
 
@@ -750,7 +753,7 @@ class INS_GPS_NAV : public NAV {
     }
 
   protected:
-    static void set_matrix_full(Matrix<float_sylph_t> &mat, const char *spec){
+    static void set_matrix_full(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
       for(int i(0); i < mat.rows(); i++){
         for(int j(0); j < mat.columns(); j++){
@@ -758,13 +761,13 @@ class INS_GPS_NAV : public NAV {
         }
       }
     }
-    static void set_matrix_diagonal(Matrix<float_sylph_t> &mat, const char *spec){
+    static void set_matrix_diagonal(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
       for(int i(0); i < mat.rows(); i++){
         mat(i, i) = std::strtod(_spec, &_spec);
       }
     }
-    static void set_matrix_1element(Matrix<float_sylph_t> &mat, const char *spec){
+    static void set_matrix_1element(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
       int i((int)std::strtol(_spec, &_spec, 10));
       int j((int)std::strtol(_spec, &_spec, 10));
@@ -774,7 +777,7 @@ class INS_GPS_NAV : public NAV {
     bool init_misc(const char *line, void *){
       return false;
     }
-    bool init_misc(const char *line, INS<float_sylph_t> *){
+    bool init_misc(const char *line, INS<float_t> *){
       const char *value;
       if(value = Options::get_value2(line, "x")){
         char *spec(const_cast<char *>(value));
@@ -789,7 +792,7 @@ class INS_GPS_NAV : public NAV {
       const char *value;
 
       while(true){
-        Matrix<float_sylph_t> P(ins_gps->getFilter().getP());
+        mat_t P(ins_gps->getFilter().getP());
         if(value = Options::get_value2(line, "P")){
           set_matrix_full(P, value);
         }else if(value = Options::get_value2(line, "P_diag")){
@@ -802,7 +805,7 @@ class INS_GPS_NAV : public NAV {
       }
 
       while(true){
-        Matrix<float_sylph_t> Q(ins_gps->getFilter().getQ());
+        mat_t Q(ins_gps->getFilter().getQ());
         if(value = Options::get_value2(line, "Q")){
           set_matrix_full(Q, value);
         }else if(value = Options::get_value2(line, "Q_diag")){
@@ -829,7 +832,7 @@ class INS_GPS_NAV : public NAV {
     }
 
 #define MAKE_PROXY_FUNC(fname) \
-float_sylph_t fname() const {return ins_gps->fname();}
+float_t fname() const {return ins_gps->fname();}
     MAKE_PROXY_FUNC(longitude);
     MAKE_PROXY_FUNC(latitude);
     MAKE_PROXY_FUNC(height);
@@ -844,12 +847,12 @@ float_sylph_t fname() const {return ins_gps->fname();}
     MAKE_PROXY_FUNC(time_stamp);
 #undef MAKE_PROXY_FUNC
     
-    float_sylph_t &operator[](const unsigned &index){return ins_gps->operator[](index);}
+    float_t &operator[](const unsigned &index){return ins_gps->operator[](index);}
     
     NAV &update(
-        const Vector3<float_sylph_t> &accel, 
-        const Vector3<float_sylph_t> &gyro, 
-        const float_sylph_t &elapsedT){
+        const vec3_t &accel,
+        const vec3_t &gyro,
+        const float_t &elapsedT){
       ins_gps->update(accel, gyro, elapsedT);
       return *this;
     }
@@ -862,26 +865,26 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
     NAV &correct(
         const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b){
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b){
       ins_gps->correct(gps, lever_arm_b, omega_b2i_4b);
       return *this;
     }
 
   protected:
-    bool setup_correct(const float_sylph_t &advanceT, void *){
+    bool setup_correct(const float_t &advanceT, void *){
       return true;
     }
 
     template <class INS_GPS_orig>
-    bool setup_correct(const float_sylph_t &advanceT, INS_GPS_RealTime<INS_GPS_orig> *){
+    bool setup_correct(const float_t &advanceT, INS_GPS_RealTime<INS_GPS_orig> *){
       return ins_gps->setup_correct(advanceT);
     }
 
   public:
     NAV &correct(
         const G_Packet &gps,
-        const float_sylph_t &advanceT){
+        const float_t &advanceT){
       if(setup_correct(advanceT, ins_gps)){
         return correct(gps);
       }else{
@@ -891,9 +894,9 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
     NAV &correct(
         const G_Packet &gps,
-        const Vector3<float_sylph_t> &lever_arm_b,
-        const Vector3<float_sylph_t> &omega_b2i_4b,
-        const float_sylph_t &advanceT){
+        const vec3_t &lever_arm_b,
+        const vec3_t &omega_b2i_4b,
+        const float_t &advanceT){
       if(setup_correct(advanceT, ins_gps)){
         return correct(gps, lever_arm_b, omega_b2i_4b);
       }else{
@@ -901,7 +904,7 @@ float_sylph_t fname() const {return ins_gps->fname();}
       }
     }
 
-    NAV &correct_yaw(const float_sylph_t &delta_yaw){
+    NAV &correct_yaw(const float_t &delta_yaw){
       ins_gps->correct_yaw(delta_yaw, pow(deg2rad(options.mag_heading_accuracy_deg), 2));
       return *this;
     }
@@ -1001,6 +1004,14 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
 
 template <class INS_GPS>
 class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename INS_GPS::vec3_t vec3_t;
+    typedef typename INS_GPS::mat_t mat_t;
+#else
+    using typename INS_GPS::vec3_t;
+    using typename INS_GPS::mat_t;
+#endif
   protected:
     mutable const char *mode;
     mutable typename INS_GPS::float_t itow;
@@ -1109,8 +1120,8 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     template <class BaseINS>
     void dump2(std::ostream &out, const INS_BiasEstimated<BaseINS> *ins) const {
       dump2(out, (const BaseINS *)ins);
-      Vector3<float_sylph_t> &ba(const_cast<INS_BiasEstimated<BaseINS> *>(ins)->bias_accel());
-      Vector3<float_sylph_t> &bg(const_cast<INS_BiasEstimated<BaseINS> *>(ins)->bias_gyro());
+      vec3_t &ba(const_cast<INS_BiasEstimated<BaseINS> *>(ins)->bias_accel());
+      vec3_t &bg(const_cast<INS_BiasEstimated<BaseINS> *>(ins)->bias_gyro());
       out << ',' << ba.getX()      // Bias
           << ',' << ba.getY()
           << ',' << ba.getZ()
@@ -1124,7 +1135,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
         std::ostream &out, const Filtered_INS_BiasEstimated<BaseFINS> *fins) const {
       dump2(out, (const BaseFINS *)fins);
       if(options.dump_stddev){
-        const Matrix<float_sylph_t> &P(
+        const mat_t &P(
             const_cast<Filtered_INS_BiasEstimated<BaseFINS> *>(fins)->getFilter().getP());
         for(int i(Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_WITHOUT_BIAS), j(0);
             j < Filtered_INS_BiasEstimated<BaseFINS>::P_SIZE_BIAS; ++i, ++j){
@@ -1791,14 +1802,14 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     typedef PacketBuffer<M_Packet> recent_m_t;
     recent_m_t recent_m;
 
-    Vector3<float_sylph_t> get_mag(const float_sylph_t &itow){
+    vec3_t get_mag(const float_t &itow){
       if(recent_m.buf.size() < 2){
-        return Vector3<float_sylph_t>(1, 0, 0); // heading is north
+        return vec3_t(1, 0, 0); // heading is north
       }
       typename recent_m_t::buf_t::const_iterator
           it_a(nearest(recent_m.buf, itow, 2)),
           it_b(it_a + 1);
-      float_sylph_t
+      float_t
           weight_a((it_b->itow - itow) / (it_b->itow - it_a->itow)),
           weight_b(1. - weight_a);
       /* Reduce excessive extrapolation.
@@ -1841,7 +1852,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       // When smoothing is activated
       switch(status){
         case MEASUREMENT_UPDATED: {
-          float_sylph_t itow(recent_a.buf.back().itow);
+          float_t itow(recent_a.buf.back().itow);
           typedef typename INS_GPS_Back_Propagate<Base_INS_GPS>::snapshots_t snapshots_t;
           const snapshots_t &snapshots(ins_gps->get_snapshots());
           int index(0);
@@ -1892,7 +1903,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 
   protected:
-    void time_update(const A_Packet &a_packet, float_sylph_t deltaT){
+    void time_update(const A_Packet &a_packet, float_t deltaT){
 
       static const int one_week(60 * 60 * 7 * 24);
       if(deltaT <= -(one_week / 2)){ // Check roll over
@@ -1922,7 +1933,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         const A_Packet &previous(recent_a.buf.back());
 
         // Check interval from the last time update
-        float_sylph_t deltaT(previous.interval(a_packet));
+        float_t deltaT(previous.interval(a_packet));
         time_update(a_packet, deltaT);
         nav.ins_gps->set_header("TU", a_packet.itow);
       }
@@ -1946,15 +1957,15 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 
     void initialize(
-        const float_sylph_t &itow,
-        const float_sylph_t &latitude,
-        const float_sylph_t &longitude,
-        const float_sylph_t &height,
-        const float_sylph_t &v_north,
-        const float_sylph_t &v_east,
-        const float_sylph_t &v_down){
+        const float_t &itow,
+        const float_t &latitude,
+        const float_t &longitude,
+        const float_t &height,
+        const float_t &v_north,
+        const float_t &v_east,
+        const float_t &v_down){
 
-      float_sylph_t
+      float_t
           yaw(deg2rad(options.initial_attitude.yaw_deg)),
           pitch(deg2rad(options.initial_attitude.pitch_deg)),
           roll(deg2rad(options.initial_attitude.roll_deg));
@@ -1962,17 +1973,15 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       while(options.initial_attitude.mode < options.initial_attitude.FULL_GIVEN){
         // Estimate initial attitude by using accelerometer and magnetic sensor (if available) under static assumption
 
-        typedef Vector3<float_sylph_t> vec_t;
-
         // Normalization
-        vec_t acc(0, 0, 0);
+        vec3_t acc(0, 0, 0);
         for(typename recent_a_t::buf_t::iterator it(recent_a.buf.begin());
             it != recent_a.buf.end();
             ++it){
           acc += it->accel;
         }
         acc /= recent_a.buf.size();
-        vec_t acc_reg(-acc / acc.abs());
+        vec3_t acc_reg(-acc / acc.abs());
 
         // Estimate roll angle
         roll = atan2(acc_reg[1], acc_reg[2]);
@@ -2008,14 +2017,14 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
     }
 
-    void time_update_before_measurement_update(const float_sylph_t &advanceT, void *){
+    void time_update_before_measurement_update(const float_t &advanceT, void *){
       if(advanceT <= 0){return;}
       // Time update up to the GPS observation
       time_update(recent_a.buf.back(), advanceT);
     }
 
     template <class Base_INS_GPS>
-    void time_update_before_measurement_update(const float_sylph_t &advanceT, INS_GPS_RealTime<Base_INS_GPS> *){
+    void time_update_before_measurement_update(const float_t &advanceT, INS_GPS_RealTime<Base_INS_GPS> *){
       return;
     }
 
@@ -2035,11 +2044,11 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         
         // calculate GPS data timing;
         // negative(realtime mode, delayed), or slightly positive(other modes, because of already sorted)
-        float_sylph_t gps_advance(recent_a.buf.back().interval(g_packet));
+        float_t gps_advance(recent_a.buf.back().interval(g_packet));
         time_update_before_measurement_update(gps_advance, nav.ins_gps);
 
         if(g_packet.lever_arm){ // When use lever arm effect.
-          Vector3<float_sylph_t> omega_b2i_4n;
+          vec3_t omega_b2i_4n;
           int packets_for_mean(0x10), i(0);
           typename recent_a_t::buf_t::const_iterator it(
               nearest(recent_a.buf, g_packet.itow, packets_for_mean));
