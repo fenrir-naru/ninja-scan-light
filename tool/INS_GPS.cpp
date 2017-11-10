@@ -544,7 +544,8 @@ struct Packet{
   /**
    * Get interval time between another one
    *
-   * @param another one
+   * @param another
+   * @return if another is bigger, positive number will be returned.
    */
   float_sylph_t interval(const Packet &another) const {
     return another.itow - itow;
@@ -552,15 +553,35 @@ struct Packet{
   static bool compare(const Packet *a, const Packet *b) {
     return a->itow < b->itow;
   }
+  /**
+   * Get interval time between another one
+   * in consideration of one week roll over
+   *
+   * @param another
+   * @return The returned number range is [-one_week/2, +one_week/2)
+   * if another is bigger, positive number will be returned.
+   */
+  float_sylph_t interval_rollover(const Packet &another) const {
+    float_sylph_t delta(another.itow - itow);
+    static const int one_week(60 * 60 * 24 * 7);
+    return delta - (std::floor((delta / one_week) + 0.5) * one_week);
+  }
+  static bool compare_rollover(const Packet *a, const Packet *b) {
+    return a->interval_rollover(*b) > 0;
+  }
+};
+
+template <class T>
+struct BasicPacket : public Packet {
+  void apply(NAV &nav) const {
+    nav.update(static_cast<const T &>(*this));
+  }
 };
 
 /**
  * Inertial and temperature sensor data (ADC raw value)
  */
-struct A_Packet : public Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
+struct A_Packet : public BasicPacket<A_Packet> {
   Vector3<float_sylph_t> accel; ///< Acceleration
   Vector3<float_sylph_t> omega; ///< Angular speed
 };
@@ -568,11 +589,7 @@ struct A_Packet : public Packet {
 /**
  * GPS data
  */
-struct G_Packet : public Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
-
+struct G_Packet : public BasicPacket<G_Packet> {
   GPS_Solution<float_sylph_t> solution;
   Vector3<float_sylph_t> *lever_arm;
 
@@ -696,11 +713,7 @@ struct gps_pvt_t : public G_Packet_Raw::pvt_t {
 /**
  * Magnetic sensor data
  */
-struct M_Packet : public Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
-
+struct M_Packet : public BasicPacket<M_Packet> {
   Vector3<float_sylph_t> mag;
 };
 
@@ -1109,47 +1122,68 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
 template <class INS_GPS>
 struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
-  typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
-  typedef INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS> > data_t;
-
-  typedef INS_GPS_NAV_Factory<INS_GPS_Back_Propagate<INS_GPS> > bp_t;
-  typedef INS_GPS_NAV_Factory<INS_GPS_RealTime<INS_GPS> > rt_t;
-
-  typedef INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<INS_GPS> > debug_cov_t;
-  typedef INS_GPS_NAV_Factory<INS_GPS_Debug_PureInertial<INS_GPS> > debug_ins_t;
 
   template <class Calibration>
   static NAV *generate(const Calibration &calibration){
+    typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
     typename nav_t::disp_t *res(new typename nav_t::disp_t());
     res->setup_filter(calibration.sigma_accel(), calibration.sigma_gyro());
     return res;
   }
 
+  private:
+  template <class T>
+  struct Checker {
+    template <class Calibration>
+    static NAV *check_covariance(const Calibration &calibration){
+      switch(options.debug_property.debug_target){
+        case INS_GPS_Debug_Property::DEBUG_KF_P:
+        case INS_GPS_Debug_Property::DEBUG_KF_FULL:
+          return INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<T> >::generate(calibration);
+        case INS_GPS_Debug_Property::DEBUG_NONE:
+        default:
+          return INS_GPS_NAV_Factory<T>::generate(calibration);
+      }
+    }
+
+    template <class Calibration>
+    static NAV *check_synchronization(const Calibration &calibration){
+      switch(options.ins_gps_sync_strategy){
+        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+          return Checker<INS_GPS_Back_Propagate<T> >::check_covariance(calibration);
+        case Options::INS_GPS_SYNC_REALTIME:
+          return Checker<INS_GPS_RealTime<T> >::check_covariance(calibration);
+        case Options::INS_GPS_SYNC_OFFLINE:
+        default:
+          return check_covariance(calibration);
+      }
+    }
+
+    template <class Calibration>
+    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
+      return Checker<INS_GPS_NAVData<T> >::check_synchronization(calibration);
+    }
+
+    template <class Calibration>
+    static NAV *check_pure_ins(const Calibration &calibration){
+      return (options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL)
+          ? Checker<INS_GPS_Debug_PureInertial<T> >::check_navdata(calibration)
+          : check_navdata(calibration);
+    }
+  };
+
+  template <class T>
+  struct Checker<INS_GPS_Debug_PureInertial<T> > {
+    template <class Calibration>
+    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
+      return INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> > >::generate(calibration);
+    }
+  };
+
+  public:
   template <class Calibration>
   static NAV *get_nav(const Calibration &calibration){
-    switch(options.debug_property.debug_target){
-      case INS_GPS_Debug_Property::DEBUG_NONE:
-        switch(options.ins_gps_sync_strategy){
-          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return data_t::bp_t::generate(calibration);
-          case Options::INS_GPS_SYNC_REALTIME:
-            return data_t::rt_t::generate(calibration);
-          default:
-            return data_t::generate(calibration);
-        }
-      case INS_GPS_Debug_Property::DEBUG_KF_P:
-      case INS_GPS_Debug_Property::DEBUG_KF_FULL:
-        switch(options.ins_gps_sync_strategy){
-          case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-            return data_t::bp_t::debug_cov_t::generate(calibration);
-          case Options::INS_GPS_SYNC_REALTIME:
-            return data_t::rt_t::debug_cov_t::generate(calibration);
-          default:
-            return data_t::debug_cov_t::generate(calibration);
-        }
-      case INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL:
-        return debug_ins_t::data_t::generate(calibration);
-    }
+    return Checker<INS_GPS>::check_pure_ins(calibration);
   }
 };
 
@@ -1679,7 +1713,7 @@ class StreamProcessor
           lever_arm(),
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
-          week_number(0), status(),
+          week_number(Options::gps_time_t::WN_INVALID), status(),
           space_node(),
           packet_raw_latest(space_node) {
         previous_seek_next = G_Observer_t::ready();
@@ -2520,12 +2554,16 @@ class INS_GPS_NAV<INS_GPS>::Helper {
   protected:
     void time_update(const A_Packet &a_packet, float_sylph_t deltaT){
 
+      static const int one_week(60 * 60 * 7 * 24);
+      if(deltaT <= -(one_week / 2)){ // Check roll over
+        deltaT += one_week;
+      }
+
       // Check interval from the last time update
 #define INTERVAL_THRESHOLD 10
-#define INTERVAL_FORCE_VALUE 0.01
-      if((deltaT < 0) || (deltaT >= INTERVAL_THRESHOLD)){
-        // Rewrite time stamp forcedly when discontinuity is too large.
-        deltaT = INTERVAL_FORCE_VALUE;
+      if((deltaT <= 0) || (deltaT >= INTERVAL_THRESHOLD)){
+        // Skip update when discontinuity is too large.
+        return;
       }
 
       nav.update(a_packet.accel, a_packet.omega, deltaT);
@@ -2556,7 +2594,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void time_update_after_initialization(const G_Packet &g_packet){
       typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
       for(; it_r != recent_a.buf.rend(); ++it_r){
-        if(g_packet.interval(*it_r) <= 0){break;}
+        if(g_packet.interval_rollover(*it_r) <= 0){break;}
       }
       const Packet *packet(&g_packet);
       for(typename recent_a_t::buf_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
@@ -2823,7 +2861,7 @@ void loop(){
     packet_pool_t packet_pool;
     NAV &nav;
     void sort_and_apply(int packets){
-      stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare);
+      stable_sort(packet_pool.begin(), packet_pool.end(), Packet::compare_rollover);
       while(packets-- > 0){
         packet_pool_t::reference front(packet_pool.front());
         front->apply(nav);

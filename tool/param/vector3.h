@@ -39,6 +39,7 @@
  */
 
 #include <cmath>
+#include <cstring>
 #include "param/matrix.h"
 
 template <class FloatT>
@@ -140,7 +141,7 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
      */
     self_t deep_copy() const {
       storage_t *copied(new storage_t());
-      memcpy(
+      std::memcpy(
           copied->values, storage->values, 
           sizeof(FloatT[super_t::OUT_OF_INDEX]));
       return self_t(copied);
@@ -581,11 +582,11 @@ class Vector3Data<float_t> : public Vector3DataProperty<float_t> { \
     } \
     \
     Vector3Data(const self_t &v){ \
-      memcpy(values, v.values, sizeof(values)); \
+      std::memcpy(values, v.values, sizeof(values)); \
     } \
     \
     self_t &operator=(const self_t &v){ \
-      memcpy(values, v.values, sizeof(values)); \
+      std::memcpy(values, v.values, sizeof(values)); \
       return *this; \
     } \
     \
