@@ -934,52 +934,68 @@ float_sylph_t fname() const {return ins_gps->fname();}
 
 template <class INS_GPS>
 struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
-  typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
 
   template <class Calibration>
   static NAV *generate(const Calibration &calibration){
+    typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
     typename nav_t::disp_t *res(new typename nav_t::disp_t());
     res->setup_filter(calibration.sigma_accel(), calibration.sigma_gyro());
     return res;
   }
 
   private:
-  template <class T, class Calibration>
-  static NAV *check_covariance(const Calibration &calibration){
-    switch(options.debug_property.debug_target){
-      case INS_GPS_Debug_Property::DEBUG_KF_P:
-      case INS_GPS_Debug_Property::DEBUG_KF_FULL:
-        return INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<T> >::generate(calibration);
-      case INS_GPS_Debug_Property::DEBUG_NONE:
-      default:
-        return INS_GPS_NAV_Factory<T>::generate(calibration);
+  template <class T>
+  struct Checker {
+    template <class Calibration>
+    static NAV *check_covariance(const Calibration &calibration){
+      switch(options.debug_property.debug_target){
+        case INS_GPS_Debug_Property::DEBUG_KF_P:
+        case INS_GPS_Debug_Property::DEBUG_KF_FULL:
+          return INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<T> >::generate(calibration);
+        case INS_GPS_Debug_Property::DEBUG_NONE:
+        default:
+          return INS_GPS_NAV_Factory<T>::generate(calibration);
+      }
     }
-  }
 
-  template <class T, class Calibration>
-  static NAV *check_synchronization(const Calibration &calibration){
-    switch(options.ins_gps_sync_strategy){
-      case Options::INS_GPS_SYNC_BACK_PROPAGATION:
-        return check_covariance<INS_GPS_Back_Propagate<T>, Calibration>(calibration);
-      case Options::INS_GPS_SYNC_REALTIME:
-        return check_covariance<INS_GPS_RealTime<T>, Calibration>(calibration);
-      case Options::INS_GPS_SYNC_OFFLINE:
-      default:
-        return check_covariance<T, Calibration>(calibration);
+    template <class Calibration>
+    static NAV *check_synchronization(const Calibration &calibration){
+      switch(options.ins_gps_sync_strategy){
+        case Options::INS_GPS_SYNC_BACK_PROPAGATION:
+          return Checker<INS_GPS_Back_Propagate<T> >::check_covariance(calibration);
+        case Options::INS_GPS_SYNC_REALTIME:
+          return Checker<INS_GPS_RealTime<T> >::check_covariance(calibration);
+        case Options::INS_GPS_SYNC_OFFLINE:
+        default:
+          return check_covariance(calibration);
+      }
     }
-  }
 
-  template <class T, class Calibration>
-  static NAV *check_pure_ins(const Calibration &calibration){
-    return (options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL)
-        ? INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> > >::generate(calibration)
-        : check_synchronization<INS_GPS_NAVData<T>, Calibration>(calibration);
-  }
+    template <class Calibration>
+    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
+      return Checker<INS_GPS_NAVData<T> >::check_synchronization(calibration);
+    }
+
+    template <class Calibration>
+    static NAV *check_pure_ins(const Calibration &calibration){
+      return (options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL)
+          ? Checker<INS_GPS_Debug_PureInertial<T> >::check_navdata(calibration)
+          : check_navdata(calibration);
+    }
+  };
+
+  template <class T>
+  struct Checker<INS_GPS_Debug_PureInertial<T> > {
+    template <class Calibration>
+    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
+      return INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> > >::generate(calibration);
+    }
+  };
 
   public:
   template <class Calibration>
   static NAV *get_nav(const Calibration &calibration){
-    return check_pure_ins<INS_GPS, Calibration>(calibration);
+    return Checker<INS_GPS>::check_pure_ins(calibration);
   }
 };
 
