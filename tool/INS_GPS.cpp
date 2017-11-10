@@ -369,8 +369,8 @@ struct CalendarTimeStamp : public CalendarTime<FloatT> {
 #endif
   float_t itow;
   CalendarTimeStamp &operator=(const float_t &t){
-    year = month = mday = hour = min = 0;
-    sec = itow = t;
+    super_t::year = super_t::month = super_t::mday = super_t::hour = super_t::min = 0;
+    super_t::sec = itow = t;
     return *this;
   }
   CalendarTimeStamp(const float_t &t = 0) : super_t(), itow(t) {
@@ -1146,8 +1146,9 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       out << "itow";
     }
 
-    static void label_time(std::ostream &out, const CalendarTimeStamp *){
-      CalendarTimeStamp::label(out);
+    template <class FloatT>
+    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
+      CalendarTimeStamp<FloatT>::label(out);
     }
 
   public:

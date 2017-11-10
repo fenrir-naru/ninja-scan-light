@@ -85,7 +85,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
     float_sylph_t itow;
     friend ostream &operator<<(ostream &out, const formatted_time_t &t){
       if(t.options.use_calendar_time){ // year, month, mday, hour, min, sec
-        typename Options::calendar_time_t t2(
+        calendar_time_t t2(
             t.options.time_gps2local.convert(t.itow));
         out << t2.year << ", "
             << t2.month << ", "
