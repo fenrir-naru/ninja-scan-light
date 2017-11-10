@@ -1533,7 +1533,7 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SC2RAD = GP
 
 #define POWER_2(n) \
 (((n) >= 0) \
-  ? (float_t)(1 << (n)) \
+  ? (float_t)(1 << (n >= 0 ? n : 0)) \
   : (((float_t)1) / (1 << (-(n) >= 30 ? 30 : -(n > 0 ? 0 : n))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
 template <class FloatT>
