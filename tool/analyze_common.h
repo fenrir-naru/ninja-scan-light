@@ -534,6 +534,7 @@ const std::time_t TimeConverter<FloatT>::gps_time_zero
 template <class FloatT>
 class NAVData {
   public:
+    virtual ~NAVData(){}
     virtual FloatT longitude() const = 0;
     virtual FloatT latitude() const = 0;
     virtual FloatT height() const = 0;
