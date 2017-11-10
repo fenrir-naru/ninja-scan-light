@@ -431,8 +431,9 @@ if(key_checked){ \
 
 template <class FloatT>
 struct CalendarTime {
+  typedef FloatT float_t;
   int year, month, mday, hour, min;
-  FloatT sec;
+  float_t sec;
 
   typedef typename GlobalOptions<FloatT>::gps_time_t gps_time_t;
 
@@ -453,7 +454,7 @@ struct CalendarTime {
 
     CalendarTime convert(const FloatT &itow) const {
       if(gps_time.wn != gps_time_t::WN_INVALID){
-        FloatT gap(itow - gps_time.sec);
+        float_t gap(itow - gps_time.sec);
         static const int one_week(60 * 60 * 7 * 24);
         if(gap <= -(one_week / 2)){ // Check roll over
           gap += one_week;
@@ -508,11 +509,11 @@ struct CalendarTime {
       }
       return res;
     }
-    void update(const FloatT &gps_sec){
+    void update(const float_t &gps_sec){
       gps_time.sec = gps_sec;
       gps_time.wn = gps_time_t::WN_INVALID;
     }
-    void update(const FloatT &gps_sec, const int &gps_wn, const int &leap_secs){
+    void update(const float_t &gps_sec, const int &gps_wn, const int &leap_secs){
       gps_time.sec = gps_sec;
       gps_time.wn = gps_wn;
       utc_time = gps_time_zero
@@ -520,7 +521,7 @@ struct CalendarTime {
           + gps_time.sec - leap_secs; // POSIX time ignores leap seconds.
       leap_seconds = LEAP_SECONDS_CORRECTED;
     }
-    void update(const FloatT &gps_sec, const int &gps_wn){
+    void update(const float_t &gps_sec, const int &gps_wn){
       update(gps_sec, gps_wn, 0);
       utc_time -= estimate_leap_seconds(utc_time);
       leap_seconds = LEAP_SECONDS_ESTIMATED;
