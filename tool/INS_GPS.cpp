@@ -184,6 +184,39 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool dump_stddev; ///< True for dumping standard deviations
   bool out_is_N_packet; ///< True for NPacket formatted outputs
 
+  // Time Stamp
+  struct time_stamp_t {
+    enum mode_t {
+      ITOW,
+      CALENDAR_TIME,
+    } mode;
+    const char *spec;
+    time_stamp_t()
+        : mode(ITOW), spec(NULL) {}
+    struct calendar_spec_parsed_t {
+      int correction_hr;
+      friend std::ostream &operator<<(std::ostream &out, const calendar_spec_parsed_t &parsed){
+        out << "UTC";
+        if(parsed.correction_hr != 0){
+          out << (parsed.correction_hr > 0 ? " +" : " ")
+              << parsed.correction_hr << " [hr]";
+        }
+        return out;
+      }
+    };
+    calendar_spec_parsed_t calendar_spec_parse() const {
+      calendar_spec_parsed_t res = {0};
+      if(is_true(spec)){return res;}
+      char *spec_end;
+      res.correction_hr = std::strtol(spec, &spec_end, 10);
+      if(spec == spec_end){
+        std::cerr << "Invalid spec for --calendar_time[=(+/-hr)]: " << spec << std::endl;
+        exit(-1);
+      }
+      return res;
+    }
+  } time_stamp;
+
   // Navigation strategies
   enum {
     INS_GPS_INTEGRATION_LOOSELY,
@@ -254,6 +287,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       : super_t(),
       dump_update(true), dump_correct(false), dump_stddev(false),
       out_is_N_packet(false),
+      time_stamp(),
       ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
       est_bias(true), use_udkf(false), use_egm(false),
       back_propagate_property(),
@@ -309,6 +343,11 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION_BOOL(dump_stddev);
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
+
+    CHECK_OPTION(calendar_time, true, {
+          time_stamp.mode = time_stamp_t::CALENDAR_TIME;
+          time_stamp.spec = value;
+        }, time_stamp.calendar_spec_parse());
 
     CHECK_ALIAS(tight);
     CHECK_OPTION(tightly, true,
@@ -379,10 +418,50 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
   }
 } options;
 
+template <class FloatT>
+struct CalendarTimeStamp : public CalendarTime<FloatT> {
+  typedef CalendarTime<FloatT> super_t;
+#if defined(__GNUC__) && (__GNUC__ < 5)
+  typedef typename super_t::float_t float_t;
+#else
+  using typename super_t::float_t;
+#endif
+  float_t itow;
+  CalendarTimeStamp &operator=(const float_t &t){
+    super_t::year = super_t::month = super_t::mday = super_t::hour = super_t::min = 0;
+    super_t::sec = itow = t;
+    return *this;
+  }
+  CalendarTimeStamp(const super_t &t1, const float_t &t2)
+      : super_t(t1), itow(t2) {}
+  CalendarTimeStamp(const float_t &t = 0) : super_t(), itow(t) {
+    operator=(t);
+  }
+  operator float_t() const {return itow;}
+  static void label(std::ostream &out){
+    out << "year" << ','
+        << "month" << ','
+        << "day" << ','
+        << "hour" << ','
+        << "min" << ','
+        << "sec";
+  }
+  friend std::ostream &operator<<(std::ostream &out, const CalendarTimeStamp &time){
+    out << time.year << ','
+        << time.month << ','
+        << time.mday << ','
+        << time.hour << ','
+        << time.min << ','
+        << time.sec;
+    return out;
+  }
+};
+
 struct A_Packet;
 struct G_Packet;
 struct G_Packet_Raw;
 struct M_Packet;
+struct TimePacket;
 
 struct Updatable {
   virtual ~Updatable() {}
@@ -390,6 +469,7 @@ struct Updatable {
   virtual void update(const G_Packet &){}
   virtual void update(const G_Packet_Raw &){}
   virtual void update(const M_Packet &){}
+  virtual void update(const TimePacket &){}
 } updatable_blackhole;
 
 class NAV : public NAVData<float_sylph_t>, public Updatable {
@@ -717,6 +797,21 @@ struct M_Packet : public BasicPacket<M_Packet> {
   Vector3<float_sylph_t> mag;
 };
 
+struct TimePacket : public BasicPacket<TimePacket> {
+  typedef BasicPacket<TimePacket> super_t;
+  int week_num, leap_sec;
+  bool valid_week_num, valid_leap_sec;
+  using super_t::apply;
+  template <class FloatT>
+  void apply(typename CalendarTime<FloatT>::Converter &converter) const {
+    valid_week_num
+        ? (valid_leap_sec
+            ? converter.update(super_t::itow, week_num, leap_sec)
+            : converter.update(super_t::itow, week_num))
+        : converter.update(super_t::itow);
+  }
+};
+
 template <
     class PureINS = INS<float_sylph_t>,
     template <class> class Filter = KalmanFilter,
@@ -752,7 +847,7 @@ struct INS_GPS_Factory<PureINS, Filter, true, true> {
   typedef INS_GPS2_Tightly_BiasEstimated<PureINS, Filter> product_t;
 };
 
-template <class INS_GPS>
+template <class INS_GPS, class TimeStamp = typename INS_GPS::float_t>
 class INS_GPS_NAVData;
 
 template <class INS_GPS>
@@ -1121,6 +1216,9 @@ float_t fname() const {return ins_gps->fname();}
       helper.before_any_update();
       helper.compass(packet);
     }
+    void update(const TimePacket &packet){
+      helper.t_stamp_generator.update(packet);
+    }
 };
 
 template <class INS_GPS>
@@ -1163,8 +1261,18 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
     }
 
     template <class Calibration>
-    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
-      return Checker<INS_GPS_NAVData<T> >::check_synchronization(calibration);
+    static NAV *check_navdata(const Calibration &calibration){
+      switch(options.time_stamp.mode){
+        case Options::time_stamp_t::CALENDAR_TIME:
+          return Checker<
+                INS_GPS_NAVData<T, CalendarTimeStamp<typename T::float_t> >
+              >::check_synchronization(calibration);
+        case Options::time_stamp_t::ITOW:
+        default:
+          return Checker<
+                INS_GPS_NAVData<T>
+              >::check_synchronization(calibration);
+      }
     }
 
     template <class Calibration>
@@ -1178,8 +1286,19 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   template <class T>
   struct Checker<INS_GPS_Debug_PureInertial<T> > {
     template <class Calibration>
-    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
-      return INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> > >::generate(calibration);
+    static NAV *check_navdata(const Calibration &calibration){
+      typedef INS_GPS_Debug_PureInertial<T> base_t;
+      switch(options.time_stamp.mode){
+        case Options::time_stamp_t::CALENDAR_TIME:
+          return INS_GPS_NAV_Factory<
+                INS_GPS_NAVData<base_t, CalendarTimeStamp<typename base_t::float_t> >
+              >::generate(calibration);
+        case Options::time_stamp_t::ITOW:
+        default:
+          return INS_GPS_NAV_Factory<
+                INS_GPS_NAVData<base_t>
+              >::generate(calibration);
+      }
     }
   };
 
@@ -1190,7 +1309,7 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   }
 };
 
-template <class INS_GPS>
+template <class INS_GPS, class TimeStamp>
 class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
@@ -1200,12 +1319,14 @@ class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t
     using typename INS_GPS::vec3_t;
     using typename INS_GPS::mat_t;
 #endif
+    typedef NAVData<typename INS_GPS::float_t> super_data_t;
+    typedef TimeStamp time_stamp_t;
   protected:
     mutable const char *mode;
-    mutable typename INS_GPS::float_t itow;
+    mutable time_stamp_t itow;
   public:
     INS_GPS_NAVData() : INS_GPS(), mode("N/A"), itow(0) {}
-    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS, time_stamp_t> &orig, const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
     ~INS_GPS_NAVData(){}
 #define MAKE_PROXY_FUNC(fname) \
@@ -1222,12 +1343,12 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     MAKE_PROXY_FUNC(euler_psi);
     MAKE_PROXY_FUNC(azimuth);
 #undef MAKE_PROXY_FUNC
-    typename INS_GPS::float_t time_stamp() const {return itow;}
+    typename INS_GPS::float_t time_stamp() const {return (typename INS_GPS::float_t)itow;}
 
     void set_header(const char *_mode) const {
       mode = _mode;
     }
-    void set_header(const char *_mode, const typename INS_GPS::float_t &_itow) const {
+    void set_header(const char *_mode, const time_stamp_t &_itow) const {
       mode = _mode;
       itow = _itow;
     }
@@ -1296,14 +1417,24 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       }
     }
 
+    static void label_time(std::ostream &out, const void *){
+      out << "itow";
+    }
+
+    template <class FloatT>
+    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
+      CalendarTimeStamp<FloatT>::label(out);
+    }
+
   public:
     /**
      * print label
      */
     void label(std::ostream &out = std::cout) const {
-      out << "mode" << ','
-          << "itow" << ',';
-      NAVData<typename INS_GPS::float_t>::label(out);
+      out << "mode" << ',';
+      label_time(out, &itow);
+      out << ',';
+      super_data_t::label(out);
       label2(out, this);
     }
   
@@ -1387,7 +1518,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     void dump(std::ostream &out) const {
       out << mode << ','
           << itow << ',';
-      NAVData<typename INS_GPS::float_t>::dump(out);
+      super_data_t::dump(out);
       dump2(out, this);
     }
 };
@@ -1826,6 +1957,22 @@ class StreamProcessor
             packet_latest.solution.v_d = velocity.down;
             packet_latest.solution.sigma_vel = velocity_acc.acc;
 
+            break;
+          }
+          case 0x20: { // NAV-TIMEGPS
+            TimePacket packet;
+            packet.itow = observer.fetch_ITOW();
+            char buf[4];
+            observer.inspect(buf, sizeof(buf), 6 + 8);
+            if(packet.valid_week_num = ((unsigned char)buf[3] & 0x02)){
+              // valid week number
+              packet.week_num = le_char2_2_num<unsigned short>(*buf);
+              if(packet.valid_leap_sec = ((unsigned char)buf[3] & 0x04)){
+                // valid UTC (leap seconds)
+                packet.leap_sec = (char)(buf[2]);
+              }
+            }
+            outer.updatable->update(packet);
             break;
           }
           default: return;
@@ -2485,6 +2632,32 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
     gps_pvt_t gps_raw_pvt;
   public:
+    template <class TimeStamp>
+    struct TimeStampGenerator {
+      void update(const TimePacket &packet){}
+      TimeStamp operator()(const float_t &t) const {
+        return (TimeStamp)t;
+      }
+    };
+
+    template <class FloatT>
+    struct TimeStampGenerator<CalendarTimeStamp<FloatT> > {
+      typedef CalendarTimeStamp<FloatT> stamp_t;
+      typename stamp_t::Converter itow2calendar;
+      TimeStampGenerator() : itow2calendar() {
+        itow2calendar.correction_sec
+            = 60 * 60 * options.time_stamp.calendar_spec_parse().correction_hr;
+      }
+      void update(const TimePacket &packet){
+        packet.apply<FloatT>(itow2calendar);
+      }
+      stamp_t operator()(const FloatT &itow) const {
+        return stamp_t(itow2calendar.convert(itow), itow);
+      }
+    };
+
+    TimeStampGenerator<typename INS_GPS::time_stamp_t> t_stamp_generator;
+
     void before_any_update(){
       if(status >= JUST_INITIALIZED){
         status = WAITING_UPDATE;
@@ -2500,7 +2673,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         min_a_packets_for_init(options.initial_attitude.mode == options.initial_attitude.FULL_GIVEN ? 1 : 0x10),
         recent_a(max(min_a_packets_for_init, 0x100)),
         recent_m(0x10),
-        gps_raw_pvt() {
+        gps_raw_pvt(),
+        t_stamp_generator() {
     }
   
   protected:
@@ -2525,11 +2699,11 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
             if(index == 0){
               if(!options.dump_correct){continue;}
-              it->ins_gps.set_header("BP_MU", itow + it->elapsedT_from_last_correct);
+              it->ins_gps.set_header("BP_MU", t_stamp_generator(itow + it->elapsedT_from_last_correct));
               res.push_back(&(it->ins_gps));
             }else{
               if(!options.dump_update){continue;}
-              it->ins_gps.set_header("BP_TU", itow + it->elapsedT_from_last_correct);
+              it->ins_gps.set_header("BP_TU",  t_stamp_generator(itow + it->elapsedT_from_last_correct));
               res.push_back(&(it->ins_gps));
             }
           }
@@ -2595,7 +2769,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         // Check interval from the last time update
         float_t deltaT(previous.interval(a_packet));
         time_update(a_packet, deltaT);
-        nav.ins_gps->set_header("TU", a_packet.itow);
+        nav.ins_gps->set_header("TU",  t_stamp_generator(a_packet.itow));
       }
 
       recent_a.push(a_packet);
@@ -2613,7 +2787,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         time_update(*it, packet->interval(*it));
         packet = &(*it);
       }
-      nav.ins_gps->set_header("MU", g_packet.itow);
+      nav.ins_gps->set_header("MU",  t_stamp_generator(g_packet.itow));
     }
 
     void initialize_common(
@@ -2895,6 +3069,7 @@ virtual void update(const type &packet){ \
     update_func(G_Packet);
     update_func(G_Packet_Raw);
     update_func(M_Packet);
+    update_func(TimePacket);
 #undef update_func
   } buffer(*nav_manager.nav);
   proc.update_target() = &buffer;
