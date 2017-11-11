@@ -178,6 +178,39 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool dump_stddev; ///< True for dumping standard deviations
   bool out_is_N_packet; ///< True for NPacket formatted outputs
 
+  // Time Stamp
+  struct time_stamp_t {
+    enum mode_t {
+      ITOW,
+      CALENDAR_TIME,
+    } mode;
+    const char *spec;
+    time_stamp_t()
+        : mode(ITOW), spec(NULL) {}
+    struct calendar_spec_parsed_t {
+      int correction_hr;
+      friend std::ostream &operator<<(std::ostream &out, const calendar_spec_parsed_t &parsed){
+        out << "UTC";
+        if(parsed.correction_hr != 0){
+          out << (parsed.correction_hr > 0 ? " +" : " ")
+              << parsed.correction_hr << " [hr]";
+        }
+        return out;
+      }
+    };
+    calendar_spec_parsed_t calendar_spec_parse() const {
+      calendar_spec_parsed_t res = {0};
+      if(is_true(spec)){return res;}
+      char *spec_end;
+      res.correction_hr = std::strtol(spec, &spec_end, 10);
+      if(spec == spec_end){
+        std::cerr << "Invalid spec for --calendar_time[=(+/-hr)]: " << spec << std::endl;
+        exit(-1);
+      }
+      return res;
+    }
+  } time_stamp;
+
   // Navigation strategies
   enum {
     INS_GPS_SYNC_OFFLINE,
@@ -243,6 +276,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       : super_t(),
       dump_update(true), dump_correct(false), dump_stddev(false),
       out_is_N_packet(false),
+      time_stamp(),
       ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
       est_bias(true), use_udkf(false), use_egm(false),
       back_propagate_property(),
@@ -297,6 +331,11 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION_BOOL(dump_stddev);
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
+
+    CHECK_OPTION(calendar_time, true, {
+          time_stamp.mode = time_stamp_t::CALENDAR_TIME;
+          time_stamp.spec = value;
+        }, time_stamp.calendar_spec_parse());
 
     CHECK_OPTION(back_propagate, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
@@ -1034,8 +1073,18 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
     }
 
     template <class Calibration>
-    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
-      return Checker<INS_GPS_NAVData<T> >::check_synchronization(calibration);
+    static NAV *check_navdata(const Calibration &calibration){
+      switch(options.time_stamp.mode){
+        case Options::time_stamp_t::CALENDAR_TIME:
+          return Checker<
+                INS_GPS_NAVData<T, CalendarTimeStamp<typename T::float_t> >
+              >::check_synchronization(calibration);
+        case Options::time_stamp_t::ITOW:
+        default:
+          return Checker<
+                INS_GPS_NAVData<T>
+              >::check_synchronization(calibration);
+      }
     }
 
     template <class Calibration>
@@ -1049,8 +1098,19 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   template <class T>
   struct Checker<INS_GPS_Debug_PureInertial<T> > {
     template <class Calibration>
-    static NAV *check_navdata(const Calibration &calibration){ // TODO provisional
-      return INS_GPS_NAV_Factory<INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> > >::generate(calibration);
+    static NAV *check_navdata(const Calibration &calibration){
+      typedef INS_GPS_Debug_PureInertial<T> base_t;
+      switch(options.time_stamp.mode){
+        case Options::time_stamp_t::CALENDAR_TIME:
+          return INS_GPS_NAV_Factory<
+                INS_GPS_NAVData<base_t, CalendarTimeStamp<typename base_t::float_t> >
+              >::generate(calibration);
+        case Options::time_stamp_t::ITOW:
+        default:
+          return INS_GPS_NAV_Factory<
+                INS_GPS_NAVData<base_t>
+              >::generate(calibration);
+      }
     }
   };
 
@@ -1925,7 +1985,10 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     struct TimeStampGenerator<CalendarTimeStamp<FloatT> > {
       typedef CalendarTimeStamp<FloatT> stamp_t;
       typename stamp_t::Converter itow2calendar;
-      TimeStampGenerator() : itow2calendar() {}
+      TimeStampGenerator() : itow2calendar() {
+        itow2calendar.local_time_correction_in_seconds
+            = 60 * 60 * options.time_stamp.calendar_spec_parse().correction_hr;
+      }
       void update(const TimePacket &packet){
         packet.apply<FloatT>(itow2calendar);
       }
