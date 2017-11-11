@@ -445,12 +445,12 @@ struct CalendarTime {
     } leap_seconds;
     gps_time_t gps_time; ///< base GPS time
     std::time_t utc_time; ///< corresponding base UTC time in time_t
-    int local_time_correction_in_seconds;
+    int correction_sec;
     static const std::time_t gps_time_zero;
     Converter()
         : gps_time(0),
         leap_seconds(LEAP_SECONDS_UNKNOWN),
-        local_time_correction_in_seconds(0) {}
+        correction_sec(0) {}
 
     CalendarTime convert(const FloatT &itow) const {
       if(gps_time.wn != gps_time_t::WN_INVALID){
@@ -460,7 +460,7 @@ struct CalendarTime {
           gap += one_week;
         }
         int gap_sec(std::floor(gap));
-        std::time_t current(utc_time + gap_sec + local_time_correction_in_seconds);
+        std::time_t current(utc_time + gap_sec + correction_sec);
         tm *t(std::gmtime(&current));
         CalendarTime res = {
             t->tm_year + 1900,
@@ -475,7 +475,7 @@ struct CalendarTime {
         return res;
       }
     }
-    static int estimate_leap_seconds(const std::time_t &t_gps){
+    static int estimate_leap_sec(const std::time_t &t_gps){
       static const struct {
         std::time_t t;
         int sec;
@@ -513,17 +513,17 @@ struct CalendarTime {
       gps_time.sec = gps_sec;
       gps_time.wn = gps_time_t::WN_INVALID;
     }
-    void update(const float_t &gps_sec, const int &gps_wn, const int &leap_secs){
+    void update(const float_t &gps_sec, const int &gps_wn, const int &leap_sec){
       gps_time.sec = gps_sec;
       gps_time.wn = gps_wn;
       utc_time = gps_time_zero
           + (7u * 24 * 60 * 60) * gps_time.wn
-          + gps_time.sec - leap_secs; // POSIX time ignores leap seconds.
+          + gps_time.sec - leap_sec; // POSIX time ignores leap seconds.
       leap_seconds = LEAP_SECONDS_CORRECTED;
     }
     void update(const float_t &gps_sec, const int &gps_wn){
       update(gps_sec, gps_wn, 0);
-      utc_time -= estimate_leap_seconds(utc_time);
+      utc_time -= estimate_leap_sec(utc_time);
       leap_seconds = LEAP_SECONDS_ESTIMATED;
     }
   };

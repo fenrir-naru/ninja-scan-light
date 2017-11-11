@@ -666,15 +666,15 @@ struct M_Packet : public BasicPacket<M_Packet> {
 
 struct TimePacket : public BasicPacket<TimePacket> {
   typedef BasicPacket<TimePacket> super_t;
-  int week_number, leap_seconds;
-  bool valid_week_number, valid_leap_seconds;
+  int week_num, leap_sec;
+  bool valid_week_num, valid_leap_sec;
   using super_t::apply;
   template <class FloatT>
   void apply(typename CalendarTime<FloatT>::Converter &converter) const {
-    valid_week_number
-        ? (valid_leap_seconds
-            ? converter.update(super_t::itow, week_number, leap_seconds)
-            : converter.update(super_t::itow, week_number))
+    valid_week_num
+        ? (valid_leap_sec
+            ? converter.update(super_t::itow, week_num, leap_sec)
+            : converter.update(super_t::itow, week_num))
         : converter.update(super_t::itow);
   }
 };
@@ -1662,12 +1662,12 @@ class StreamProcessor
             packet.itow = observer.fetch_ITOW();
             char buf[4];
             observer.inspect(buf, sizeof(buf), 6 + 8);
-            if(packet.valid_week_number = ((unsigned char)buf[3] & 0x02)){
+            if(packet.valid_week_num = ((unsigned char)buf[3] & 0x02)){
               // valid week number
-              packet.week_number = le_char2_2_num<unsigned short>(*buf);
-              if(packet.valid_leap_seconds = ((unsigned char)buf[3] & 0x04)){
+              packet.week_num = le_char2_2_num<unsigned short>(*buf);
+              if(packet.valid_leap_sec = ((unsigned char)buf[3] & 0x04)){
                 // valid UTC (leap seconds)
-                packet.leap_seconds = (char)(buf[2]);
+                packet.leap_sec = (char)(buf[2]);
               }
             }
             outer.updatable->update(packet);
@@ -1986,7 +1986,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       typedef CalendarTimeStamp<FloatT> stamp_t;
       typename stamp_t::Converter itow2calendar;
       TimeStampGenerator() : itow2calendar() {
-        itow2calendar.local_time_correction_in_seconds
+        itow2calendar.correction_sec
             = 60 * 60 * options.time_stamp.calendar_spec_parse().correction_hr;
       }
       void update(const TimePacket &packet){

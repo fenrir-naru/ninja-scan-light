@@ -147,7 +147,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
         correction_hr = atoi(value); // Specify time zone by hour.
       }
       use_calendar_time = true;
-      time_gps2local.local_time_correction_in_seconds = 60 * 60 * correction_hr;
+      time_gps2local.correction_sec = 60 * 60 * correction_hr;
       cerr << "use_calendar_time: UTC "
           << (correction_hr >= 0 ? '+' : '-')
           << correction_hr << " [hr]" << endl;
