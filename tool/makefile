@@ -38,7 +38,7 @@ LIBS = -lm #-L
 BUILD_DIR ?= build_GCC
 
 SRCS_COMMON = util/crc.cpp
-OBJS_COMMON = $(patsubst %.cpp,%.o,$(notdir $(SRCS_COMMON)))
+OBJS_COMMON = $(patsubst %.cpp,%.o,$(SRCS_COMMON))
 SRCS = $(patsubst %,%.cpp,$(PACKAGES)) $(SRCS_COMMON)
 
 all : $(BUILD_DIR) packages
@@ -52,12 +52,13 @@ $(BUILD_DIR)/depend.inc: $(BUILD_DIR) makefile
 			exit 1; \
 		fi; \
 	done; \
-	cat tempfile | sed -e 's/^+.*//g' -e 's/[^\.]*\.o/$(BUILD_DIR)\/&/g' > $@; \
+	cat tempfile | sed -e 's/^+.*//g' -e "s/[^\.]\+\.o: \([^\/]\+\/\)\?[^\.]\+\.cpp/$(BUILD_DIR)\/\1&/g" > $@; \
 	rm -f tempfile
 
 -include $(BUILD_DIR)/depend.inc
 
 $(BUILD_DIR)/%.o :
+	mkdir -p $(dir $@)
 	$(CXX) -c $(CFLAGS) $(INCLUDES) -o $@ $(findstring $<,$^)
 
 $(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(patsubst %,$(BUILD_DIR)/%,$(OBJS_COMMON))
@@ -70,7 +71,7 @@ $(BUILD_DIR) :
 	mkdir $@
 
 clean :
-	rm -f $(BUILD_DIR)/*
+	rm -rf $(BUILD_DIR)/*
 
 run : all
 
