@@ -49,7 +49,8 @@ all : $(BUILD_DIRS) packages
 
 # Header file dependencies @see http://lists.gnu.org/archive/html/automake/2002-01/msg00155.html
 # and package specific objects
-$(BUILD_DIR)/depend.inc: $(BUILD_DIR) makefile
+$(BUILD_DIR)/depend.inc: $(SRCS) makefile
+	mkdir -p $(dir $@); \
 	for i in $(SRCS); do \
 		$(CXX) -E -MM $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
 		if ! [ $$? = 0 ]; then \
@@ -57,9 +58,9 @@ $(BUILD_DIR)/depend.inc: $(BUILD_DIR) makefile
 			exit 1; \
 		fi; \
 	done; \
-	cat tempfile | sed -e 's/^+.*//g' -e "s/[^\.]\+\.o: \([^\/]\+\/\)\?[^\.]\+\.cpp/$(BUILD_DIR)\/\1&/g" > $@; \
+	cat tempfile | sed -e 's/^+.*//g' -e "s/[^\.]\+\.o: \([^\/]\+\/\)\?[^\.]\+\.cpp/\$$(BUILD_DIR)\/\1&/g" > $@; \
 	for i in $(PACKAGES); do \
-		echo "$(BUILD_DIR)/$$i.out : \$$(filter $(BUILD_DIR)/$$i%,$(OBJS_DEPEND))" >> $@; \
+		echo "\$$(BUILD_DIR)/$$i.out : \$$(addprefix \$$(BUILD_DIR)/,\$$(filter $$i%,$(SRCS_DEPEND:.cpp=.o)))" >> $@; \
 	done; \
 	rm -f tempfile
 
@@ -74,7 +75,7 @@ $(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(OBJS_COMMON)
 packages : $(patsubst %,$(BUILD_DIR)/%.out,$(PACKAGES))
 
 $(BUILD_DIRS) :
-	mkdir -p $@ 
+	mkdir -p $@
 
 clean :
 	rm -rf $(BUILD_DIR)/*
