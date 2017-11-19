@@ -38,13 +38,19 @@ LIBS = -lm #-L
 BUILD_DIR ?= build_GCC
 
 SRCS_COMMON = util/crc.cpp
-OBJS_COMMON = $(patsubst %.cpp,%.o,$(notdir $(SRCS_COMMON)))
-SRCS = $(patsubst %,%.cpp,$(PACKAGES)) $(SRCS_COMMON)
+OBJS_COMMON = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_COMMON))
+SRCS_DEPEND = $(shell find $(PACKAGES) -name "*.cpp" 2>/dev/null)
+OBJS_DEPEND = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_DEPEND))
+SRCS = $(patsubst %,%.cpp,$(PACKAGES)) $(SRCS_COMMON) $(SRCS_DEPEND)
 
-all : $(BUILD_DIR) packages
+BUILD_DIRS = $(sort $(BUILD_DIR) $(dir $(OBJS_COMMON) $(OBJS_DEPEND)))
 
-# ヘッダーファイルの依存関係 @see http://lists.gnu.org/archive/html/automake/2002-01/msg00155.html
-$(BUILD_DIR)/depend.inc: $(BUILD_DIR) makefile
+all : $(BUILD_DIRS) packages
+
+# Header file dependencies @see http://lists.gnu.org/archive/html/automake/2002-01/msg00155.html
+# and package specific objects
+$(BUILD_DIR)/depend.inc: $(SRCS) makefile
+	mkdir -p $(dir $@); \
 	for i in $(SRCS); do \
 		$(CXX) -E -MM $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
 		if ! [ $$? = 0 ]; then \
@@ -52,25 +58,27 @@ $(BUILD_DIR)/depend.inc: $(BUILD_DIR) makefile
 			exit 1; \
 		fi; \
 	done; \
-	cat tempfile | sed -e 's/^+.*//g' -e 's/[^\.]*\.o/$(BUILD_DIR)\/&/g' > $@; \
+	cat tempfile | sed -e 's/^+.*//g' -e "s/[^\.]\+\.o: \([^\/]\+\/\)\?[^\.]\+\.cpp/\$$(BUILD_DIR)\/\1&/g" > $@; \
+	for i in $(PACKAGES); do \
+		echo "\$$(BUILD_DIR)/$$i.out : \$$(addprefix \$$(BUILD_DIR)/,\$$(filter $$i%,$(SRCS_DEPEND:.cpp=.o)))" >> $@; \
+	done; \
 	rm -f tempfile
 
 -include $(BUILD_DIR)/depend.inc
 
 $(BUILD_DIR)/%.o :
-	$(CXX) -c $(CFLAGS) $(INCLUDES) -o $@ $(findstring $<,$^)
+	$(CXX) -c $(CFLAGS) $(INCLUDES) -o $@ $<
 
-$(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(patsubst %,$(BUILD_DIR)/%,$(OBJS_COMMON))
+$(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(OBJS_COMMON)
 	$(CXX) $(LFLAGS) $(INCLUDES) -o $@ $^ $(LIBS)
 
 packages : $(patsubst %,$(BUILD_DIR)/%.out,$(PACKAGES))
-	
 
-$(BUILD_DIR) :
-	mkdir $@
+$(BUILD_DIRS) :
+	mkdir -p $@
 
 clean :
-	rm -f $(BUILD_DIR)/*
+	rm -rf $(BUILD_DIR)/*
 
 run : all
 
