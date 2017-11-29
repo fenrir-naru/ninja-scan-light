@@ -71,11 +71,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       float_sylph_t sf; // physical = (ADC_value - zero) * sf
       float_sylph_t zero;
     } accel, gyro; // accel=[m/s^2], gyro=[dps]
-  } physical_converter = {
-    false,
-    {8.0 *  9.80665 / (1 << 15), (1 << 15)},
-    {2000.0 / (1 << 15), (1 << 15)},
-  };
+  } physical_converter;
 
   Options() 
       : super_t(),
@@ -89,6 +85,11 @@ struct Options : public GlobalOptions<float_sylph_t> {
       time_gps2local(),
       use_calendar_time(false) {
 
+    physical_converter.is_active = false;
+    physical_converter.accel.sf = 8.0 *  9.80665 / (1 << 15);
+    physical_converter.accel.zero = (1 << 15);
+    physical_converter.gyro.sf = 2000.0 / (1 << 15);
+    physical_converter.gyro.zero = (1 << 15);
   }
   ~Options(){}
   
