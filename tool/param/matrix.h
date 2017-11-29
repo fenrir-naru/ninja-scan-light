@@ -104,6 +104,12 @@ class StorageException: public MatrixException{
     ~StorageException() throw(){}
 };
 
+#if defined(DEBUG)
+#define throw_when_debug(e) throw(e)
+#else
+#define throw_when_debug(e) throw()
+#endif
+
 #include <cstring>
 #include <cmath>
 #include <ostream>
@@ -125,7 +131,6 @@ class Array2D{
   public:
     typedef Array2D<T> self_t;
     typedef Array2D<T> root_t;
-    typedef Array2D_Dense<T> dense_t;
 
   protected:
     unsigned int m_rows;    ///< Rows
@@ -314,10 +319,12 @@ class Array2D_Dense : public Array2D<T> {
      */
     const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) const throw(StorageException){
+        const unsigned int &column) const throw_when_debug(StorageException) {
+#if defined(DEBUG)
       if((row >= rows()) || (column >= columns())){
         throw StorageException("Index incorrect");
       }
+#endif
       return values[(row * columns()) + column];
     }
 
@@ -390,7 +397,6 @@ class Matrix{
      *
      * @param rows 行数
      * @param columns 列数
-     * @throw MatrixException
      */
     Matrix(
         const unsigned int &rows,
@@ -407,7 +413,6 @@ class Matrix{
      * @param rows 行数
      * @param columns 列数
      * @param serialized 成分
-     * @throw MatrixException
      */
     Matrix(
         const unsigned int &rows,
@@ -507,7 +512,6 @@ class Matrix{
      * @param row 行インデックス(開始番号は0～)
      * @param column 列インデックス(開始番号は0～)
      * @return (const T &) 成分
-     * @throw MatrixException インデックスが不正な場合など
      */
     const T &operator()(
         const unsigned int &row,
@@ -649,7 +653,6 @@ class Matrix{
      *
      * @param column 列インデックス
      * @return (self_t) 列ベクトル
-     * @throw MatrixException インデックスが不正な場合
      */
     self_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
@@ -1649,5 +1652,7 @@ class Matrix{
       return out;
     }
 };
+
+#undef throw_when_debug
 
 #endif /* __MATRIX_H */
