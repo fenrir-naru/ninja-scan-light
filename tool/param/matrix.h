@@ -269,7 +269,8 @@ class Array2D_Dense : public Array2D<T> {
      *
      * @param array another one
      */
-    Array2D_Dense(const root_t &array)
+    template <class T2>
+    Array2D_Dense(const Array2D<T2> &array)
         : values(new T[array.rows() * array.columns()]), ref(new int(1)) {
       T *buf;
       for(unsigned int i(0); i < array.rows(); ++i){
@@ -432,8 +433,8 @@ class Matrix{
             ? matrix.array2d()->storage_t::copy(false)
             : NULL){}
 
-    template <template <class> class Array2D_AnotherType>
-    Matrix(const Matrix<T, Array2D_AnotherType> &matrix)
+    template <class T2, template <class> class Array2D_Type2>
+    Matrix(const Matrix<T2, Array2D_Type2> &matrix)
         : storage(matrix.storage
             ? new storage_t(matrix.storage)
             : NULL){}
@@ -477,8 +478,8 @@ class Matrix{
       }
       return *this;
     }
-    template <template <class> class Array2D_AnotherType>
-    self_t &operator=(const Matrix<T, Array2D_AnotherType> &matrix){
+    template <class T2, template <class> class Array2D_Type2>
+    self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
       delete storage;
       storage = new storage_t(*matrix.storage);
       return *this;
@@ -530,8 +531,8 @@ class Matrix{
      * @param matrix 比較する別の行列
      * @return (bool) 行列が等しい場合true、以外false
      */
-    template <template <class> class Array2D_AnotherType>
-    bool operator==(const Matrix<T, Array2D_AnotherType> &matrix) const {
+    template <class T2, template <class> class Array2D_Type2>
+    bool operator==(const Matrix<T2, Array2D_Type2> &matrix) const {
       if(storage != matrix.storage){
         if((rows() != matrix.rows())
             || columns() != matrix.columns()){
@@ -548,8 +549,8 @@ class Matrix{
       return true;
     }
     
-    template <template <class> class Array2D_AnotherType>
-    bool operator!=(const Matrix<T, Array2D_AnotherType> &matrix) const {
+    template <class T2, template <class> class Array2D_Type2>
+    bool operator!=(const Matrix<T2, Array2D_Type2> &matrix) const {
       return !(operator==(matrix));
     }
 
@@ -745,8 +746,8 @@ class Matrix{
      * @param matrix 比較対象
      * @return (bool) 異なっている場合true
      */
-    template <template <class> class Array2D_AnotherType>
-    bool isDifferentSize(const Matrix<T, Array2D_AnotherType> &matrix) const{
+    template <class T2, template <class> class Array2D_Type2>
+    bool isDifferentSize(const Matrix<T2, Array2D_Type2> &matrix) const{
       return (rows() != matrix.rows()) || (columns() != matrix.columns());
     }
 
@@ -823,8 +824,8 @@ class Matrix{
      * @param matrix 加える行列
      * @return (self_t) 自分自身
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t &operator+=(const Matrix<T, Array2D_AnotherType> &matrix) throw(MatrixException) {
+    template <class T2, template <class> class Array2D_Type2>
+    self_t &operator+=(const Matrix<T2, Array2D_Type2> &matrix) throw(MatrixException) {
       if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
@@ -840,8 +841,8 @@ class Matrix{
      * @param matrix 加える行列
      * @return (self_t) 結果
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t operator+(const Matrix<T, Array2D_AnotherType> &matrix) const{return (copy() += matrix);}
+    template <class T2, template <class> class Array2D_Type2>
+    self_t operator+(const Matrix<T2, Array2D_Type2> &matrix) const{return (copy() += matrix);}
     
     /**
      * 行列を成分ごとに減算します。
@@ -849,8 +850,8 @@ class Matrix{
      * @param matrix 引く行列
      * @return (self_t) 自分自身
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t &operator-=(const Matrix<T, Array2D_AnotherType> &matrix) throw(MatrixException) {
+    template <class T2, template <class> class Array2D_Type2>
+    self_t &operator-=(const Matrix<T2, Array2D_Type2> &matrix) throw(MatrixException) {
       if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
@@ -866,8 +867,8 @@ class Matrix{
      * @param matrix 引く行列
      * @return (self_t) 結果
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t operator-(const Matrix<T, Array2D_AnotherType> &matrix) const{return (copy() -= matrix);}
+    template <class T2, template <class> class Array2D_Type2>
+    self_t operator-(const Matrix<T2, Array2D_Type2> &matrix) const{return (copy() -= matrix);}
 
     /**
      * 行列を乗算します。
@@ -876,8 +877,8 @@ class Matrix{
      * @return (self_t) 結果
      * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t operator*(const Matrix<T, Array2D_AnotherType> &matrix) const throw(MatrixException){
+    template <class T2, template <class> class Array2D_Type2>
+    self_t operator*(const Matrix<T2, Array2D_Type2> &matrix) const throw(MatrixException){
       if(columns() != matrix.rows()){
         throw MatrixException("Operation void!!");
       }
@@ -900,8 +901,8 @@ class Matrix{
      * @return (self_t) 自分自身
      * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
      */
-    template <class RhsMatrix>
-    self_t &operator*=(const RhsMatrix &matrix) throw(MatrixException){
+    template <class T2, template <class> class Array2D_Type2>
+    self_t &operator*=(const Matrix<T2, Array2D_Type2> &matrix) throw(MatrixException){
       return (*this = (*this * matrix));
     }
 
@@ -990,9 +991,9 @@ class Matrix{
      * @param do_check LU分解済み行列の定義を満たしているか、確認する
      * @return (Matrix<T2>) x(解)
      */
-    template <class T2, template <class> class Array2D_AnotherType>
-    Matrix<T2, Array2D_AnotherType> solve_linear_eq_with_LU(
-        const Matrix<T2, Array2D_AnotherType> &y, const bool &do_check = true)
+    template <class T2, template <class> class Array2D_Type2>
+    Matrix<T2, Array2D_Type2> solve_linear_eq_with_LU(
+        const Matrix<T2, Array2D_Type2> &y, const bool &do_check = true)
         const throw(MatrixException) {
       bool not_LU(false);
       if(do_check){
@@ -1017,7 +1018,7 @@ class Matrix{
       }
 
 
-      typedef Matrix<T2, Array2D_AnotherType> y_t;
+      typedef Matrix<T2, Array2D_Type2> y_t;
       // L(Ux) = y で y' = (Ux)をまず解く
       y_t y_copy(y.copy());
       y_t y_prime(y_t::blank(y.rows(), 1));
@@ -1176,8 +1177,8 @@ class Matrix{
      * @param matrix 行列
      * @return (self_t) 自分自身
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t &operator/=(const Matrix<T, Array2D_AnotherType> &matrix) {
+    template <class T2, template <class> class Array2D_Type2>
+    self_t &operator/=(const Matrix<T2, Array2D_Type2> &matrix) {
         return (*this) *= matrix.inverse();
     }
     /**
@@ -1186,8 +1187,8 @@ class Matrix{
      * @param matrix 行列
      * @return (self_t) 結果
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t operator/(const Matrix<T, Array2D_AnotherType> &matrix) const {
+    template <class T2, template <class> class Array2D_Type2>
+    self_t operator/(const Matrix<T2, Array2D_Type2> &matrix) const {
       return (copy() /= matrix);
     }
 
@@ -1199,10 +1200,10 @@ class Matrix{
      * @param column 列インデックス
      * @param matrix 足す行列
      */
-    template <template <class> class Array2D_AnotherType>
+    template <class T2, template <class> class Array2D_Type2>
     self_t &pivotMerge(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T, Array2D_AnotherType> &matrix){
+        const Matrix<T2, Array2D_Type2> &matrix){
       for(int i(0); i < matrix.rows(); i++){
         if(row + i < 0){continue;}
         else if(row + i >= rows()){break;}
@@ -1222,10 +1223,10 @@ class Matrix{
      * @param column 列インデックス
      * @param matrix 足す行列
      */
-    template <template <class> class Array2D_AnotherType>
+    template <class T2, template <class> class Array2D_Type2>
     self_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T, Array2D_AnotherType> &matrix) const{
+        const Matrix<T2, Array2D_Type2> &matrix) const{
       return copy().pivotMerge(row, column, matrix);
     }
 
@@ -1236,8 +1237,7 @@ class Matrix{
      * @return (self_t) ヘッセンベルク行列
      * @throw MatrixException 正方行列ではなく計算することができない場合
      */
-    template <template <class> class Array2D_AnotherType>
-    self_t hessenberg(Matrix<T, Array2D_AnotherType> *transform) const throw(MatrixException){
+    self_t hessenberg(self_t *transform = NULL) const throw(MatrixException){
       if(!isSquare()){throw MatrixException("Operation void!!");}
 
       self_t result(copy());
@@ -1279,12 +1279,18 @@ class Matrix{
       return result;
     }
 
-    /**
-     * ハウスホルダー変換をしてヘッセンベルク行列を得ます。
-     *
-     * @return (self_t) ヘッセンベルク行列
-     */
-    self_t hessenberg() const {return hessenberg(NULL);}
+    template <class T2>
+    struct complex_t {
+      static const bool is_complex = false;
+      typedef Complex<T2> v_t;
+      typedef Matrix<Complex<T2>, Array2D_Type> m_t;
+    };
+    template <class T2>
+    struct complex_t<Complex<T2> > {
+        static const bool is_complex = true;
+      typedef Complex<T2> v_t;
+      typedef Matrix<Complex<T2>, Array2D_Type> m_t;
+    };
 
     /**
      * 2次小行列の固有値を求めます。
@@ -1295,23 +1301,23 @@ class Matrix{
      * @param lower 結果(固有値2)
      */
     void eigen22(
-       const unsigned int &row, const unsigned int &column,
-       Complex<T> &upper, Complex<T> &lower) const {
-     T a((*this)(row, column)),
-       b((*this)(row, column + 1)),
-       c((*this)(row + 1, column)),
-       d((*this)(row + 1, column + 1));
-     T root(pow((a - d), 2) + b * c * 4);
-     if(root >= T(0)){
-       root = ::sqrt(root);
-       upper = Complex<T>((a + d + root) / 2);
-       lower = Complex<T>((a + d - root) / 2);
-     }else{
-       root = ::sqrt(root * -1);
-       upper = Complex<T>((a + d) / 2, root / 2);
-       lower = Complex<T>((a + d) / 2, root / 2 * -1);
-     }
-   }
+        const unsigned int &row, const unsigned int &column,
+        typename complex_t<T>::v_t &upper, typename complex_t<T>::v_t &lower) const {
+      T a((*this)(row, column)),
+        b((*this)(row, column + 1)),
+        c((*this)(row + 1, column)),
+        d((*this)(row + 1, column + 1));
+      T root2(pow((a - d), 2) + b * c * 4);
+      if(complex_t<T>::is_complex || (root2 > 0)){
+        T root(::sqrt(root2));
+        upper = ((a + d + root) / 2);
+        lower = ((a + d - root) / 2);
+      }else{
+        T root(::sqrt(root2 * -1));
+        upper = typename complex_t<T>::v_t((a + d) / 2, root / 2);
+        lower = typename complex_t<T>::v_t((a + d) / 2, root / 2 * -1);
+      }
+    }
 
     /**
      * 固有値、固有ベクトルを求めます。
@@ -1325,11 +1331,11 @@ class Matrix{
      * @param threshold_rel 収束判定に用いる相対誤差
      * @return (Matrix<Complex<T> >) 固有値、固有ベクトル
      */
-    Matrix<Complex<T>, Array2D_Type> eigen(
+    typename complex_t<T>::m_t eigen(
         const T &threshold_abs = 1E-10,
         const T &threshold_rel = 1E-7) const throw(MatrixException){
 
-      typedef Matrix<Complex<T>, Array2D_Type> res_t;
+      typedef typename complex_t<T>::m_t res_t;
 
       if(!isSquare()){throw MatrixException("Operation void!!");}
 
@@ -1371,7 +1377,7 @@ class Matrix{
 #define lambda(i) result(i, _rows)
 
       T mu_sum(0), mu_multi(0);
-      Complex<T> p1, p2;
+      typename complex_t<T>::v_t p1, p2;
       int m = _rows;
       bool first = true;
 
@@ -1392,7 +1398,7 @@ class Matrix{
 
         //μ、μ*の更新(4.143)
         {
-          Complex<T> p1_new, p2_new;
+          typename complex_t<T>::v_t p1_new, p2_new;
           A.eigen22(m-2, m-2, p1_new, p2_new);
           if(first ? (first = false) : true){
             if((p1_new - p1).abs() > p1_new.abs() / 2){
@@ -1508,7 +1514,7 @@ class Matrix{
         // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
         // を参考に、値を振ってみることにした
         res_t A_C_lambda(A_C.copy());
-        Complex<T> approx_lambda(lambda(j));
+        typename complex_t<T>::v_t approx_lambda(lambda(j));
         if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
           approx_lambda += 2E-3;
         }
@@ -1563,7 +1569,7 @@ class Matrix{
         }
 
         //正規化
-        Complex<T> _norm;
+        typename complex_t<T>::v_t _norm;
         for(unsigned int i(0); i < _rows; i++){
           _norm += result(i, j).abs2();
         }
@@ -1596,11 +1602,11 @@ class Matrix{
      * @param eigen_mat 固有値、固有ベクトルが入った(n,n+1)の行列
      * @return (Matrix<Complex<T> >) 平方根
      */
-    static Matrix<Complex<T>, Array2D_Type> sqrt(
-        const Matrix<Complex<T>, Array2D_Type> &eigen_mat){
+    static typename complex_t<T>::m_t sqrt(
+        const typename complex_t<T>::m_t &eigen_mat){
       unsigned int n(eigen_mat.rows());
-      Matrix<Complex<T>, Array2D_Type> VsD(eigen_mat.partial(n, n, 0, 0));
-      Matrix<Complex<T>, Array2D_Type> nV(VsD.inverse());
+      typename complex_t<T>::m_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename complex_t<T>::m_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
         VsD.partial(n, 1, 0, i) *= (eigen_mat(i, n).sqrt());
       }
@@ -1617,7 +1623,7 @@ class Matrix{
      * @param threshold_abs 固有値、固有ベクトル求める際に収束判定に用いる相対誤差
      * @return (Matrix<Complex<T> >) 平方根
      */
-    Matrix<Complex<T>, Array2D_Type> sqrt(
+    typename complex_t<T>::m_t sqrt(
         const T &threshold_abs,
         const T &threshold_rel) const {
       return sqrt(eigen(threshold_abs, threshold_rel));
@@ -1629,7 +1635,7 @@ class Matrix{
      *
      * @return (Matrix<Complex<T> >) 平方根
      */
-    Matrix<Complex<T>, Array2D_Type> sqrt() const {
+    typename complex_t<T>::m_t sqrt() const {
       return sqrt(eigen());
     }
 
