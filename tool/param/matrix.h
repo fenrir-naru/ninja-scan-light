@@ -1094,7 +1094,7 @@ class Matrix{
       self_t UD(rows(), columns() * 2);
 #define U(i, j) UD(i, j)
 #define D(i, j) UD(i, j + columns())
-      for(unsigned int i(rows() - 1); i >= 0; i--){
+      for(int i(rows() - 1); i >= 0; i--){
         D(i, i) = P(i, i);
         U(i, i) = T(1);
         for(unsigned int j(0); j < i; j++){
