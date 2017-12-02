@@ -532,11 +532,6 @@ class Matrix{
       view = matrix.view;
       return *this;
     }
-    template <class ViewType2>
-    self_t &operator=(const Matrix<T, Array2D_Type, ViewType2> &matrix){
-      // TODO
-      return *this;
-    }
 
     /**
      * 行列を複製(ディープコピー)します。
@@ -815,6 +810,29 @@ class Matrix{
       return (rows() != matrix.rows()) || (columns() != matrix.columns());
     }
 
+  protected:
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    self_t &replace_internal(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
+      for(unsigned int i(0); i < rows(); ++i){
+        for(unsigned int j(0); j < columns(); ++j){
+          (*this)(i, j) = matrix(i, j);
+        }
+      }
+      return *this;
+    }
+
+  public:
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    self_t &replace(
+        const Matrix<T2, Array2D_Type2, ViewType2> &matrix,
+        const bool &do_check = true)
+        throw(MatrixException) {
+      if(do_check && isDifferentSize(matrix)){
+        throw MatrixException("Incorrect size");
+      }
+      return replace_internal(matrix);
+    }
+
     /**
      * 行列のトレースを返します。
      *
@@ -822,7 +840,7 @@ class Matrix{
      * @return (T) トレース
      */
     T trace(const bool &do_check = true) const throw(MatrixException) {
-      if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
+      if(do_check && !isSquare()){throw MatrixException("rows != columns");}
       T tr(0);
       for(unsigned i(0); i < rows(); i++){
         tr += (*this)(i, i);
@@ -894,7 +912,7 @@ class Matrix{
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
-      if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
+      if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           (*this)(i, j) += matrix(i, j);
@@ -922,7 +940,7 @@ class Matrix{
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
-      if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
+      if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           (*this)(i, j) -= matrix(i, j);
@@ -952,7 +970,7 @@ class Matrix{
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const throw(MatrixException){
       if(columns() != matrix.rows()){
-        throw MatrixException("Operation void!!");
+        throw MatrixException("Incorrect size");
       }
       viewless_t result(viewless_t::blank(rows(), matrix.columns()));
       for(unsigned int i(0); i < result.rows(); i++){
@@ -974,8 +992,8 @@ class Matrix{
      * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException){
-      return (*this = (*this * matrix));
+    self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
+      return replace_internal(*this * matrix);
     }
 
     /**
@@ -1040,7 +1058,7 @@ class Matrix{
      * @throw MatrixException 正方行列ではなく行列式を計算することができない場合
      */
     T determinant(const bool &do_check = true) const throw(MatrixException){
-      if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
+      if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       if(rows() == 1){
         return (*this)(0, 0);
       }else{
@@ -1087,7 +1105,7 @@ class Matrix{
       }
       if((y.columns() != 1)
           || (y.rows() != rows())){
-        throw MatrixException("Operation void!!");
+        throw MatrixException("Incorrect y size");
       }
 
 
@@ -1126,7 +1144,7 @@ class Matrix{
      * @throw MatrixException 正方行列ではなくLU分解を計算することができない場合
      */
     viewless_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
-      if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
+      if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       viewless_t LU(viewless_t::blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
@@ -1163,7 +1181,7 @@ class Matrix{
      * @throw MatrixException 対称行列ではなくUD分解を計算することができない場合
      */
     viewless_t decomposeUD(const bool &do_check = true) const throw(MatrixException){
-      if(do_check && !isSymmetric()){throw MatrixException("Operation void");}
+      if(do_check && !isSymmetric()){throw MatrixException("not symmetric");}
       viewless_t P(copy());
       viewless_t UD(rows(), columns() * 2);
 #define U(i, j) UD(i, j)
@@ -1191,7 +1209,7 @@ class Matrix{
      */
     viewless_t inverse() const throw(MatrixException){
 
-      if(!isSquare()){throw MatrixException("Operation void!!");}
+      if(!isSquare()){throw MatrixException("rows() != columns()");}
 
       //クラメール(遅い)
       /*
@@ -1213,7 +1231,7 @@ class Matrix{
       for(unsigned int i(0); i < rows(); i++){
         if(left(i, i) == T(0)){ //(i, i)が存在するように並べ替え
           for(unsigned int j(i + 1); j <= rows(); j++){
-            if(j == rows()){throw MatrixException("Operation void!! ; Invert matrix not exist");}
+            if(j == rows()){throw MatrixException("invert matrix not exist");}
             if(left(j, i) != T(0)){
               left.exchangeRows(j, i);
               right.exchangeRows(j, i);
@@ -1311,7 +1329,7 @@ class Matrix{
      * @throw MatrixException 正方行列ではなく計算することができない場合
      */
     viewless_t hessenberg(viewless_t *transform = NULL) const throw(MatrixException){
-      if(!isSquare()){throw MatrixException("Operation void!!");}
+      if(!isSquare()){throw MatrixException("rows() != columns()");}
 
       viewless_t result(copy());
       for(unsigned int j(0); j < columns() - 2; j++){
@@ -1410,7 +1428,7 @@ class Matrix{
 
       typedef typename complex_t<T>::m_t res_t;
 
-      if(!isSquare()){throw MatrixException("Operation void!!");}
+      if(!isSquare()){throw MatrixException("rows() != columns()");}
 
       //パワー法(べき乗法)
       /*viewless_t result(rows(), rows() + 1);
@@ -1528,7 +1546,7 @@ class Matrix{
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 
         if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
-          throw MatrixException("Cannot calc eigen values!!");
+          throw MatrixException("eigen values calculation failed");
         }
 
         //収束判定
@@ -1618,7 +1636,7 @@ class Matrix{
             break;
           }
           if(loop > 100){
-            throw MatrixException("Cannot calc eigen vectors!!");
+            throw MatrixException("eigen vectors calculation failed");
           }
         }
       }
