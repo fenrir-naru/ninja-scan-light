@@ -115,9 +115,6 @@ class StorageException: public MatrixException{
 #include <ostream>
 #include "param/complex.h"
 
-template <class T>
-class Array2D_Dense;
-
 /**
  * @brief 2D array abstract class
  *
@@ -409,6 +406,9 @@ class Matrix{
     typedef Matrix<T, Array2D_Type, typename view_t::transposed_t> transposed_t;
     typedef Matrix<T, Array2D_Type, typename view_t::partial_t> partial_t;
 
+    friend viewless_t;
+    friend transposed_t;
+    friend partial_t;
   protected:
     Array2D<T> *storage; ///< 内部的に利用する2次元配列のメモリ
     view_t view;
@@ -430,6 +430,70 @@ class Matrix{
 
   public:
     /**
+     * 行数を返します。
+     *
+     * @return (int) 行数
+     */
+    const unsigned int &rows() const{
+      if(view.transposed){
+        return storage->columns();
+      }else{
+        return storage->rows();
+      }
+    }
+
+    /**
+     * 列数を返します。
+     *
+     * @return (int) 列数
+     */
+    const unsigned int &columns() const{
+      if(view.transposed){
+        return storage->rows();
+      }else{
+        return storage->columns();
+      }
+    }
+
+    /**
+     * 指定した行列成分を返します。
+     *
+     * @param row 行インデックス(開始番号は0～)
+     * @param column 列インデックス(開始番号は0～)
+     * @return (const T &) 成分
+     */
+    const T &operator()(
+        const unsigned int &row,
+        const unsigned int &column) const {
+      if(view.transposed){
+        return array2d()->storage_t::operator()(column, row);
+      }else{
+        return array2d()->storage_t::operator()(row, column);
+      }
+    }
+    T &operator()(
+        const unsigned int &row,
+        const unsigned int &column){
+      return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
+    }
+
+    /**
+     * 要素をゼロクリアします
+     *
+     */
+    void clear(){
+      if(view.partialized){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(0); j < columns(); j++){
+            (*this)(i, j) = T(0);
+          }
+        }
+      }else{
+        array2d()->storage_t::clear();
+      }
+    }
+
+    /**
      * Matrixクラスのコンストラクタ。
      * 内部的な2次元配列用のメモリを確保しない状態で初期化を完了します。
      *
@@ -448,7 +512,7 @@ class Matrix{
         const unsigned int &rows,
         const unsigned int &columns)
         : storage(new storage_t(rows, columns)), view(){
-      array2d()->storage_t::clear();
+      clear();
     }
 
     /**
@@ -485,6 +549,15 @@ class Matrix{
             ? new storage_t(matrix.storage)
             : NULL),
         view(matrix.view) {}
+  protected:
+    template <class ViewType2>
+    Matrix(const Matrix<T, Array2D_Type, ViewType2> &matrix)
+        : storage(matrix.storage
+            ? matrix.array2d()->storage_t::copy(false)
+            : NULL),
+        view() {}
+
+  public:
     /**
      * デストラクタ。
      */
@@ -541,37 +614,6 @@ class Matrix{
     viewless_t copy() const {
       return self_t(array2d()->storage_t::copy(true));
     }
-
-    /**
-     * 行数を返します。
-     *
-     * @return (int) 行数
-     */
-    const unsigned int &rows() const{return storage->rows();}
-    /**
-     * 列数を返します。
-     *
-     * @return (int) 列数
-     */
-    const unsigned int &columns() const{return storage->columns();}
-
-    /**
-     * 指定した行列成分を返します。
-     *
-     * @param row 行インデックス(開始番号は0～)
-     * @param column 列インデックス(開始番号は0～)
-     * @return (const T &) 成分
-     */
-    const T &operator()(
-        const unsigned int &row,
-        const unsigned int &column) const {
-      return array2d()->storage_t::operator()(row, column);
-    }
-    T &operator()(
-        const unsigned int &row,
-        const unsigned int &column){
-      return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
-    }
     
     /**
      * 行列の内容が等しいか、調べます
@@ -606,24 +648,6 @@ class Matrix{
     }
 
     /**
-     * 要素をゼロクリアします
-     *
-     * @return (self_t) ゼロクリアされた自分自身
-     */
-    self_t &clear(){
-      if(view.partialized){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(0); j < columns(); j++){
-            (*this)(i, j) = T(0);
-          }
-        }
-      }else{
-        array2d()->storage_t::clear();
-      }
-      return *this;
-    }
-
-    /**
      * 指定のスカラー行列を生成します。
      *
      * @param size 指定の行数(列数)
@@ -645,29 +669,19 @@ class Matrix{
     }
 
     /**
-     * TODO
-     *
      * 行列を転置します。
      * 転置された行列はもとの行列とリンクしています。
      * もとの行列との切り離しを行うにはtranspose().copy()としてください。
      *
-     * @return (TransposedMatrix<T>) 転置行列
+     * @return (transposed_t) 転置行列
      */
-#if 0
     transposed_t transpose() const{
-      return transposed_t(*this);
-    }
-#else
-    viewless_t transpose() const {
-      viewless_t res(viewless_t::blank(columns(), rows()));
-      for(unsigned int i(0); i < res.rows(); ++i){
-        for(unsigned int j(0); j < res.columns(); ++j){
-          res(i, j) = operator()(j, i);
-        }
+      transposed_t res(*this);
+      if(view.partialized){
+        // TODO
       }
       return res;
     }
-#endif
 
     /**
      * TODO

@@ -318,9 +318,12 @@ class MatrixTestSuite : public Test::Suite{
             return m(j, i);
           }
         } a(*A);
-        matrix_t _A(A->transpose());
+        matrix_t::transposed_t _A(A->transpose());
+        matrix_t __A(_A.copy());
         dbg("trans:" << _A << endl, false);
+        dbg("trans.copy:" << __A << endl, false);
         matrix_compare(a, _A);
+        matrix_compare(a, __A);
       }
       {
         struct A_compared {
