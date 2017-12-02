@@ -359,14 +359,59 @@ class Array2D_Dense : public Array2D<T> {
  * @param T 演算精度
  * @param Array2D_Type
  */
-template <class T, template <class> class Array2D_Type = Array2D_Dense>
+template <
+    class T,
+    template <class> class Array2D_Type = Array2D_Dense,
+    class ViewType = void>
 class Matrix{
   public:
     typedef Array2D_Type<T> storage_t;
-    typedef Matrix<T, Array2D_Type> self_t;
+    typedef Matrix<T, Array2D_Type, ViewType> self_t;
+
+    template <bool is_transposed, bool is_partialized>
+    struct View {
+      static const bool transposed = is_transposed;
+      static const bool partialized = is_partialized;
+
+      template <bool is_transposed2, bool is_partialized2, class U = void>
+      struct Converter {
+        typedef View<!is_transposed2, is_partialized2> transposed_t;
+        typedef View<is_transposed2, true> partial_t;
+      };
+      template <class U>
+      struct Converter<true, false, U> {
+        typedef void transposed_t;
+        typedef View<true, true> partial_t;
+      };
+
+      typedef typename Converter<
+          is_transposed, is_partialized>::transposed_t transposed_t;
+      typedef typename Converter<
+          is_transposed, is_partialized>::partial_t partial_t;
+    };
+
+    template <class ViewType2, class U = void>
+    struct ViewProperty {
+      static const bool transposed = ViewType2::transposed;
+      static const bool partialized = ViewType2::partialized;
+    };
+    template <class U>
+    struct ViewProperty<void, U> {
+      static const bool transposed = false;
+      static const bool partialized = false;
+    };
+
+    typedef View<
+        ViewProperty<ViewType>::transposed,
+        ViewProperty<ViewType>::partialized> view_t;
+
+    typedef Matrix<T, Array2D_Type, void> viewless_t;
+    typedef Matrix<T, Array2D_Type, typename view_t::transposed_t> transposed_t;
+    typedef Matrix<T, Array2D_Type, typename view_t::partial_t> partial_t;
 
   protected:
     Array2D<T> *storage; ///< 内部的に利用する2次元配列のメモリ
+    view_t view;
 
     /**
      * Matrixクラスのコンストラクタ。
@@ -389,7 +434,7 @@ class Matrix{
      * 内部的な2次元配列用のメモリを確保しない状態で初期化を完了します。
      *
      */
-    Matrix() : storage(NULL){}
+    Matrix() : storage(NULL), view(){}
 
     /**
      * Matrixクラスのコンストラクタ。
@@ -402,7 +447,7 @@ class Matrix{
     Matrix(
         const unsigned int &rows,
         const unsigned int &columns)
-        : storage(new storage_t(rows, columns)){
+        : storage(new storage_t(rows, columns)), view(){
       array2d()->storage_t::clear();
     }
 
@@ -419,7 +464,7 @@ class Matrix{
         const unsigned int &rows,
         const unsigned int &columns,
         const T *serialized)
-        : storage(new storage_t(rows, columns, serialized)){
+        : storage(new storage_t(rows, columns, serialized)), view(){
     }
 
     /**
@@ -431,13 +476,15 @@ class Matrix{
     Matrix(const self_t &matrix)
         : storage(matrix.storage
             ? matrix.array2d()->storage_t::copy(false)
-            : NULL){}
+            : NULL),
+        view(matrix.view){}
 
     template <class T2, template <class> class Array2D_Type2>
-    Matrix(const Matrix<T2, Array2D_Type2> &matrix)
+    Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
         : storage(matrix.storage
             ? new storage_t(matrix.storage)
-            : NULL){}
+            : NULL),
+        view(matrix.view) {}
     /**
      * デストラクタ。
      */
@@ -460,7 +507,7 @@ class Matrix{
 
   protected:
     self_t blank_copy() const {
-      return storage ? blank(storage->rows(), storage->columns()) : self_t((storage_t)NULL);
+      return storage ? blank(storage->rows(), storage->columns()) : self_t(NULL);
     }
 
   public:
@@ -479,18 +526,24 @@ class Matrix{
       return *this;
     }
     template <class T2, template <class> class Array2D_Type2>
-    self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
+    self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
       delete storage;
       storage = new storage_t(*matrix.storage);
+      view = matrix.view;
+      return *this;
+    }
+    template <class ViewType2>
+    self_t &operator=(const Matrix<T, Array2D_Type, ViewType2> &matrix){
+      // TODO
       return *this;
     }
 
     /**
      * 行列を複製(ディープコピー)します。
      *
-     * @return (self_t) コピー
+     * @return (viewless_t) コピー
      */
-    self_t copy() const {
+    viewless_t copy() const {
       return self_t(array2d()->storage_t::copy(true));
     }
 
@@ -531,26 +584,29 @@ class Matrix{
      * @param matrix 比較する別の行列
      * @return (bool) 行列が等しい場合true、以外false
      */
-    template <class T2, template <class> class Array2D_Type2>
-    bool operator==(const Matrix<T2, Array2D_Type2> &matrix) const {
-      if(storage != matrix.storage){
-        if((rows() != matrix.rows())
-            || columns() != matrix.columns()){
-          return false;
-        }
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(0); j < columns(); j++){
-            if((*this)(i, j) != matrix(i, j)){
-              return false;
-            }
+    template <
+        class T2, template <class> class Array2D_Type2,
+        class ViewType2>
+    bool operator==(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
+      if(this == &matrix){return true;}
+      if((rows() != matrix.rows())
+          || columns() != matrix.columns()){
+        return false;
+      }
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
+          if((*this)(i, j) != matrix(i, j)){
+            return false;
           }
         }
       }
       return true;
     }
     
-    template <class T2, template <class> class Array2D_Type2>
-    bool operator!=(const Matrix<T2, Array2D_Type2> &matrix) const {
+    template <
+        class T2, template <class> class Array2D_Type2,
+        class ViewType2>
+    bool operator!=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
       return !(operator==(matrix));
     }
 
@@ -560,7 +616,15 @@ class Matrix{
      * @return (self_t) ゼロクリアされた自分自身
      */
     self_t &clear(){
-      array2d()->storage_t::clear();
+      if(view.partialized){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(0); j < columns(); j++){
+            (*this)(i, j) = T(0);
+          }
+        }
+      }else{
+        array2d()->storage_t::clear();
+      }
       return *this;
     }
 
@@ -570,8 +634,8 @@ class Matrix{
      * @param size 指定の行数(列数)
      * @param scalar 値
      */
-    static self_t getScalar(const unsigned int &size, const T &scalar){
-      self_t result(size, size);
+    static viewless_t getScalar(const unsigned int &size, const T &scalar){
+      viewless_t result(size, size);
       for(unsigned int i(0); i < size; i++){result(i, i) = scalar;}
       return result;
     }
@@ -581,7 +645,7 @@ class Matrix{
      *
      * @param size 指定の行数(列数)
      */
-    static self_t getI(const unsigned int &size){
+    static viewless_t getI(const unsigned int &size){
       return getScalar(size, T(1));
     }
 
@@ -595,12 +659,12 @@ class Matrix{
      * @return (TransposedMatrix<T>) 転置行列
      */
 #if 0
-    TransposedMatrix<T> transpose() const{
-      return TransposedMatrix<T>(*this);
+    transposed_t transpose() const{
+      return transposed_t(*this);
     }
 #else
-    self_t transpose() const {
-      self_t res(self_t::blank(columns(), rows()));
+    viewless_t transpose() const {
+      viewless_t res(viewless_t::blank(columns(), rows()));
       for(unsigned int i(0); i < res.rows(); ++i){
         for(unsigned int j(0); j < res.columns(); ++j){
           res(i, j) = operator()(j, i);
@@ -622,12 +686,12 @@ class Matrix{
      * @return (PartialMatrix<T>) 部分行列
      *
      */
-    self_t partial(
+    viewless_t partial(
         const unsigned int &new_rows,
         const unsigned int &new_columns,
         const unsigned int &row_offset,
         const unsigned int &column_offset) const {
-      self_t res(self_t::blank(new_rows, new_columns));
+      viewless_t res(viewless_t::blank(new_rows, new_columns));
       for(unsigned int i_dst(0), i_src(row_offset); i_dst < res.rows();  ++i_src, ++i_dst){
         for(unsigned int j_dst(0), j_src(column_offset); j_dst < res.columns(); ++j_src, ++j_dst){
           res(i_dst, j_dst) = operator()(i_src, j_src);
@@ -644,7 +708,7 @@ class Matrix{
      * @param row 行インデックス
      * @return (self_t) 行ベクトル
      */
-    self_t rowVector(const unsigned int &row) const {
+    viewless_t rowVector(const unsigned int &row) const {
       return partial(1, columns(), row, 0);
     }
     /**
@@ -655,7 +719,7 @@ class Matrix{
      * @param column 列インデックス
      * @return (self_t) 列ベクトル
      */
-    self_t columnVector(const unsigned int &column) const {
+    viewless_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
     }
 
@@ -746,8 +810,8 @@ class Matrix{
      * @param matrix 比較対象
      * @return (bool) 異なっている場合true
      */
-    template <class T2, template <class> class Array2D_Type2>
-    bool isDifferentSize(const Matrix<T2, Array2D_Type2> &matrix) const{
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
       return (rows() != matrix.rows()) || (columns() != matrix.columns());
     }
 
@@ -786,7 +850,7 @@ class Matrix{
      * @param scalar 倍数
      * @return (self_t) 結果
      */
-    self_t operator*(const T &scalar) const{return (copy() *= scalar);}
+    viewless_t operator*(const T &scalar) const{return (copy() *= scalar);}
     /**
      * 行列の成分全てを指定倍します。
      *
@@ -794,7 +858,9 @@ class Matrix{
      * @param matrix 行列
      * @return (self_t) 結果
      */
-    friend self_t operator*(const T &scalar, const self_t &matrix){return matrix * scalar;}
+    friend viewless_t operator*(const T &scalar, const self_t &matrix){
+      return matrix * scalar;
+    }
     /**
      * 行列の成分全てを除算します。破壊的メソッドです。
      *
@@ -808,7 +874,7 @@ class Matrix{
      * @param scalar 倍数
      * @return (self_t) 結果
      */
-    self_t operator/(const T &scalar) const{return (copy() /= scalar);}
+    viewless_t operator/(const T &scalar) const{return (copy() /= scalar);}
     /**
      * 行列の成分全てを除算します。
      *
@@ -816,7 +882,9 @@ class Matrix{
      * @param matrix 行列
      * @return (self_t) 結果
      */
-    friend self_t operator/(const T &scalar, const self_t &matrix){return matrix / scalar;}
+    friend viewless_t operator/(const T &scalar, const self_t &matrix){
+      return matrix / scalar;
+    }
     
     /**
      * 行列を成分ごとに加算します。破壊的メソッドです。
@@ -824,8 +892,8 @@ class Matrix{
      * @param matrix 加える行列
      * @return (self_t) 自分自身
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t &operator+=(const Matrix<T2, Array2D_Type2> &matrix) throw(MatrixException) {
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
       if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
@@ -841,8 +909,10 @@ class Matrix{
      * @param matrix 加える行列
      * @return (self_t) 結果
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t operator+(const Matrix<T2, Array2D_Type2> &matrix) const{return (copy() += matrix);}
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    viewless_t operator+(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
+      return (copy() += matrix);
+    }
     
     /**
      * 行列を成分ごとに減算します。
@@ -850,8 +920,8 @@ class Matrix{
      * @param matrix 引く行列
      * @return (self_t) 自分自身
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t &operator-=(const Matrix<T2, Array2D_Type2> &matrix) throw(MatrixException) {
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
       if(isDifferentSize(matrix)){throw MatrixException("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
@@ -868,7 +938,9 @@ class Matrix{
      * @return (self_t) 結果
      */
     template <class T2, template <class> class Array2D_Type2>
-    self_t operator-(const Matrix<T2, Array2D_Type2> &matrix) const{return (copy() -= matrix);}
+    viewless_t operator-(const Matrix<T2, Array2D_Type2> &matrix) const{
+      return (copy() -= matrix);
+    }
 
     /**
      * 行列を乗算します。
@@ -877,12 +949,12 @@ class Matrix{
      * @return (self_t) 結果
      * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t operator*(const Matrix<T2, Array2D_Type2> &matrix) const throw(MatrixException){
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const throw(MatrixException){
       if(columns() != matrix.rows()){
         throw MatrixException("Operation void!!");
       }
-      self_t result(self_t::blank(rows(), matrix.columns()));
+      viewless_t result(viewless_t::blank(rows(), matrix.columns()));
       for(unsigned int i(0); i < result.rows(); i++){
         for(unsigned int j(0); j < result.columns(); j++){
           result(i, j) = (*this)(i, 0) * matrix(0, j);
@@ -901,8 +973,8 @@ class Matrix{
      * @return (self_t) 自分自身
      * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t &operator*=(const Matrix<T2, Array2D_Type2> &matrix) throw(MatrixException){
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException){
       return (*this = (*this * matrix));
     }
 
@@ -912,7 +984,7 @@ class Matrix{
      *
      * @return (self_t) -matrix
      */
-    self_t operator-() const{return (copy() *= -1);}
+    viewless_t operator-() const{return (copy() *= -1);}
 
     /**
      * TODO
@@ -930,10 +1002,10 @@ class Matrix{
       return CoMatrix<T>(*this, row, column);
     }
 #else
-    self_t coMatrix(
+    viewless_t coMatrix(
         const unsigned int &row,
         const unsigned int &column) const {
-      self_t res(self_t::blank(rows() - 1, columns() - 1));
+      viewless_t res(viewless_t::blank(rows() - 1, columns() - 1));
       unsigned int i(0), i2(0);
       for( ; i < row; ++i, ++i2){
         unsigned int j(0), j2(0);
@@ -991,15 +1063,16 @@ class Matrix{
      * @param do_check LU分解済み行列の定義を満たしているか、確認する
      * @return (Matrix<T2>) x(解)
      */
-    template <class T2, template <class> class Array2D_Type2>
-    Matrix<T2, Array2D_Type2> solve_linear_eq_with_LU(
-        const Matrix<T2, Array2D_Type2> &y, const bool &do_check = true)
-        const throw(MatrixException) {
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t
+        solve_linear_eq_with_LU(
+            const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
+            const throw(MatrixException) {
       bool not_LU(false);
       if(do_check){
         if(rows() * 2 != columns()){not_LU = true;}
       }
-      self_t L(partial(rows(), rows(), 0, 0)),
+      viewless_t L(partial(rows(), rows(), 0, 0)),
              U(partial(rows(), rows(), 0, rows()));
       if(do_check){
         for(unsigned i(1); i < rows(); i++){
@@ -1018,7 +1091,7 @@ class Matrix{
       }
 
 
-      typedef Matrix<T2, Array2D_Type2> y_t;
+      typedef typename Matrix<T2, Array2D_Type2>::viewless_t y_t;
       // L(Ux) = y で y' = (Ux)をまず解く
       y_t y_copy(y.copy());
       y_t y_prime(y_t::blank(y.rows(), 1));
@@ -1052,9 +1125,9 @@ class Matrix{
      * @return (self_t) LU分解
      * @throw MatrixException 正方行列ではなくLU分解を計算することができない場合
      */
-    self_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
+    viewless_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("Operation void!!");}
-      self_t LU(self_t::blank(rows(), columns() * 2));
+      viewless_t LU(viewless_t::blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
       for(unsigned int i(0); i < rows(); i++){
@@ -1089,10 +1162,10 @@ class Matrix{
      * @return (self_t) UD分解
      * @throw MatrixException 対称行列ではなくUD分解を計算することができない場合
      */
-    self_t decomposeUD(const bool &do_check = true) const throw(MatrixException){
+    viewless_t decomposeUD(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSymmetric()){throw MatrixException("Operation void");}
-      self_t P(copy());
-      self_t UD(rows(), columns() * 2);
+      viewless_t P(copy());
+      viewless_t UD(rows(), columns() * 2);
 #define U(i, j) UD(i, j)
 #define D(i, j) UD(i, j + columns())
       for(int i(rows() - 1); i >= 0; i--){
@@ -1116,13 +1189,13 @@ class Matrix{
      * @return (self_t) 逆行列
      * @throw MatrixException 正方行列ではなく逆行列を計算することができない場合
      */
-    self_t inverse() const throw(MatrixException){
+    viewless_t inverse() const throw(MatrixException){
 
       if(!isSquare()){throw MatrixException("Operation void!!");}
 
       //クラメール(遅い)
       /*
-      self_t result(rows(), columns());
+      viewless_t result(rows(), columns());
       T det;
       if((det = determinant()) == 0){throw MatrixException("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
@@ -1135,8 +1208,8 @@ class Matrix{
 
       //ガウス消去法
 
-      self_t left(copy());
-      self_t right(self_t::getI(rows()));
+      viewless_t left(copy());
+      viewless_t right(viewless_t::getI(rows()));
       for(unsigned int i(0); i < rows(); i++){
         if(left(i, i) == T(0)){ //(i, i)が存在するように並べ替え
           for(unsigned int j(i + 1); j <= rows(); j++){
@@ -1177,8 +1250,8 @@ class Matrix{
      * @param matrix 行列
      * @return (self_t) 自分自身
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t &operator/=(const Matrix<T2, Array2D_Type2> &matrix) {
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
         return (*this) *= matrix.inverse();
     }
     /**
@@ -1187,8 +1260,8 @@ class Matrix{
      * @param matrix 行列
      * @return (self_t) 結果
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t operator/(const Matrix<T2, Array2D_Type2> &matrix) const {
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    viewless_t operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
       return (copy() /= matrix);
     }
 
@@ -1200,10 +1273,10 @@ class Matrix{
      * @param column 列インデックス
      * @param matrix 足す行列
      */
-    template <class T2, template <class> class Array2D_Type2>
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &pivotMerge(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T2, Array2D_Type2> &matrix){
+        const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       for(int i(0); i < matrix.rows(); i++){
         if(row + i < 0){continue;}
         else if(row + i >= rows()){break;}
@@ -1223,10 +1296,10 @@ class Matrix{
      * @param column 列インデックス
      * @param matrix 足す行列
      */
-    template <class T2, template <class> class Array2D_Type2>
-    self_t pivotAdd(
+    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    viewless_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T2, Array2D_Type2> &matrix) const{
+        const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
       return copy().pivotMerge(row, column, matrix);
     }
 
@@ -1237,10 +1310,10 @@ class Matrix{
      * @return (self_t) ヘッセンベルク行列
      * @throw MatrixException 正方行列ではなく計算することができない場合
      */
-    self_t hessenberg(self_t *transform = NULL) const throw(MatrixException){
+    viewless_t hessenberg(viewless_t *transform = NULL) const throw(MatrixException){
       if(!isSquare()){throw MatrixException("Operation void!!");}
 
-      self_t result(copy());
+      viewless_t result(copy());
       for(unsigned int j(0); j < columns() - 2; j++){
         T t(0);
         for(unsigned int i(j + 1); i < rows(); i++){
@@ -1249,7 +1322,7 @@ class Matrix{
         T s = ::sqrt(t);
         if(result(j + 1, j) < 0){s *= -1;}
 
-        self_t omega(self_t::blank(rows() - (j+1), 1));
+        viewless_t omega(viewless_t::blank(rows() - (j+1), 1));
         {
           for(unsigned int i(0); i < omega.rows(); i++){
             omega(i, 0) = result(j+i+1, j);
@@ -1257,7 +1330,7 @@ class Matrix{
           omega(0, 0) += s;
         }
 
-        self_t P(self_t::getI(rows()));
+        viewless_t P(viewless_t::getI(rows()));
         T denom(t + result(j + 1, j) * s);
         if(denom){
           P.pivotMerge(j+1, j+1, -(omega * omega.transpose() / denom));
@@ -1283,13 +1356,13 @@ class Matrix{
     struct complex_t {
       static const bool is_complex = false;
       typedef Complex<T2> v_t;
-      typedef Matrix<Complex<T2>, Array2D_Type> m_t;
+      typedef typename Matrix<Complex<T2>, Array2D_Type, ViewType>::viewless_t m_t;
     };
     template <class T2>
     struct complex_t<Complex<T2> > {
         static const bool is_complex = true;
       typedef Complex<T2> v_t;
-      typedef Matrix<Complex<T2>, Array2D_Type> m_t;
+      typedef typename Matrix<Complex<T2>, Array2D_Type, ViewType>::viewless_t m_t;
     };
 
     /**
@@ -1340,12 +1413,12 @@ class Matrix{
       if(!isSquare()){throw MatrixException("Operation void!!");}
 
       //パワー法(べき乗法)
-      /*self_t result(rows(), rows() + 1);
-      self_t source = copy();
+      /*viewless_t result(rows(), rows() + 1);
+      viewless_t source = copy();
       for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
       for(unsigned int i(0); i < columns(); i++){
         while(true){
-          self_t approxVec = source * result.columnVector(i);
+          viewless_t approxVec = source * result.columnVector(i);
           T approxVal(0);
           for(unsigned int j(0); j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
           approxVal = sqrt(approxVal);
@@ -1381,9 +1454,9 @@ class Matrix{
       int m = _rows;
       bool first = true;
 
-      self_t transform(getI(_rows));
-      self_t A(hessenberg(&transform));
-      self_t A_(A);
+      viewless_t transform(getI(_rows));
+      viewless_t A(hessenberg(&transform));
+      viewless_t A_(A);
 
       while(true){
 
@@ -1437,13 +1510,13 @@ class Matrix{
 
           r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
 
-          self_t omega(3, 1);
+          viewless_t omega(3, 1);
           {
             omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
             omega(1, 0) = b2;
             if(b3 != T(0)){omega(2, 0) = b3;}
           }
-          self_t P(Matrix::getI(_rows));
+          viewless_t P(viewless_t::getI(_rows));
           T denom((omega.transpose() * omega)(0, 0));
           if(denom){
             P.pivotMerge(i, i, omega * omega.transpose() * -2 / denom);
