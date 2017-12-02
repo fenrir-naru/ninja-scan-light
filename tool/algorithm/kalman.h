@@ -513,7 +513,7 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
 #endif
       
       for(int j = W.rows() - 1; j > 0; j--){
-        Matrix<FloatT> V(W.rowVector(j));
+        typename Matrix<FloatT>::partial_t V(W.rowVector(j));
         
         Matrix<FloatT> Z(1, Q.columns()); // = V * QA‚‘¬‰»‚Ì‚½‚ß“WŠJ‚µ‚Ä‘‚­
         for(int i = 0; i < Z.columns(); i++){
