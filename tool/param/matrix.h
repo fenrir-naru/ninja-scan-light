@@ -341,6 +341,49 @@ class Array2D_Dense : public Array2D<T> {
     }
 };
 
+template <bool is_transposed, bool is_partialized>
+struct MatrixView {
+  static const bool transposed = is_transposed;
+  static const bool partialized = is_partialized;
+
+  template <bool is_transposed2, bool is_partialized2, class U = void>
+  struct Converter {
+    typedef MatrixView<!is_transposed2, is_partialized2> transposed_t;
+    typedef MatrixView<is_transposed2, true> partial_t;
+  };
+  template <class U>
+  struct Converter<true, false, U> {
+    typedef void transposed_t;
+    typedef MatrixView<true, true> partial_t;
+  };
+
+  typedef typename Converter<
+      is_transposed, is_partialized>::transposed_t transposed_t;
+  typedef typename Converter<
+      is_transposed, is_partialized>::partial_t partial_t;
+
+  struct {
+    unsigned int rows, row_offset;
+    unsigned int columns, column_offset;
+  } partial;
+
+  MatrixView() {}
+
+  template <bool is_transposed2, bool is_partialized2>
+  MatrixView(const MatrixView<is_transposed2, is_partialized2> &another){
+    if(another.partialized && partialized){
+      partial.rows = another.partial.rows;
+      partial.columns = another.partial.columns;
+      partial.row_offset = another.partial.row_offset;
+      partial.column_offset = another.partial.column_offset;
+    }
+  }
+
+  static bool is_viewless() {
+    return !(transposed || partialized);
+  }
+};
+
 /**
  * @brief 行列
  *
@@ -365,28 +408,6 @@ class Matrix{
     typedef Array2D_Type<T> storage_t;
     typedef Matrix<T, Array2D_Type, ViewType> self_t;
 
-    template <bool is_transposed, bool is_partialized>
-    struct View {
-      static const bool transposed = is_transposed;
-      static const bool partialized = is_partialized;
-
-      template <bool is_transposed2, bool is_partialized2, class U = void>
-      struct Converter {
-        typedef View<!is_transposed2, is_partialized2> transposed_t;
-        typedef View<is_transposed2, true> partial_t;
-      };
-      template <class U>
-      struct Converter<true, false, U> {
-        typedef void transposed_t;
-        typedef View<true, true> partial_t;
-      };
-
-      typedef typename Converter<
-          is_transposed, is_partialized>::transposed_t transposed_t;
-      typedef typename Converter<
-          is_transposed, is_partialized>::partial_t partial_t;
-    };
-
     template <class ViewType2, class U = void>
     struct ViewProperty {
       static const bool transposed = ViewType2::transposed;
@@ -398,7 +419,7 @@ class Matrix{
       static const bool partialized = false;
     };
 
-    typedef View<
+    typedef MatrixView<
         ViewProperty<ViewType>::transposed,
         ViewProperty<ViewType>::partialized> view_t;
 
@@ -419,7 +440,7 @@ class Matrix{
      *
      * @param storage ストレージ
      */
-    Matrix(Array2D<T> *new_storage) : storage(new_storage) {}
+    Matrix(Array2D<T> *new_storage) : storage(new_storage), view() {}
     
     inline const storage_t *array2d() const{
       return static_cast<const storage_t *>(storage);
@@ -435,11 +456,9 @@ class Matrix{
      * @return (int) 行数
      */
     const unsigned int &rows() const{
-      if(view.transposed){
-        return storage->columns();
-      }else{
-        return storage->rows();
-      }
+      return view.partialized
+          ? (view.transposed ? view.partial.columns : view.partial.rows)
+          : (view.transposed ? storage->columns() : storage->rows());
     }
 
     /**
@@ -448,11 +467,9 @@ class Matrix{
      * @return (int) 列数
      */
     const unsigned int &columns() const{
-      if(view.transposed){
-        return storage->rows();
-      }else{
-        return storage->columns();
-      }
+      return view.partialized
+          ? (view.transposed ? view.partial.rows : view.partial.columns)
+          : (view.transposed ? storage->rows() : storage->columns());
     }
 
     /**
@@ -465,11 +482,17 @@ class Matrix{
     const T &operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      if(view.transposed){
-        return array2d()->storage_t::operator()(column, row);
-      }else{
-        return array2d()->storage_t::operator()(row, column);
-      }
+      return array2d()->storage_t::operator()(
+          (view.partialized
+              ? (view.transposed
+                  ? (column + view.partial.column_offset)
+                  : (row + view.partial.row_offset))
+              : (view.transposed ? column : row)),
+          (view.partialized
+              ? (view.transposed
+                  ? (row + view.partial.row_offset)
+                  : (column + view.partial.column_offset))
+              : (view.transposed ? row : column)));
     }
     T &operator()(
         const unsigned int &row,
@@ -555,7 +578,7 @@ class Matrix{
         : storage(matrix.storage
             ? matrix.array2d()->storage_t::copy(false)
             : NULL),
-        view() {}
+        view(matrix.view) {}
 
   public:
     /**
@@ -572,15 +595,15 @@ class Matrix{
      * @param new_rows 行数
      * @param new_columns 列数
      */
-    static self_t blank(
+    static viewless_t blank(
         const unsigned int &new_rows,
         const unsigned int &new_columns){
-      return self_t(new storage_t(new_rows, new_columns));
+      return viewless_t(new storage_t(new_rows, new_columns));
     }
 
   protected:
-    self_t blank_copy() const {
-      return storage ? blank(storage->rows(), storage->columns()) : self_t(NULL);
+    viewless_t blank_copy() const {
+      return blank(rows(), columns());
     }
 
   public:
@@ -595,6 +618,7 @@ class Matrix{
         if(matrix.storage){
           storage = matrix.array2d()->storage_t::copy(false);
         }
+        view = matrix.view;
       }
       return *this;
     }
@@ -612,7 +636,17 @@ class Matrix{
      * @return (viewless_t) コピー
      */
     viewless_t copy() const {
-      return self_t(array2d()->storage_t::copy(true));
+      if(view.is_viewless()){
+        return viewless_t(array2d()->storage_t::copy(true));
+      }else{
+        viewless_t res(blank_copy());
+        for(unsigned int i(0); i < rows(); ++i){
+          for(unsigned int j(0); j < columns(); ++j){
+            res(i, j) = (*this)(i, j);
+          }
+        }
+        return res;
+      }
     }
     
     /**
@@ -676,59 +710,62 @@ class Matrix{
      * @return (transposed_t) 転置行列
      */
     transposed_t transpose() const{
-      transposed_t res(*this);
-      if(view.partialized){
-        // TODO
-      }
-      return res;
+      return transposed_t(*this);
     }
 
     /**
-     * TODO
-     *
      * 指定した部分行列を返します。
      *
      * @param rowSize 行サイズ
      * @param columnSize 列サイズ
      * @param rowOffset 開始行インデックス
      * @param columnOffset 開始列インデックス
-     * @return (PartialMatrix<T>) 部分行列
+     * @return (partial_t) 部分行列
      *
      */
-    viewless_t partial(
+    partial_t partial(
         const unsigned int &new_rows,
         const unsigned int &new_columns,
         const unsigned int &row_offset,
-        const unsigned int &column_offset) const {
-      viewless_t res(viewless_t::blank(new_rows, new_columns));
-      for(unsigned int i_dst(0), i_src(row_offset); i_dst < res.rows();  ++i_src, ++i_dst){
-        for(unsigned int j_dst(0), j_src(column_offset); j_dst < res.columns(); ++j_src, ++j_dst){
-          res(i_dst, j_dst) = operator()(i_src, j_src);
-        }
+        const unsigned int &column_offset) const throw(MatrixException) {
+      partial_t res(*this);
+      if(!view.partialized){
+        res.view.partial.row_offset = res.view.partial.column_offset = 0;
+      }
+      if(view.transposed){
+        res.view.partial.rows = new_columns;
+        res.view.partial.columns = new_rows;
+        res.view.partial.row_offset += column_offset;
+        res.view.partial.column_offset += row_offset;
+      }else{
+        res.view.partial.rows = new_rows;
+        res.view.partial.columns = new_columns;
+        res.view.partial.row_offset += row_offset;
+        res.view.partial.column_offset += column_offset;
+      }
+      if(((res.view.partial.row_offset + res.view.partial.rows) > storage->rows())
+          || ((res.view.partial.column_offset + res.view.partial.columns) > storage->columns())){
+        throw MatrixException("size exceeding");
       }
       return res;
     }
 
     /**
-     * TODO
-     *
      * 指定した行の行ベクトルを返します。
      *
      * @param row 行インデックス
-     * @return (self_t) 行ベクトル
+     * @return (partial_t) 行ベクトル
      */
-    viewless_t rowVector(const unsigned int &row) const {
+    partial_t rowVector(const unsigned int &row) const {
       return partial(1, columns(), row, 0);
     }
     /**
-     * TODO
-     *
      * 指定した列の列ベクトルを返します。
      *
      * @param column 列インデックス
-     * @return (self_t) 列ベクトル
+     * @return (partial_t) 列ベクトル
      */
-    viewless_t columnVector(const unsigned int &column) const {
+    partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
     }
 
@@ -986,7 +1023,7 @@ class Matrix{
       if(columns() != matrix.rows()){
         throw MatrixException("Incorrect size");
       }
-      viewless_t result(viewless_t::blank(rows(), matrix.columns()));
+      viewless_t result(blank(rows(), matrix.columns()));
       for(unsigned int i(0); i < result.rows(); i++){
         for(unsigned int j(0); j < result.columns(); j++){
           result(i, j) = (*this)(i, 0) * matrix(0, j);
@@ -1037,7 +1074,7 @@ class Matrix{
     viewless_t coMatrix(
         const unsigned int &row,
         const unsigned int &column) const {
-      viewless_t res(viewless_t::blank(rows() - 1, columns() - 1));
+      viewless_t res(blank(rows() - 1, columns() - 1));
       unsigned int i(0), i2(0);
       for( ; i < row; ++i, ++i2){
         unsigned int j(0), j2(0);
@@ -1104,8 +1141,9 @@ class Matrix{
       if(do_check){
         if(rows() * 2 != columns()){not_LU = true;}
       }
-      viewless_t L(partial(rows(), rows(), 0, 0)),
-             U(partial(rows(), rows(), 0, rows()));
+      partial_t
+          L(partial(rows(), rows(), 0, 0)),
+          U(partial(rows(), rows(), 0, rows()));
       if(do_check){
         for(unsigned i(1); i < rows(); i++){
           for(unsigned j(0); j < i; j++){
@@ -1159,7 +1197,7 @@ class Matrix{
      */
     viewless_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
-      viewless_t LU(viewless_t::blank(rows(), columns() * 2));
+      viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
       for(unsigned int i(0); i < rows(); i++){
@@ -1354,7 +1392,7 @@ class Matrix{
         T s = ::sqrt(t);
         if(result(j + 1, j) < 0){s *= -1;}
 
-        viewless_t omega(viewless_t::blank(rows() - (j+1), 1));
+        viewless_t omega(blank(rows() - (j+1), 1));
         {
           for(unsigned int i(0); i < omega.rows(); i++){
             omega(i, 0) = result(j+i+1, j);
@@ -1710,7 +1748,7 @@ class Matrix{
     static typename complex_t<T>::m_t sqrt(
         const typename complex_t<T>::m_t &eigen_mat){
       unsigned int n(eigen_mat.rows());
-      typename complex_t<T>::m_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename complex_t<T>::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
       typename complex_t<T>::m_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
         VsD.partial(n, 1, 0, i) *= (eigen_mat(i, n).sqrt());

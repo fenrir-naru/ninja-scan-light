@@ -51,7 +51,7 @@ class MatrixTestSuite : public Test::Suite{
       TEST_ADD(MatrixTestSuite::test_scalar_op);
       TEST_ADD(MatrixTestSuite::test_matrix_op);
       TEST_ADD(MatrixTestSuite::test_matrix_op_loop);
-      //TEST_ADD(MatrixTestSuite::test_partialMatrix);
+      TEST_ADD(MatrixTestSuite::test_partialMatrix);
       TEST_ADD(MatrixTestSuite::test_decompose);
     }
 
@@ -380,6 +380,8 @@ class MatrixTestSuite : public Test::Suite{
         cmatrix_t _A(A->eigen());
         dbg("eigen:" << _A << endl, false);
         for(unsigned i(0); i < A->rows(); i++){
+          //dbg("eigen(" << i << "):" << A_copy * _A.partial(A->rows(), 1, 0, i) << endl, false);
+          //dbg("eigen(" << i << "):" << _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()) << endl, false);
           matrix_compare_delta(A_copy * _A.partial(A->rows(), 1, 0, i),
               _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), ACCEPTABLE_DELTA);
         }
@@ -387,11 +389,11 @@ class MatrixTestSuite : public Test::Suite{
         dbg("eigen_error:" << e.what() << endl, true);
       }
 
-      /*{
+      {
         cmatrix_t _A(A->sqrt());
         dbg("sqrt:" << _A << endl, false);
         matrix_compare_delta(*A, _A * _A, ACCEPTABLE_DELTA);
-      }*/
+      }
     }
 
     void test_matrix_op_loop(){
@@ -407,15 +409,16 @@ class MatrixTestSuite : public Test::Suite{
       }
     }
 
-#if 0
     void test_partialMatrix(){
-      PartialMatrix<accuracy> _A(A->partial(3, 3, 1, 1));
+      Matrix<accuracy>::partial_t _A(A->partial(3, 3, 1, 1));
 
       dbg("A:" << *A << endl, false);
       dbg("_A:" << _A << endl, false);
 
       dbg("rows:" << _A.rows() << endl, false);
+      TEST_ASSERT(3 == _A.rows());
       dbg("columns:" << _A.columns() << endl, false);
+      TEST_ASSERT(3 == _A.columns());
 
       dbg("_A.copy():" << _A.copy() << endl, false);
       dbg("(*_A)^{-1}:" << _A.inverse() << endl, false);
@@ -427,35 +430,41 @@ class MatrixTestSuite : public Test::Suite{
       dbg("_A:" << _A << endl, false);
       _A = A->partial(3, 3, 2, 2);
       dbg("_A => A:" << *A << endl, false);
+      TEST_ASSERT(3 == _A.rows());
+      TEST_ASSERT(3 == _A.columns());
 
       dbg("A:" << *A << endl, false);
-      Matrix<accuracy> __A(A->partial(3, 3, 1, 1));
+      Matrix<accuracy>::partial_t __A(A->partial(3, 3, 1, 1));
       dbg("__A:" << __A << endl, false);
       __A = A->partial(3, 3, 3, 3);
       dbg("__A => A:" << *A << endl, false);
+      TEST_ASSERT(3 == __A.rows());
+      TEST_ASSERT(3 == __A.columns());
 
       dbg("A:" << *A << endl, false);
-      PartialMatrix<accuracy> ___A_(A->partial(3, 3, 1, 1));
-      PartialMatrix<accuracy> &___A(___A_);
+      Matrix<accuracy>::partial_t ___A_(A->partial(3, 3, 1, 1));
+      Matrix<accuracy>::partial_t &___A(___A_);
       dbg("___A:" << ___A << endl, false);
       ___A = A->partial(3, 3, 4, 4);
       dbg("___A => A:" << *A << endl, false);
-
+      TEST_ASSERT(3 == ___A.rows());
+      TEST_ASSERT(3 == ___A.columns());
 
       dbg("A:" << *A << endl, false);
-      PartialMatrix<accuracy> ____A_(A->partial(3, 3, 1, 1));
-      Matrix<accuracy> &____A(____A_);
+      Matrix<accuracy>::partial_t ____A_(A->partial(3, 3, 1, 1));
+      Matrix<accuracy>::partial_t &____A(____A_);
       dbg("____A:" << ____A << endl, false);
       ____A = A->partial(3, 3, 5, 5);
       dbg("____A => A:" << *A << endl, false);
+      TEST_ASSERT(3 == ____A.rows());
+      TEST_ASSERT(3 == ____A.columns());
     }
-#endif
 
     void test_decompose(){
 
       {
         Matrix<accuracy> LU(A->decomposeLU());
-        Matrix<accuracy>
+        Matrix<accuracy>::partial_t
             L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
             U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
         dbg("LU(L):" << L << endl, false);
@@ -515,7 +524,7 @@ class MatrixTestSuite : public Test::Suite{
       {
 
         Matrix<accuracy> UD(A->decomposeUD());
-        Matrix<accuracy>
+        Matrix<accuracy>::partial_t
             U(UD.partial(UD.rows(), UD.rows(), 0, 0)),
             D(UD.partial(UD.rows(), UD.rows(), 0, UD.rows()));
         dbg("UD(U):" << U << endl, false);
@@ -529,6 +538,7 @@ class MatrixTestSuite : public Test::Suite{
           }
         }
 
+        dbg("UD(U):" << U.transpose() << endl, false);
         Matrix<accuracy> _A(U * D * U.transpose());
         dbg("U * D * U^{T}:" << _A << endl, false);
         matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
