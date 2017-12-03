@@ -33,74 +33,59 @@
 #define __MATRIX_H
 
 /** @file
- * @brief 行列ライブラリ
+ * @brief Portable matrix library
  *
- * お手製の行列を定義したライブラリ。
- * シャローコピーを積極的に利用しているので転置や部分行列ではコピーを生成しない分、
- * 早くなっていると思われます。
+ * This is hand-made matrix library whose features are
+ * 1) to use template for generic primitive type
+ * including not only double for general purpose,
+ * but also int used with fixed float for embedded environment.
+ * 2) to utilize shallow copy for small memory usage,
+ * which is very important for embedded environment.
+ * 3) to use views for transpose and partial matrices
+ * to reduce copies.
  *
- * しかし演算速度を最重視する場合は、ETを活用したublas等を
- * 利用することを検討してください。
- * インターフェイスは大体似ていると思うので、移植は簡単なはずです。
- *
- * @see <a href="http://www.boost.org/libs/numeric/ublas/doc/index.htm">boost::ublas</a>
+ * Currently it only supports dense matrices,
+ * whose storage is prepared as continuous array,
+ * however it can support sparse matrices by extending
+ * the Array2D class structure.
  */
 
 #include <string>
 #include <exception>
 
 /**
- * @brief 行列に関わる例外
+ * @brief Exception related to matrix
  *
- * Matrixクラスの例外クラス。
- * 例として、演算が成立しない場合など。
- *
+ * This exception will be thrown when matrix operation is incorrect.
  */
 class MatrixException: public std::exception{
   private:
     std::string what_str;
   public:
     /**
-     * コンストラクタ。
+     * Constructor
      *
-     * @param what_arg エラー内容
+     * @param what_arg error
      */
     MatrixException(const std::string &what_arg) : what_str(what_arg){}
-    /**
-     * デストラクタ。
-     *
-     */
+
     ~MatrixException() throw(){}
-    /**
-     * エラー内容を取得します。
-     *
-     * @return (chsr *) エラー内容
-     */
+
     const char *what() const throw(){
       return what_str.c_str();
     }
 };
 
 /**
- * @brief 行列の保管方法に関する例外
+ * @brief Exception related to storage
  *
- * 保存クラスの例外クラス。
- * 例として、メモリが足りない場合など。
+ * This exception will be thrown when access to storage for matrix elements is invalid.
  *
  */
-class StorageException: public MatrixException{
+class StorageException: public MatrixException {
   public:
-    /**
-     * コンストラクタ。
-     *
-     * @param what_arg エラー内容
-     */
     StorageException(const std::string &what_arg)
         : MatrixException(what_arg) {}
-    /**
-     * デストラクタ。
-     *
-     */
     ~StorageException() throw(){}
 };
 
@@ -341,6 +326,9 @@ class Array2D_Dense : public Array2D<T> {
     }
 };
 
+/**
+ * @brief View for specific matrix, such as transpose and partial matrices.
+ */
 template <bool is_transposed, bool is_partialized>
 struct MatrixView {
   static const bool transposed = is_transposed;
@@ -385,19 +373,21 @@ struct MatrixView {
 };
 
 /**
- * @brief 行列
+ * @brief Matrix
  *
- * 行列を定義したクラス。
- * 様々な行列の演算を定義しています。
+ * Most of useful matrix operations are defined.
  *
- * なお、内部的に参照カウンタを利用したライトウエイトな実装になっているため、
- * メモリや演算回数が節約されることが機体されます。
- * そのために明示的にcopy()メソッドを使用しないとディープコピーがされないので、
- * 再利用を行う際は注意してください。
+ * Special care when you want to make copy;
+ * The copy constructor(s) and change functions of view such as
+ * transpose() are implemented by using shallow copy, which means
+ * these return values are linked to their original operand.
+ * If you unlink the relation between the original and returned matrices,
+ * you have to use copy(), which makes a deep copy explicitly,
+ * for example, mat.transpose().copy().
  *
- * @see Array2D 内部的に利用する2次元配列を定義したクラス。
- * @param T 演算精度
- * @param Array2D_Type
+ * @param T precision such as double
+ * @param Array2D_Type Storage type. The default is Array2D_Dense
+ * @param ViewType View type. The default is void, which means no view, i.e. direct access.
  */
 template <
     class T,
@@ -435,10 +425,9 @@ class Matrix{
     view_t view;
 
     /**
-     * Matrixクラスのコンストラクタ。
-     * ストレージを指定して新しく行列を作ります。
+     * Constructor with storage
      *
-     * @param storage ストレージ
+     * @param storage new storage
      */
     Matrix(Array2D<T> *new_storage) : storage(new_storage), view() {}
     
@@ -451,9 +440,9 @@ class Matrix{
 
   public:
     /**
-     * 行数を返します。
+     * Return row number.
      *
-     * @return (int) 行数
+     * @return row number.
      */
     const unsigned int &rows() const{
       return view.partialized
@@ -462,9 +451,9 @@ class Matrix{
     }
 
     /**
-     * 列数を返します。
+     * Return column number.
      *
-     * @return (int) 列数
+     * @return column number.
      */
     const unsigned int &columns() const{
       return view.partialized
@@ -473,11 +462,11 @@ class Matrix{
     }
 
     /**
-     * 指定した行列成分を返します。
+     * Return matrix element of specified indices.
      *
-     * @param row 行インデックス(開始番号は0～)
-     * @param column 列インデックス(開始番号は0～)
-     * @return (const T &) 成分
+     * @param row Row index starting from 0.
+     * @param column Column index starting from 0.
+     * @return element
      */
     const T &operator()(
         const unsigned int &row,
@@ -501,7 +490,7 @@ class Matrix{
     }
 
     /**
-     * 要素をゼロクリアします
+     * Clear elements.
      *
      */
     void clear(){
@@ -517,19 +506,18 @@ class Matrix{
     }
 
     /**
-     * Matrixクラスのコンストラクタ。
-     * 内部的な2次元配列用のメモリを確保しない状態で初期化を完了します。
+     * Constructor without storage.
      *
      */
     Matrix() : storage(NULL), view(){}
 
     /**
-     * Matrixクラスのコンストラクタ。
-     * 指定の行数、指定の列数で行列を生成します。
-     * また成分はすべてT(0)で初期化されます。
+     * Constructor with specified row and column numbers.
+     * The storage will be assigned with the size.
+     * The elements will be cleared with T(0).
      *
-     * @param rows 行数
-     * @param columns 列数
+     * @param rows Row number
+     * @param columns Column number
      */
     Matrix(
         const unsigned int &rows,
@@ -539,13 +527,13 @@ class Matrix{
     }
 
     /**
-     * Matrixクラスのコンストラクタ。
-     * 指定の行数、指定の列数で行列を生成します。
-     * また成分はserializedで復元されます。
+     * Constructor with specified row and column numbers, and values.
+     * The storage will be assigned with the size.
+     * The elements will be initialized with specified values。
      *
-     * @param rows 行数
-     * @param columns 列数
-     * @param serialized 成分
+     * @param rows Row number
+     * @param columns Column number
+     * @param serialized Initial values of elements
      */
     Matrix(
         const unsigned int &rows,
@@ -555,10 +543,9 @@ class Matrix{
     }
 
     /**
-     * コピーコンストラクタ。
-     * シャローコピーを生成します。
+     * Copy constructor generating shallow copy.
      *
-     * @param matrix コピー元
+     * @param matrix original
      */
     Matrix(const self_t &matrix)
         : storage(matrix.storage
@@ -582,18 +569,19 @@ class Matrix{
 
   public:
     /**
-     * デストラクタ。
+     * Destructor
      */
     virtual ~Matrix(){delete storage;}
 
 
     /**
-     * Matrixクラスを作成するヘルパ関数。
-     * 指定の行数、指定の列数で行列を生成しますが、
-     * 成分については初期化を行わないため不定です。
+     * Matrix generator with specified row and column numbers.
+     * The storage will be assigned with the size,
+     * however, initialization of elements will NOT be performed.
+     * In addition, its view is none.
      *
-     * @param new_rows 行数
-     * @param new_columns 列数
+     * @param new_rows Row number
+     * @param new_columns Column number
      */
     static viewless_t blank(
         const unsigned int &new_rows,
@@ -608,9 +596,9 @@ class Matrix{
 
   public:
     /**
-     * 代入演算子。
+     * Assign operator performing shallow copy.
      *
-     * @return (self_t) 自分自身
+     * @return myself
      */
     self_t &operator=(const self_t &matrix){
       if(this != &matrix){
@@ -631,9 +619,9 @@ class Matrix{
     }
 
     /**
-     * 行列を複製(ディープコピー)します。
+     * Perform (deep) copy
      *
-     * @return (viewless_t) コピー
+     * @return (viewless_t)
      */
     viewless_t copy() const {
       if(view.is_viewless()){
@@ -650,10 +638,10 @@ class Matrix{
     }
     
     /**
-     * 行列の内容が等しいか、調べます
+     * Test whether elements are identical
      * 
-     * @param matrix 比較する別の行列
-     * @return (bool) 行列が等しい場合true、以外false
+     * @param matrix Matrix to be compared
+     * @return true when elements of two matrices are identical, otherwise false.
      */
     template <
         class T2, template <class> class Array2D_Type2,
@@ -682,10 +670,10 @@ class Matrix{
     }
 
     /**
-     * 指定のスカラー行列を生成します。
+     * Generate scalar matrix
      *
-     * @param size 指定の行数(列数)
-     * @param scalar 値
+     * @param size Row and column number
+     * @param scalar
      */
     static viewless_t getScalar(const unsigned int &size, const T &scalar){
       viewless_t result(size, size);
@@ -694,33 +682,35 @@ class Matrix{
     }
 
     /**
-     * 指定の単位行列を生成します。
+     * Generate unit matrix
      *
-     * @param size 指定の行数(列数)
+     * @param size Row and column number
      */
     static viewless_t getI(const unsigned int &size){
       return getScalar(size, T(1));
     }
 
     /**
-     * 行列を転置します。
-     * 転置された行列はもとの行列とリンクしています。
-     * もとの行列との切り離しを行うにはtranspose().copy()としてください。
+     * Generate transpose matrix
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do transpose().copy().
      *
-     * @return (transposed_t) 転置行列
+     * @return Transpose matrix
      */
     transposed_t transpose() const{
       return transposed_t(*this);
     }
 
     /**
-     * 指定した部分行列を返します。
+     * Generate partial matrix
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do partial().copy().
      *
-     * @param rowSize 行サイズ
-     * @param columnSize 列サイズ
-     * @param rowOffset 開始行インデックス
-     * @param columnOffset 開始列インデックス
-     * @return (partial_t) 部分行列
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @param rowOffset Upper row index of original matrix for partial matrix
+     * @param columnOffset Left column index of original matrix for partial matrix
+     * @return partial matrix
      *
      */
     partial_t partial(
@@ -751,31 +741,33 @@ class Matrix{
     }
 
     /**
-     * 指定した行の行ベクトルを返します。
+     * Generate row vector by using partial()
      *
-     * @param row 行インデックス
-     * @return (partial_t) 行ベクトル
+     * @param row Row index of original matrix for row vector
+     * @return Row vector
+     * @see partial()
      */
     partial_t rowVector(const unsigned int &row) const {
       return partial(1, columns(), row, 0);
     }
     /**
-     * 指定した列の列ベクトルを返します。
+     * Generate column vector by using partial()
      *
-     * @param column 列インデックス
-     * @return (partial_t) 列ベクトル
+     * @param column Column index of original matrix for column vector
+     * @return Column vector
+     * @see partial()
      */
     partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
     }
 
     /**
-     * 行を入れ替えます。破壊的メソッドです。
+     * Exchange rows (bang method).
      *
-     * @param row1 行インデックス1
-     * @param row2 行インデックス2
-     * @return (self_t) 自分自身
-     * @throw MatrixException インデックスが不正な場合
+     * @param row1 Target row (1)
+     * @param row2 Target row (2)
+     * @return myself
+     * @throw MatrixException
      */
     self_t &exchangeRows(
         const unsigned int &row1, const unsigned int &row2) throw(MatrixException){
@@ -790,12 +782,12 @@ class Matrix{
     }
 
     /**
-     * 列を入れ替えます。破壊的メソッドです。
+     * Exchange columns (bang method).
      *
-     * @param column1 列インデックス1
-     * @param column2 列インデックス2
-     * @return (self_t) 自分自身
-     * @throw MatrixException インデックスが不正な場合
+     * @param column1 Target column (1)
+     * @param column2 Target column (2)
+     * @return myself
+     * @throw MatrixException
      */
     self_t &exchangeColumns(
         const unsigned int &column1, const unsigned int &column2){
@@ -810,16 +802,16 @@ class Matrix{
     }
 
     /**
-     * 正方行列かどうか調べます。
+     * Test whether matrix is square
      *
-     * @return (bool) 正方行列である場合true、それ以外の場合false
+     * @return true when square, otherwise false.
      */
     bool isSquare() const{return rows() == columns();}
 
     /**
-     * 対角行列かどうか調べます
+     * Test whether matrix is diagonal
      *
-     * @return (bool) 対角行列である場合true、それ以外の場合false
+     * @return true when diagonal, otherwise false.
      */
     bool isDiagonal() const{
       if(isSquare()){
@@ -835,9 +827,9 @@ class Matrix{
     }
 
     /**
-     * 対称行列かどうか調べます。
+     * Test whether matrix is symmetric
      *
-     * @return (bool) 対称行列である場合true、それ以外の場合false
+     * @return true when symmetric, otherwise false.
      */
     bool isSymmetric() const{
       if(isSquare()){
@@ -851,10 +843,10 @@ class Matrix{
     }
 
     /**
-     * 行列の大きさが異なるか調べる
+     * Test whether size of matrices is different
      *
-     * @param matrix 比較対象
-     * @return (bool) 異なっている場合true
+     * @param matrix Matrix to be compared
+     * @return true when size different, otherwise false.
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
@@ -885,10 +877,10 @@ class Matrix{
     }
 
     /**
-     * 行列のトレースを返します。
+     * Return trace of matrix
      *
-     * @param do_check 正方行列かを調べる、デフォルトtrue
-     * @return (T) トレース
+     * @param do_check Check matrix size property. The default is true
+     * @return Trace
      */
     T trace(const bool &do_check = true) const throw(MatrixException) {
       if(do_check && !isSquare()){throw MatrixException("rows != columns");}
@@ -900,10 +892,10 @@ class Matrix{
     }
 
     /**
-     * 行列の成分全てを指定倍します。破壊的メソッドです。
+     * Multiple by scalar (bang method)
      *
-     * @param scalar 倍数
-     * @return (self_t) 自分自身
+     * @param scalar
+     * @return myself
      */
     self_t &operator*=(const T &scalar){
       for(unsigned int i(0); i < rows(); i++){
@@ -914,52 +906,52 @@ class Matrix{
       return *this;
     }
     /**
-     * 行列の成分全てを指定倍します。
+     * Multiple by scalar
      *
-     * @param scalar 倍数
-     * @return (self_t) 結果
+     * @param scalar
+     * @return multiplied (deep) copy
      */
     viewless_t operator*(const T &scalar) const{return (copy() *= scalar);}
     /**
-     * 行列の成分全てを指定倍します。
+     * Multiple by scalar
      *
-     * @param scalar 倍数
-     * @param matrix 行列
-     * @return (self_t) 結果
+     * @param scalar
+     * @param matrix
+     * @return multiplied (deep) copy
      */
     friend viewless_t operator*(const T &scalar, const self_t &matrix){
       return matrix * scalar;
     }
     /**
-     * 行列の成分全てを除算します。破壊的メソッドです。
+     * Divide by scalar (bang method)
      *
-     * @param scalar 倍数
-     * @return (self_t) 自分自身
+     * @param scalar
+     * @return myself
      */
     self_t &operator/=(const T &scalar){return (*this) *= (1 / scalar);}
     /**
-     * 行列の成分全てを除算します。
+     * Divide by scalar
      *
-     * @param scalar 倍数
-     * @return (self_t) 結果
+     * @param scalar
+     * @return divided (deep) copy
      */
     viewless_t operator/(const T &scalar) const{return (copy() /= scalar);}
     /**
-     * 行列の成分全てを除算します。
+     * Divide by scalar
      *
-     * @param scalar 倍数
-     * @param matrix 行列
-     * @return (self_t) 結果
+     * @param scalar
+     * @param matrix
+     * @return divided (deep) copy
      */
     friend viewless_t operator/(const T &scalar, const self_t &matrix){
       return matrix / scalar;
     }
     
     /**
-     * 行列を成分ごとに加算します。破壊的メソッドです。
+     * Add by matrix (bang method)
      *
-     * @param matrix 加える行列
-     * @return (self_t) 自分自身
+     * @param matrix Matrix to add
+     * @return myself
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
@@ -973,10 +965,10 @@ class Matrix{
     }
 
     /**
-     * 行列を成分ごとに加算します。
+     * Add by matrix
      *
-     * @param matrix 加える行列
-     * @return (self_t) 結果
+     * @param matrix Matrix to add
+     * @return added (deep) copy
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     viewless_t operator+(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
@@ -984,10 +976,10 @@ class Matrix{
     }
     
     /**
-     * 行列を成分ごとに減算します。
+     * Subtract by matrix (bang method)
      *
-     * @param matrix 引く行列
-     * @return (self_t) 自分自身
+     * @param matrix Matrix to subtract
+     * @return myself
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
@@ -1001,10 +993,10 @@ class Matrix{
     }
 
     /**
-     * 行列を成分ごとに減算します。
+     * Subtract by matrix
      *
-     * @param matrix 引く行列
-     * @return (self_t) 結果
+     * @param matrix Matrix to subtract
+     * @return subtracted (deep) copy
      */
     template <class T2, template <class> class Array2D_Type2>
     viewless_t operator-(const Matrix<T2, Array2D_Type2> &matrix) const{
@@ -1012,11 +1004,11 @@ class Matrix{
     }
 
     /**
-     * 行列を乗算します。
+     * Multiply by matrix
      *
-     * @param matrix かける行列
-     * @return (self_t) 結果
-     * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
+     * @param matrix matrix to multiply
+     * @return multiplied (deep) copy
+     * @throw MatrixException
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const throw(MatrixException){
@@ -1036,11 +1028,11 @@ class Matrix{
     }
     
     /**
-     * 行列を乗算します。破壊的メソッドです。
+     * Multiply by matrix (bang method)
      *
-     * @param matrix かける行列
-     * @return (self_t) 自分自身
-     * @throw MatrixException 行列の積算が成立しない場合(オペランド行列の列数が引数行列の行数と等しくない)
+     * @param matrix Matrix to multiply
+     * @return myself
+     * @throw MatrixException
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
@@ -1048,10 +1040,9 @@ class Matrix{
     }
 
     /**
-     * 単項演算子-。
-     * 効果は matrix * -1と同じです。
+     * Unary minus operator, which is alias of matrix * -1.
      *
-     * @return (self_t) -matrix
+     * @return matrix * -1.
      */
     viewless_t operator-() const{return (copy() *= -1);}
 
@@ -1102,11 +1093,11 @@ class Matrix{
 #endif
 
     /**
-     * 行列式を計算します。
+     * Calculate determinant
      *
-     * @param do_check 正方行列チェックを行うか(デフォルトtrue)
-     * @return (T) 結果
-     * @throw MatrixException 正方行列ではなく行列式を計算することができない場合
+     * @param do_check Whether check size property. The default is true.
+     * @return Determinant
+     * @throw MatrixException
      */
     T determinant(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
@@ -1126,11 +1117,12 @@ class Matrix{
     }
 
     /**
-     * LU行列であること利用して線型方程式(Ax = y)のxを解きます。
+     * Resolve x of (Ax = y), where this matrix is A and has already been decomposed as LU.
      *
-     * @param y 右辺
-     * @param do_check LU分解済み行列の定義を満たしているか、確認する
-     * @return (Matrix<T2>) x(解)
+     * @param y Right hand term
+     * @param do_check Check whether already LU decomposed
+     * @return Left hand second term
+     * @see decomposeLU(const bool &)
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t
@@ -1187,13 +1179,14 @@ class Matrix{
     }
 
     /**
-     * LU分解をします。
-     * (0, 0)～(n-1, n-1):  L行列
-     * (0, n)～(n-1, 2n-1): U行列
+     * Perform decomposition of LU
+     * Return matrix is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
      *
-     * @param do_check 対称行列チェックを行うか(デフォルトtrue)
-     * @return (self_t) LU分解
-     * @throw MatrixException 正方行列ではなくLU分解を計算することができない場合
+     * @param do_check Check size, the default is true.
+     * @return LU decomposed matrix
+     * @throw MatrixException
      */
     viewless_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
@@ -1224,13 +1217,14 @@ class Matrix{
     }
 
     /**
-     * UD分解をします。
-     * (0, 0)～(n-1,n-1):  U行列
-     * (0, n)～(n-1,2n-1): D行列
+     * Perform UD decomposition
+     * Return matrix is
+     * (0, 0)-(n-1,n-1):  U matrix
+     * (0, n)-(n-1,2n-1): D matrix
      *
-     * @param do_check 対称行列チェックを行うか(デフォルトtrue)
-     * @return (self_t) UD分解
-     * @throw MatrixException 対称行列ではなくUD分解を計算することができない場合
+     * @param do_check Check size, the default is true.
+     * @return UD decomposed matrix
+     * @throw MatrixException
      */
     viewless_t decomposeUD(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSymmetric()){throw MatrixException("not symmetric");}
@@ -1254,10 +1248,10 @@ class Matrix{
     }
 
     /**
-     * 逆行列を求めます。
+     * Calculate inverse matrix
      *
-     * @return (self_t) 逆行列
-     * @throw MatrixException 正方行列ではなく逆行列を計算することができない場合
+     * @return Inverse matrix
+     * @throw MatrixException
      */
     viewless_t inverse() const throw(MatrixException){
 
@@ -1315,20 +1309,20 @@ class Matrix{
       */
     }
     /**
-     * 逆行列をかけます。破壊的メソッドです。
+     * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
      *
-     * @param matrix 行列
-     * @return (self_t) 自分自身
+     * @param matrix Matrix to divide
+     * @return myself
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
         return (*this) *= matrix.inverse();
     }
     /**
-     * 逆行列をかけます。
+     * Divide by matrix, in other words, multiply by inverse matrix
      *
-     * @param matrix 行列
-     * @return (self_t) 結果
+     * @param matrix Matrix to divide
+     * @return divided (deep) copy
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     viewless_t operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
@@ -1336,12 +1330,12 @@ class Matrix{
     }
 
     /**
-     * ピボットを指定して、加算します。
-     * 破壊的です。
+     * Add by matrix with specified pivot (bang method)
      *
-     * @param row 行インデックス
-     * @param column 列インデックス
-     * @param matrix 足す行列
+     * @param row Upper row index (pivot) of matrix to be added
+     * @param column Left column index (pivot) of matrix to be added
+     * @param matrix Matrix to add
+     * @return myself
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &pivotMerge(
@@ -1360,11 +1354,12 @@ class Matrix{
     }
 
     /**
-     * ピボットを指定して、加算します。
+     * Add by matrix with specified pivot
      *
-     * @param row 行インデックス
-     * @param column 列インデックス
-     * @param matrix 足す行列
+     * @param row Upper row index (pivot) of matrix to be added
+     * @param column Left column index (pivot) of matrix to be added
+     * @param matrix Matrix to add
+     * @return added (deep) copy
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     viewless_t pivotAdd(
@@ -1374,11 +1369,12 @@ class Matrix{
     }
 
     /**
-     * ハウスホルダー変換をしてヘッセンベルク行列を得ます。
+     * Calculate Hessenberg matrix by performing householder conversion
      *
-     * @param transform 変換に用いた行列の積を格納するポインタ
-     * @return (self_t) ヘッセンベルク行列
-     * @throw MatrixException 正方行列ではなく計算することができない場合
+     * @param transform Pointer to store multiplication of matrices used for the conversion.
+     * If NULL is specified, the store will not be performed, The default is NULL.
+     * @return Hessenberg matrix
+     * @throw MatrixException
      */
     viewless_t hessenberg(viewless_t *transform = NULL) const throw(MatrixException){
       if(!isSquare()){throw MatrixException("rows() != columns()");}
@@ -1436,12 +1432,12 @@ class Matrix{
     };
 
     /**
-     * 2次小行列の固有値を求めます。
+     * Calculate eigenvalues of 2 by 2 partial matrix.
      *
-     * @param row 2次小行列の左上項の行インデックス
-     * @param column 2次小行列の左上項の列インデックス
-     * @param upper 結果(固有値1)
-     * @param lower 結果(固有値2)
+     * @param row Upper row index of the partial matrix
+     * @param column Left column index of the partial matrix
+     * @param upper Eigenvalue (1)
+     * @param lower Eigenvalue (2)
      */
     void eigen22(
         const unsigned int &row, const unsigned int &column,
@@ -1463,16 +1459,14 @@ class Matrix{
     }
 
     /**
-     * 固有値、固有ベクトルを求めます。
-     * 返却値はMatrix<Complex<T> >型で、
-     * (0,0)～(n-1,n-1)要素が固有ベクトルの行列
-     * (0,n)～(n-1,n)要素が対応する固有値の列ベクトル
-     * になっています。
-     * (固有ベクトル1,固有ベクトル2,…,固有ベクトルn,固有値)のn×(n+1)行列
+     * Calculate eigenvalues and eigenvectors.
+     * The return matrix consists of
+     * (0,j)-(n-1,j): Eigenvector (j) (0 <= j <= n-1)
+     * (j,n)-(j,n): Eigenvalue (j)
      *
-     * @param threshold_abs 収束判定に用いる絶対誤差
-     * @param threshold_rel 収束判定に用いる相対誤差
-     * @return (Matrix<Complex<T> >) 固有値、固有ベクトル
+     * @param threshold_abs Absolute error to be used for convergence determination
+     * @param threshold_rel Relative error to be used for convergence determination
+     * @return Eigenvalues and eigenvectors
      */
     typename complex_t<T>::m_t eigen(
         const T &threshold_abs = 1E-10,
@@ -1729,21 +1723,21 @@ class Matrix{
 
   protected:
     /**
-     * 行列の平方根を求めます。
-     * 返却値はMatrix型です。
+     * Calculate square root of a matrix
      *
-     * 行列Aが
+     * If matrix (A) can be decomposed as
      * @f[
-     *    A = V D V^{-1}
+     *    A = V D V^{-1},
      * @f]
-     * と固有値(D)と固有ベクトル(V)に分解できれば
+     * where D and V are diagonal matrix consisting of eigenvalues and eigenvectors, respectively,
+     * the square root A^{1/2} is
      * @f[
-     *    A^{1/2} = V D^{1/2} V^{-1}
+     *    A^{1/2} = V D^{1/2} V^{-1}.
      * @f]
-     * である。
      *
-     * @param eigen_mat 固有値、固有ベクトルが入った(n,n+1)の行列
-     * @return (Matrix<Complex<T> >) 平方根
+     * @param eigen_mat result of eigen()
+     * @return square root
+     * @see eiegn(const T &, const T &)
      */
     static typename complex_t<T>::m_t sqrt(
         const typename complex_t<T>::m_t &eigen_mat){
@@ -1759,12 +1753,12 @@ class Matrix{
 
   public:
     /**
-     * 行列の平方根を求めます。
-     * 返却値はMatrix型です。
+     * Calculate square root of a matrix
      *
-     * @param threshold_abs 固有値、固有ベクトル求める際に収束判定に用いる絶対誤差
-     * @param threshold_abs 固有値、固有ベクトル求める際に収束判定に用いる相対誤差
-     * @return (Matrix<Complex<T> >) 平方根
+     * @param threshold_abs Absolute error to be used for convergence determination of eigenvalue calculation
+     * @param threshold_abs Relative error to be used for convergence determination of eigenvalue calculation
+     * @return square root
+     * @see eigen(const T &, const T &)
      */
     typename complex_t<T>::m_t sqrt(
         const T &threshold_abs,
@@ -1773,17 +1767,16 @@ class Matrix{
     }
 
     /**
-     * 行列の平方根を求めます。
-     * 返却値はMatrix型です。
+     * Calculate square root
      *
-     * @return (Matrix<Complex<T> >) 平方根
+     * @return square root
      */
     typename complex_t<T>::m_t sqrt() const {
       return sqrt(eigen());
     }
 
     /**
-     * 行列を見やすい形で出力します。
+     * Print matrix
      *
      */
     friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
