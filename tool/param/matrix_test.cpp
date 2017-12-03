@@ -1,29 +1,38 @@
 #include <string>
 #include <cstring>
 #include <cmath>
+#include <ctime>
 #include <iostream>
 #include <exception>
+#include <sstream>
+#include <set>
 
 #include "param/complex.h"
 #include "param/matrix.h"
 
-#include <iostream>
-#include <sstream>
-#include <cmath>
-#include <ctime>
-#include <set>
-
 #include <cpptest.h>
 #include <cpptest-suite.h>
 
-#include "util/util.h"
-
+#include <boost/random.hpp>
+#include <boost/random/random_device.hpp>
 
 #define SIZE 8
 #define accuracy double
 #define ACCEPTABLE_DELTA 1E-10
 
 using namespace std;
+
+struct rand_t {
+  boost::random::mt19937 gen;
+  boost::random::normal_distribution<> dist;
+  rand_t()
+      : gen(static_cast<unsigned long>(time(0))), dist(0, 1.0){
+  }
+  accuracy operator()(){
+    return (accuracy)dist(gen);
+  }
+} gen_rand;
+
 
 #ifndef DEBUG_PRINT
 #define DEBUG_PRINT false
@@ -63,18 +72,18 @@ class MatrixTestSuite : public Test::Suite{
       dbg(endl, false);
       A = new matrix_t(SIZE, SIZE);
       for(int i = 0; i < A->rows(); i++){
-        A_array[i][i] = (*A)(i, i) = rand_regularized(0, 1);
+        A_array[i][i] = (*A)(i, i) = gen_rand();
         for(int j = i + 1; j < A->columns(); j++){
           A_array[i][j] = A_array[j][i]
-              = (*A)(i, j) = (*A)(j, i) = rand_regularized(0, 1);
+              = (*A)(i, j) = (*A)(j, i) = gen_rand();
         }
       }
       B = new matrix_t(SIZE, SIZE);
       for(int i = 0; i < B->rows(); i++){
-        B_array[i][i] = (*B)(i, i) = rand_regularized(0, 1);
+        B_array[i][i] = (*B)(i, i) = gen_rand();
         for(int j = i + 1; j < B->columns(); j++){
           B_array[i][j] = B_array[j][i]
-              = (*B)(i, j) = (*B)(j, i) = rand_regularized(0, 1);
+              = (*B)(i, j) = (*B)(j, i) = gen_rand();
         }
       }
       dbg("A:" << *A << endl, false);
@@ -641,12 +650,12 @@ class MatrixTestSuite : public Test::Suite{
       // ”ñ‘ÎÌs—ñ‰»
       for(int i(0); i < A->rows(); i++){
         for(int j(i); j < A->columns(); j++){
-          A_array[i][j] = (*A)(i, j) = rand_regularized(0, 1);
+          A_array[i][j] = (*A)(i, j) = gen_rand();
         }
       }
       for(int i(0); i < B->rows(); i++){
         for(int j(i); j < B->columns(); j++){
-          B_array[i][j] = (*B)(i, j) = rand_regularized(0, 1);
+          B_array[i][j] = (*B)(i, j) = gen_rand();
         }
       }
       accuracy *AB_array(new accuracy[A->rows() * B->columns()]);
