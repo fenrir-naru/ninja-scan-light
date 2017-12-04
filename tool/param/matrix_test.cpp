@@ -4,7 +4,6 @@
 #include <ctime>
 #include <iostream>
 #include <exception>
-#include <sstream>
 #include <set>
 
 #include "param/complex.h"
@@ -39,9 +38,9 @@ struct rand_t {
 #endif
 #define dbg(exp, force) \
 if((force) || DEBUG_PRINT){cerr << endl << exp;} \
-else{stringstream ss; ss << exp;}
+else{ostream(NULL) << exp;}
 
-accuracy k_delta(unsigned i, unsigned j){
+accuracy k_delta(const unsigned &i, const unsigned &j){
   return (i == j) ? 1 : 0;
 }
 
@@ -55,13 +54,27 @@ class MatrixTestSuite : public Test::Suite{
       TEST_ADD(MatrixTestSuite::test_copy);
       TEST_ADD(MatrixTestSuite::test_properties);
       TEST_ADD(MatrixTestSuite::test_getI);
-      TEST_ADD(MatrixTestSuite::test_exchange);
-      TEST_ADD(MatrixTestSuite::test_check);
-      TEST_ADD(MatrixTestSuite::test_scalar_op);
-      TEST_ADD(MatrixTestSuite::test_matrix_op);
-      TEST_ADD(MatrixTestSuite::test_matrix_op_loop);
-      TEST_ADD(MatrixTestSuite::test_partialMatrix);
-      TEST_ADD(MatrixTestSuite::test_decompose);
+      TEST_ADD(MatrixTestSuite::test_exchange_row);
+      TEST_ADD(MatrixTestSuite::test_exchange_column);
+      TEST_ADD(MatrixTestSuite::test_check_square);
+      TEST_ADD(MatrixTestSuite::test_check_symmetric);
+      TEST_ADD(MatrixTestSuite::test_scalar_mul);
+      TEST_ADD(MatrixTestSuite::test_scalar_div);
+      TEST_ADD(MatrixTestSuite::test_scalar_minus);
+      TEST_ADD(MatrixTestSuite::test_matrix_add);
+      TEST_ADD(MatrixTestSuite::test_matrix_mul);
+      TEST_ADD(MatrixTestSuite::test_inv);
+      TEST_ADD(MatrixTestSuite::test_trans);
+      TEST_ADD(MatrixTestSuite::test_det);
+      TEST_ADD(MatrixTestSuite::test_pivot_merge);
+      TEST_ADD(MatrixTestSuite::test_pivot_add);
+      TEST_ADD(MatrixTestSuite::test_eigen);
+      TEST_ADD(MatrixTestSuite::test_sqrt);
+      TEST_ADD(MatrixTestSuite::test_partial);
+      TEST_ADD(MatrixTestSuite::test_LU);
+      TEST_ADD(MatrixTestSuite::test_UH);
+      TEST_ADD(MatrixTestSuite::test_UD);
+      //TEST_ADD(MatrixTestSuite::test_matrix_op_loop);
     }
 
   protected:
@@ -95,78 +108,63 @@ class MatrixTestSuite : public Test::Suite{
       delete B;
     }
 
-    template<class U, class V, class T>
-    void matrix_compare_delta(
-        const U &u, const V &v,
-        const T &delta = ACCEPTABLE_DELTA){
-      for(unsigned i(0); i < v.rows(); i++){
-        for(unsigned j(0); j < v.columns(); j++){
-          TEST_ASSERT_DELTA(u(i, j), v(i, j), delta);
-        }
-      }
+    template<class T1, class T2, class T3>
+    void element_compare_delta(
+        const T1 &v1, const T2 &v2,
+        const T3 &delta){
+      TEST_ASSERT_DELTA(v1, v2, delta);
     }
 
-    template<class U, class T>
-    void matrix_compare_delta(
-        const Matrix<U> &m1, const Matrix<U> &m2,
-        const T &delta = ACCEPTABLE_DELTA){
-      TEST_ASSERT(m1.rows() == m2.rows());
-      TEST_ASSERT(m1.columns() == m2.columns());
-      for(unsigned i(0); i < m1.rows(); i++){
-        for(unsigned j(0); j < m1.columns(); j++){
-          TEST_ASSERT_DELTA(m1(i, j), m2(i, j), delta);
-        }
-      }
+    template<class T1, class T2, class T3>
+    void element_compare_delta(
+        const T1 &v1, const Complex<T2> &v2,
+        const T3 &delta){
+      TEST_ASSERT_DELTA(v1, v2.real(), delta);
     }
 
-    template<class U, class T>
-    void matrix_compare_delta(
-        const Matrix<U> &m1, const Matrix<Complex<U> > &m2,
-        const T &delta = ACCEPTABLE_DELTA){
-      TEST_ASSERT(m1.rows() == m2.rows());
-      TEST_ASSERT(m1.columns() == m2.columns());
-      for(unsigned i(0); i < m1.rows(); i++){
-        for(unsigned j(0); j < m1.columns(); j++){
-          TEST_ASSERT_DELTA(m1(i, j), m2(i, j).real(), delta);
-        }
-      }
+    template<class T1, class T2, class T3>
+    void element_compare_delta(
+        const Complex<T1> &v1, const Complex<T2> &v2,
+        const T3 &delta){
+      TEST_ASSERT_DELTA(v1.real(), v2.real(), delta);
+      TEST_ASSERT_DELTA(v1.imaginary(), v2.imaginary(), delta);
     }
 
-    template<class U, class T>
+    template<
+        class U,
+        class T2, template <class> class Array2D_Type2, class ViewType2,
+        class T3>
     void matrix_compare_delta(
-        const Matrix<Complex<U> > &m1, const Matrix<Complex<U> > &m2,
-        const T &delta = ACCEPTABLE_DELTA){
-      TEST_ASSERT(m1.rows() == m2.rows());
-      TEST_ASSERT(m1.columns() == m2.columns());
-      for(unsigned i(0); i < m1.rows(); i++){
-        for(unsigned j(0); j < m1.columns(); j++){
-          TEST_ASSERT_DELTA(m1(i, j).real(), m2(i, j).real(), delta);
-          TEST_ASSERT_DELTA(m1(i, j).imaginary(), m2(i, j).imaginary(), delta);
-        }
-      }
-    }
-
-    template<class U, class T>
-    void matrix_compare_delta(
-        U (*func)(const unsigned &, const unsigned &), const Matrix<U> &m,
-        const T &delta = ACCEPTABLE_DELTA){
+        const U &u,
+        const Matrix<T2, Array2D_Type2, ViewType2> &m,
+        const T3 &delta){
       for(unsigned i(0); i < m.rows(); i++){
         for(unsigned j(0); j < m.columns(); j++){
-          TEST_ASSERT_DELTA(func(i, j), m(i, j), delta);
+          element_compare_delta(u(i, j), m(i, j), delta);
         }
       }
+    }
+
+    template<
+        class T1, template <class> class Array2D_Type1, class ViewType1,
+        class T2, template <class> class Array2D_Type2, class ViewType2,
+        class T3>
+    void matrix_compare_delta(
+        const Matrix<T1, Array2D_Type1, ViewType1> &m1,
+        const Matrix<T2, Array2D_Type2, ViewType2> &m2,
+        const T3 &delta){
+      TEST_ASSERT(m1.rows() == m2.rows());
+      TEST_ASSERT(m1.columns() == m2.columns());
+      matrix_compare_delta<
+          Matrix<T1, Array2D_Type1, ViewType1>,
+          T2, Array2D_Type2, ViewType2,
+          T3>(m1, m2, delta);
     }
 
     template<class U, class V>
     void matrix_compare(
         const U &u, const V &v){
       matrix_compare_delta(u, v, accuracy(0));
-    }
-
-    template<class U>
-    void matrix_compare(
-        U (*func)(const unsigned &, const unsigned &), const Matrix<U> &m){
-      matrix_compare_delta(func, m, accuracy(0));
     }
 
   private:
@@ -200,185 +198,158 @@ class MatrixTestSuite : public Test::Suite{
       matrix_compare(k_delta, _A);
     }
 
-    void test_exchange(){
-      struct A1_compared {
+    void test_exchange_row(){
+      struct {
         const matrix_t m;
-        A1_compared(const matrix_t &_m) : m(_m.copy()) {}
-        ~A1_compared(){};
-        accuracy operator()(const unsigned &i, const unsigned &j) const {
-          switch(i){
-            case 0:
-              return m(1, j);
-            case 1:
-              return m(0, j);
-            default:
-              return m(i, j);
-          }
+        const accuracy &operator()(const unsigned &i, const unsigned &j) const {
+          return m((i == 0 ? 1 : (i == 1 ? 0 : i)), j);
         }
-      } a1(*A);
+      } a1 = {A->copy()};
       matrix_t _A1(A->exchangeRows(0, 1));
       dbg("ex_rows:" << _A1 << endl, false);
       matrix_compare(a1, _A1);
+    }
+    void test_exchange_column(){
       struct A2_compared {
         const matrix_t m;
-        A2_compared(const matrix_t &_m) : m(_m.copy()) {}
-        ~A2_compared(){};
-        accuracy operator()(const unsigned &i, const unsigned &j) const {
-          switch(j){
-            case 0:
-              return m(i, 1);
-            case 1:
-              return m(i, 0);
-            default:
-              return m(i, j);
-          }
+        const accuracy &operator()(const unsigned &i, const unsigned &j) const {
+          return m(i, (j == 0 ? 1 : (j == 1 ? 0 : j)));
         }
-      } a2(*A);
+      } a2 = {A->copy()};
       matrix_t _A2(A->exchangeColumns(0, 1));
       dbg("ex_columns:" << _A2 << endl, false);
       matrix_compare(a2, _A2);
     }
 
-    void test_check(){
+    void test_check_square(){
       dbg("square?:" << A->isSquare() << endl, false);
       TEST_ASSERT(true == A->isSquare());
+    }
+    void test_check_symmetric(){
       dbg("sym?:" << A->isSymmetric() << endl, false);
       TEST_ASSERT(true == A->isSymmetric());
     }
 
-    void test_scalar_op(){
-      struct A1_compared {
+    void test_scalar_mul(){
+      struct {
         const matrix_t &m;
-        A1_compared(const matrix_t &_m) : m(_m) {}
-        ~A1_compared(){};
         accuracy operator()(const unsigned &i, const unsigned &j) const {
           return m(i, j) * 2;
         }
-      } a1(*A);
-      struct A2_compared {
+      } a1 = {*A};
+      matrix_t _A1((*A) * 2.);
+      dbg("*:" << _A1 << endl, false);
+      matrix_compare(a1, _A1);
+    }
+    void test_scalar_div(){
+      struct {
         const matrix_t &m;
-        A2_compared(const matrix_t &_m) : m(_m) {}
-        ~A2_compared(){};
         accuracy operator()(const unsigned &i, const unsigned &j) const {
           return m(i, j) / 2;
         }
-      } a2(*A);
+      } a2 = {*A};
+      matrix_t _A2((*A) / 2.);
+      dbg("/:" << _A2 << endl, false);
+      matrix_compare(a2, _A2);
+    }
+    void test_scalar_minus(){
       struct A3_compared {
         const matrix_t &m;
-        A3_compared(const matrix_t &_m) : m(_m) {}
-        ~A3_compared(){};
         accuracy operator()(const unsigned &i, const unsigned &j) const {
           return -m(i, j);
         }
-      } a3(*A);
-      matrix_t _A1((*A) * 2.);
-      matrix_t _A2((*A) / 2.);
+      } a3 = {*A};
       matrix_t _A3(-(*A));
-      dbg("*:" << _A1 << endl, false);
-      dbg("/:" << _A2 << endl, false);
       dbg("-():" << _A3 << endl, false);
-      matrix_compare(a1, _A1);
-      matrix_compare(a2, _A2);
       matrix_compare(a3, _A3);
     }
 
-    void test_matrix_op(){
-      {
-        struct A_compared {
-          const matrix_t &m1, &m2;
-          A_compared(const matrix_t &_m1, const matrix_t &_m2) : m1(_m1), m2(_m2) {}
-          ~A_compared(){};
-          accuracy operator()(const unsigned &i, const unsigned &j) const {
-            return (m1)(i, j) + (m2)(i, j);
+    void test_matrix_add(){
+      struct {
+        const matrix_t &m1, &m2;
+        accuracy operator()(const unsigned &i, const unsigned &j) const {
+          return (m1)(i, j) + (m2)(i, j);
+        }
+      } a = {*A, *B};
+      matrix_t _A((*A) + (*B));
+      dbg("+:" << _A << endl, false);
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+    }
+    void test_matrix_mul(){
+      struct {
+        matrix_t &m1, &m2;
+        accuracy operator()(const unsigned &i, const unsigned &j) const {
+          accuracy sum(0);
+          for(unsigned k(0); k < m1.rows(); k++){
+            sum += m1(i, k) * m2(k, j);
           }
-        } a(*A, *B);
-        matrix_t _A((*A) + (*B));
-        dbg("+:" << _A << endl, false);
-        matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
-      }
-      {
-        struct A_compared {
-          matrix_t &m1, &m2;
-          A_compared(matrix_t &_m1, matrix_t &_m2) : m1(_m1), m2(_m2) {}
-          ~A_compared(){};
-          accuracy operator()(unsigned i, unsigned j) const {
-            accuracy sum(0);
-            for(unsigned k(0); k < m1.rows(); k++){
-              sum += m1(i, k) * m2(k, j);
-            }
-            return sum;
-          }
-        } a(*A, *B);
-        matrix_t _A((*A) * (*B));
-        dbg("*:" << _A << endl, false);
-        matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
-      }
-      {
-        matrix_t _A(A->inverse());
-        dbg("inv:" << _A << endl, false);
-        matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, ACCEPTABLE_DELTA);
-      }
-      {
-        struct A_compared {
-          const matrix_t &m;
-          A_compared(const matrix_t &_m) : m(_m) {}
-          ~A_compared(){};
-          accuracy operator()(const unsigned &i, const unsigned &j) const {
-            return m(j, i);
-          }
-        } a(*A);
-        matrix_t::transposed_t _A(A->transpose());
-        matrix_t __A(_A.copy());
-        dbg("trans:" << _A << endl, false);
-        dbg("trans.copy:" << __A << endl, false);
-        matrix_compare(a, _A);
-        matrix_compare(a, __A);
-      }
-      {
-        struct A_compared {
-          const matrix_t &m;
-          A_compared(const matrix_t &_m) : m(_m) {}
-          ~A_compared(){};
-          accuracy operator()(const unsigned &i, const unsigned &j) const {
-            return m(i+1, j+1);
-          }
-        } a(*A);
-        matrix_t _A(A->matrix_for_minor(0, 0));
-        dbg("matrix_for_minor:" << _A << endl, false);
-        matrix_compare(a, _A);
-      }
+          return sum;
+        }
+      } a = {*A, *B};
+      matrix_t _A((*A) * (*B));
+      dbg("*:" << _A << endl, false);
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+    }
+    void test_inv(){
+      matrix_t _A(A->inverse());
+      dbg("inv:" << _A << endl, false);
+      matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, ACCEPTABLE_DELTA);
+    }
+    void test_trans(){
+      struct {
+        const matrix_t &m;
+        const accuracy &operator()(const unsigned &i, const unsigned &j) const {
+          return m(j, i);
+        }
+      } a = {*A};
+      matrix_t::transposed_t _A(A->transpose());
+      dbg("trans:" << _A << endl, false);
+      matrix_compare(a, _A);
+      matrix_t __A(_A.copy());
+      dbg("trans.copy:" << __A << endl, false);
+      matrix_compare(a, __A);
+      matrix_t ___A(_A.transpose());
+      dbg("trans.trans:" << ___A << endl, false);
+      matrix_compare(*A, ___A);
+    }
+    void test_det(){
+      struct {
+        const matrix_t &m;
+        const accuracy &operator()(const unsigned &i, const unsigned &j) const {
+          return m(i+1, j+1);
+        }
+      } a = {*A};
+      matrix_t _A(A->matrix_for_minor(0, 0));
+      dbg("matrix_for_minor:" << _A << endl, false);
+      matrix_compare(a, _A);
       dbg("det:" << A->determinant() << endl, false);
-      {
-        struct A_compared {
-          matrix_t m1, m2;
-          A_compared(const matrix_t &_m1, const matrix_t &_m2)
-              : m1(_m1.copy()), m2(_m2.copy()) {}
-          ~A_compared(){};
-          accuracy operator()(const unsigned &i, const unsigned &j) const {
-            return m1(i, j) + m2(i, j);
-          }
-        } a(*A, *B);
-        matrix_t _A(A->pivotMerge(0, 0, *B));
-        dbg("pivotMerge:" << _A << endl, false);
-        matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
-      }
-      {
-        struct A_compared {
-          matrix_t m1, m2;
-          A_compared(const matrix_t &_m1, const matrix_t &_m2)
-              : m1(_m1.copy()), m2(_m2.copy()) {}
-          ~A_compared(){};
-          accuracy operator()(const unsigned &i, const unsigned &j) const {
-            //std::cerr << i << "," << j << ": " << (m1(i, j) + m2(i, j)) << std::endl;
-            return m1(i, j) + m2(i, j);
-          }
-        } a(*A, *B);
-        matrix_t _A(A->pivotAdd(0, 0, *B));
-        dbg("pivotAdd:" << _A << endl, false);
-        matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
-      }
-      dbg("eigen22" << *A << endl, false);
+    }
 
+    void test_pivot_merge(){
+      struct {
+        matrix_t m1, m2;
+        accuracy operator()(const unsigned &i, const unsigned &j) const {
+          return m1(i, j) + m2(i, j);
+        }
+      } a = {A->copy(), B->copy()};
+      matrix_t _A(A->pivotMerge(0, 0, *B));
+      dbg("pivotMerge:" << _A << endl, false);
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+    }
+    void test_pivot_add(){
+      struct {
+        const matrix_t &m1, &m2;
+        accuracy operator()(const unsigned &i, const unsigned &j) const {
+          //std::cerr << i << "," << j << ": " << (m1(i, j) + m2(i, j)) << std::endl;
+          return m1(i, j) + m2(i, j);
+        }
+      } a = {*A, *B};
+      matrix_t _A(A->pivotAdd(0, 0, *B));
+      dbg("pivotAdd:" << _A << endl, false);
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+    }
+
+    void test_eigen(){
       try{
         cmatrix_t A_copy(A->rows(), A->columns());
         for(unsigned i(0); i < A_copy.rows(); i++){
@@ -397,14 +368,15 @@ class MatrixTestSuite : public Test::Suite{
       }catch(exception &e){
         dbg("eigen_error:" << e.what() << endl, true);
       }
-
-      {
-        cmatrix_t _A(A->sqrt());
-        dbg("sqrt:" << _A << endl, false);
-        matrix_compare_delta(*A, _A * _A, ACCEPTABLE_DELTA);
-      }
     }
 
+    void test_sqrt(){
+      cmatrix_t _A(A->sqrt());
+      dbg("sqrt:" << _A << endl, false);
+      matrix_compare_delta(*A, _A * _A, ACCEPTABLE_DELTA);
+    }
+
+#if 0
     void test_matrix_op_loop(){
       for(unsigned i(0); i < 300; i++){
         if(i % 100 == 0){
@@ -417,17 +389,21 @@ class MatrixTestSuite : public Test::Suite{
         }
       }
     }
+#endif
 
-    void test_partialMatrix(){
-      Matrix<accuracy>::partial_t _A(A->partial(3, 3, 1, 1));
+    void test_partial(){
+      struct {
+        const matrix_t &m;
+        unsigned int i_offset, j_offset;
+        const accuracy &operator()(const unsigned &i, const unsigned &j) const {
+          return m(i + i_offset, j + j_offset);
+        }
+      } a = {*A, 0, 0};
 
-      dbg("A:" << *A << endl, false);
+      a.i_offset = a.j_offset = 1;
+      matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
       dbg("_A:" << _A << endl, false);
-
-      dbg("rows:" << _A.rows() << endl, false);
-      TEST_ASSERT(3 == _A.rows());
-      dbg("columns:" << _A.columns() << endl, false);
-      TEST_ASSERT(3 == _A.columns());
+      matrix_compare(a, _A);
 
       dbg("_A.copy():" << _A.copy() << endl, false);
       dbg("(*_A)^{-1}:" << _A.inverse() << endl, false);
@@ -435,123 +411,91 @@ class MatrixTestSuite : public Test::Suite{
       dbg("_A.rowVector():" << _A.rowVector(0) << endl, false);
       dbg("_A.columnVector():" << _A.columnVector(0) << endl, false);
 
-      dbg("A:" << *A << endl, false);
+      a.i_offset = a.j_offset = 2;
+      _A = A->partial(3, 3, a.i_offset, a.j_offset);
       dbg("_A:" << _A << endl, false);
-      _A = A->partial(3, 3, 2, 2);
-      dbg("_A => A:" << *A << endl, false);
-      TEST_ASSERT(3 == _A.rows());
-      TEST_ASSERT(3 == _A.columns());
-
-      dbg("A:" << *A << endl, false);
-      Matrix<accuracy>::partial_t __A(A->partial(3, 3, 1, 1));
-      dbg("__A:" << __A << endl, false);
-      __A = A->partial(3, 3, 3, 3);
-      dbg("__A => A:" << *A << endl, false);
-      TEST_ASSERT(3 == __A.rows());
-      TEST_ASSERT(3 == __A.columns());
-
-      dbg("A:" << *A << endl, false);
-      Matrix<accuracy>::partial_t ___A_(A->partial(3, 3, 1, 1));
-      Matrix<accuracy>::partial_t &___A(___A_);
-      dbg("___A:" << ___A << endl, false);
-      ___A = A->partial(3, 3, 4, 4);
-      dbg("___A => A:" << *A << endl, false);
-      TEST_ASSERT(3 == ___A.rows());
-      TEST_ASSERT(3 == ___A.columns());
-
-      dbg("A:" << *A << endl, false);
-      Matrix<accuracy>::partial_t ____A_(A->partial(3, 3, 1, 1));
-      Matrix<accuracy>::partial_t &____A(____A_);
-      dbg("____A:" << ____A << endl, false);
-      ____A = A->partial(3, 3, 5, 5);
-      dbg("____A => A:" << *A << endl, false);
-      TEST_ASSERT(3 == ____A.rows());
-      TEST_ASSERT(3 == ____A.columns());
+      matrix_compare(a, _A);
     }
 
-    void test_decompose(){
+    void test_LU(){
+      matrix_t LU(A->decomposeLU());
+      matrix_t::partial_t
+          L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
+          U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
+      dbg("LU(L):" << L << endl, false);
+      dbg("LU(U):" << U << endl, false);
 
-      {
-        Matrix<accuracy> LU(A->decomposeLU());
-        Matrix<accuracy>::partial_t
-            L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
-            U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
-        dbg("LU(L):" << L << endl, false);
-        dbg("LU(U):" << U << endl, false);
-
-        for(unsigned i(0); i < A->rows(); i++){
-          for(unsigned j(i+1); j < A->columns(); j++){
-            TEST_ASSERT(L(i, j) == 0);
-            TEST_ASSERT(U(j, i) == 0);
-          }
-        }
-
-        Matrix<accuracy> _A(L * U);
-        dbg("LU(L) * LU(U):" << _A << endl, false);
-        // GSLのLU分解では行の入れ替えが行われている
-        set<unsigned> unused_rows;
-        for(unsigned i(0); i < A->rows(); i++){
-          unused_rows.insert(i);
-        }
-        for(unsigned i(0); i < A->rows(); i++){
-          for(set<unsigned>::iterator it(unused_rows.begin());
-              ;
-              ++it){
-            if(it == unused_rows.end()){TEST_FAIL("L * U != A");}
-            //cout << *it << endl;
-            bool matched(true);
-            for(unsigned j(0); j < A->columns(); j++){
-              accuracy delta((*A)(i, j) - _A(*it, j));
-              //cout << delta << endl;
-              if(delta < 0){delta *= -1;}
-              if(delta > ACCEPTABLE_DELTA){matched = false;}
-            }
-            if(matched){
-              //cout << "matched: " << *it << endl;
-              unused_rows.erase(it);
-              break;
-            }
-          }
+      for(unsigned i(0); i < A->rows(); i++){
+        for(unsigned j(i+1); j < A->columns(); j++){
+          TEST_ASSERT(L(i, j) == 0);
+          TEST_ASSERT(U(j, i) == 0);
         }
       }
 
-      {
-        matrix_t U(matrix_t::getI(A->rows()));
-        matrix_t H(A->hessenberg(&U));
-
-        dbg("hessen(H):" << H << endl, false);
-        for(unsigned i(2); i < H.rows(); i++){
-          for(unsigned j(0); j < (i - 1); j++){
-            TEST_ASSERT(H(i, j) == 0);
+      matrix_t _A(L * U);
+      dbg("LU(L) * LU(U):" << _A << endl, false);
+      // GSLのLU分解では行の入れ替えが行われている
+      set<unsigned> unused_rows;
+      for(unsigned i(0); i < A->rows(); i++){
+        unused_rows.insert(i);
+      }
+      for(unsigned i(0); i < A->rows(); i++){
+        for(set<unsigned>::iterator it(unused_rows.begin());
+            ;
+            ++it){
+          if(it == unused_rows.end()){TEST_FAIL("L * U != A");}
+          //cout << *it << endl;
+          bool matched(true);
+          for(unsigned j(0); j < A->columns(); j++){
+            accuracy delta((*A)(i, j) - _A(*it, j));
+            //cout << delta << endl;
+            if(delta < 0){delta *= -1;}
+            if(delta > ACCEPTABLE_DELTA){matched = false;}
+          }
+          if(matched){
+            //cout << "matched: " << *it << endl;
+            unused_rows.erase(it);
+            break;
           }
         }
-        matrix_t _A(U * H * U.transpose());
-        dbg("U * H * U^{T}:" << _A << endl, false);
-        matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
       }
+    }
 
-      {
+    void test_UH(){
+      matrix_t U(matrix_t::getI(A->rows()));
+      matrix_t H(A->hessenberg(&U));
 
-        Matrix<accuracy> UD(A->decomposeUD());
-        Matrix<accuracy>::partial_t
-            U(UD.partial(UD.rows(), UD.rows(), 0, 0)),
-            D(UD.partial(UD.rows(), UD.rows(), 0, UD.rows()));
-        dbg("UD(U):" << U << endl, false);
-        dbg("UD(D):" << D << endl, false);
-
-        for(unsigned i(0); i < A->rows(); i++){
-          for(unsigned j(i+1); j < A->columns(); j++){
-            TEST_ASSERT(U(j, i) == 0);
-            TEST_ASSERT(D(i, j) == 0);
-            TEST_ASSERT(D(j, i) == 0);
-          }
+      dbg("hessen(H):" << H << endl, false);
+      for(unsigned i(2); i < H.rows(); i++){
+        for(unsigned j(0); j < (i - 1); j++){
+          TEST_ASSERT(H(i, j) == 0);
         }
-
-        dbg("UD(U):" << U.transpose() << endl, false);
-        Matrix<accuracy> _A(U * D * U.transpose());
-        dbg("U * D * U^{T}:" << _A << endl, false);
-        matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
       }
+      matrix_t _A(U * H * U.transpose());
+      dbg("U * H * U^{T}:" << _A << endl, false);
+      matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
+    }
+
+    void test_UD(){
+      matrix_t UD(A->decomposeUD());
+      matrix_t::partial_t
+          U(UD.partial(UD.rows(), UD.rows(), 0, 0)),
+          D(UD.partial(UD.rows(), UD.rows(), 0, UD.rows()));
+      dbg("UD(U):" << U << endl, false);
+      dbg("UD(D):" << D << endl, false);
+
+      for(unsigned i(0); i < A->rows(); i++){
+        for(unsigned j(i+1); j < A->columns(); j++){
+          TEST_ASSERT(U(j, i) == 0);
+          TEST_ASSERT(D(i, j) == 0);
+          TEST_ASSERT(D(j, i) == 0);
+        }
+      }
+
+      dbg("UD(U):" << U.transpose() << endl, false);
+      matrix_t _A(U * D * U.transpose());
+      dbg("U * D * U^{T}:" << _A << endl, false);
+      matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
     }
 
 #if 0
