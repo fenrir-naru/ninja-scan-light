@@ -1047,22 +1047,13 @@ class Matrix{
     viewless_t operator-() const{return (copy() *= -1);}
 
     /**
-     * TODO
+     * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
      *
-     * 補行列(余因子行列)を求めます。
-     *
-     * @param row 行インデックス
-     * @param column 列インデックス
-     * @return (CoMatrix) 補行列
+     * @param row Row to be removed
+     * @param column Column to be removed
+     * @return Removed matrix
      */
-#if 0
-    CoMatrix<T> coMatrix(
-        const unsigned int &row,
-        const unsigned int &column) const {
-      return CoMatrix<T>(*this, row, column);
-    }
-#else
-    viewless_t coMatrix(
+    viewless_t matrix_for_minor(
         const unsigned int &row,
         const unsigned int &column) const {
       viewless_t res(blank(rows() - 1, columns() - 1));
@@ -1090,7 +1081,6 @@ class Matrix{
       }
       return res;
     }
-#endif
 
     /**
      * Calculate determinant
@@ -1108,7 +1098,7 @@ class Matrix{
         T sign(1);
         for(unsigned int i(0); i < rows(); i++){
           if((*this)(i, 0) != T(0)){
-            sum += (*this)(i, 0) * (coMatrix(i, 0).determinant(false)) * sign;
+            sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant(false)) * sign;
           }
           sign = -sign;
         }

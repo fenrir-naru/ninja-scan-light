@@ -343,8 +343,8 @@ class MatrixTestSuite : public Test::Suite{
             return m(i+1, j+1);
           }
         } a(*A);
-        matrix_t _A(A->coMatrix(0, 0));
-        dbg("coMatrix:" << _A << endl, false);
+        matrix_t _A(A->matrix_for_minor(0, 0));
+        dbg("matrix_for_minor:" << _A << endl, false);
         matrix_compare(a, _A);
       }
       dbg("det:" << A->determinant() << endl, false);
