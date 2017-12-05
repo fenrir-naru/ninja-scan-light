@@ -21,9 +21,10 @@
 
 using namespace std;
 
+namespace br = boost::random;
 struct rand_t {
-  boost::random::mt19937 gen;
-  boost::random::normal_distribution<> dist;
+  br::mt19937 gen;
+  br::normal_distribution<> dist;
   rand_t()
       : gen(static_cast<unsigned long>(time(0))), dist(0, 1.0){
   }
@@ -120,6 +121,7 @@ class MatrixTestSuite : public Test::Suite{
         const T1 &v1, const Complex<T2> &v2,
         const T3 &delta){
       TEST_ASSERT_DELTA(v1, v2.real(), delta);
+      TEST_ASSERT_DELTA(0, v2.imaginary(), delta);
     }
 
     template<class T1, class T2, class T3>
