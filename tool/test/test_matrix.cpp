@@ -23,7 +23,7 @@
 #endif
 
 #define SIZE 8
-#define ACCEPTABLE_DELTA 1E-5
+#define ACCEPTABLE_DELTA_DEFAULT 1E-8
 
 using namespace std;
 
@@ -88,27 +88,27 @@ struct Fixture {
 
 template<class T1, class T2, class T3>
 void element_compare_delta(
-    const T1 &v1, const T2 &v2,
-    const T3 &delta){
+    T1 v1, T2 v2,
+    T3 delta){
   BOOST_CHECK_SMALL(v1 - v2, delta);
 }
 template<class T1, class T2>
 void element_compare_delta(
-    const T1 &v1, const T2 &v2,
+    T1 v1, T2 v2,
     const bool &){
   BOOST_CHECK_EQUAL(v1, v2);
 }
 
 template<class T1, class T2, class T3>
 void element_compare_delta(
-    const T1 &v1, const Complex<T2> &v2,
-    const T3 &delta){
+    T1 v1, const Complex<T2> &v2,
+    T3 delta){
   BOOST_CHECK_SMALL(v1 - v2.real(), delta);
   BOOST_CHECK_SMALL(0 - v2.imaginary(), delta);
 }
 template<class T1, class T2>
 void element_compare_delta(
-    const T1 &v1, const Complex<T2> &v2,
+    T1 v1, const Complex<T2> &v2,
     const bool &){
   BOOST_CHECK_EQUAL(v1, v2.real());
   BOOST_CHECK_EQUAL(0, v2.imaginary());
@@ -117,7 +117,7 @@ void element_compare_delta(
 template<class T1, class T2, class T3>
 void element_compare_delta(
     const Complex<T1> &v1, const Complex<T2> &v2,
-    const T3 &delta){
+    T3 delta){
   BOOST_CHECK_SMALL(v1.real() - v2.real(), delta);
   BOOST_CHECK_SMALL(v1.imaginary() - v2.imaginary(), delta);
 }
@@ -134,9 +134,9 @@ template<
     class T2, template <class> class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
-    const U &u,
+    U u,
     const Matrix<T2, Array2D_Type2, ViewType2> &m,
-    const T3 &delta = ACCEPTABLE_DELTA){
+    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
       element_compare_delta(u(i, j), m(i, j), delta);
@@ -151,7 +151,7 @@ template<
 void matrix_compare_delta(
     const Matrix<T1, Array2D_Type1, ViewType1> &m1,
     const Matrix<T2, Array2D_Type2, ViewType2> &m2,
-    const T3 &delta = ACCEPTABLE_DELTA){
+    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
   BOOST_REQUIRE_EQUAL(m1.rows(), m2.rows());
   BOOST_REQUIRE_EQUAL(m1.columns(), m2.columns());
   matrix_compare_delta<
@@ -162,7 +162,7 @@ void matrix_compare_delta(
 
 template<class U, class V>
 void matrix_compare(
-    const U &u, const V &v){
+    U u, V v){
   matrix_compare_delta(u, v, false);
 }
 
@@ -211,7 +211,7 @@ BOOST_AUTO_TEST_CASE(exchange_row){
   matrix_compare(a1, _A1);
 }
 BOOST_AUTO_TEST_CASE(exchange_column){
-  struct A2_compared {
+  struct {
     const matrix_t m;
     const content_t &operator()(const unsigned &i, const unsigned &j) const {
       return m(i, (j == 0 ? 1 : (j == 1 ? 0 : j)));
@@ -254,7 +254,7 @@ BOOST_AUTO_TEST_CASE(scalar_div){
   matrix_compare(a2, _A2);
 }
 BOOST_AUTO_TEST_CASE(scalar_minus){
-  struct A3_compared {
+  struct {
     const matrix_t &m;
     content_t operator()(const unsigned &i, const unsigned &j) const {
       return -m(i, j);
@@ -274,7 +274,7 @@ BOOST_AUTO_TEST_CASE(matrix_add){
   } a = {*A, *B};
   matrix_t _A((*A) + (*B));
   dbg("+:" << _A << endl, false);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(matrix_mul){
   struct {
@@ -289,12 +289,16 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   } a = {*A, *B};
   matrix_t _A((*A) * (*B));
   dbg("*:" << _A << endl, false);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(inv){
-  matrix_t _A(A->inverse());
-  dbg("inv:" << _A << endl, false);
-  matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, ACCEPTABLE_DELTA);
+  try{
+    matrix_t _A(A->inverse());
+    dbg("inv:" << _A << endl, false);
+    matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, 1E-5);
+  }catch(MatrixException &e){
+    dbg("inv_error:" << e.what() << endl, true);
+  }
 }
 BOOST_AUTO_TEST_CASE(trans){
   struct {
@@ -313,6 +317,34 @@ BOOST_AUTO_TEST_CASE(trans){
   dbg("trans.trans:" << ___A << endl, false);
   matrix_compare(*A, ___A);
 }
+
+BOOST_AUTO_TEST_CASE(partial){
+  struct {
+    const matrix_t &m;
+    unsigned int i_offset, j_offset;
+    const content_t &operator()(const unsigned &i, const unsigned &j) const {
+      return m(i + i_offset, j + j_offset);
+    }
+  } a = {*A, 0, 0};
+
+  a.i_offset = a.j_offset = 1;
+  matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
+  dbg("_A:" << _A << endl, false);
+  matrix_compare(a, _A);
+  matrix_compare(a, _A.copy());
+
+  unsigned int i_offset2, j_offset2;
+  i_offset2 = j_offset2 = 1;
+
+  _A = _A.partial(
+      _A.rows() - i_offset2, _A.columns() - j_offset2,
+      i_offset2, j_offset2);
+  a.i_offset += i_offset2;
+  a.j_offset += j_offset2;
+  dbg("_A:" << _A << endl, false);
+  matrix_compare(a, _A);
+}
+
 BOOST_AUTO_TEST_CASE(det){
   struct {
     const matrix_t &m;
@@ -335,19 +367,18 @@ BOOST_AUTO_TEST_CASE(pivot_merge){
   } a = {A->copy(), B->copy()};
   matrix_t _A(A->pivotMerge(0, 0, *B));
   dbg("pivotMerge:" << _A << endl, false);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
   struct {
     const matrix_t &m1, &m2;
     content_t operator()(const unsigned &i, const unsigned &j) const {
-      //std::cerr << i << "," << j << ": " << (m1(i, j) + m2(i, j)) << std::endl;
       return m1(i, j) + m2(i, j);
     }
   } a = {*A, *B};
   matrix_t _A(A->pivotAdd(0, 0, *B));
   dbg("pivotAdd:" << _A << endl, false);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA);
+  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 BOOST_AUTO_TEST_CASE(eigen){
@@ -364,17 +395,21 @@ BOOST_AUTO_TEST_CASE(eigen){
       //dbg("eigen(" << i << "):" << A_copy * _A.partial(A->rows(), 1, 0, i) << endl, false);
       //dbg("eigen(" << i << "):" << _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()) << endl, false);
       matrix_compare_delta(A_copy * _A.partial(A->rows(), 1, 0, i),
-          _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), ACCEPTABLE_DELTA);
+          _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), 1E-4);
     }
-  }catch(exception &e){
+  }catch(MatrixException &e){
     dbg("eigen_error:" << e.what() << endl, true);
   }
 }
 
 BOOST_AUTO_TEST_CASE(sqrt){
-  cmatrix_t _A(A->sqrt());
-  dbg("sqrt:" << _A << endl, false);
-  matrix_compare_delta(*A, _A * _A, ACCEPTABLE_DELTA);
+  try{
+    cmatrix_t _A(A->sqrt());
+    dbg("sqrt:" << _A << endl, false);
+    matrix_compare_delta(*A, _A * _A, 1E-4);
+  }catch(MatrixException &e){
+    dbg("sqrt_error:" << e.what() << endl, true);
+  }
 }
 
 #if 0
@@ -391,32 +426,6 @@ BOOST_AUTO_TEST_CASE(matrix_op_loop){
   }
 }
 #endif
-
-BOOST_AUTO_TEST_CASE(partial){
-  struct {
-    const matrix_t &m;
-    unsigned int i_offset, j_offset;
-    const content_t &operator()(const unsigned &i, const unsigned &j) const {
-      return m(i + i_offset, j + j_offset);
-    }
-  } a = {*A, 0, 0};
-
-  a.i_offset = a.j_offset = 1;
-  matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
-  dbg("_A:" << _A << endl, false);
-  matrix_compare(a, _A);
-
-  dbg("_A.copy():" << _A.copy() << endl, false);
-  dbg("(*_A)^{-1}:" << _A.inverse() << endl, false);
-  dbg("_A.eigen()" << _A.eigen() << endl, false);
-  dbg("_A.rowVector():" << _A.rowVector(0) << endl, false);
-  dbg("_A.columnVector():" << _A.columnVector(0) << endl, false);
-
-  a.i_offset = a.j_offset = 2;
-  _A = A->partial(3, 3, a.i_offset, a.j_offset);
-  dbg("_A:" << _A << endl, false);
-  matrix_compare(a, _A);
-}
 
 BOOST_AUTO_TEST_CASE(LU){
   matrix_t LU(A->decomposeLU());
@@ -451,7 +460,7 @@ BOOST_AUTO_TEST_CASE(LU){
         content_t delta((*A)(i, j) - _A(*it, j));
         //cout << delta << endl;
         if(delta < 0){delta *= -1;}
-        if(delta > ACCEPTABLE_DELTA){matched = false;}
+        if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
       if(matched){
         //cout << "matched: " << *it << endl;
@@ -474,7 +483,7 @@ BOOST_AUTO_TEST_CASE(UH){
   }
   matrix_t _A(U * H * U.transpose());
   dbg("U * H * U^{T}:" << _A << endl, false);
-  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
+  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 BOOST_AUTO_TEST_CASE(UD){
@@ -496,7 +505,7 @@ BOOST_AUTO_TEST_CASE(UD){
   dbg("UD(U):" << U.transpose() << endl, false);
   matrix_t _A(U * D * U.transpose());
   dbg("U * D * U^{T}:" << _A << endl, false);
-  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA);
+  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 #if 0
