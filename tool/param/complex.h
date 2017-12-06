@@ -132,6 +132,17 @@ class Complex{
       return const_cast<FloatT &>(static_cast<const Complex &>(*this).imaginary());
     }
 
+    Complex<FloatT> &operator=(const Complex<FloatT> &another){
+      m_Real = another.m_Real;
+      m_Imaginary = another.m_Imaginary;
+      return *this;
+    }
+    Complex<FloatT> &operator=(const FloatT &another){
+      m_Real = another;
+      m_Imaginary = 0;
+      return *this;
+    }
+
     /**
      * â‘Î’l‚Ì“ñæ‚ğ•Ô‚µ‚Ü‚·B
      * pow(real(), 2) + pow(imaginary(), 2)‚ğ‚µ‚Ä‚¢‚Ü‚·B
