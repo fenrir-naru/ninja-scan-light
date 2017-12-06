@@ -23,7 +23,7 @@
 #endif
 
 #define SIZE 8
-#define ACCEPTABLE_DELTA 1E-10
+#define ACCEPTABLE_DELTA 1E-5
 
 using namespace std;
 
