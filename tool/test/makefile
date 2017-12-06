@@ -30,8 +30,8 @@ PACKAGES = $(basename $(shell ls test_*.cpp))
 
 BIN_PATH = /usr/bin:/usr/local/bin
 CXX ?= g++
-CPPFLAGS = 
-CFLAGS = $(CPPFLAGS) -Wall -Wno-sign-compare -Wno-parentheses
+CPPFLAGS += 
+CFLAGS += $(CPPFLAGS) -Wall -Wno-sign-compare -Wno-parentheses
 LFLAGS =  
 INCLUDES = -I..
 LIBS = -lm #-L
