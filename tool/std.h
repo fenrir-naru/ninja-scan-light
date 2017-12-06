@@ -32,11 +32,28 @@
 #ifndef __STD_H__
 #define __STD_H__
 
+#if defined(__GNUC__)
+#include <inttypes.h>
+typedef uint8_t Uint8;
+typedef int8_t Int8;
+typedef uint16_t Uint16;
+typedef int16_t Int16;
+typedef uint32_t Uint32;
+typedef int32_t Int32;
+#elif defined(_MSC_VER)
+typedef unsigned __int8 Uint8;
+typedef __int8 Int8;
+typedef unsigned __int16 Uint16;
+typedef __int16 Int16;
+typedef unsigned __int32 Uint32;
+typedef __int32 Int32;
+#else
 typedef unsigned char Uint8;
 typedef signed char Int8;
 typedef unsigned short Uint16;
 typedef signed short Int16;
-typedef unsigned long Uint32;
-typedef signed long Int32;
+typedef unsigned int Uint32;
+typedef signed int Int32;
+#endif
 
 #endif /* __STD_H__ */

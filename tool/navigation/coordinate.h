@@ -86,7 +86,8 @@ class System_3D {
         v[i] = vec.get(i);
       }
     }
-    System_3D(const Matrix<FloatT> &matrix){
+    template <template <class> class Array2D_Type, class ViewType>
+    System_3D(const Matrix<FloatT, Array2D_Type, ViewType> &matrix){
       if(matrix.rows() < matrix.columns()){
         for(unsigned i(0); i < value_boundary; i++){
           v[i] = matrix(0, i);
@@ -149,7 +150,8 @@ class System_XYZ : public System_3D<FloatT> {
         : super_t(xyz) {}
     System_XYZ(const Vector3<FloatT> &vec)
         : super_t(vec) {}
-    System_XYZ(const Matrix<FloatT> &matrix)
+    template <template <class> class Array2D_Type, class ViewType>
+    System_XYZ(const Matrix<FloatT, Array2D_Type, ViewType> &matrix)
         : super_t(matrix) {}
     ~System_XYZ(){}
     
@@ -302,7 +304,8 @@ class System_ENU : public System_3D<FloatT> {
         : super_t(enu) {}
     System_ENU(const Vector3<FloatT> &vec)
         : super_t(vec) {}
-    System_ENU(const Matrix<FloatT> &mat)
+    template <template <class> class Array2D_Type, class ViewType>
+    System_ENU(const Matrix<FloatT, Array2D_Type, ViewType> &mat)
         : super_t(mat) {}
     ~System_ENU() {}
     

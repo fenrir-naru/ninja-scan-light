@@ -26,22 +26,22 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, 
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-PACKAGES = log2ubx log_CSV INS_GPS
+PACKAGES = $(basename $(shell ls test_*.cpp))
 
 BIN_PATH = /usr/bin:/usr/local/bin
 CXX ?= g++
-CPPFLAGS = 
-CFLAGS = $(CPPFLAGS) -Os -O3 -Wa,-mbig-obj #-Wall
-LFLAGS =
-INCLUDES = -I.
+CPPFLAGS += 
+CFLAGS += $(CPPFLAGS) -Wall -Wno-sign-compare -Wno-parentheses
+LFLAGS =  
+INCLUDES = -I..
 LIBS = -lm #-L
 BUILD_DIR ?= build_GCC
 
-SRCS_COMMON = util/crc.cpp
+SRCS_COMMON = $(filter-out $(addsuffix .cpp,$(PACKAGES)),$(shell ls *.cpp))
 OBJS_COMMON = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_COMMON))
 SRCS_DEPEND = $(shell find $(PACKAGES) -name "*.cpp" 2>/dev/null)
-OBJS_DEPEND = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_DEPEND))
-SRCS = $(patsubst %,%.cpp,$(PACKAGES)) $(SRCS_COMMON) $(SRCS_DEPEND)
+OBJS_DEPEND = $(addsuffix %.cpp,$(BUILD_DIR)/%.o,$(SRCS_DEPEND))
+SRCS = $(addsuffix .cpp,$(PACKAGES)) $(SRCS_COMMON) $(SRCS_DEPEND)
 
 BUILD_DIRS = $(sort $(BUILD_DIR) $(dir $(OBJS_COMMON) $(OBJS_DEPEND)))
 
@@ -73,6 +73,7 @@ $(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(OBJS_COMMON)
 	$(CXX) $(LFLAGS) $(INCLUDES) -o $@ $^ $(LIBS)
 
 packages : $(patsubst %,$(BUILD_DIR)/%.out,$(PACKAGES))
+	for f in $^; do ./$$f; done
 
 $(BUILD_DIRS) :
 	mkdir -p $@
@@ -83,4 +84,3 @@ clean :
 run : all
 
 .PHONY : clean all packages
-

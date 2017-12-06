@@ -65,6 +65,14 @@ struct Options : public GlobalOptions<float_sylph_t> {
   calendar_time_t::Converter time_gps2local;
   bool use_calendar_time;
 
+  struct {
+    bool is_active;
+    struct {
+      float_sylph_t sf; // physical = (ADC_value - zero) * sf
+      float_sylph_t zero;
+    } accel, gyro; // accel=[m/s^2], gyro=[dps]
+  } physical_converter;
+
   Options() 
       : super_t(),
       page_A(false), page_G(false), page_F(false), 
@@ -77,6 +85,11 @@ struct Options : public GlobalOptions<float_sylph_t> {
       time_gps2local(),
       use_calendar_time(false) {
 
+    physical_converter.is_active = false;
+    physical_converter.accel.sf = 8.0 *  9.80665 / (1 << 15);
+    physical_converter.accel.zero = (1 << 15);
+    physical_converter.gyro.sf = 2000.0 / (1 << 15);
+    physical_converter.gyro.zero = (1 << 15);
   }
   ~Options(){}
   
@@ -172,6 +185,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(debug, false,
         debug_level = atoi(value),
         debug_level);
+
+    CHECK_OPTION(physical, true,
+        physical_converter.is_active = is_true(value),
+        (physical_converter.is_active ? "on" : "off"));
 #undef CHECK_OPTION
     return super_t::check_spec(spec);
   }
@@ -204,23 +221,39 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
      */
     struct HandlerA {
       int count;
-      HandlerA() : count(0) {}
+      void (HandlerA::*formatter)(const float_sylph_t &current, const A_Observer_t::values_t &values) const;
       void operator()(const super_t::A_Observer_t &observer){
         if(!observer.validate()){return;} // check validity
         
         float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
         if(!options.is_time_in_range(current)){return;}
         
+        A_Observer_t::values_t values(observer.fetch_values());
+        (this->*formatter)(current, values);
+        count++;
+      }
+      void dump_raw(const float_sylph_t &current, const A_Observer_t::values_t &values) const {
         options.out() 
-            << (count++) << ", "
+            << count << ", "
             << options.format_time(current) << ", ";
         
-        A_Observer_t::values_t values(observer.fetch_values());
         for(int i(0); i < 8; i++){
           options.out() << values.values[i] << ", ";
         }
         options.out() << values.temperature << endl;
       }
+      void dump_physical(const float_sylph_t &current, const A_Observer_t::values_t &values) const {
+        options.out() << options.format_time(current);
+
+        for(int i(0); i < 3; i++){ // accelerometer
+          options.out() << ", " << (values.values[i] - options.physical_converter.accel.zero) * options.physical_converter.accel.sf;
+        }
+        for(int i(3); i < 6; i++){ // gyro
+          options.out() << ", " << (values.values[i] - options.physical_converter.gyro.zero) * options.physical_converter.gyro.sf;
+        }
+        options.out() << endl;
+      }
+      HandlerA() : count(0), formatter(&HandlerA::dump_raw) {}
     } handler_A;
     
     /**
@@ -347,8 +380,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     
     
     struct HandlerP {
-      HandlerP() {}
-      
+      void (HandlerP::*formatter)(
+          const float_sylph_t &current, const int &index,
+          const Int32 &pressure, const Int32 &temperature) const;
       void ms5611_convert(
           const Int32 &d1, const Int32 &d2,
           Int32 &pressure, Int32 &temperature,
@@ -399,7 +433,6 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             }
 
             for(int i(0), j(-1); i < 2; i++, j++){
-              options.out() << options.format_time(current) << ", " << j << ", ";
               char buf[2][4];
               buf[0][0] = buf[1][0] = 0;
               observer.inspect(&buf[0][1], 3, 7 + 6 * i);
@@ -409,14 +442,28 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                   d2(be_char4_2_num<Uint32>(buf[1][0]));
               Int32 pressure, temperature;
               ms5611_convert(d1, d2, pressure, temperature, coef);
-              options.out()
-                  << pressure << ", "
-                  << temperature << endl;
+              (this->*formatter)(current, j, pressure, temperature);
             }
             break;
           }
         }
       }
+      void dump_raw(
+          const float_sylph_t &current, const int &index,
+          const Int32 &pressure, const Int32 &temperature) const {
+        options.out()
+            << options.format_time(current) << ", " << index << ", "
+            << pressure << ", " << temperature << endl;
+      }
+      void dump_physical(
+          const float_sylph_t &current, const int &index,
+          const Int32 &pressure, const Int32 &temperature) const {
+        options.out()
+            << options.format_time(current) << ", " << index << ", "
+            << (float_sylph_t)pressure << ", "  // [Pa]
+            << (float_sylph_t)temperature / 100 << endl; // [degC]
+      }
+      HandlerP() : formatter(&HandlerP::dump_raw) {}
     } handler_P;
     
     /**
@@ -425,6 +472,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
      * @param observer M page observer
      */
     struct HandlerM {
+      void (HandlerM::*formatter)(const float_sylph_t &current, const M_Observer_t::values_t &values) const;
       void operator()(const M_Observer_t &observer){
         if(!observer.validate()){return;}
         
@@ -442,18 +490,30 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             }
             break;
           default:
-            for(int i(0), j(-3); i < 4; i++, j++){
-              options.out() << options.format_time(current) << ", "
-                   << j << ", "
-                   << values.x[i] << ", "
-                   << values.y[i] << ", "
-                   << values.z[i] << endl;
-            }
+            (this->*formatter)(current, values);
         }
       }
+      void dump_raw(const float_sylph_t &current, const M_Observer_t::values_t &values) const {
+        for(int i(0), j(-3); i < 4; i++, j++){
+          options.out() << options.format_time(current) << ", "
+               << j << ", "
+               << values.x[i] << ", "
+               << values.y[i] << ", "
+               << values.z[i] << endl;
+        }
+      }
+      void dump_physical(const float_sylph_t &current, const M_Observer_t::values_t &values) const {
+        /* TODO how to resolve the difference of sensors;
+         *
+         * [ver1] MAG3110 => scale factor is 0.10 uT / LSB
+         * [ver2] AK8963 in MPU9250 => scale factor is 0.15 uT / LSB (16-bit mode @see mpu9250.c)
+         */
+        dump_raw(current, values);
+      }
+      HandlerM() : formatter(&HandlerM::dump_raw) {}
     } handler_M;
-    
     /**
+    
      * check N page (navigation information), which is not used for NinjaScan
      * 
      * @param observer M page observer
@@ -531,8 +591,17 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     void process(istream &in){
       char buffer[SYLPHIDE_PAGE_SIZE];
       
-      while(true){
+      if(options.physical_converter.is_active){
+        handler_A.formatter = &HandlerA::dump_physical;
+        handler_P.formatter = &HandlerP::dump_physical;
+        handler_M.formatter = &HandlerM::dump_physical;
+        cerr << "Units are [m/s^2], [deg/s], [Pa], and [degC] "
+            "for acceleration, angular speed, pressure, and temperature, respectively."
+            << endl;
+      }
+
         int read_count;
+      while(true){
         in.read(buffer, SYLPHIDE_PAGE_SIZE);
         read_count = in.gcount();
         if(in.fail() || (read_count == 0)){return;}
