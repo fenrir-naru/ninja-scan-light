@@ -5,6 +5,7 @@
 #include <iostream>
 #include <exception>
 #include <set>
+#include <deque>
 
 #include "param/complex.h"
 #include "param/matrix.h"
@@ -166,6 +167,30 @@ void matrix_compare(
   matrix_compare_delta(u, v, false);
 }
 
+struct direct_t {
+  matrix_t m;
+  content_t scalar;
+  deque<unsigned int> row, column;
+  bool trans;
+  unsigned int i_offset, j_offset;
+  direct_t(const matrix_t &_m)
+      : m(_m), scalar(1),
+      row(), column(), trans(false),
+      i_offset(0), j_offset(0) {
+    for(unsigned int i(0); i < m.rows(); ++i){
+      row.push_back(i);
+    }
+    for(unsigned int j(0); j < m.columns(); ++j){
+      column.push_back(j);
+    }
+  }
+  content_t operator()(const unsigned &i, const unsigned &j) const {
+    return m(
+        (trans ? column[j] : row[i]) + i_offset,
+        (trans ? row[i] : column[j]) + j_offset) * scalar;
+  }
+};
+
 BOOST_FIXTURE_TEST_SUITE(matrix, Fixture)
 
 BOOST_AUTO_TEST_CASE(init){
@@ -200,26 +225,20 @@ BOOST_AUTO_TEST_CASE(getI){
 }
 
 BOOST_AUTO_TEST_CASE(exchange_row){
-  struct {
-    const matrix_t m;
-    const content_t &operator()(const unsigned &i, const unsigned &j) const {
-      return m((i == 0 ? 1 : (i == 1 ? 0 : i)), j);
-    }
-  } a1 = {A->copy()};
-  matrix_t _A1(A->exchangeRows(0, 1));
-  dbg("ex_rows:" << _A1 << endl, false);
-  matrix_compare(a1, _A1);
+  direct_t a(A->copy());
+  a.row[0] = 1;
+  a.row[1] = 0;
+  matrix_t _A(A->exchangeRows(0, 1));
+  dbg("ex_rows:" << _A << endl, false);
+  matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(exchange_column){
-  struct {
-    const matrix_t m;
-    const content_t &operator()(const unsigned &i, const unsigned &j) const {
-      return m(i, (j == 0 ? 1 : (j == 1 ? 0 : j)));
-    }
-  } a2 = {A->copy()};
-  matrix_t _A2(A->exchangeColumns(0, 1));
-  dbg("ex_columns:" << _A2 << endl, false);
-  matrix_compare(a2, _A2);
+  direct_t a(A->copy());
+  a.column[1] = 0;
+  a.column[0] = 1;
+  matrix_t _A(A->exchangeColumns(0, 1));
+  dbg("ex_columns:" << _A << endl, false);
+  matrix_compare(a, _A);
 }
 
 BOOST_AUTO_TEST_CASE(check_square){
@@ -232,61 +251,55 @@ BOOST_AUTO_TEST_CASE(check_symmetric){
 }
 
 BOOST_AUTO_TEST_CASE(scalar_mul){
-  struct {
-    const matrix_t &m;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      return m(i, j) * 2;
-    }
-  } a1 = {*A};
-  matrix_t _A1((*A) * 2.);
-  dbg("*:" << _A1 << endl, false);
-  matrix_compare(a1, _A1);
+  direct_t a(*A);
+  a.scalar = 2.;
+  matrix_t _A((*A) * a.scalar);
+  dbg("*:" << _A << endl, false);
+  matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(scalar_div){
-  struct {
-    const matrix_t &m;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      return m(i, j) / 2;
-    }
-  } a2 = {*A};
-  matrix_t _A2((*A) / 2.);
-  dbg("/:" << _A2 << endl, false);
-  matrix_compare(a2, _A2);
+  direct_t a(*A);
+  int div(2);
+  a.scalar = (1.0 / div);
+  matrix_t _A((*A) / div);
+  dbg("/:" << _A << endl, false);
+  matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(scalar_minus){
-  struct {
-    const matrix_t &m;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      return -m(i, j);
-    }
-  } a3 = {*A};
-  matrix_t _A3(-(*A));
-  dbg("-():" << _A3 << endl, false);
-  matrix_compare(a3, _A3);
+  direct_t a(*A);
+  a.scalar = -1;
+  matrix_t _A(-(*A));
+  dbg("-():" << _A << endl, false);
+  matrix_compare(a, _A);
 }
 
+struct mat_add_t {
+  const matrix_t &m1, &m2;
+  content_t operator()(const unsigned &i, const unsigned &j) const {
+    return (m1)(i, j) + (m2)(i, j);
+  }
+};
+
 BOOST_AUTO_TEST_CASE(matrix_add){
-  struct {
-    const matrix_t &m1, &m2;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      return (m1)(i, j) + (m2)(i, j);
-    }
-  } a = {*A, *B};
+  mat_add_t a = {*A, *B};
   matrix_t _A((*A) + (*B));
   dbg("+:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
-BOOST_AUTO_TEST_CASE(matrix_mul){
-  struct {
-    matrix_t &m1, &m2;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      content_t sum(0);
-      for(unsigned k(0); k < m1.rows(); k++){
-        sum += m1(i, k) * m2(k, j);
-      }
-      return sum;
+
+struct mat_mul_t {
+  const matrix_t &m1, &m2;
+  content_t operator()(const unsigned &i, const unsigned &j) const {
+    content_t sum(0);
+    for(unsigned k(0); k < m1.rows(); k++){
+      sum += m1(i, k) * m2(k, j);
     }
-  } a = {*A, *B};
+    return sum;
+  }
+};
+
+BOOST_AUTO_TEST_CASE(matrix_mul){
+  mat_mul_t a = {*A, *B};
   matrix_t _A((*A) * (*B));
   dbg("*:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
@@ -301,12 +314,8 @@ BOOST_AUTO_TEST_CASE(inv){
   }
 }
 BOOST_AUTO_TEST_CASE(trans){
-  struct {
-    const matrix_t &m;
-    const content_t &operator()(const unsigned &i, const unsigned &j) const {
-      return m(j, i);
-    }
-  } a = {*A};
+  direct_t a(*A);
+  a.trans = true;
   matrix_t::transposed_t _A(A->transpose());
   dbg("trans:" << _A << endl, false);
   matrix_compare(a, _A);
@@ -319,13 +328,7 @@ BOOST_AUTO_TEST_CASE(trans){
 }
 
 BOOST_AUTO_TEST_CASE(partial){
-  struct {
-    const matrix_t &m;
-    unsigned int i_offset, j_offset;
-    const content_t &operator()(const unsigned &i, const unsigned &j) const {
-      return m(i + i_offset, j + j_offset);
-    }
-  } a = {*A, 0, 0};
+  direct_t a(*A);
 
   a.i_offset = a.j_offset = 1;
   matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
@@ -346,12 +349,9 @@ BOOST_AUTO_TEST_CASE(partial){
 }
 
 BOOST_AUTO_TEST_CASE(det){
-  struct {
-    const matrix_t &m;
-    const content_t &operator()(const unsigned &i, const unsigned &j) const {
-      return m(i+1, j+1);
-    }
-  } a = {*A};
+  direct_t a(*A);
+  a.row.pop_front();
+  a.column.pop_front();
   matrix_t _A(A->matrix_for_minor(0, 0));
   dbg("matrix_for_minor:" << _A << endl, false);
   matrix_compare(a, _A);
@@ -359,23 +359,13 @@ BOOST_AUTO_TEST_CASE(det){
 }
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
-  struct {
-    matrix_t m1, m2;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      return m1(i, j) + m2(i, j);
-    }
-  } a = {A->copy(), B->copy()};
+  mat_add_t a = {A->copy(), B->copy()};
   matrix_t _A(A->pivotMerge(0, 0, *B));
   dbg("pivotMerge:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
-  struct {
-    const matrix_t &m1, &m2;
-    content_t operator()(const unsigned &i, const unsigned &j) const {
-      return m1(i, j) + m2(i, j);
-    }
-  } a = {*A, *B};
+  mat_add_t a = {*A, *B};
   matrix_t _A(A->pivotAdd(0, 0, *B));
   dbg("pivotAdd:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
