@@ -30,8 +30,8 @@ PACKAGES = log2ubx log_CSV INS_GPS
 
 BIN_PATH = /usr/bin:/usr/local/bin
 CXX ?= g++
-CPPFLAGS = 
-CFLAGS = $(CPPFLAGS) -O3 #-Wall
+CPPFLAGS ?= 
+CFLAGS ?= $(CPPFLAGS) -O3 #-Wall
 LFLAGS =  
 INCLUDES = -I.
 LIBS = -lm #-L
@@ -52,7 +52,7 @@ all : $(BUILD_DIRS) packages
 $(BUILD_DIR)/depend.inc: $(SRCS) makefile
 	mkdir -p $(dir $@); \
 	for i in $(SRCS); do \
-		$(CXX) -E -MM $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
+		$(CXX) -E -MM -MP $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
 		if ! [ $$? = 0 ]; then \
 			rm -f tempfile; \
 			exit 1; \
