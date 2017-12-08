@@ -1083,13 +1083,13 @@ class Matrix{
     }
 
     /**
-     * Calculate determinant
+     * Calculate determinant by using minor
      *
      * @param do_check Whether check size property. The default is true.
      * @return Determinant
      * @throw MatrixException
      */
-    T determinant(const bool &do_check = true) const throw(MatrixException){
+    T determinant_minor(const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       if(rows() == 1){
         return (*this)(0, 0);
@@ -1204,6 +1204,25 @@ class Matrix{
 #undef L
 #undef U
       return LU;
+    }
+
+    /**
+     * Calculate determinant by using LU decomposition
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return Determinant
+     */
+    T determinant_LU(const bool &do_check = true) const {
+      viewless_t LU(decomposeLU(do_check));
+      T res(1);
+      for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
+        res *= LU(i, i) * LU(i, j);
+      }
+      return res;
+    }
+
+    T determinant(const bool &do_check = true) const {
+      return determinant_LU(do_check);
     }
 
     /**

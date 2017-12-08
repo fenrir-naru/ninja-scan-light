@@ -401,14 +401,23 @@ BOOST_AUTO_TEST_CASE(partial){
   matrix_compare(a, _A);
 }
 
+BOOST_AUTO_TEST_CASE(minor){
+  dbg_print();
+  for(unsigned i(0); i < A->rows(); ++i){
+    for(unsigned j(0); j < A->columns(); ++j){
+      direct_t a(*A);
+      a.row.erase(a.row.begin() + i);
+      a.column.erase(a.column.begin() + j);
+      matrix_t _A(A->matrix_for_minor(i, j));
+      dbg("matrix_for_minor:" << _A << endl, false);
+      matrix_compare(a, _A);
+    }
+  }
+}
+
 BOOST_AUTO_TEST_CASE(det){
   dbg_print();
-  direct_t a(*A);
-  a.row.pop_front();
-  a.column.pop_front();
-  matrix_t _A(A->matrix_for_minor(0, 0));
-  dbg("matrix_for_minor:" << _A << endl, false);
-  matrix_compare(a, _A);
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   dbg("det:" << A->determinant() << endl, false);
 }
 
