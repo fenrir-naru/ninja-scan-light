@@ -327,7 +327,34 @@ class Array2D_Dense : public Array2D<T> {
 };
 
 
-struct MatrixView;
+struct MatrixView {
+  typedef MatrixView self_t;
+
+  MatrixView(){}
+  template <class ViewType>
+  MatrixView(const ViewType &view){}
+
+  friend std::ostream &operator<<(std::ostream &out, const self_t &view){
+    return out << " [V]";
+  }
+
+  inline const unsigned int rows(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return _rows;
+  }
+  inline const unsigned int columns(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return _columns;
+  }
+  inline unsigned int i(
+      const unsigned int &i, const unsigned int &j) const {
+    return i;
+  }
+  inline unsigned int j(
+      const unsigned int &i, const unsigned int &j) const {
+    return j;
+  }
+};
 
 template <class BaseView>
 struct MatrixViewTranspose;
@@ -437,16 +464,48 @@ struct MatrixViewBuilder {
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
   typedef typename once_t<MatrixViewPartial>::res_t partial_t;
+
+  /* Using template because of inhibit generation of method
+   * in case View does not have partial attribute.
+   */
+  template <class View2>
+  static void set_partial(
+      View2 &view,
+      const unsigned int &orig_rows,
+      const unsigned int &orig_columns,
+      const unsigned int &new_rows,
+      const unsigned int &new_columns,
+      const unsigned int &row_offset,
+      const unsigned int &column_offset) throw (MatrixException){
+    if(MatrixViewProperty<View>::transposed){
+      view.partial_prop.rows = new_columns;
+      view.partial_prop.columns = new_rows;
+      view.partial_prop.row_offset += column_offset;
+      view.partial_prop.column_offset += row_offset;
+    }else{
+      view.partial_prop.rows = new_rows;
+      view.partial_prop.columns = new_columns;
+      view.partial_prop.row_offset += row_offset;
+      view.partial_prop.column_offset += column_offset;
+    }
+    if(((view.partial_prop.row_offset + view.partial_prop.rows) > orig_rows)
+        || ((view.partial_prop.column_offset + view.partial_prop.columns) > orig_columns)){
+      throw MatrixException("size exceeding");
+    }
+  }
 };
 
 template <class BaseView>
-struct MatrixViewTranspose : /*protected*/ BaseView {
+struct MatrixViewTranspose : protected BaseView {
   typedef MatrixViewTranspose<BaseView> self_t;
 
   MatrixViewTranspose() : BaseView() {}
   template <class BaseView2>
   MatrixViewTranspose(const BaseView2 &view)
       : BaseView(view) {}
+
+  template <class View>
+  friend class MatrixViewBuilder;
 
   friend std::ostream &operator<<(std::ostream &out, const MatrixViewTranspose<BaseView> &view){
     return out << " [T]" << (const BaseView &)view;
@@ -471,7 +530,7 @@ struct MatrixViewTranspose : /*protected*/ BaseView {
 };
 
 template <class BaseView>
-struct MatrixViewPartial : /*protected*/ BaseView {
+struct MatrixViewPartial : protected BaseView {
   typedef MatrixViewPartial<BaseView> self_t;
 
   struct partial_prop_t {
@@ -497,6 +556,9 @@ struct MatrixViewPartial : /*protected*/ BaseView {
       : BaseView(view), partial_prop(view) {
   }
 
+  template <class View>
+  friend class MatrixViewBuilder;
+
   friend std::ostream &operator<<(std::ostream &out, const MatrixViewPartial<BaseView> &view){
     return out << " [P]("
          << view.partial_prop.rows << ","
@@ -521,31 +583,6 @@ struct MatrixViewPartial : /*protected*/ BaseView {
   inline unsigned int j(
       const unsigned int &i, const unsigned int &j) const {
     return BaseView::j(i + partial_prop.row_offset, j + partial_prop.column_offset);
-  }
-};
-
-struct MatrixView {
-  typedef MatrixView self_t;
-
-  friend std::ostream &operator<<(std::ostream &out, const self_t &view){
-    return out << " [V]";
-  }
-
-  inline const unsigned int rows(
-      const unsigned int &_rows, const unsigned int &_columns) const {
-    return _rows;
-  }
-  inline const unsigned int columns(
-      const unsigned int &_rows, const unsigned int &_columns) const {
-    return _columns;
-  }
-  inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const {
-    return i;
-  }
-  inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const {
-    return j;
   }
 };
 
@@ -585,9 +622,12 @@ class Matrix{
     typedef Matrix<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
 
-    friend viewless_t;
-    friend transpose_t;
-    friend partial_t;
+    template <
+        class T2,
+        template <class> class Array2D_Type2,
+        class ViewType2>
+    friend class Matrix;
+
   protected:
     Array2D<T> *storage; ///< “à•”“I‚É—˜—p‚·‚é2ŽŸŒ³”z—ñ‚Ìƒƒ‚ƒŠ
     view_t view;
@@ -874,21 +914,10 @@ class Matrix{
         const unsigned int &row_offset,
         const unsigned int &column_offset) const throw(MatrixException) {
       partial_t res(*this);
-      if(view_property_t::transposed){
-        res.view.partial_prop.rows = new_columns;
-        res.view.partial_prop.columns = new_rows;
-        res.view.partial_prop.row_offset += column_offset;
-        res.view.partial_prop.column_offset += row_offset;
-      }else{
-        res.view.partial_prop.rows = new_rows;
-        res.view.partial_prop.columns = new_columns;
-        res.view.partial_prop.row_offset += row_offset;
-        res.view.partial_prop.column_offset += column_offset;
-      }
-      if(((res.view.partial_prop.row_offset + res.view.partial_prop.rows) > storage->rows())
-          || ((res.view.partial_prop.column_offset + res.view.partial_prop.columns) > storage->columns())){
-        throw MatrixException("size exceeding");
-      }
+      partial_t::view_builder_t::set_partial(
+          res.view,
+          storage->rows(), storage->columns(),
+          new_rows, new_columns, row_offset, column_offset);
       return res;
     }
 
