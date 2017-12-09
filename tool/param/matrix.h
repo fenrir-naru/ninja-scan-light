@@ -326,49 +326,226 @@ class Array2D_Dense : public Array2D<T> {
     }
 };
 
-/**
- * @brief View for specific matrix, such as transpose and partial matrices.
- */
-template <bool is_transposed, bool is_partialized>
-struct MatrixView {
-  static const bool transposed = is_transposed;
-  static const bool partialized = is_partialized;
 
-  template <bool is_transposed2, bool is_partialized2, class U = void>
-  struct Converter {
-    typedef MatrixView<!is_transposed2, is_partialized2> transposed_t;
-    typedef MatrixView<is_transposed2, true> partial_t;
+struct MatrixView;
+
+template <class BaseView>
+struct MatrixViewTranspose;
+
+template <class BaseView>
+struct MatrixViewPartial;
+
+template <class View>
+struct MatrixViewProperty {
+  typedef View self_t;
+  static const bool viewless = true;
+
+  static const bool transposed = false;
+  static const bool partialized = false;
+
+  static const bool truncated = false;
+};
+
+template <class V1, template <class> class V2>
+struct MatrixViewProperty<V2<V1> > {
+  typedef V2<V1> self_t;
+  static const bool viewless = false;
+  template <template <class> class TargetView>
+  struct check_is_t {
+    template <class U>
+    struct check_t {
+      static const bool res = false;
+    };
+    template <class U1, template <class> class U2>
+    struct check_t<U2<U1> > {
+      static const bool res = check_t<V1>::res;
+    };
+    template <class U1>
+    struct check_t<TargetView<U1> > {
+      static const bool res = true;
+    };
+    static const bool res = check_t<V2<V1> >::res;
+  };
+  static const bool transposed = check_is_t<MatrixViewTranspose>::res;
+  static const bool partialized = check_is_t<MatrixViewPartial>::res;
+
+  static const bool truncated = partialized;
+};
+
+template <class View>
+struct MatrixViewBuilder {
+  template <template <class> class V, class U = void>
+  struct priority_t {
+    static const int priority = 0;
   };
   template <class U>
-  struct Converter<true, false, U> {
-    typedef void transposed_t;
-    typedef MatrixView<true, true> partial_t;
+  struct priority_t<MatrixViewTranspose, U> {
+    static const int priority = 1;
   };
 
-  typedef typename Converter<
-      is_transposed, is_partialized>::transposed_t transposed_t;
-  typedef typename Converter<
-      is_transposed, is_partialized>::partial_t partial_t;
+  template <template <class> class V1, class V2>
+  struct sort_t {
+    typedef V1<V2> res_t;
+  };
+  template <template <class> class V1, template <class> class V2, class V3>
+  struct sort_t<V1, V2<V3> > {
+    template <bool, class U = void>
+    struct rebuild_t {
+      typedef V1<V2<V3> > res_t;
+    };
+    template <class U>
+    struct rebuild_t<false, U> {
+      typedef V2<V1<V3> > res_t;
+    };
+    typedef typename rebuild_t<
+        (priority_t<V1>::priority >= priority_t<V2>::priority)>::res_t res_t;
+  };
 
-  struct {
-    unsigned int rows, row_offset;
-    unsigned int columns, column_offset;
-  } partial;
+  template <template <class> class NextView>
+  struct switch_t { // off => on => off => ...
+    template <class V>
+    struct rebuild_t {
+      typedef NextView<V> res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
+    };
+    template <class V1>
+    struct rebuild_t<NextView<V1> > {
+      typedef V1 res_t;
+    };
+    typedef typename rebuild_t<View>::res_t res_t;
+  };
 
-  MatrixView() {}
+  template <template <class> class NextView>
+  struct once_t { // off => on => on => ...
+    template <class V>
+    struct rebuild_t {
+      typedef NextView<V> res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
+    };
+    template <class V1>
+    struct rebuild_t<NextView<V1> > {
+      typedef NextView<V1> res_t;
+    };
+    typedef typename rebuild_t<View>::res_t res_t;
+  };
 
-  template <bool is_transposed2, bool is_partialized2>
-  MatrixView(const MatrixView<is_transposed2, is_partialized2> &another){
-    if(another.partialized && partialized){
-      partial.rows = another.partial.rows;
-      partial.columns = another.partial.columns;
-      partial.row_offset = another.partial.row_offset;
-      partial.column_offset = another.partial.column_offset;
-    }
+  typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
+  typedef typename once_t<MatrixViewPartial>::res_t partial_t;
+};
+
+template <class BaseView>
+struct MatrixViewTranspose : /*protected*/ BaseView {
+  typedef MatrixViewTranspose<BaseView> self_t;
+
+  MatrixViewTranspose() : BaseView() {}
+  template <class BaseView2>
+  MatrixViewTranspose(const BaseView2 &view)
+      : BaseView(view) {}
+
+  friend std::ostream &operator<<(std::ostream &out, const MatrixViewTranspose<BaseView> &view){
+    return out << " [T]" << (const BaseView &)view;
   }
 
-  static bool is_viewless() {
-    return !(transposed || partialized);
+  inline const unsigned int rows(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return BaseView::columns(_rows, _columns);
+  }
+  inline const unsigned int columns(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return BaseView::rows(_rows, _columns);
+  }
+  inline unsigned int i(
+      const unsigned int &i, const unsigned int &j) const {
+    return BaseView::j(i, j);
+  }
+  inline unsigned int j(
+      const unsigned int &i, const unsigned int &j) const {
+    return BaseView::i(i, j);
+  }
+};
+
+template <class BaseView>
+struct MatrixViewPartial : /*protected*/ BaseView {
+  typedef MatrixViewPartial<BaseView> self_t;
+
+  struct partial_prop_t {
+    unsigned int rows, row_offset;
+    unsigned int columns, column_offset;
+    partial_prop_t()
+        : rows(0), row_offset(0), columns(0), column_offset(0){}
+    template <class BaseView2>
+    partial_prop_t(const BaseView2 &view)
+        : rows(0), row_offset(0), columns(0), column_offset(0){}
+    template <class BaseView2>
+    partial_prop_t(const MatrixViewPartial<BaseView2> &view){
+      rows = view.partial_prop.rows;
+      row_offset = view.partial_prop.row_offset;
+      columns = view.partial_prop.columns;
+      column_offset = view.partial_prop.column_offset;
+    }
+  } partial_prop;
+
+  MatrixViewPartial() : BaseView(), partial_prop() {}
+  template <class BaseView2>
+  MatrixViewPartial(const BaseView2 &view)
+      : BaseView(view), partial_prop(view) {
+  }
+
+  friend std::ostream &operator<<(std::ostream &out, const MatrixViewPartial<BaseView> &view){
+    return out << " [P]("
+         << view.partial_prop.rows << ","
+         << view.partial_prop.columns << ","
+         << view.partial_prop.row_offset << ","
+         << view.partial_prop.column_offset << ")"
+         << (const BaseView &)view;
+  }
+
+  inline const unsigned int rows(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return partial_prop.rows;
+  }
+  inline const unsigned int columns(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return partial_prop.columns;
+  }
+  inline unsigned int i(
+      const unsigned int &i, const unsigned int &j) const {
+    return BaseView::i(i + partial_prop.row_offset, j + partial_prop.column_offset);
+  }
+  inline unsigned int j(
+      const unsigned int &i, const unsigned int &j) const {
+    return BaseView::j(i + partial_prop.row_offset, j + partial_prop.column_offset);
+  }
+};
+
+struct MatrixView {
+  typedef MatrixView self_t;
+
+  friend std::ostream &operator<<(std::ostream &out, const self_t &view){
+    return out << " [V]";
+  }
+
+  inline const unsigned int rows(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return _rows;
+  }
+  inline const unsigned int columns(
+      const unsigned int &_rows, const unsigned int &_columns) const {
+    return _columns;
+  }
+  inline unsigned int i(
+      const unsigned int &i, const unsigned int &j) const {
+    return i;
+  }
+  inline unsigned int j(
+      const unsigned int &i, const unsigned int &j) const {
+    return j;
   }
 };
 
@@ -392,33 +569,24 @@ struct MatrixView {
 template <
     class T,
     template <class> class Array2D_Type = Array2D_Dense,
-    class ViewType = void>
+    class ViewType = MatrixView>
 class Matrix{
   public:
     typedef Array2D_Type<T> storage_t;
     typedef Matrix<T, Array2D_Type, ViewType> self_t;
 
-    template <class ViewType2, class U = void>
-    struct ViewProperty {
-      static const bool transposed = ViewType2::transposed;
-      static const bool partialized = ViewType2::partialized;
-    };
-    template <class U>
-    struct ViewProperty<void, U> {
-      static const bool transposed = false;
-      static const bool partialized = false;
-    };
+    typedef MatrixViewProperty<ViewType> view_property_t;
+    typedef typename view_property_t::self_t view_t;
+    typedef MatrixViewBuilder<view_t> view_builder_t;
 
-    typedef MatrixView<
-        ViewProperty<ViewType>::transposed,
-        ViewProperty<ViewType>::partialized> view_t;
-
-    typedef Matrix<T, Array2D_Type, void> viewless_t;
-    typedef Matrix<T, Array2D_Type, typename view_t::transposed_t> transposed_t;
-    typedef Matrix<T, Array2D_Type, typename view_t::partial_t> partial_t;
+    typedef Matrix<T, Array2D_Type> viewless_t;
+    typedef Matrix<T, Array2D_Type,
+        typename view_builder_t::transpose_t> transpose_t;
+    typedef Matrix<T, Array2D_Type,
+        typename view_builder_t::partial_t> partial_t;
 
     friend viewless_t;
-    friend transposed_t;
+    friend transpose_t;
     friend partial_t;
   protected:
     Array2D<T> *storage; ///< “à•”“I‚É—˜—p‚·‚é2ŽŸŒ³”z—ñ‚Ìƒƒ‚ƒŠ
@@ -444,10 +612,8 @@ class Matrix{
      *
      * @return row number.
      */
-    const unsigned int &rows() const{
-      return view.partialized
-          ? (view.transposed ? view.partial.columns : view.partial.rows)
-          : (view.transposed ? storage->columns() : storage->rows());
+    const unsigned int rows() const{
+      return view.rows(storage->rows(), storage->columns());
     }
 
     /**
@@ -455,10 +621,8 @@ class Matrix{
      *
      * @return column number.
      */
-    const unsigned int &columns() const{
-      return view.partialized
-          ? (view.transposed ? view.partial.rows : view.partial.columns)
-          : (view.transposed ? storage->rows() : storage->columns());
+    const unsigned int columns() const{
+      return view.columns(storage->rows(), storage->columns());
     }
 
     /**
@@ -472,16 +636,7 @@ class Matrix{
         const unsigned int &row,
         const unsigned int &column) const {
       return array2d()->storage_t::operator()(
-          (view.partialized
-              ? (view.transposed
-                  ? (column + view.partial.column_offset)
-                  : (row + view.partial.row_offset))
-              : (view.transposed ? column : row)),
-          (view.partialized
-              ? (view.transposed
-                  ? (row + view.partial.row_offset)
-                  : (column + view.partial.column_offset))
-              : (view.transposed ? row : column)));
+          view.i(row, column), view.j(row, column));
     }
     T &operator()(
         const unsigned int &row,
@@ -494,7 +649,7 @@ class Matrix{
      *
      */
     void clear(){
-      if(view.partialized){
+      if(view_property_t::truncated){
         for(unsigned int i(0); i < rows(); i++){
           for(unsigned int j(0); j < columns(); j++){
             (*this)(i, j) = T(0);
@@ -624,7 +779,7 @@ class Matrix{
      * @return (viewless_t)
      */
     viewless_t copy() const {
-      if(view.is_viewless()){
+      if(view_property_t::viewless){
         return viewless_t(array2d()->storage_t::copy(true));
       }else{
         viewless_t res(blank_copy());
@@ -697,8 +852,8 @@ class Matrix{
      *
      * @return Transpose matrix
      */
-    transposed_t transpose() const{
-      return transposed_t(*this);
+    transpose_t transpose() const{
+      return transpose_t(*this);
     }
 
     /**
@@ -719,22 +874,19 @@ class Matrix{
         const unsigned int &row_offset,
         const unsigned int &column_offset) const throw(MatrixException) {
       partial_t res(*this);
-      if(!view.partialized){
-        res.view.partial.row_offset = res.view.partial.column_offset = 0;
-      }
-      if(view.transposed){
-        res.view.partial.rows = new_columns;
-        res.view.partial.columns = new_rows;
-        res.view.partial.row_offset += column_offset;
-        res.view.partial.column_offset += row_offset;
+      if(view_property_t::transposed){
+        res.view.partial_prop.rows = new_columns;
+        res.view.partial_prop.columns = new_rows;
+        res.view.partial_prop.row_offset += column_offset;
+        res.view.partial_prop.column_offset += row_offset;
       }else{
-        res.view.partial.rows = new_rows;
-        res.view.partial.columns = new_columns;
-        res.view.partial.row_offset += row_offset;
-        res.view.partial.column_offset += column_offset;
+        res.view.partial_prop.rows = new_rows;
+        res.view.partial_prop.columns = new_columns;
+        res.view.partial_prop.row_offset += row_offset;
+        res.view.partial_prop.column_offset += column_offset;
       }
-      if(((res.view.partial.row_offset + res.view.partial.rows) > storage->rows())
-          || ((res.view.partial.column_offset + res.view.partial.columns) > storage->columns())){
+      if(((res.view.partial_prop.row_offset + res.view.partial_prop.rows) > storage->rows())
+          || ((res.view.partial_prop.column_offset + res.view.partial_prop.columns) > storage->columns())){
         throw MatrixException("size exceeding");
       }
       return res;

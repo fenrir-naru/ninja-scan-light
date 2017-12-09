@@ -368,7 +368,7 @@ BOOST_AUTO_TEST_CASE(trans){
   dbg_print();
   direct_t a(*A);
   a.trans = true;
-  matrix_t::transposed_t _A(A->transpose());
+  matrix_t::transpose_t _A(A->transpose());
   dbg("trans:" << _A << endl, false);
   matrix_compare(a, _A);
   matrix_t __A(_A.copy());
