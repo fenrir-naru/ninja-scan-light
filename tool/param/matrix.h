@@ -403,12 +403,20 @@ template <class View>
 struct MatrixViewBuilder {
   template <template <class> class V, class U = void>
   struct priority_t {
-    static const int priority = 0;
+    static const int priority = -1;
   };
-  template <class U>
-  struct priority_t<MatrixViewTranspose, U> {
-    static const int priority = 1;
+  enum {
+    Partial = 0,
+    Transpose,
   };
+#define make_priority_table(name) \
+template <class U> \
+struct priority_t<MatrixView ## name, U> { \
+  static const int priority = name; \
+};
+  make_priority_table(Partial)
+  make_priority_table(Transpose)
+#undef make_priority_table
 
   template <template <class> class V1, class V2>
   struct sort_t {
