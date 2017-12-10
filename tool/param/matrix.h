@@ -330,10 +330,6 @@ class Array2D_Dense : public Array2D<T> {
 struct MatrixView {
   typedef MatrixView self_t;
 
-  MatrixView(){}
-  template <class ViewType>
-  MatrixView(const ViewType &view){}
-
   friend std::ostream &operator<<(std::ostream &out, const self_t &view){
     return out << " [V]";
   }
@@ -401,6 +397,8 @@ struct MatrixViewProperty<V2<V1> > {
 
 template <class View>
 struct MatrixViewBuilder {
+  typedef MatrixViewProperty<View> property_t;
+
   template <template <class> class V, class U = void>
   struct priority_t {
     static const int priority = -1;
@@ -473,6 +471,33 @@ struct priority_t<MatrixView ## name, U> { \
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
   typedef typename once_t<MatrixViewPartial>::res_t partial_t;
 
+
+  template <class View2>
+  struct copy_t {
+    typedef property_t dist_prop_t;
+    typedef MatrixViewProperty<View2> orig_prop_t;
+
+    template <bool, class U = void>
+    struct partial_t {
+      static void run(View &dist, const View2 &orig){}
+    };
+    template <class U>
+    struct partial_t<true, U> {
+      static void run(View &dist, const View2 &orig){
+        dist.partial_prop = orig.partial_prop;
+      }
+    };
+    static void run(View &dist, const View2 &orig){
+      partial_t<
+          dist_prop_t::partialized
+          && orig_prop_t::partialized>::run(dist, orig);
+    }
+  };
+  template <class View2>
+  static void copy(View &dist, const View2 &orig){
+    copy_t<View2>::run(dist, orig);
+  }
+
   /* Using template because of inhibit generation of method
    * in case View does not have partial attribute.
    */
@@ -485,7 +510,7 @@ struct priority_t<MatrixView ## name, U> { \
       const unsigned int &new_columns,
       const unsigned int &row_offset,
       const unsigned int &column_offset) throw (MatrixException){
-    if(MatrixViewProperty<View>::transposed){
+    if(property_t::transposed){
       view.partial_prop.rows = new_columns;
       view.partial_prop.columns = new_rows;
       view.partial_prop.row_offset += column_offset;
@@ -508,9 +533,8 @@ struct MatrixViewTranspose : protected BaseView {
   typedef MatrixViewTranspose<BaseView> self_t;
 
   MatrixViewTranspose() : BaseView() {}
-  template <class BaseView2>
-  MatrixViewTranspose(const BaseView2 &view)
-      : BaseView(view) {}
+  MatrixViewTranspose(const self_t &view)
+      : BaseView((const BaseView &)view) {}
 
   template <class View>
   friend class MatrixViewBuilder;
@@ -546,22 +570,14 @@ struct MatrixViewPartial : protected BaseView {
     unsigned int columns, column_offset;
     partial_prop_t()
         : rows(0), row_offset(0), columns(0), column_offset(0){}
-    template <class BaseView2>
-    partial_prop_t(const BaseView2 &view)
-        : rows(0), row_offset(0), columns(0), column_offset(0){}
-    template <class BaseView2>
-    partial_prop_t(const MatrixViewPartial<BaseView2> &view){
-      rows = view.partial_prop.rows;
-      row_offset = view.partial_prop.row_offset;
-      columns = view.partial_prop.columns;
-      column_offset = view.partial_prop.column_offset;
-    }
+    partial_prop_t(const partial_prop_t &prop)
+        : rows(prop.rows), row_offset(prop.row_offset),
+        columns(prop.columns), column_offset(prop.column_offset){}
   } partial_prop;
 
   MatrixViewPartial() : BaseView(), partial_prop() {}
-  template <class BaseView2>
-  MatrixViewPartial(const BaseView2 &view)
-      : BaseView(view), partial_prop(view) {
+  MatrixViewPartial(const self_t &view)
+      : BaseView((const BaseView &)view), partial_prop(view.partial_prop) {
   }
 
   template <class View>
@@ -768,7 +784,9 @@ class Matrix{
         : storage(matrix.storage
             ? matrix.array2d()->storage_t::copy(false)
             : NULL),
-        view(matrix.view) {}
+        view() {
+      view_builder_t::copy(view, matrix.view);
+    }
 
   public:
     /**
