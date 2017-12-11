@@ -97,6 +97,7 @@ class StorageException: public MatrixException {
 
 #include <cstring>
 #include <cmath>
+#include <cfloat>
 #include <ostream>
 #include "param/complex.h"
 
@@ -1818,7 +1819,11 @@ class Matrix{
         }
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 
+#if defined(_MSC_VER)
+        if(_isnan(A(m-1,m-2)) || !_finite(A(m-1,m-2))){
+#else
         if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
+#endif
           throw MatrixException("eigen values calculation failed");
         }
 
