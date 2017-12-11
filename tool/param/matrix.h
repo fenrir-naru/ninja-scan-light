@@ -363,6 +363,11 @@ struct MatrixViewProperty {
   typedef View self_t;
   static const bool viewless = true;
 
+  template <template <class> class TargetView>
+  struct check_of_t {
+    static const bool res = false;
+  };
+
   static const bool transposed = false;
   static const bool partialized = false;
 
@@ -373,24 +378,22 @@ template <class V1, template <class> class V2>
 struct MatrixViewProperty<V2<V1> > {
   typedef V2<V1> self_t;
   static const bool viewless = false;
+
   template <template <class> class TargetView>
-  struct check_is_t {
-    template <class U>
+  struct check_of_t {
+    template <template <class> class T, class U = void>
     struct check_t {
-      static const bool res = false;
+      static const bool res = MatrixViewProperty<V1>::template check_of_t<TargetView>::res;
     };
-    template <class U1, template <class> class U2>
-    struct check_t<U2<U1> > {
-      static const bool res = check_t<V1>::res;
+    template <class U>
+    struct check_t<TargetView, U> {
+        static const bool res = true;
     };
-    template <class U1>
-    struct check_t<TargetView<U1> > {
-      static const bool res = true;
-    };
-    static const bool res = check_t<V2<V1> >::res;
+    static const bool res = check_t<V2>::res;
   };
-  static const bool transposed = check_is_t<MatrixViewTranspose>::res;
-  static const bool partialized = check_is_t<MatrixViewPartial>::res;
+
+  static const bool transposed = check_of_t<MatrixViewTranspose>::res;
+  static const bool partialized = check_of_t<MatrixViewPartial>::res;
 
   static const bool truncated = partialized;
 };
@@ -438,15 +441,19 @@ struct priority_t<MatrixView ## name, U> { \
   struct switch_t { // off => on => off => ...
     template <class V>
     struct rebuild_t {
-      typedef NextView<V> res_t;
+      template <class V1>
+      struct check_t {
+        typedef NextView<V1> res_t;
+      };
+      template <class V1, template <class> class V2>
+      struct check_t<V2<V1> > {
+        typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
+      };
+      typedef typename check_t<V>::res_t res_t;
     };
-    template <class V1, template <class> class V2>
-    struct rebuild_t<V2<V1> > {
-      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-    };
-    template <class V1>
-    struct rebuild_t<NextView<V1> > {
-      typedef V1 res_t;
+    template <class V>
+    struct rebuild_t<NextView<V> > {
+      typedef V res_t;
     };
     typedef typename rebuild_t<View>::res_t res_t;
   };
@@ -455,15 +462,19 @@ struct priority_t<MatrixView ## name, U> { \
   struct once_t { // off => on => on => ...
     template <class V>
     struct rebuild_t {
+      template <class V1>
+      struct check_t {
+        typedef NextView<V1> res_t;
+      };
+      template <class V1, template <class> class V2>
+      struct check_t<V2<V1> > {
+        typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
+      };
+      typedef typename check_t<V>::res_t res_t;
+    };
+    template <class V>
+    struct rebuild_t<NextView<V> > {
       typedef NextView<V> res_t;
-    };
-    template <class V1, template <class> class V2>
-    struct rebuild_t<V2<V1> > {
-      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-    };
-    template <class V1>
-    struct rebuild_t<NextView<V1> > {
-      typedef NextView<V1> res_t;
     };
     typedef typename rebuild_t<View>::res_t res_t;
   };
