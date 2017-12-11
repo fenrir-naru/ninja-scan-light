@@ -410,6 +410,24 @@ BOOST_AUTO_TEST_CASE(partial){
   dbg_print();
   direct_t a(*A);
 
+  BOOST_CHECK_THROW(A->partial(A->rows() + 1, 0, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(A->partial(0, A->columns() + 1, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(A->partial(A->rows(), 0, 1, 0), MatrixException);
+  BOOST_CHECK_THROW(A->partial(0, A->columns(), 0, 1), MatrixException);
+
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2 + 1, A->columns() / 2, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2, A->columns() / 2 + 1, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2, A->columns() / 2, 1, 0), MatrixException);
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2, A->columns() / 2, 0, 1), MatrixException);
+
   a.i_offset = a.j_offset = 1;
   matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
   dbg("_A:" << _A << endl, false);
@@ -439,7 +457,7 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->transpose().partial(2,3,3,4).transpose());
 
   a.trans = true;   a.i_offset = 6; a.j_offset = 4;
-  matrix_compare(a, A->transpose().partial(2,3,3,4).partial(1,2,1,2));
+  matrix_compare(a, A->transpose().partial(2,3,3,4).partial(1,1,1,2));
 
   a.trans = true;   a.i_offset = 3; a.j_offset = 4;
   matrix_compare(a, A->partial(2,3,3,4).transpose());
@@ -448,10 +466,10 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->partial(2,3,3,4).transpose().transpose());
 
   a.trans = false;  a.i_offset = 4; a.j_offset = 6;
-  matrix_compare(a, A->partial(2,3,3,4).transpose().transpose().partial(1,2,1,2));
+  matrix_compare(a, A->partial(2,3,3,4).transpose().transpose().partial(1,1,1,2));
 
   a.trans = false;  a.i_offset = 5; a.j_offset = 5;
-  matrix_compare(a, A->partial(2,3,3,4).transpose().partial(1,2,1,2).transpose());
+  matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
 
 BOOST_AUTO_TEST_CASE(minor){
