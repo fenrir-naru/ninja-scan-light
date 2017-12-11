@@ -516,12 +516,10 @@ struct priority_t<MatrixView ## name, U> { \
   template <class View2>
   static void set_partial(
       View2 &view,
-      const unsigned int &orig_rows,
-      const unsigned int &orig_columns,
       const unsigned int &new_rows,
       const unsigned int &new_columns,
       const unsigned int &row_offset,
-      const unsigned int &column_offset) throw (MatrixException){
+      const unsigned int &column_offset){
     if(property_t::transposed){
       view.partial_prop.rows = new_columns;
       view.partial_prop.columns = new_rows;
@@ -533,10 +531,7 @@ struct priority_t<MatrixView ## name, U> { \
       view.partial_prop.row_offset += row_offset;
       view.partial_prop.column_offset += column_offset;
     }
-    if(((view.partial_prop.row_offset + view.partial_prop.rows) > orig_rows)
-        || ((view.partial_prop.column_offset + view.partial_prop.columns) > orig_columns)){
-      throw MatrixException("size exceeding");
-    }
+
   }
 };
 
@@ -549,7 +544,7 @@ struct MatrixViewTranspose : protected BaseView {
       : BaseView((const BaseView &)view) {}
 
   template <class View>
-  friend class MatrixViewBuilder;
+  friend struct MatrixViewBuilder;
 
   friend std::ostream &operator<<(std::ostream &out, const MatrixViewTranspose<BaseView> &view){
     return out << " [T]" << (const BaseView &)view;
@@ -593,7 +588,7 @@ struct MatrixViewPartial : protected BaseView {
   }
 
   template <class View>
-  friend class MatrixViewBuilder;
+  friend struct MatrixViewBuilder;
 
   friend std::ostream &operator<<(std::ostream &out, const MatrixViewPartial<BaseView> &view){
     return out << " [P]("
@@ -952,9 +947,12 @@ class Matrix{
         const unsigned int &row_offset,
         const unsigned int &column_offset) const throw(MatrixException) {
       partial_t res(*this);
+      if((new_rows + row_offset > rows())
+          || (new_columns + column_offset > columns())){
+        throw MatrixException("size exceeding");
+      }
       partial_t::view_builder_t::set_partial(
           res.view,
-          storage->rows(), storage->columns(),
           new_rows, new_columns, row_offset, column_offset);
       return res;
     }
