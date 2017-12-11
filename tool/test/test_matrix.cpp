@@ -324,7 +324,7 @@ BOOST_AUTO_TEST_CASE(scalar_minus){
 }
 
 struct mat_add_t {
-  const matrix_t &m1, &m2;
+  matrix_t m1, m2;
   content_t operator()(const unsigned &i, const unsigned &j) const {
     return (m1)(i, j) + (m2)(i, j);
   }
@@ -339,7 +339,7 @@ BOOST_AUTO_TEST_CASE(matrix_add){
 }
 
 struct mat_mul_t {
-  const matrix_t &m1, &m2;
+  matrix_t m1, m2;
   content_t operator()(const unsigned &i, const unsigned &j) const {
     content_t sum(0);
     for(unsigned k(0); k < m1.rows(); k++){
@@ -479,6 +479,7 @@ BOOST_AUTO_TEST_CASE(pivot_merge){
   mat_add_t a = {A->copy(), B->copy()};
   matrix_t _A(A->pivotMerge(0, 0, *B));
   dbg("pivotMerge:" << _A << endl, false);
+  matrix_compare_delta(a, *A, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
@@ -486,6 +487,7 @@ BOOST_AUTO_TEST_CASE(pivot_add){
   mat_add_t a = {*A, *B};
   matrix_t _A(A->pivotAdd(0, 0, *B));
   dbg("pivotAdd:" << _A << endl, false);
+  matrix_compare_delta(a, *A + *B, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
