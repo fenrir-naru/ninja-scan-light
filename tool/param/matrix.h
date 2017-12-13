@@ -438,13 +438,47 @@ struct priority_t<MatrixView ## name, U> { \
         (priority_t<V1>::priority >= priority_t<V2>::priority)>::res_t res_t;
   };
 
-  template <template <class> class NextView>
+  template <template <class> class RemoveView>
+  struct remove_t {
+    template <class V>
+    struct rebuild_t {
+      template <class V1>
+      struct check_t {
+        typedef V1 res_t;
+      };
+      template <class V1, template <class> class V2>
+      struct check_t<V2<V1> > {
+        typedef V2<typename rebuild_t<V1>::res_t> res_t;
+      };
+      typedef typename check_t<V>::res_t res_t;
+    };
+    template <class V>
+    struct rebuild_t<RemoveView<V> > {
+      typedef typename rebuild_t<V>::res_t res_t;
+    };
+    typedef typename rebuild_t<View>::res_t res_t;
+  };
+
+  template <template <class> class AddView>
+  struct add_t {
+    template <class V>
+    struct rebuild_t {
+      typedef AddView<V> res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
+    };
+    typedef typename rebuild_t<View>::res_t res_t;
+  };
+
+  template <template <class> class SwitchView>
   struct switch_t { // off => on => off => ...
     template <class V>
     struct rebuild_t {
       template <class V1>
       struct check_t {
-        typedef NextView<V1> res_t;
+        typedef SwitchView<V1> res_t;
       };
       template <class V1, template <class> class V2>
       struct check_t<V2<V1> > {
@@ -453,31 +487,18 @@ struct priority_t<MatrixView ## name, U> { \
       typedef typename check_t<V>::res_t res_t;
     };
     template <class V>
-    struct rebuild_t<NextView<V> > {
-      typedef V res_t;
+    struct rebuild_t<SwitchView<V> > {
+      typedef typename MatrixViewBuilder<V>
+          ::template remove_t<SwitchView>::res_t res_t; // remove all subsequential SwitchView
     };
     typedef typename rebuild_t<View>::res_t res_t;
   };
 
-  template <template <class> class NextView>
+  template <template <class> class OnceView>
   struct once_t { // off => on => on => ...
-    template <class V>
-    struct rebuild_t {
-      template <class V1>
-      struct check_t {
-        typedef NextView<V1> res_t;
-      };
-      template <class V1, template <class> class V2>
-      struct check_t<V2<V1> > {
-        typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-      };
-      typedef typename check_t<V>::res_t res_t;
-    };
-    template <class V>
-    struct rebuild_t<NextView<V> > {
-      typedef NextView<V> res_t;
-    };
-    typedef typename rebuild_t<View>::res_t res_t;
+    typedef typename MatrixViewBuilder<
+        typename remove_t<OnceView>::res_t> // remove all OnceView, then add an OnceView
+            ::template add_t<OnceView>::res_t res_t;
   };
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
