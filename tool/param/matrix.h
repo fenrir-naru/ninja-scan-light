@@ -1421,26 +1421,41 @@ class Matrix{
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          if(i >= j){
-           U(i, j) = T(i == j ? 1 : 0);
-            L(i, j) = (*this)(i, j);
-            for(unsigned int k(0); k < j; k++){
-              L(i, j) -= (L(i, k) * U(k, j));
+      for(unsigned int i(0); i < rows(); ++i){
+        U(i, i) = (*this)(i, i);
+        L(i, i) = T(1);
+        for(unsigned int j(i + 1); j < rows(); ++j){
+          U(i, j) = (*this)(i, j);
+          U(j, i) = (*this)(j, i); // U is full copy
+          L(i, j) = T(0);
+        }
+      }
+      // apply Gaussian elimination
+      for(unsigned int i(0); i < rows(); ++i){
+        if(U(i, i) == T(0)){ // check (i, i) is not zero
+          unsigned int j(i);
+          do{
+            if(++j == rows()){
+              throw MatrixException("LU decomposition cannot be performed");
             }
-          }else{
-           L(i, j) = T(0);
-            U(i, j) = (*this)(i, j);
-            for(unsigned int k(0); k < i; k++){
-              U(i, j) -= (L(i, k) * U(k, j));
-            }
-            U(i, j) /= L(i, i);
+          }while(U(i, j) == T(0));
+          for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
+            T temp(U(i2, i));
+            U(i2, i) = U(i2, j);
+            U(i2, j) = temp;
+          }
+        }
+        for(unsigned int i2(i + 1); i2 < rows(); ++i2){
+          L(i2, i) = U(i2, i) / U(i, i);
+          U(i2, i) = T(0);
+          for(unsigned int j2(i + 1); j2 < rows(); ++j2){
+            U(i2, j2) -= L(i2, i) * U(i, j2);
           }
         }
       }
 #undef L
 #undef U
+
       return LU;
     }
 
@@ -1518,19 +1533,23 @@ class Matrix{
       */
 
       //ƒKƒEƒXÁ‹Ž–@
-
       viewless_t left(copy());
       viewless_t right(viewless_t::getI(rows()));
       for(unsigned int i(0); i < rows(); i++){
-        if(left(i, i) == T(0)){ //(i, i)‚ª‘¶Ý‚·‚é‚æ‚¤‚É•À‚×‘Ö‚¦
-          for(unsigned int j(i + 1); j <= rows(); j++){
-            if(j == rows()){throw MatrixException("invert matrix not exist");}
-            if(left(j, i) != T(0)){
-              left.exchangeRows(j, i);
-              right.exchangeRows(j, i);
-              break;
+        if(left(i, i) == T(0)){
+          unsigned int i2(i);
+          do{
+            if(++i2 == rows()){
+              throw MatrixException("invert matrix not exist");
             }
+          }while(left(i2, i) == T(0));
+          // exchange i-th and i2-th rows
+          for(unsigned int j(i); j < columns(); ++j){
+            T temp(left(i, j));
+            left(i, j) = left(i2, j);
+            left(i2, j) = temp;
           }
+          right.exchangeRows(i, i2);
         }
         if(left(i, i) != T(1)){
           for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}

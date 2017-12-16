@@ -356,15 +356,23 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   dbg("*:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
-BOOST_AUTO_TEST_CASE(inv){
-  dbg_print();
+
+void check_inv(const matrix_t &mat){
   try{
-    matrix_t _A(A->inverse());
-    dbg("inv:" << _A << endl, false);
-    matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, 1E-5);
+    matrix_t inv(mat.inverse());
+    dbg("inv:" << inv << endl, false);
+    matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
   }catch(MatrixException &e){
     dbg("inv_error:" << e.what() << endl, true);
   }
+}
+
+BOOST_AUTO_TEST_CASE(inv){
+  dbg_print();
+  check_inv(*A);
+  (*A)(1, 0) = (*A)(1, 1) = 0;
+  dbg_print();
+  check_inv(*A);
 }
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
@@ -542,49 +550,56 @@ BOOST_AUTO_TEST_CASE(sqrt){
   }
 }
 
-BOOST_AUTO_TEST_CASE(LU){
-  dbg_print();
-  matrix_t LU(A->decomposeLU());
+void check_LU(const matrix_t &mat){
+  matrix_t LU(mat.decomposeLU());
   matrix_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
   dbg("LU(L):" << L << endl, false);
   dbg("LU(U):" << U << endl, false);
 
-  for(unsigned i(0); i < A->rows(); i++){
-    for(unsigned j(i+1); j < A->columns(); j++){
+  for(unsigned i(0); i < mat.rows(); i++){
+    for(unsigned j(i+1); j < mat.columns(); j++){
       BOOST_CHECK_EQUAL(L(i, j), 0);
       BOOST_CHECK_EQUAL(U(j, i), 0);
     }
   }
 
-  matrix_t _A(L * U);
-  dbg("LU(L) * LU(U):" << _A << endl, false);
-  // GSL‚ÌLU•ª‰ð‚Å‚Ís‚Ì“ü‚ê‘Ö‚¦‚ªs‚í‚ê‚Ä‚¢‚é
-  set<unsigned> unused_rows;
-  for(unsigned i(0); i < A->rows(); i++){
-    unused_rows.insert(i);
+  matrix_t LU_multi(L * U);
+  dbg("LU(L) * LU(U):" << LU_multi << endl, false);
+  // column permutation will possibly be performed
+  set<unsigned> unused_columns;
+  for(unsigned j(0); j < mat.columns(); j++){
+    unused_columns.insert(j);
   }
-  for(unsigned i(0); i < A->rows(); i++){
-    for(set<unsigned>::iterator it(unused_rows.begin());
+  for(unsigned j(0); j < mat.columns(); j++){
+    for(set<unsigned>::iterator it(unused_columns.begin());
         ;
         ++it){
-      if(it == unused_rows.end()){BOOST_FAIL("L * U != A");}
+      if(it == unused_columns.end()){BOOST_FAIL("L * U != A");}
       //cout << *it << endl;
       bool matched(true);
-      for(unsigned j(0); j < A->columns(); j++){
-        content_t delta((*A)(i, j) - _A(*it, j));
-        //cout << delta << endl;
+      for(unsigned i(0); i < mat.rows(); i++){
+        content_t delta(mat(i, j) - LU_multi(i, *it));
+        //cerr << delta << endl;
         if(delta < 0){delta *= -1;}
         if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
       if(matched){
         //cout << "matched: " << *it << endl;
-        unused_rows.erase(it);
+        unused_columns.erase(it);
         break;
       }
     }
   }
+}
+
+BOOST_AUTO_TEST_CASE(LU){
+  dbg_print();
+  check_LU(*A);
+  (*A)(1, 0) = (*A)(1, 1) = 0;
+  dbg_print();
+  check_LU(*A);
 }
 
 BOOST_AUTO_TEST_CASE(UH){
