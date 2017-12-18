@@ -885,7 +885,32 @@ class Matrix{
         return res;
       }
     }
-    
+
+  protected:
+    /**
+     * Cast to viewless_t is intentionally protected,
+     * because view must be taken into account by a programmer
+     * to optimize speed.
+     * In addition, this cast must be called in explicit style like
+     * subclass_instance.operator superclass::viewless_t (),
+     * because constructor<T, Array2D_Type, ViewType2> has higher priority,
+     * which also has protected.
+     */
+    operator viewless_t() const {
+      if(view_property_t::viewless){
+        return viewless_t(array2d()->storage_t::copy(false)); // shallow copy
+      }else{
+        viewless_t res(blank_copy());
+        for(unsigned int i(0); i < rows(); ++i){
+          for(unsigned int j(0); j < columns(); ++j){
+            res(i, j) = (*this)(i, j);
+          }
+        }
+        return res;
+      }
+    }
+
+  public:
     /**
      * Test whether elements are identical
      * 

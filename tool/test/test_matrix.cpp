@@ -480,6 +480,26 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
 
+BOOST_AUTO_TEST_CASE(cast){
+  assign_unsymmetric();
+  dbg_print();
+
+  direct_t a(*A);
+  a.trans = true;   a.i_offset = 4; a.j_offset = 3;
+
+  typedef matrix_t::transpose_t::partial_t mat_tp_t;
+  struct mat_tp_ex_t : protected mat_tp_t {
+    using mat_tp_t::viewless_t;
+    using mat_tp_t::operator viewless_t;
+    mat_tp_ex_t(const mat_tp_t &mat) : mat_tp_t(mat) {}
+  } mat_tp_ex(A->transpose().partial(2,3,3,4));
+
+  matrix_t _A(mat_tp_ex.operator mat_tp_t::viewless_t ()); // explicit cast, because defined constructor interrupts implicit call.
+  //matrix_t _A2((mat_tp_t::viewless_t)mat_tp_ex); // compile error
+  //matrix_t _A3(mat_tp_ex); // compile error
+  matrix_compare(a, _A);
+}
+
 BOOST_AUTO_TEST_CASE(minor){
   dbg_print();
   for(unsigned i(0); i < A->rows(); ++i){
