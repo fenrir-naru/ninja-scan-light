@@ -1407,16 +1407,20 @@ class Matrix{
     }
 
     /**
-     * Perform decomposition of LU
+     * Perform decomposition of LUP
      * Return matrix is
      * (0, 0)-(n-1, n-1):  L matrix
      * (0, n)-(n-1, 2n-1): U matrix
      *
+     * @param pivot array of pivoting indices to be returned, NULL is acceptable (no return).
+     * For example, [0,2,1] means the left hand side pivot matrix,
+     * which multiplies original matrix (not to be multiplied), equals to
+     * [[1,0,0], [0,0,1], [0,1,0]].
      * @param do_check Check size, the default is true.
      * @return LU decomposed matrix
      * @throw MatrixException
      */
-    viewless_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
+    viewless_t decomposeLUP(unsigned int *pivot = NULL, const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
@@ -1428,6 +1432,11 @@ class Matrix{
           U(i, j) = (*this)(i, j);
           U(j, i) = (*this)(j, i); // U is full copy
           L(i, j) = T(0);
+        }
+      }
+      if(pivot){
+        for(unsigned int i(0); i < rows(); ++i){
+          pivot[i] = i;
         }
       }
       // apply Gaussian elimination
@@ -1444,6 +1453,11 @@ class Matrix{
             U(i2, i) = U(i2, j);
             U(i2, j) = temp;
           }
+          if(pivot){
+            unsigned int temp(pivot[i]);
+            pivot[i] = pivot[j];
+            pivot[j] = temp;
+          }
         }
         for(unsigned int i2(i + 1); i2 < rows(); ++i2){
           L(i2, i) = U(i2, i) / U(i, i);
@@ -1457,6 +1471,10 @@ class Matrix{
 #undef U
 
       return LU;
+    }
+
+    viewless_t decomposeLU(const bool &do_check = true) const {
+      return decomposeLUP(NULL, do_check);
     }
 
     /**

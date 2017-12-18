@@ -551,7 +551,16 @@ BOOST_AUTO_TEST_CASE(sqrt){
 }
 
 void check_LU(const matrix_t &mat){
-  matrix_t LU(mat.decomposeLU());
+  struct pivot_t {
+    unsigned *indices;
+    pivot_t(const unsigned &size) : indices(new unsigned [size]) {}
+    ~pivot_t(){
+      delete [] indices;
+    }
+  } pivot(mat.rows());
+
+  matrix_t LU(mat.decomposeLUP(pivot.indices)), LU2(mat.decomposeLU());
+  matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
   matrix_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
@@ -585,8 +594,8 @@ void check_LU(const matrix_t &mat){
         if(delta < 0){delta *= -1;}
         if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
-      if(matched){
-        //cout << "matched: " << *it << endl;
+      if(matched && (pivot.indices[j] == *it)){
+        //cerr << "matched: " << *it << endl;
         unused_columns.erase(it);
         break;
       }
