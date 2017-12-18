@@ -87,10 +87,19 @@ struct Fixture {
         A_array[i][j] = (*A)(i, j) = gen_rand();
       }
     }
-    for(int i(0); i < B->rows(); i++){
-      for(int j(i); j < B->columns(); j++){
+    for(unsigned int i(0); i < B->rows(); i++){
+      for(unsigned int j(i); j < B->columns(); j++){
         B_array[i][j] = (*B)(i, j) = gen_rand();
       }
+    }
+  }
+  void assign_intermediate_zeros(const unsigned &row = 1){
+    if(row > A->rows()){return;}
+    for(unsigned int j(0); j < row; j++){
+      A_array[row][j] = (*A)(row, j) = content_t(0);
+    }
+    for(unsigned int j(0); j < row; j++){
+      B_array[row][j] = (*B)(row, j) = content_t(0);
     }
   }
   void dbg_print(){
@@ -370,7 +379,7 @@ void check_inv(const matrix_t &mat){
 BOOST_AUTO_TEST_CASE(inv){
   dbg_print();
   check_inv(*A);
-  (*A)(1, 0) = (*A)(1, 1) = 0;
+  assign_intermediate_zeros();
   dbg_print();
   check_inv(*A);
 }
@@ -518,6 +527,12 @@ BOOST_AUTO_TEST_CASE(det){
   dbg_print();
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   dbg("det:" << A->determinant() << endl, false);
+
+  assign_unsymmetric();
+  assign_intermediate_zeros();
+  dbg_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
+  dbg("det:" << A->determinant() << endl, false);
 }
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
@@ -572,6 +587,7 @@ BOOST_AUTO_TEST_CASE(sqrt){
 
 void check_LU(const matrix_t &mat){
   struct pivot_t {
+    unsigned num;
     unsigned *indices;
     pivot_t(const unsigned &size) : indices(new unsigned [size]) {}
     ~pivot_t(){
@@ -579,7 +595,7 @@ void check_LU(const matrix_t &mat){
     }
   } pivot(mat.rows());
 
-  matrix_t LU(mat.decomposeLUP(pivot.indices)), LU2(mat.decomposeLU());
+  matrix_t LU(mat.decomposeLUP(pivot.num, pivot.indices)), LU2(mat.decomposeLU());
   matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
   matrix_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
@@ -626,7 +642,7 @@ void check_LU(const matrix_t &mat){
 BOOST_AUTO_TEST_CASE(LU){
   dbg_print();
   check_LU(*A);
-  (*A)(1, 0) = (*A)(1, 1) = 0;
+  assign_intermediate_zeros();
   dbg_print();
   check_LU(*A);
 }

@@ -1437,7 +1437,8 @@ class Matrix{
      * (0, 0)-(n-1, n-1):  L matrix
      * (0, n)-(n-1, 2n-1): U matrix
      *
-     * @param pivot array of pivoting indices to be returned, NULL is acceptable (no return).
+     * @param pivot_num Number of pivoting to be returned
+     * @param pivot Array of pivoting indices to be returned, NULL is acceptable (no return).
      * For example, [0,2,1] means the left hand side pivot matrix,
      * which multiplies original matrix (not to be multiplied), equals to
      * [[1,0,0], [0,0,1], [0,1,0]].
@@ -1445,7 +1446,10 @@ class Matrix{
      * @return LU decomposed matrix
      * @throw MatrixException
      */
-    viewless_t decomposeLUP(unsigned int *pivot = NULL, const bool &do_check = true) const throw(MatrixException){
+    viewless_t decomposeLUP(
+        unsigned int &pivot_num,
+        unsigned int *pivot = NULL,
+        const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
@@ -1459,6 +1463,7 @@ class Matrix{
           L(i, j) = T(0);
         }
       }
+      pivot_num = 0;
       if(pivot){
         for(unsigned int i(0); i < rows(); ++i){
           pivot[i] = i;
@@ -1478,6 +1483,7 @@ class Matrix{
             U(i2, i) = U(i2, j);
             U(i2, j) = temp;
           }
+          pivot_num++;
           if(pivot){
             unsigned int temp(pivot[i]);
             pivot[i] = pivot[j];
@@ -1499,7 +1505,8 @@ class Matrix{
     }
 
     viewless_t decomposeLU(const bool &do_check = true) const {
-      return decomposeLUP(NULL, do_check);
+      unsigned int pivot_num;
+      return decomposeLUP(pivot_num, NULL, do_check);
     }
 
     /**
@@ -1509,8 +1516,9 @@ class Matrix{
      * @return Determinant
      */
     T determinant_LU(const bool &do_check = true) const {
-      viewless_t LU(decomposeLU(do_check));
-      T res(1);
+      unsigned int pivot_num;
+      viewless_t LU(decomposeLUP(pivot_num, NULL, do_check));
+      T res((pivot_num % 2 == 0) ? 1 : -1);
       for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
         res *= LU(i, i) * LU(i, j);
       }
