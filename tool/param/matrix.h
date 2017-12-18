@@ -438,13 +438,47 @@ struct priority_t<MatrixView ## name, U> { \
         (priority_t<V1>::priority >= priority_t<V2>::priority)>::res_t res_t;
   };
 
-  template <template <class> class NextView>
+  template <template <class> class RemoveView>
+  struct remove_t {
+    template <class V>
+    struct rebuild_t {
+      template <class V1>
+      struct check_t {
+        typedef V1 res_t;
+      };
+      template <class V1, template <class> class V2>
+      struct check_t<V2<V1> > {
+        typedef V2<typename rebuild_t<V1>::res_t> res_t;
+      };
+      typedef typename check_t<V>::res_t res_t;
+    };
+    template <class V>
+    struct rebuild_t<RemoveView<V> > {
+      typedef typename rebuild_t<V>::res_t res_t;
+    };
+    typedef typename rebuild_t<View>::res_t res_t;
+  };
+
+  template <template <class> class AddView>
+  struct add_t {
+    template <class V>
+    struct rebuild_t {
+      typedef AddView<V> res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
+    };
+    typedef typename rebuild_t<View>::res_t res_t;
+  };
+
+  template <template <class> class SwitchView>
   struct switch_t { // off => on => off => ...
     template <class V>
     struct rebuild_t {
       template <class V1>
       struct check_t {
-        typedef NextView<V1> res_t;
+        typedef SwitchView<V1> res_t;
       };
       template <class V1, template <class> class V2>
       struct check_t<V2<V1> > {
@@ -453,31 +487,18 @@ struct priority_t<MatrixView ## name, U> { \
       typedef typename check_t<V>::res_t res_t;
     };
     template <class V>
-    struct rebuild_t<NextView<V> > {
-      typedef V res_t;
+    struct rebuild_t<SwitchView<V> > {
+      typedef typename MatrixViewBuilder<V>
+          ::template remove_t<SwitchView>::res_t res_t; // remove all subsequential SwitchView
     };
     typedef typename rebuild_t<View>::res_t res_t;
   };
 
-  template <template <class> class NextView>
+  template <template <class> class OnceView>
   struct once_t { // off => on => on => ...
-    template <class V>
-    struct rebuild_t {
-      template <class V1>
-      struct check_t {
-        typedef NextView<V1> res_t;
-      };
-      template <class V1, template <class> class V2>
-      struct check_t<V2<V1> > {
-        typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-      };
-      typedef typename check_t<V>::res_t res_t;
-    };
-    template <class V>
-    struct rebuild_t<NextView<V> > {
-      typedef NextView<V> res_t;
-    };
-    typedef typename rebuild_t<View>::res_t res_t;
+    typedef typename MatrixViewBuilder<
+        typename remove_t<OnceView>::res_t> // remove all OnceView, then add an OnceView
+            ::template add_t<OnceView>::res_t res_t;
   };
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
@@ -864,7 +885,32 @@ class Matrix{
         return res;
       }
     }
-    
+
+  protected:
+    /**
+     * Cast to viewless_t is intentionally protected,
+     * because view must be taken into account by a programmer
+     * to optimize speed.
+     * In addition, this cast must be called in explicit style like
+     * subclass_instance.operator superclass::viewless_t (),
+     * because constructor<T, Array2D_Type, ViewType2> has higher priority,
+     * which also has protected.
+     */
+    operator viewless_t() const {
+      if(view_property_t::viewless){
+        return viewless_t(array2d()->storage_t::copy(false)); // shallow copy
+      }else{
+        viewless_t res(blank_copy());
+        for(unsigned int i(0); i < rows(); ++i){
+          for(unsigned int j(0); j < columns(); ++j){
+            res(i, j) = (*this)(i, j);
+          }
+        }
+        return res;
+      }
+    }
+
+  public:
     /**
      * Test whether elements are identical
      * 
@@ -1386,41 +1432,81 @@ class Matrix{
     }
 
     /**
-     * Perform decomposition of LU
+     * Perform decomposition of LUP
      * Return matrix is
      * (0, 0)-(n-1, n-1):  L matrix
      * (0, n)-(n-1, 2n-1): U matrix
      *
+     * @param pivot_num Number of pivoting to be returned
+     * @param pivot Array of pivoting indices to be returned, NULL is acceptable (no return).
+     * For example, [0,2,1] means the left hand side pivot matrix,
+     * which multiplies original matrix (not to be multiplied), equals to
+     * [[1,0,0], [0,0,1], [0,1,0]].
      * @param do_check Check size, the default is true.
      * @return LU decomposed matrix
      * @throw MatrixException
      */
-    viewless_t decomposeLU(const bool &do_check = true) const throw(MatrixException){
+    viewless_t decomposeLUP(
+        unsigned int &pivot_num,
+        unsigned int *pivot = NULL,
+        const bool &do_check = true) const throw(MatrixException){
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          if(i >= j){
-           U(i, j) = T(i == j ? 1 : 0);
-            L(i, j) = (*this)(i, j);
-            for(unsigned int k(0); k < j; k++){
-              L(i, j) -= (L(i, k) * U(k, j));
+      for(unsigned int i(0); i < rows(); ++i){
+        U(i, i) = (*this)(i, i);
+        L(i, i) = T(1);
+        for(unsigned int j(i + 1); j < rows(); ++j){
+          U(i, j) = (*this)(i, j);
+          U(j, i) = (*this)(j, i); // U is full copy
+          L(i, j) = T(0);
+        }
+      }
+      pivot_num = 0;
+      if(pivot){
+        for(unsigned int i(0); i < rows(); ++i){
+          pivot[i] = i;
+        }
+      }
+      // apply Gaussian elimination
+      for(unsigned int i(0); i < rows(); ++i){
+        if(U(i, i) == T(0)){ // check (i, i) is not zero
+          unsigned int j(i);
+          do{
+            if(++j == rows()){
+              throw MatrixException("LU decomposition cannot be performed");
             }
-          }else{
-           L(i, j) = T(0);
-            U(i, j) = (*this)(i, j);
-            for(unsigned int k(0); k < i; k++){
-              U(i, j) -= (L(i, k) * U(k, j));
-            }
-            U(i, j) /= L(i, i);
+          }while(U(i, j) == T(0));
+          for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
+            T temp(U(i2, i));
+            U(i2, i) = U(i2, j);
+            U(i2, j) = temp;
+          }
+          pivot_num++;
+          if(pivot){
+            unsigned int temp(pivot[i]);
+            pivot[i] = pivot[j];
+            pivot[j] = temp;
+          }
+        }
+        for(unsigned int i2(i + 1); i2 < rows(); ++i2){
+          L(i2, i) = U(i2, i) / U(i, i);
+          U(i2, i) = T(0);
+          for(unsigned int j2(i + 1); j2 < rows(); ++j2){
+            U(i2, j2) -= L(i2, i) * U(i, j2);
           }
         }
       }
 #undef L
 #undef U
+
       return LU;
+    }
+
+    viewless_t decomposeLU(const bool &do_check = true) const {
+      unsigned int pivot_num;
+      return decomposeLUP(pivot_num, NULL, do_check);
     }
 
     /**
@@ -1430,8 +1516,9 @@ class Matrix{
      * @return Determinant
      */
     T determinant_LU(const bool &do_check = true) const {
-      viewless_t LU(decomposeLU(do_check));
-      T res(1);
+      unsigned int pivot_num;
+      viewless_t LU(decomposeLUP(pivot_num, NULL, do_check));
+      T res((pivot_num % 2 == 0) ? 1 : -1);
       for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
         res *= LU(i, i) * LU(i, j);
       }
@@ -1497,19 +1584,23 @@ class Matrix{
       */
 
       //ƒKƒEƒXÁ‹Ž–@
-
       viewless_t left(copy());
       viewless_t right(viewless_t::getI(rows()));
       for(unsigned int i(0); i < rows(); i++){
-        if(left(i, i) == T(0)){ //(i, i)‚ª‘¶Ý‚·‚é‚æ‚¤‚É•À‚×‘Ö‚¦
-          for(unsigned int j(i + 1); j <= rows(); j++){
-            if(j == rows()){throw MatrixException("invert matrix not exist");}
-            if(left(j, i) != T(0)){
-              left.exchangeRows(j, i);
-              right.exchangeRows(j, i);
-              break;
+        if(left(i, i) == T(0)){
+          unsigned int i2(i);
+          do{
+            if(++i2 == rows()){
+              throw MatrixException("invert matrix not exist");
             }
+          }while(left(i2, i) == T(0));
+          // exchange i-th and i2-th rows
+          for(unsigned int j(i); j < columns(); ++j){
+            T temp(left(i, j));
+            left(i, j) = left(i2, j);
+            left(i2, j) = temp;
           }
+          right.exchangeRows(i, i2);
         }
         if(left(i, i) != T(1)){
           for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}

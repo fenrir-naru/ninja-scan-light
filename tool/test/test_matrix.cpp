@@ -87,10 +87,19 @@ struct Fixture {
         A_array[i][j] = (*A)(i, j) = gen_rand();
       }
     }
-    for(int i(0); i < B->rows(); i++){
-      for(int j(i); j < B->columns(); j++){
+    for(unsigned int i(0); i < B->rows(); i++){
+      for(unsigned int j(i); j < B->columns(); j++){
         B_array[i][j] = (*B)(i, j) = gen_rand();
       }
+    }
+  }
+  void assign_intermediate_zeros(const unsigned &row = 1){
+    if(row > A->rows()){return;}
+    for(unsigned int j(0); j < row; j++){
+      A_array[row][j] = (*A)(row, j) = content_t(0);
+    }
+    for(unsigned int j(0); j < row; j++){
+      B_array[row][j] = (*B)(row, j) = content_t(0);
     }
   }
   void dbg_print(){
@@ -356,15 +365,23 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   dbg("*:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
-BOOST_AUTO_TEST_CASE(inv){
-  dbg_print();
+
+void check_inv(const matrix_t &mat){
   try{
-    matrix_t _A(A->inverse());
-    dbg("inv:" << _A << endl, false);
-    matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, 1E-5);
+    matrix_t inv(mat.inverse());
+    dbg("inv:" << inv << endl, false);
+    matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
   }catch(MatrixException &e){
     dbg("inv_error:" << e.what() << endl, true);
   }
+}
+
+BOOST_AUTO_TEST_CASE(inv){
+  dbg_print();
+  check_inv(*A);
+  assign_intermediate_zeros();
+  dbg_print();
+  check_inv(*A);
 }
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
@@ -472,6 +489,26 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
 
+BOOST_AUTO_TEST_CASE(cast){
+  assign_unsymmetric();
+  dbg_print();
+
+  direct_t a(*A);
+  a.trans = true;   a.i_offset = 4; a.j_offset = 3;
+
+  typedef matrix_t::transpose_t::partial_t mat_tp_t;
+  struct mat_tp_ex_t : protected mat_tp_t {
+    using mat_tp_t::viewless_t;
+    using mat_tp_t::operator viewless_t;
+    mat_tp_ex_t(const mat_tp_t &mat) : mat_tp_t(mat) {}
+  } mat_tp_ex(A->transpose().partial(2,3,3,4));
+
+  matrix_t _A(mat_tp_ex.operator mat_tp_t::viewless_t ()); // explicit cast, because defined constructor interrupts implicit call.
+  //matrix_t _A2((mat_tp_t::viewless_t)mat_tp_ex); // compile error
+  //matrix_t _A3(mat_tp_ex); // compile error
+  matrix_compare(a, _A);
+}
+
 BOOST_AUTO_TEST_CASE(minor){
   dbg_print();
   for(unsigned i(0); i < A->rows(); ++i){
@@ -487,6 +524,12 @@ BOOST_AUTO_TEST_CASE(minor){
 }
 
 BOOST_AUTO_TEST_CASE(det){
+  dbg_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
+  dbg("det:" << A->determinant() << endl, false);
+
+  assign_unsymmetric();
+  assign_intermediate_zeros();
   dbg_print();
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   dbg("det:" << A->determinant() << endl, false);
@@ -542,49 +585,66 @@ BOOST_AUTO_TEST_CASE(sqrt){
   }
 }
 
-BOOST_AUTO_TEST_CASE(LU){
-  dbg_print();
-  matrix_t LU(A->decomposeLU());
+void check_LU(const matrix_t &mat){
+  struct pivot_t {
+    unsigned num;
+    unsigned *indices;
+    pivot_t(const unsigned &size) : indices(new unsigned [size]) {}
+    ~pivot_t(){
+      delete [] indices;
+    }
+  } pivot(mat.rows());
+
+  matrix_t LU(mat.decomposeLUP(pivot.num, pivot.indices)), LU2(mat.decomposeLU());
+  matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
   matrix_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
   dbg("LU(L):" << L << endl, false);
   dbg("LU(U):" << U << endl, false);
 
-  for(unsigned i(0); i < A->rows(); i++){
-    for(unsigned j(i+1); j < A->columns(); j++){
+  for(unsigned i(0); i < mat.rows(); i++){
+    for(unsigned j(i+1); j < mat.columns(); j++){
       BOOST_CHECK_EQUAL(L(i, j), 0);
       BOOST_CHECK_EQUAL(U(j, i), 0);
     }
   }
 
-  matrix_t _A(L * U);
-  dbg("LU(L) * LU(U):" << _A << endl, false);
-  // GSL‚ÌLU•ª‰ð‚Å‚Ís‚Ì“ü‚ê‘Ö‚¦‚ªs‚í‚ê‚Ä‚¢‚é
-  set<unsigned> unused_rows;
-  for(unsigned i(0); i < A->rows(); i++){
-    unused_rows.insert(i);
+  matrix_t LU_multi(L * U);
+  dbg("LU(L) * LU(U):" << LU_multi << endl, false);
+  // column permutation will possibly be performed
+  set<unsigned> unused_columns;
+  for(unsigned j(0); j < mat.columns(); j++){
+    unused_columns.insert(j);
   }
-  for(unsigned i(0); i < A->rows(); i++){
-    for(set<unsigned>::iterator it(unused_rows.begin());
+  for(unsigned j(0); j < mat.columns(); j++){
+    for(set<unsigned>::iterator it(unused_columns.begin());
         ;
         ++it){
-      if(it == unused_rows.end()){BOOST_FAIL("L * U != A");}
+      if(it == unused_columns.end()){BOOST_FAIL("L * U != A");}
       //cout << *it << endl;
       bool matched(true);
-      for(unsigned j(0); j < A->columns(); j++){
-        content_t delta((*A)(i, j) - _A(*it, j));
-        //cout << delta << endl;
+      for(unsigned i(0); i < mat.rows(); i++){
+        content_t delta(mat(i, j) - LU_multi(i, *it));
+        //cerr << delta << endl;
         if(delta < 0){delta *= -1;}
         if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
-      if(matched){
-        //cout << "matched: " << *it << endl;
-        unused_rows.erase(it);
+      if(matched && (pivot.indices[j] == *it)){
+        //cerr << "matched: " << *it << endl;
+        unused_columns.erase(it);
         break;
       }
     }
   }
+}
+
+BOOST_AUTO_TEST_CASE(LU){
+  dbg_print();
+  check_LU(*A);
+  assign_intermediate_zeros();
+  dbg_print();
+  check_LU(*A);
 }
 
 BOOST_AUTO_TEST_CASE(UH){
