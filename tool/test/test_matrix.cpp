@@ -609,6 +609,7 @@ void check_LU(const matrix_t &mat){
       BOOST_CHECK_EQUAL(U(j, i), 0);
     }
   }
+  BOOST_REQUIRE_EQUAL(true, LU.isLU());
 
   matrix_t LU_multi(L * U);
   dbg("LU(L) * LU(U):" << LU_multi << endl, false);
