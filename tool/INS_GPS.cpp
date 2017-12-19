@@ -703,7 +703,7 @@ struct INS_GPS_Factory<PureINS, Filter, true> {
   typedef INS_GPS2_BiasEstimated<PureINS, Filter> product_t;
 };
 
-template <class INS_GPS, class TimeStamp = typename INS_GPS::float_t>
+template <class INS_GPS>
 class INS_GPS_NAVData;
 
 template <class INS_GPS>
@@ -1060,17 +1060,7 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
 
     template <class Calibration>
     static NAV *check_navdata(const Calibration &calibration){
-      switch(options.time_stamp.mode){
-        case Options::time_stamp_t::CALENDAR_TIME:
-          return Checker<
-                INS_GPS_NAVData<T, CalendarTimeStamp<typename T::float_t> >
-              >::check_synchronization(calibration);
-        case Options::time_stamp_t::ITOW:
-        default:
-          return Checker<
-                INS_GPS_NAVData<T>
-              >::check_synchronization(calibration);
-      }
+      return Checker<INS_GPS_NAVData<T> >::check_synchronization(calibration);
     }
 
     template <class Calibration>
@@ -1085,18 +1075,9 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   struct Checker<INS_GPS_Debug_PureInertial<T> > {
     template <class Calibration>
     static NAV *check_navdata(const Calibration &calibration){
-      typedef INS_GPS_Debug_PureInertial<T> base_t;
-      switch(options.time_stamp.mode){
-        case Options::time_stamp_t::CALENDAR_TIME:
-          return INS_GPS_NAV_Factory<
-                INS_GPS_NAVData<base_t, CalendarTimeStamp<typename base_t::float_t> >
-              >::generate(calibration);
-        case Options::time_stamp_t::ITOW:
-        default:
-          return INS_GPS_NAV_Factory<
-                INS_GPS_NAVData<base_t>
-              >::generate(calibration);
-      }
+      return INS_GPS_NAV_Factory<
+            INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> >
+          >::generate(calibration);
     }
   };
 
@@ -1107,28 +1088,21 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   }
 };
 
-template <class INS_GPS, class TimeStamp>
-class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
+template <class PureINS, class TimeStamp = typename PureINS::float_t>
+class INS_NAVData : public PureINS, public NAVData<typename PureINS::float_t> {
   public:
-#if defined(__GNUC__) && (__GNUC__ < 5)
-    typedef typename INS_GPS::vec3_t vec3_t;
-    typedef typename INS_GPS::mat_t mat_t;
-#else
-    using typename INS_GPS::vec3_t;
-    using typename INS_GPS::mat_t;
-#endif
-    typedef NAVData<typename INS_GPS::float_t> super_data_t;
+    typedef NAVData<typename PureINS::float_t> super_data_t;
     typedef TimeStamp time_stamp_t;
   protected:
     mutable const char *mode;
     mutable time_stamp_t itow;
   public:
-    INS_GPS_NAVData() : INS_GPS(), mode("N/A"), itow(0) {}
-    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS, time_stamp_t> &orig, const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
-    ~INS_GPS_NAVData(){}
+    INS_NAVData() : PureINS(), mode("N/A"), itow(0) {}
+    INS_NAVData(const INS_NAVData<PureINS, time_stamp_t> &orig, const bool &deepcopy = false)
+        : PureINS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
+    ~INS_NAVData(){}
 #define MAKE_PROXY_FUNC(fname) \
-typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
+typename PureINS::float_t fname() const {return PureINS::fname();}
     MAKE_PROXY_FUNC(longitude);
     MAKE_PROXY_FUNC(latitude);
     MAKE_PROXY_FUNC(height);
@@ -1141,7 +1115,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     MAKE_PROXY_FUNC(euler_psi);
     MAKE_PROXY_FUNC(azimuth);
 #undef MAKE_PROXY_FUNC
-    typename INS_GPS::float_t time_stamp() const {return (typename INS_GPS::float_t)itow;}
+    typename PureINS::float_t time_stamp() const {return (typename PureINS::float_t)itow;}
 
     void set_header(const char *_mode) const {
       mode = _mode;
@@ -1150,6 +1124,44 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       mode = _mode;
       itow = _itow;
     }
+  protected:
+    static void label_time(std::ostream &out, const void *){
+      out << "itow";
+    }
+
+    template <class FloatT>
+    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
+      CalendarTimeStamp<FloatT>::label(out);
+    }
+  public:
+    void label(std::ostream &out) const {
+      out << "mode" << ',';
+      label_time(out, &itow);
+      out << ',';
+      super_data_t::label(out);
+    }
+    void dump(std::ostream &out) const {
+      out << mode << ','
+          << itow << ',';
+      super_data_t::dump(out);
+    }
+};
+
+template <class INS_GPS>
+class INS_GPS_NAVData : public INS_GPS {
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename INS_GPS::vec3_t vec3_t;
+    typedef typename INS_GPS::mat_t mat_t;
+#else
+    using typename INS_GPS::vec3_t;
+    using typename INS_GPS::mat_t;
+#endif
+  public:
+    INS_GPS_NAVData() : INS_GPS() {}
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
+        : INS_GPS(orig, deepcopy) {}
+    ~INS_GPS_NAVData(){}
   protected:
     static void label2(std::ostream &out, const void *){}
 
@@ -1192,25 +1204,12 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
             << ',' << "s1(bias_gyro(Z))";
       }
     }
-
-    static void label_time(std::ostream &out, const void *){
-      out << "itow";
-    }
-
-    template <class FloatT>
-    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
-      CalendarTimeStamp<FloatT>::label(out);
-    }
-
   public:
     /**
      * print label
      */
-    void label(std::ostream &out = std::cout) const {
-      out << "mode" << ',';
-      label_time(out, &itow);
-      out << ',';
-      super_data_t::label(out);
+    void label(std::ostream &out) const {
+      INS_GPS::label(out);
       label2(out, this);
     }
   
@@ -1268,9 +1267,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
      * @param itow current time
      */
     void dump(std::ostream &out) const {
-      out << mode << ','
-          << itow << ',';
-      super_data_t::dump(out);
+      INS_GPS::dump(out);
       dump2(out, this);
     }
 };
@@ -2271,7 +2268,14 @@ class NAV_Generator {
     }
   public:
     static NAV *generate(){
-      return check_egm<INS_GPS_Factory<> >();
+      switch(options.time_stamp.mode){
+        case Options::time_stamp_t::CALENDAR_TIME:
+          return check_egm<INS_GPS_Factory<
+              INS_NAVData<INS<float_sylph_t>, CalendarTimeStamp<float_sylph_t> > > >();
+        case Options::time_stamp_t::ITOW:
+        default:
+          return check_egm<INS_GPS_Factory<INS_NAVData<INS<float_sylph_t> > > >();
+      }
     }
 };
 
