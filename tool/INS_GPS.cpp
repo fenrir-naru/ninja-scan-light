@@ -450,11 +450,13 @@ struct Updatable {
   virtual void update(const TimePacket &){}
 } updatable_blackhole;
 
-class NAV : public NAVData<float_sylph_t>, public Updatable {
+class NAV : public Updatable {
   public:
-    typedef std::vector<const NAVData<float_sylph_t> *> updated_items_t;
+    typedef NAVData<float_sylph_t> data_t;
+    typedef std::vector<const data_t *> updated_items_t;
     virtual ~NAV(){}
   public:
+    virtual void label(std::ostream &out) const = 0;
     virtual updated_items_t updated_items() const {
       return updated_items_t();
     }
@@ -507,17 +509,19 @@ class NAV : public NAVData<float_sylph_t>, public Updatable {
 
     float_sylph_t get_mag_delta_yaw(
         const Vector3<float_sylph_t> &mag,
-        const Quaternion<float_sylph_t> &attitude){
+        const Quaternion<float_sylph_t> &attitude,
+        const data_t &data){
 
-      return get_mag_delta_yaw(mag, attitude, latitude(), longitude(), height());
+      return get_mag_delta_yaw(mag, attitude, data.latitude(), data.longitude(), data.height());
     }
 
     float_sylph_t get_mag_delta_yaw(
-        const Vector3<float_sylph_t> &mag){
+        const Vector3<float_sylph_t> &mag,
+        const data_t &data){
 
       return get_mag_delta_yaw(mag,
-          INS<float_sylph_t>::euler2q(euler_psi(), euler_theta(), euler_phi()),
-          latitude(), longitude(), height());
+          INS<float_sylph_t>::euler2q(data.euler_psi(), data.euler_theta(), data.euler_phi()),
+          data.latitude(), data.longitude(), data.height());
     }
 
     /**
@@ -535,12 +539,14 @@ class NAV : public NAVData<float_sylph_t>, public Updatable {
           latitude, longitude, altitude);
     }
 
-    float_sylph_t get_mag_yaw(const Vector3<float_sylph_t> &mag){
+    float_sylph_t get_mag_yaw(
+        const Vector3<float_sylph_t> &mag,
+        const data_t &data){
 
       return get_mag_yaw(
           mag,
-          euler_theta(), euler_phi(),
-          latitude(), longitude(), height());
+          data.euler_theta(), data.euler_phi(),
+          data.latitude(), data.longitude(), data.height());
     }
 };
 
@@ -571,7 +577,7 @@ struct NAV_Factory {
         }
       }
 
-      options.out_debug() << BaseNAV::time_stamp() << ',';
+      options.out_debug() << (**(items.rbegin())).time_stamp() << ',';
       BaseNAV::inspect(options.out_debug());
       options.out_debug() << std::endl;
     }
@@ -925,22 +931,6 @@ class INS_GPS_NAV : public NAV {
       }
       return res;
     }
-
-#define MAKE_PROXY_FUNC(fname) \
-float_t fname() const {return ins_gps->fname();}
-    MAKE_PROXY_FUNC(longitude);
-    MAKE_PROXY_FUNC(latitude);
-    MAKE_PROXY_FUNC(height);
-    MAKE_PROXY_FUNC(v_north);
-    MAKE_PROXY_FUNC(v_east);
-    MAKE_PROXY_FUNC(v_down);
-    MAKE_PROXY_FUNC(heading);
-    MAKE_PROXY_FUNC(euler_phi);
-    MAKE_PROXY_FUNC(euler_theta);
-    MAKE_PROXY_FUNC(euler_psi);
-    MAKE_PROXY_FUNC(azimuth);
-    MAKE_PROXY_FUNC(time_stamp);
-#undef MAKE_PROXY_FUNC
     
     float_t &operator[](const unsigned &index){return ins_gps->operator[](index);}
     
@@ -1006,10 +996,6 @@ float_t fname() const {return ins_gps->fname();}
     
     void label(std::ostream &out) const {
       ins_gps->label(out);
-    }
-
-    void dump(std::ostream &out) const {
-      ins_gps->dump(out);
     }
 
     updated_items_t updated_items() const {
@@ -2243,7 +2229,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
               && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
-            nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
+            nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow), *(nav.ins_gps)));
           }
         }
         status = MEASUREMENT_UPDATED;
