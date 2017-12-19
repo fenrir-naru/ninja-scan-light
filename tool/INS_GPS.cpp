@@ -693,7 +693,7 @@ struct INS_GPS_Factory {
   typedef INS_GPS2<PureINS, Filter> product_t;
   typedef INS_GPS_Factory<PureINS, Filter, true> bias_t;
   typedef INS_GPS_Factory<PureINS, KalmanFilterUD, BiasEstimator> udkf_t;
-  typedef INS_GPS_Factory<INS_EGM<typename PureINS::float_t>, Filter> egm_t;
+  typedef INS_GPS_Factory<INS_EGM<PureINS>, Filter> egm_t;
 };
 
 template <
