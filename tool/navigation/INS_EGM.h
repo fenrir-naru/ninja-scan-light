@@ -31,15 +31,15 @@
 /**
  * @brief INS including EGM
  *
- * @param FloatT precision, default is double
+ * @param PureINS Base INS class
  * @param EGM
  */
 template <
-    class FloatT = double,
-    class EGM = EGM2008_70_Generic<FloatT> >
-class INS_EGM : public INS<FloatT> {
+    class PureINS,
+    class EGM = EGM2008_70_Generic<typename PureINS::float_t> >
+class INS_EGM : public PureINS {
   public:
-    typedef INS<FloatT> super_t;
+    typedef PureINS super_t;
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename super_t::float_t float_t;
     typedef typename super_t::vec3_t vec3_t;

@@ -3,12 +3,16 @@ configuration: AppVeyor
 install:
   - set PATH=C:\Ruby21\bin;%PATH%
   - gem install ocra
+before_build:
+  - nuget restore tool\NinjaScanLight_tools.sln
 build:
   project: tool\NinjaScanLight_tools.sln
   verbosity: minimal
 after_build:
   - type nul > %APPVEYOR_REPO_COMMIT%.commit
-  - 7z a windows.%APPVEYOR_REPO_BRANCH%.zip %APPVEYOR_BUILD_FOLDER%\tool\build_VC\%CONFIGURATION%\*.exe %APPVEYOR_REPO_COMMIT%.commit
+  - 7z a windows.%APPVEYOR_REPO_BRANCH%.zip %APPVEYOR_BUILD_FOLDER%\tool\build_VC\%CONFIGURATION%\*.exe %APPVEYOR_REPO_COMMIT%.commit -x!test_*.exe
+test_script:
+  - for /r tool\build_VC\%CONFIGURATION% %%a in (test_*.exe) do %%a
 artifacts:
   - path: windows.*.zip
     name: x86 binary
@@ -30,3 +34,5 @@ deploy:
     explode: false
     on:
       branch: master
+#cache:
+#  - tool\packages -> **\packages.config

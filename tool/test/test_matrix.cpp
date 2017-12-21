@@ -13,6 +13,8 @@
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
 
+#include <boost/type_traits/is_same.hpp>
+
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
 #include <boost/test/floating_point_comparison.hpp>
@@ -85,10 +87,19 @@ struct Fixture {
         A_array[i][j] = (*A)(i, j) = gen_rand();
       }
     }
-    for(int i(0); i < B->rows(); i++){
-      for(int j(i); j < B->columns(); j++){
+    for(unsigned int i(0); i < B->rows(); i++){
+      for(unsigned int j(i); j < B->columns(); j++){
         B_array[i][j] = (*B)(i, j) = gen_rand();
       }
+    }
+  }
+  void assign_intermediate_zeros(const unsigned &row = 1){
+    if(row > A->rows()){return;}
+    for(unsigned int j(0); j < row; j++){
+      A_array[row][j] = (*A)(row, j) = content_t(0);
+    }
+    for(unsigned int j(0); j < row; j++){
+      B_array[row][j] = (*B)(row, j) = content_t(0);
     }
   }
   void dbg_print(){
@@ -222,8 +233,8 @@ struct direct_t {
   }
   content_t operator()(const unsigned &i, const unsigned &j) const {
     return m(
-        (trans ? column[j] : row[i]) + i_offset,
-        (trans ? row[i] : column[j]) + j_offset) * scalar;
+        (trans ? column[j + j_offset] : row[i + i_offset]),
+        (trans ? row[i + i_offset] : column[j + j_offset])) * scalar;
   }
 };
 
@@ -322,7 +333,7 @@ BOOST_AUTO_TEST_CASE(scalar_minus){
 }
 
 struct mat_add_t {
-  const matrix_t &m1, &m2;
+  matrix_t m1, m2;
   content_t operator()(const unsigned &i, const unsigned &j) const {
     return (m1)(i, j) + (m2)(i, j);
   }
@@ -337,7 +348,7 @@ BOOST_AUTO_TEST_CASE(matrix_add){
 }
 
 struct mat_mul_t {
-  const matrix_t &m1, &m2;
+  matrix_t m1, m2;
   content_t operator()(const unsigned &i, const unsigned &j) const {
     content_t sum(0);
     for(unsigned k(0); k < m1.rows(); k++){
@@ -354,34 +365,85 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   dbg("*:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
-BOOST_AUTO_TEST_CASE(inv){
-  dbg_print();
+
+void check_inv(const matrix_t &mat){
   try{
-    matrix_t _A(A->inverse());
-    dbg("inv:" << _A << endl, false);
-    matrix_compare_delta(matrix_t::getI(SIZE), (*A) * _A, 1E-5);
+    matrix_t inv(mat.inverse());
+    dbg("inv:" << inv << endl, false);
+    matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
   }catch(MatrixException &e){
     dbg("inv_error:" << e.what() << endl, true);
   }
+}
+
+BOOST_AUTO_TEST_CASE(inv){
+  dbg_print();
+  check_inv(*A);
+  assign_intermediate_zeros();
+  dbg_print();
+  check_inv(*A);
+}
+BOOST_AUTO_TEST_CASE(view){
+  BOOST_CHECK((boost::is_same<
+      matrix_t::transpose_t::view_t,
+      MatrixViewTranspose<MatrixView> >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::transpose_t::transpose_t::view_t,
+      MatrixView>::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::transpose_t::partial_t::view_t,
+      MatrixViewTranspose<MatrixViewPartial<MatrixView> > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::transpose_t::partial_t::transpose_t::view_t,
+      MatrixViewPartial<MatrixView> >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::partial_t::view_t,
+      MatrixViewPartial<MatrixView> >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::transpose_t::view_t,
+      MatrixViewTranspose<MatrixViewPartial<MatrixView> > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::transpose_t::transpose_t::view_t,
+      MatrixViewPartial<MatrixView> >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
+      MatrixViewPartial<MatrixView> >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
   dbg_print();
   direct_t a(*A);
   a.trans = true;
-  matrix_t::transposed_t _A(A->transpose());
+  matrix_t::transpose_t _A(A->transpose());
   dbg("trans:" << _A << endl, false);
   matrix_compare(a, _A);
   matrix_t __A(_A.copy());
   dbg("trans.copy:" << __A << endl, false);
   matrix_compare(a, __A);
-  matrix_t ___A(_A.transpose());
+  matrix_t::transpose_t::transpose_t ___A(_A.transpose()); // matrix_t::transpose_t::transpose_t = matrix_t
   dbg("trans.trans:" << ___A << endl, false);
   matrix_compare(*A, ___A);
 }
-
 BOOST_AUTO_TEST_CASE(partial){
   dbg_print();
   direct_t a(*A);
+
+  BOOST_CHECK_THROW(A->partial(A->rows() + 1, 0, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(A->partial(0, A->columns() + 1, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(A->partial(A->rows(), 0, 1, 0), MatrixException);
+  BOOST_CHECK_THROW(A->partial(0, A->columns(), 0, 1), MatrixException);
+
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2 + 1, A->columns() / 2, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2, A->columns() / 2 + 1, 0, 0), MatrixException);
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2, A->columns() / 2, 1, 0), MatrixException);
+  BOOST_CHECK_THROW(
+      A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
+        .partial(A->rows() / 2, A->columns() / 2, 0, 1), MatrixException);
 
   a.i_offset = a.j_offset = 1;
   matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
@@ -400,15 +462,76 @@ BOOST_AUTO_TEST_CASE(partial){
   dbg("_A:" << _A << endl, false);
   matrix_compare(a, _A);
 }
+BOOST_AUTO_TEST_CASE(trans_partial){
+  assign_unsymmetric();
+  dbg_print();
+  direct_t a(*A);
+
+  a.trans = true;   a.i_offset = 4; a.j_offset = 3;
+  matrix_compare(a, A->transpose().partial(2,3,3,4));
+
+  a.trans = false;  a.i_offset = 4; a.j_offset = 3;
+  matrix_compare(a, A->transpose().partial(2,3,3,4).transpose());
+
+  a.trans = true;   a.i_offset = 6; a.j_offset = 4;
+  matrix_compare(a, A->transpose().partial(2,3,3,4).partial(1,1,1,2));
+
+  a.trans = true;   a.i_offset = 3; a.j_offset = 4;
+  matrix_compare(a, A->partial(2,3,3,4).transpose());
+
+  a.trans = false;  a.i_offset = 3; a.j_offset = 4;
+  matrix_compare(a, A->partial(2,3,3,4).transpose().transpose());
+
+  a.trans = false;  a.i_offset = 4; a.j_offset = 6;
+  matrix_compare(a, A->partial(2,3,3,4).transpose().transpose().partial(1,1,1,2));
+
+  a.trans = false;  a.i_offset = 5; a.j_offset = 5;
+  matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
+}
+
+BOOST_AUTO_TEST_CASE(cast){
+  assign_unsymmetric();
+  dbg_print();
+
+  direct_t a(*A);
+  a.trans = true;   a.i_offset = 4; a.j_offset = 3;
+
+  typedef matrix_t::transpose_t::partial_t mat_tp_t;
+  struct mat_tp_ex_t : protected mat_tp_t {
+    using mat_tp_t::viewless_t;
+    using mat_tp_t::operator viewless_t;
+    mat_tp_ex_t(const mat_tp_t &mat) : mat_tp_t(mat) {}
+  } mat_tp_ex(A->transpose().partial(2,3,3,4));
+
+  matrix_t _A(mat_tp_ex.operator mat_tp_t::viewless_t ()); // explicit cast, because defined constructor interrupts implicit call.
+  //matrix_t _A2((mat_tp_t::viewless_t)mat_tp_ex); // compile error
+  //matrix_t _A3(mat_tp_ex); // compile error
+  matrix_compare(a, _A);
+}
+
+BOOST_AUTO_TEST_CASE(minor){
+  dbg_print();
+  for(unsigned i(0); i < A->rows(); ++i){
+    for(unsigned j(0); j < A->columns(); ++j){
+      direct_t a(*A);
+      a.row.erase(a.row.begin() + i);
+      a.column.erase(a.column.begin() + j);
+      matrix_t _A(A->matrix_for_minor(i, j));
+      dbg("matrix_for_minor:" << _A << endl, false);
+      matrix_compare(a, _A);
+    }
+  }
+}
 
 BOOST_AUTO_TEST_CASE(det){
   dbg_print();
-  direct_t a(*A);
-  a.row.pop_front();
-  a.column.pop_front();
-  matrix_t _A(A->matrix_for_minor(0, 0));
-  dbg("matrix_for_minor:" << _A << endl, false);
-  matrix_compare(a, _A);
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
+  dbg("det:" << A->determinant() << endl, false);
+
+  assign_unsymmetric();
+  assign_intermediate_zeros();
+  dbg_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   dbg("det:" << A->determinant() << endl, false);
 }
 
@@ -417,6 +540,7 @@ BOOST_AUTO_TEST_CASE(pivot_merge){
   mat_add_t a = {A->copy(), B->copy()};
   matrix_t _A(A->pivotMerge(0, 0, *B));
   dbg("pivotMerge:" << _A << endl, false);
+  matrix_compare_delta(a, *A, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
@@ -424,6 +548,7 @@ BOOST_AUTO_TEST_CASE(pivot_add){
   mat_add_t a = {*A, *B};
   matrix_t _A(A->pivotAdd(0, 0, *B));
   dbg("pivotAdd:" << _A << endl, false);
+  matrix_compare_delta(a, *A + *B, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
@@ -460,49 +585,67 @@ BOOST_AUTO_TEST_CASE(sqrt){
   }
 }
 
-BOOST_AUTO_TEST_CASE(LU){
-  dbg_print();
-  matrix_t LU(A->decomposeLU());
+void check_LU(const matrix_t &mat){
+  struct pivot_t {
+    unsigned num;
+    unsigned *indices;
+    pivot_t(const unsigned &size) : indices(new unsigned [size]) {}
+    ~pivot_t(){
+      delete [] indices;
+    }
+  } pivot(mat.rows());
+
+  matrix_t LU(mat.decomposeLUP(pivot.num, pivot.indices)), LU2(mat.decomposeLU());
+  matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
   matrix_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
   dbg("LU(L):" << L << endl, false);
   dbg("LU(U):" << U << endl, false);
 
-  for(unsigned i(0); i < A->rows(); i++){
-    for(unsigned j(i+1); j < A->columns(); j++){
+  for(unsigned i(0); i < mat.rows(); i++){
+    for(unsigned j(i+1); j < mat.columns(); j++){
       BOOST_CHECK_EQUAL(L(i, j), 0);
       BOOST_CHECK_EQUAL(U(j, i), 0);
     }
   }
+  BOOST_REQUIRE_EQUAL(true, LU.isLU());
 
-  matrix_t _A(L * U);
-  dbg("LU(L) * LU(U):" << _A << endl, false);
-  // GSL‚ÌLU•ª‰ð‚Å‚Ís‚Ì“ü‚ê‘Ö‚¦‚ªs‚í‚ê‚Ä‚¢‚é
-  set<unsigned> unused_rows;
-  for(unsigned i(0); i < A->rows(); i++){
-    unused_rows.insert(i);
+  matrix_t LU_multi(L * U);
+  dbg("LU(L) * LU(U):" << LU_multi << endl, false);
+  // column permutation will possibly be performed
+  set<unsigned> unused_columns;
+  for(unsigned j(0); j < mat.columns(); j++){
+    unused_columns.insert(j);
   }
-  for(unsigned i(0); i < A->rows(); i++){
-    for(set<unsigned>::iterator it(unused_rows.begin());
+  for(unsigned j(0); j < mat.columns(); j++){
+    for(set<unsigned>::iterator it(unused_columns.begin());
         ;
         ++it){
-      if(it == unused_rows.end()){BOOST_FAIL("L * U != A");}
+      if(it == unused_columns.end()){BOOST_FAIL("L * U != A");}
       //cout << *it << endl;
       bool matched(true);
-      for(unsigned j(0); j < A->columns(); j++){
-        content_t delta((*A)(i, j) - _A(*it, j));
-        //cout << delta << endl;
+      for(unsigned i(0); i < mat.rows(); i++){
+        content_t delta(mat(i, j) - LU_multi(i, *it));
+        //cerr << delta << endl;
         if(delta < 0){delta *= -1;}
         if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
-      if(matched){
-        //cout << "matched: " << *it << endl;
-        unused_rows.erase(it);
+      if(matched && (pivot.indices[j] == *it)){
+        //cerr << "matched: " << *it << endl;
+        unused_columns.erase(it);
         break;
       }
     }
   }
+}
+
+BOOST_AUTO_TEST_CASE(LU){
+  dbg_print();
+  check_LU(*A);
+  assign_intermediate_zeros();
+  dbg_print();
+  check_LU(*A);
 }
 
 BOOST_AUTO_TEST_CASE(UH){

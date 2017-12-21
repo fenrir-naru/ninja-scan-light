@@ -30,9 +30,9 @@ PACKAGES = $(basename $(shell ls test_*.cpp))
 
 BIN_PATH = /usr/bin:/usr/local/bin
 CXX ?= g++
-CPPFLAGS += 
-CFLAGS += $(CPPFLAGS) -Wall -Wno-sign-compare -Wno-parentheses
-LFLAGS =  
+CPPFLAGS ?=
+CFLAGS ?= $(CPPFLAGS) -Wall -Wno-sign-compare -Wno-parentheses
+LFLAGS =
 INCLUDES = -I..
 LIBS = -lm #-L
 BUILD_DIR ?= build_GCC
@@ -52,7 +52,7 @@ all : $(BUILD_DIRS) packages
 $(BUILD_DIR)/depend.inc: $(SRCS) makefile
 	mkdir -p $(dir $@); \
 	for i in $(SRCS); do \
-		$(CXX) -E -MM $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
+		$(CXX) -E -MM -MP $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
 		if ! [ $$? = 0 ]; then \
 			rm -f tempfile; \
 			exit 1; \
