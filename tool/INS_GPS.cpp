@@ -450,11 +450,13 @@ struct Updatable {
   virtual void update(const TimePacket &){}
 } updatable_blackhole;
 
-class NAV : public NAVData<float_sylph_t>, public Updatable {
+class NAV : public Updatable {
   public:
-    typedef std::vector<const NAVData<float_sylph_t> *> updated_items_t;
+    typedef NAVData<float_sylph_t> data_t;
+    typedef std::vector<const data_t *> updated_items_t;
     virtual ~NAV(){}
   public:
+    virtual void label(std::ostream &out) const = 0;
     virtual updated_items_t updated_items() const {
       return updated_items_t();
     }
@@ -507,17 +509,19 @@ class NAV : public NAVData<float_sylph_t>, public Updatable {
 
     float_sylph_t get_mag_delta_yaw(
         const Vector3<float_sylph_t> &mag,
-        const Quaternion<float_sylph_t> &attitude){
+        const Quaternion<float_sylph_t> &attitude,
+        const data_t &data){
 
-      return get_mag_delta_yaw(mag, attitude, latitude(), longitude(), height());
+      return get_mag_delta_yaw(mag, attitude, data.latitude(), data.longitude(), data.height());
     }
 
     float_sylph_t get_mag_delta_yaw(
-        const Vector3<float_sylph_t> &mag){
+        const Vector3<float_sylph_t> &mag,
+        const data_t &data){
 
       return get_mag_delta_yaw(mag,
-          INS<float_sylph_t>::euler2q(euler_psi(), euler_theta(), euler_phi()),
-          latitude(), longitude(), height());
+          INS<float_sylph_t>::euler2q(data.euler_psi(), data.euler_theta(), data.euler_phi()),
+          data.latitude(), data.longitude(), data.height());
     }
 
     /**
@@ -535,12 +539,14 @@ class NAV : public NAVData<float_sylph_t>, public Updatable {
           latitude, longitude, altitude);
     }
 
-    float_sylph_t get_mag_yaw(const Vector3<float_sylph_t> &mag){
+    float_sylph_t get_mag_yaw(
+        const Vector3<float_sylph_t> &mag,
+        const data_t &data){
 
       return get_mag_yaw(
           mag,
-          euler_theta(), euler_phi(),
-          latitude(), longitude(), height());
+          data.euler_theta(), data.euler_phi(),
+          data.latitude(), data.longitude(), data.height());
     }
 };
 
@@ -571,7 +577,7 @@ struct NAV_Factory {
         }
       }
 
-      options.out_debug() << BaseNAV::time_stamp() << ',';
+      options.out_debug() << (**(items.rbegin())).time_stamp() << ',';
       BaseNAV::inspect(options.out_debug());
       options.out_debug() << std::endl;
     }
@@ -687,7 +693,7 @@ struct INS_GPS_Factory {
   typedef INS_GPS2<PureINS, Filter> product_t;
   typedef INS_GPS_Factory<PureINS, Filter, true> bias_t;
   typedef INS_GPS_Factory<PureINS, KalmanFilterUD, BiasEstimator> udkf_t;
-  typedef INS_GPS_Factory<INS_EGM<typename PureINS::float_t>, Filter> egm_t;
+  typedef INS_GPS_Factory<INS_EGM<PureINS>, Filter> egm_t;
 };
 
 template <
@@ -697,7 +703,7 @@ struct INS_GPS_Factory<PureINS, Filter, true> {
   typedef INS_GPS2_BiasEstimated<PureINS, Filter> product_t;
 };
 
-template <class INS_GPS, class TimeStamp = typename INS_GPS::float_t>
+template <class INS_GPS>
 class INS_GPS_NAVData;
 
 template <class INS_GPS>
@@ -925,22 +931,6 @@ class INS_GPS_NAV : public NAV {
       }
       return res;
     }
-
-#define MAKE_PROXY_FUNC(fname) \
-float_t fname() const {return ins_gps->fname();}
-    MAKE_PROXY_FUNC(longitude);
-    MAKE_PROXY_FUNC(latitude);
-    MAKE_PROXY_FUNC(height);
-    MAKE_PROXY_FUNC(v_north);
-    MAKE_PROXY_FUNC(v_east);
-    MAKE_PROXY_FUNC(v_down);
-    MAKE_PROXY_FUNC(heading);
-    MAKE_PROXY_FUNC(euler_phi);
-    MAKE_PROXY_FUNC(euler_theta);
-    MAKE_PROXY_FUNC(euler_psi);
-    MAKE_PROXY_FUNC(azimuth);
-    MAKE_PROXY_FUNC(time_stamp);
-#undef MAKE_PROXY_FUNC
     
     float_t &operator[](const unsigned &index){return ins_gps->operator[](index);}
     
@@ -1008,10 +998,6 @@ float_t fname() const {return ins_gps->fname();}
       ins_gps->label(out);
     }
 
-    void dump(std::ostream &out) const {
-      ins_gps->dump(out);
-    }
-
     updated_items_t updated_items() const {
       return helper.updated_items();
     }
@@ -1074,17 +1060,7 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
 
     template <class Calibration>
     static NAV *check_navdata(const Calibration &calibration){
-      switch(options.time_stamp.mode){
-        case Options::time_stamp_t::CALENDAR_TIME:
-          return Checker<
-                INS_GPS_NAVData<T, CalendarTimeStamp<typename T::float_t> >
-              >::check_synchronization(calibration);
-        case Options::time_stamp_t::ITOW:
-        default:
-          return Checker<
-                INS_GPS_NAVData<T>
-              >::check_synchronization(calibration);
-      }
+      return Checker<INS_GPS_NAVData<T> >::check_synchronization(calibration);
     }
 
     template <class Calibration>
@@ -1099,18 +1075,9 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   struct Checker<INS_GPS_Debug_PureInertial<T> > {
     template <class Calibration>
     static NAV *check_navdata(const Calibration &calibration){
-      typedef INS_GPS_Debug_PureInertial<T> base_t;
-      switch(options.time_stamp.mode){
-        case Options::time_stamp_t::CALENDAR_TIME:
-          return INS_GPS_NAV_Factory<
-                INS_GPS_NAVData<base_t, CalendarTimeStamp<typename base_t::float_t> >
-              >::generate(calibration);
-        case Options::time_stamp_t::ITOW:
-        default:
-          return INS_GPS_NAV_Factory<
-                INS_GPS_NAVData<base_t>
-              >::generate(calibration);
-      }
+      return INS_GPS_NAV_Factory<
+            INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> >
+          >::generate(calibration);
     }
   };
 
@@ -1121,28 +1088,21 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   }
 };
 
-template <class INS_GPS, class TimeStamp>
-class INS_GPS_NAVData : public INS_GPS, public NAVData<typename INS_GPS::float_t> {
+template <class PureINS, class TimeStamp = typename PureINS::float_t>
+class INS_NAVData : public PureINS, public NAVData<typename PureINS::float_t> {
   public:
-#if defined(__GNUC__) && (__GNUC__ < 5)
-    typedef typename INS_GPS::vec3_t vec3_t;
-    typedef typename INS_GPS::mat_t mat_t;
-#else
-    using typename INS_GPS::vec3_t;
-    using typename INS_GPS::mat_t;
-#endif
-    typedef NAVData<typename INS_GPS::float_t> super_data_t;
+    typedef NAVData<typename PureINS::float_t> super_data_t;
     typedef TimeStamp time_stamp_t;
   protected:
     mutable const char *mode;
     mutable time_stamp_t itow;
   public:
-    INS_GPS_NAVData() : INS_GPS(), mode("N/A"), itow(0) {}
-    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS, time_stamp_t> &orig, const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
-    ~INS_GPS_NAVData(){}
+    INS_NAVData() : PureINS(), mode("N/A"), itow(0) {}
+    INS_NAVData(const INS_NAVData<PureINS, time_stamp_t> &orig, const bool &deepcopy = false)
+        : PureINS(orig, deepcopy), mode(orig.mode), itow(orig.itow) {}
+    ~INS_NAVData(){}
 #define MAKE_PROXY_FUNC(fname) \
-typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
+typename PureINS::float_t fname() const {return PureINS::fname();}
     MAKE_PROXY_FUNC(longitude);
     MAKE_PROXY_FUNC(latitude);
     MAKE_PROXY_FUNC(height);
@@ -1155,7 +1115,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
     MAKE_PROXY_FUNC(euler_psi);
     MAKE_PROXY_FUNC(azimuth);
 #undef MAKE_PROXY_FUNC
-    typename INS_GPS::float_t time_stamp() const {return (typename INS_GPS::float_t)itow;}
+    typename PureINS::float_t time_stamp() const {return (typename PureINS::float_t)itow;}
 
     void set_header(const char *_mode) const {
       mode = _mode;
@@ -1164,6 +1124,44 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
       mode = _mode;
       itow = _itow;
     }
+  protected:
+    static void label_time(std::ostream &out, const void *){
+      out << "itow";
+    }
+
+    template <class FloatT>
+    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
+      CalendarTimeStamp<FloatT>::label(out);
+    }
+  public:
+    void label(std::ostream &out) const {
+      out << "mode" << ',';
+      label_time(out, &itow);
+      out << ',';
+      super_data_t::label(out);
+    }
+    void dump(std::ostream &out) const {
+      out << mode << ','
+          << itow << ',';
+      super_data_t::dump(out);
+    }
+};
+
+template <class INS_GPS>
+class INS_GPS_NAVData : public INS_GPS {
+  public:
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename INS_GPS::vec3_t vec3_t;
+    typedef typename INS_GPS::mat_t mat_t;
+#else
+    using typename INS_GPS::vec3_t;
+    using typename INS_GPS::mat_t;
+#endif
+  public:
+    INS_GPS_NAVData() : INS_GPS() {}
+    INS_GPS_NAVData(const INS_GPS_NAVData<INS_GPS> &orig, const bool &deepcopy = false)
+        : INS_GPS(orig, deepcopy) {}
+    ~INS_GPS_NAVData(){}
   protected:
     static void label2(std::ostream &out, const void *){}
 
@@ -1206,25 +1204,12 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
             << ',' << "s1(bias_gyro(Z))";
       }
     }
-
-    static void label_time(std::ostream &out, const void *){
-      out << "itow";
-    }
-
-    template <class FloatT>
-    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
-      CalendarTimeStamp<FloatT>::label(out);
-    }
-
   public:
     /**
      * print label
      */
-    void label(std::ostream &out = std::cout) const {
-      out << "mode" << ',';
-      label_time(out, &itow);
-      out << ',';
-      super_data_t::label(out);
+    void label(std::ostream &out) const {
+      INS_GPS::label(out);
       label2(out, this);
     }
   
@@ -1282,9 +1267,7 @@ typename INS_GPS::float_t fname() const {return INS_GPS::fname();}
      * @param itow current time
      */
     void dump(std::ostream &out) const {
-      out << mode << ','
-          << itow << ',';
-      super_data_t::dump(out);
+      INS_GPS::dump(out);
       dump2(out, this);
     }
 };
@@ -2243,7 +2226,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
               && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
-            nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow)));
+            nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow), *(nav.ins_gps)));
           }
         }
         status = MEASUREMENT_UPDATED;
@@ -2285,7 +2268,14 @@ class NAV_Generator {
     }
   public:
     static NAV *generate(){
-      return check_egm<INS_GPS_Factory<> >();
+      switch(options.time_stamp.mode){
+        case Options::time_stamp_t::CALENDAR_TIME:
+          return check_egm<INS_GPS_Factory<
+              INS_NAVData<INS<float_sylph_t>, CalendarTimeStamp<float_sylph_t> > > >();
+        case Options::time_stamp_t::ITOW:
+        default:
+          return check_egm<INS_GPS_Factory<INS_NAVData<INS<float_sylph_t> > > >();
+      }
     }
 };
 
