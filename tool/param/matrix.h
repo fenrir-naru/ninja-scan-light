@@ -1370,6 +1370,25 @@ class Matrix{
     }
 
     /**
+     * Test whether matrix is LU decomposed.
+     * The assumption of elements is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
+     *
+     * @return true when LU, otherwise false.
+     */
+    bool isLU() const{
+      if(rows() * 2 != columns()){return false;}
+      for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
+        for(unsigned int j(i + 1); j < rows(); j++){
+          if((*this)(i, j) != T(0)){return false;} // check L
+          if((*this)(j, i_U) != T(0)){return false;} // check U
+        }
+      }
+      return true;
+    }
+
+    /**
      * Resolve x of (Ax = y), where this matrix is A and has already been decomposed as LU.
      *
      * @param y Right hand term
@@ -1382,22 +1401,7 @@ class Matrix{
         solve_linear_eq_with_LU(
             const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
             const throw(MatrixException) {
-      bool not_LU(false);
-      if(do_check){
-        if(rows() * 2 != columns()){not_LU = true;}
-      }
-      partial_t
-          L(partial(rows(), rows(), 0, 0)),
-          U(partial(rows(), rows(), 0, rows()));
-      if(do_check){
-        for(unsigned i(1); i < rows(); i++){
-          for(unsigned j(0); j < i; j++){
-            if(U(i, j) != T(0)){not_LU = true;}
-            if(L(j, i) != T(0)){not_LU = true;}
-          }
-        }
-      }
-      if(not_LU){
+      if(do_check && (!isLU())){
         throw MatrixException("Not LU decomposed matrix!!");
       }
       if((y.columns() != 1)
@@ -1405,7 +1409,9 @@ class Matrix{
         throw MatrixException("Incorrect y size");
       }
 
-
+      partial_t
+          L(partial(rows(), rows(), 0, 0)),
+          U(partial(rows(), rows(), 0, rows()));
       typedef typename Matrix<T2, Array2D_Type2>::viewless_t y_t;
       // L(Ux) = y ‚Å y' = (Ux)‚ð‚Ü‚¸‰ð‚­
       y_t y_copy(y.copy());
