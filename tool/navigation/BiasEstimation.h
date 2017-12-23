@@ -173,8 +173,7 @@ const unsigned Filtered_INS2_Property<INS_BiasEstimated<BaseINS> >::Q_SIZE
 #endif
 
 
-template <
-    class BaseFINS = Filtered_INS2<INS_BiasEstimated<INS<> > > >
+template <class BaseFINS = Filtered_INS2<INS_BiasEstimated<INS<> > > >
 class Filtered_INS_BiasEstimated : public BaseFINS {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
@@ -416,40 +415,39 @@ class Filtered_INS_BiasEstimated : public BaseFINS {
     }
 };
 
-template <
-  class PureINS = INS<>,
-  template <class> class Filter = KalmanFilterUD,
-  typename BaseFINS = Filtered_INS_BiasEstimated<Filtered_INS2<
-      INS_BiasEstimated<PureINS>, Filter> >
->
-class INS_GPS2_BiasEstimated
-    : public INS_GPS2<PureINS, Filter, BaseFINS>{
+template <class GPS_INS_Type = INS_GPS2<
+    Filtered_INS_BiasEstimated<
+      Filtered_INS2<
+        INS_BiasEstimated<
+          INS<> > > > > >
+class INS_GPS_BiasEstimated
+    : public GPS_INS_Type{
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
-    typedef typename BaseFINS::float_t float_t;
-    typedef typename BaseFINS::vec3_t vec3_t;
+    typedef typename GPS_INS_Type::float_t float_t;
+    typedef typename GPS_INS_Type::vec3_t vec3_t;
 #else
-    using typename BaseFINS::float_t;
-    using typename BaseFINS::vec3_t;
+    using typename GPS_INS_Type::float_t;
+    using typename GPS_INS_Type::vec3_t;
 #endif
-    typedef INS_GPS2<PureINS, Filter, BaseFINS> super_t;
+    typedef GPS_INS_Type super_t;
 
   public:
-    INS_GPS2_BiasEstimated() : super_t(){}
+    INS_GPS_BiasEstimated() : super_t(){}
 
-    INS_GPS2_BiasEstimated(const INS_GPS2_BiasEstimated &orig, const bool &deepcopy = false)
+    INS_GPS_BiasEstimated(const INS_GPS_BiasEstimated &orig, const bool &deepcopy = false)
         : super_t(orig, deepcopy){
 
     }
 
-    ~INS_GPS2_BiasEstimated(){}
+    ~INS_GPS_BiasEstimated(){}
 
     using super_t::correct;
 
     void correct(const GPS_Solution<float_t> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      super_t::correct(gps, lever_arm_b, omega_b2i_4b - BaseFINS::m_bias_gyro);
+      super_t::correct(gps, lever_arm_b, omega_b2i_4b - GPS_INS_Type::m_bias_gyro);
     }
 };
 
