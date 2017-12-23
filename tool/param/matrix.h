@@ -581,11 +581,11 @@ struct MatrixViewTranspose : protected BaseView {
   }
   inline unsigned int i(
       const unsigned int &i, const unsigned int &j) const {
-    return BaseView::j(i, j);
+    return BaseView::i(j, i);
   }
   inline unsigned int j(
       const unsigned int &i, const unsigned int &j) const {
-    return BaseView::i(i, j);
+    return BaseView::j(j, i);
   }
 };
 
