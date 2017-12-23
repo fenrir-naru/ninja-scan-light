@@ -92,12 +92,11 @@ struct GPS_Solution{
  * @see Filtered_INS2
  */
 template <
-  class PureINS = INS<>,
-  template <class> class Filter = KalmanFilterUD,
-  typename BaseFINS = Filtered_INS2<PureINS, Filter>
+  class BaseFINS = Filtered_INS2<INS<> >
 >
 class INS_GPS2 : public BaseFINS{
   public:
+    typedef BaseFINS filtered_ins_t;
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename BaseFINS::float_t float_t;
     typedef typename BaseFINS::vec3_t vec3_t;

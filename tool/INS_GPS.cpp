@@ -161,12 +161,11 @@ typedef double float_sylph_t;
 VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
 QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
 
-#include "navigation/INS_EGM.h"
-#include "navigation/INS_GPS2.h"
-#include "navigation/INS_GPS2_Tightly.h"
+#include "algorithm/kalman.h"
+
+#include "navigation/INS_GPS_Factory.h"
 #include "navigation/INS_GPS_Synchronization.h"
 #include "navigation/INS_GPS_Debug.h"
-#include "navigation/BiasEstimation.h"
 #include "navigation/GPS.h"
 #include "navigation/GPS_SP.h"
 #include "navigation/RINEX.h"
@@ -816,41 +815,6 @@ struct TimePacket : public BasicPacket<TimePacket> {
             : converter.update(super_t::itow, week_num))
         : converter.update(super_t::itow);
   }
-};
-
-template <
-    class PureINS = INS<float_sylph_t>,
-    template <class> class Filter = KalmanFilter,
-    bool BiasEstimator = false,
-    bool TightlyIntegration = false>
-struct INS_GPS_Factory {
-  typedef INS_GPS2<PureINS, Filter> product_t;
-  typedef INS_GPS_Factory<PureINS, Filter, BiasEstimator, true> tightly_t;
-  typedef INS_GPS_Factory<PureINS, Filter, true, TightlyIntegration> bias_t;
-  typedef INS_GPS_Factory<PureINS, KalmanFilterUD, BiasEstimator, TightlyIntegration> udkf_t;
-  typedef INS_GPS_Factory<INS_EGM<PureINS>, Filter> egm_t;
-};
-
-template <
-    class PureINS,
-    template <class> class Filter>
-struct INS_GPS_Factory<PureINS, Filter, true, false> {
-  typedef INS_GPS2_BiasEstimated<PureINS, Filter> product_t;
-  typedef INS_GPS_Factory<PureINS, Filter, true, true> tightly_t;
-};
-
-template <
-    class PureINS,
-    template <class> class Filter>
-struct INS_GPS_Factory<PureINS, Filter, false, true> {
-  typedef INS_GPS2_Tightly<PureINS, Filter> product_t;
-};
-
-template <
-    class PureINS,
-    template <class> class Filter>
-struct INS_GPS_Factory<PureINS, Filter, true, true> {
-  typedef INS_GPS2_Tightly_BiasEstimated<PureINS, Filter> product_t;
 };
 
 template <class INS_GPS>
@@ -2913,11 +2877,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
     }
 
-    template <
-        class PureINS, template <class> class Filter, unsigned int Clocks,
-        typename BaseFINS>
+    template <typename BaseFINS>
     void measurement_update(const G_Packet &g_packet,
-        INS_GPS2_Tightly<PureINS, Filter, Clocks, BaseFINS> *){
+        INS_GPS2_Tightly<BaseFINS> *){
       return;
     }
 
@@ -2930,11 +2892,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
      *
      * @param g_packet observation data of GPS receiver
      */
-    template <
-        class PureINS, template <class> class Filter, unsigned int Clocks,
-        typename BaseFINS>
+    template <typename BaseFINS>
     void measurement_update(const G_Packet_Raw &g_packet,
-        INS_GPS2_Tightly<PureINS, Filter, Clocks, BaseFINS> *ins_gps){
+        INS_GPS2_Tightly<BaseFINS> *ins_gps){
 
       g_packet.take_consistency();
       if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
@@ -2973,29 +2933,31 @@ class NAV_Generator {
   private:
     template <class T>
     static NAV *final(){
-      return INS_GPS_NAV_Factory<typename T::product_t>::get_nav(processors.front().calibration());
+      return INS_GPS_NAV_Factory<typename T::product>::get_nav(processors.front().calibration());
+    }
+    template <class T>
+    static NAV *check_bias(){
+      return options.est_bias ? final<typename T::template bias<> >() : final<T>();
     }
     template <class T>
     static NAV *check_coupling(){
       switch(options.ins_gps_integration){
         case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
-          return final<typename T::tightly_t>();
+          return check_bias<typename T::template tightly<> >();
         case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
         default:
-          return final<T>();
+          return check_bias<T>();
       }
     }
     template <class T>
-    static NAV *check_bias(){
-      return options.est_bias ? check_coupling<typename T::bias_t>() : check_coupling<T>();
-    }
-    template <class T>
     static NAV *check_udkf(){
-      return options.use_udkf ? check_bias<typename T::udkf_t>() : check_bias<T>();
+      return options.use_udkf
+          ? check_coupling<typename T::template kf<KalmanFilterUD> >()
+          : check_coupling<typename T::template kf<KalmanFilter> >();
     }
     template <class T>
     static NAV *check_egm(){
-      return options.use_egm ? check_udkf<typename T::egm_t>() : check_udkf<T>();
+      return options.use_egm ? check_udkf<typename T::template egm<> >() : check_udkf<T>();
     }
   public:
     static NAV *generate(){
@@ -3005,7 +2967,8 @@ class NAV_Generator {
               INS_NAVData<INS<float_sylph_t>, CalendarTimeStamp<float_sylph_t> > > >();
         case Options::time_stamp_t::ITOW:
         default:
-          return check_egm<INS_GPS_Factory<INS_NAVData<INS<float_sylph_t> > > >();
+          return check_egm<INS_GPS_Factory<
+              INS_NAVData<INS<float_sylph_t> > > >();
       }
     }
 };

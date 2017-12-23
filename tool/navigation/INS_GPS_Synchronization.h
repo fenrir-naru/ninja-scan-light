@@ -352,32 +352,26 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
 
     template <
         class GPS_Packet,
-        class FloatT,
-        template <class> class Filter,
-        unsigned int Receivers,
         typename BaseFINS>
     void correct2(
         const GPS_Packet &gps,
-        INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> *){
+        INS_GPS2_Tightly<BaseFINS> *){
 
       correct2_tightly_generic(gps,
-          typename INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS>::CorrectInfoGenerator1());
+          typename INS_GPS2_Tightly<BaseFINS>::CorrectInfoGenerator1());
     }
 
     template <
         class GPS_Packet,
-        class FloatT,
-        template <class> class Filter,
-        unsigned int Receivers,
         typename BaseFINS>
     void correct2(
         const GPS_Packet &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b,
-        INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS> *){
+        INS_GPS2_Tightly<BaseFINS> *){
 
       correct2_tightly_generic(gps,
-          typename INS_GPS2_Tightly<FloatT, Filter, Receivers, BaseFINS>::CorrectInfoGenerator2(
+          typename INS_GPS2_Tightly<BaseFINS>::CorrectInfoGenerator2(
             lever_arm_b, omega_b2i_4b));
     }
 
