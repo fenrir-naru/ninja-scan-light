@@ -232,9 +232,10 @@ struct direct_t {
     }
   }
   content_t operator()(const unsigned &i, const unsigned &j) const {
+    // strength: modification of row[], column[] > i_offset, j_offset > trans
     return m(
-        (trans ? column[j + j_offset] : row[i + i_offset]),
-        (trans ? row[i + i_offset] : column[j + j_offset])) * scalar;
+        row[(trans ? j : i) + i_offset],
+        column[(trans ? i : j) + j_offset]) * scalar;
   }
 };
 
