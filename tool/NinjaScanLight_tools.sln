@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log_mixer", "log_mixer.vcxp
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_matrix", "test\test_matrix.vcxproj", "{8D112965-118A-4A5F-8FE5-3B214D156636}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_INS_GPS_Factory", "test\test_INS_GPS_Factory.vcxproj", "{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		AppVeyor|Win32 = AppVeyor|Win32
@@ -46,6 +48,12 @@ Global
 		{8D112965-118A-4A5F-8FE5-3B214D156636}.Debug|Win32.Build.0 = Debug|Win32
 		{8D112965-118A-4A5F-8FE5-3B214D156636}.Release|Win32.ActiveCfg = Release|Win32
 		{8D112965-118A-4A5F-8FE5-3B214D156636}.Release|Win32.Build.0 = Release|Win32
+		{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
+		{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}.Debug|Win32.Build.0 = Debug|Win32
+		{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}.Release|Win32.ActiveCfg = Release|Win32
+		{FFD71BA6-6B4B-4E71-88EA-2FB4ECBE59EE}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
