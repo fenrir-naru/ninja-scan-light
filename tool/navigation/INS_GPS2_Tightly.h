@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <map>
 
 #include "INS.h"
 #include "Filtered_INS2.h"
@@ -301,7 +302,7 @@ struct GPS_RawData {
 
   unsigned int clock_index;
 
-  typedef GPS_SinglePositioning<float_sylph_t> solver_t;
+  typedef GPS_SinglePositioning<FloatT> solver_t;
 
   enum measurement_items_t {
     L1_PSEUDORANGE,
@@ -310,23 +311,26 @@ struct GPS_RawData {
     L1_RANGE_RATE,
     MEASUREMENT_ITEMS_PREDEFINED,
   };
-  typedef std::vector<std::pair<int, float_sylph_t> > prn_obs_t;
+  typedef std::vector<std::pair<int, FloatT> > prn_obs_t;
   typedef std::map<int, prn_obs_t> measurement_t;
   measurement_t measurement;
 
-  measurement_t::mapped_type measurement_of(const measurement_t::key_type &key) const {
+  typename measurement_t::mapped_type measurement_of(
+      const typename measurement_t::key_type &key) const {
     typename measurement_t::const_iterator it(measurement.find(key));
-    return it == measurement.end() ? measurement_t::mapped_type() : it->second;
+    return it == measurement.end()
+        ? typename measurement_t::mapped_type()
+        : it->second;
   }
 
   static prn_obs_t difference(
       const prn_obs_t &operand, const prn_obs_t &argument,
       const FloatT &scaling = FloatT(1)) {
     prn_obs_t res;
-    for(prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
-      for(prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
+    for(typename prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
+      for(typename prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
         if(it->first != it2->first){continue;}
-        res.push_back(prn_obs_t::value_type(it->first, (it->second - it2->second) * scaling));
+        res.push_back(typename prn_obs_t::value_type(it->first, (it->second - it2->second) * scaling));
         break;
       }
     }
