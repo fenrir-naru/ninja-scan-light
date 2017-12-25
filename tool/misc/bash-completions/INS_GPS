@@ -1,0 +1,38 @@
+# bash completion for configure                            -*- shell-script -*-
+
+_INS_GPS_module()
+{
+  local cur prev opts
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}" #_get_comp_words_by_ref -n : cur prev
+  prev="${COMP_WORDS[COMP_CWORD-1]}"
+  case $cur in
+    -*)
+      opts=$(cat << 'EOS'
+- --start_gpst= --end_gpst=
+--dump_update --dump_correct --dump_stddev --out_is_N_packet --calendar_time
+--init_attitude_deg= --init_yaw_deg=
+--init_misc= --init_misc_fname=
+--est_bias --use_udkf --use_egm
+--direct_sylphid --in_sylphide --out_sylphide --out=
+--gps_fake_lock --gps_init_acc_2d= --gps_init_acc_v= --gps_cont_acc_2d=
+--calib_file= --lever_arm=
+--use_magnet --mag_heading_accuracy_deg --yaw_correct_with_mag_when_speed_less_than_ms
+--back_propagate --realtime
+--debug=
+EOS
+)
+      COMPREPLY=( $( compgen -W "${opts[*]}" -- "${cur}" ) )
+      return 0
+      ;;
+  esac
+  case $COMP_CWORD in
+    *)
+      local IFS=$'\n'
+      compopt -o filenames
+      COMPREPLY=( $( compgen -f -W "-" -- "${cur}" ) )
+      ;;
+  esac
+  return 0
+} &&
+complete -F _INS_GPS_module INS_GPS INS_GPS.out INS_GPS.exe
