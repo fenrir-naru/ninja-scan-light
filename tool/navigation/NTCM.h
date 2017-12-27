@@ -84,6 +84,14 @@ class NTCM_GL_Generic {
       return C[10] + (C[11] * f_10_7);
     }
 
+    /**
+     * @param lt Local time in hours [0,24)
+     * @param phi Geographic latitude in radians
+     * @param delta Declination of the Sun
+     * @param doy Day of year in days [0,365.25)
+     * @param phi_m Geomagnetic latitude in radians
+     * @param f_10_7 Solar activity index
+     */
     static float_t tec_vert(
         const float_t &lt, const float_t &phi, const float_t &delta,
         const float_t &doy,
