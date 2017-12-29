@@ -33,6 +33,17 @@
 %template(IGRF11) IGRF11Generic<type>;
 %template(IGRF12) IGRF12Generic<type>;
 %template(WMM2010) WMM2010Generic<type>;
+%extend MagneticFieldModel {
+#if defined(SWIGRUBY)
+  %typemap(out) coef_t {
+    VALUE arr = rb_ary_new2($1.coef_num);
+    for(int i(0) ; i < $1.coef_num; i++){
+      rb_ary_push(arr, DBL2NUM((double)($1.coef[i])));
+    }
+    $result = arr;
+  }
+#endif
+}
 %inline %{
 struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
   typedef typename MagneticFieldGeneric<type>::model_t super_t;
@@ -40,7 +51,14 @@ struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
   const char *name() const {return super_t::name;}
   const type year() const {return super_t::year;}
   const int dof() const {return super_t::dof;}
-  const type *coef() const {return super_t::coef;}
+  struct coef_t {
+    int coef_num;
+    const type *coef;
+  };
+  const coef_t coef() const {
+    coef_t res = {super_t::dof * (super_t::dof + 2), super_t::coef};
+    return res;
+  }
   typename MagneticFieldGeneric<type>::field_components_res_t field_components_geocentric(
       const type &geocentric_latitude,
       const type &longitude_rad,
