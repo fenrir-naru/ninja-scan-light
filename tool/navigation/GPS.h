@@ -1415,22 +1415,20 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       float_t sc_el(rad2sc(el)),
              sc_az(rad2sc(az));
              
-      // Pierce point
-      float_t psi(0.0137 / (sc_el + 0.11) - 0.022);
+      // Pierce point (PP stands for the earth projection of the Pierce point)
+      float_t psi(0.0137 / (sc_el + 0.11) - 0.022); // central angle between user pos and PP.
       float_t phi_i(rad2sc(usrllh.latitude())
-          + psi * cos(az));
+          + psi * cos(az)); // geodetic latitude of PP [sc]
       if(phi_i > 0.416){phi_i = 0.416;}
       else if(phi_i < -0.416){phi_i = -0.416;}
       float_t lambda_i(rad2sc(usrllh.longitude())
-          + psi * sin(az) / cos(sc2rad(phi_i)));
+          + psi * sin(az) / cos(sc2rad(phi_i))); // geodetic longitude of PP [sc]
       float_t phi_m(phi_i
-          + 0.064 * cos(sc2rad(lambda_i - 1.617)));
+          + 0.064 * cos(sc2rad(lambda_i - 1.617))); // geomagnetic latitude of PP [sc]
       
-      // Local time
+      // Local time [sec]
       float_t lt(4.32E4 * lambda_i + t.seconds);
-      if((lt >= gps_time_t::seconds_day) || (lt < 0)){
-        lt -= std::floor(lt / gps_time_t::seconds_day) * gps_time_t::seconds_day;
-      }
+      lt -= std::floor(lt / gps_time_t::seconds_day) * gps_time_t::seconds_day; // lt = [0,86400)
       
       // Period and amplitude of cosine function
       float_t amp(0), per(0);
@@ -1446,12 +1444,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       // Obliquity factor
       float_t F(1.0 + 16.0 * pow((0.53 - sc_el), 3));
       
-      float_t x(M_PI * 2 * (lt - 50400) / per);
-      if(x > M_PI){
-        do{x -= M_PI * 2;}while(x > M_PI);
-      }else if(x < -M_PI){
-        do{x += M_PI * 2;}while(x < -M_PI);
-      }
+      float_t x(M_PI * 2 * (lt - 50400) / per); // phase [rad] => (-1.4 pi) < x < (0.42 pi) because min(per) = 72000
+      //x -= M_PI * 2 * std::floor(x / (M_PI * 2) + 0.5); // x = [-pi,pi)
       
       float_t T_iono(5E-9);
       if(std::abs(x) < 1.57){
