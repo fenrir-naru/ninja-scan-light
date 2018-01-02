@@ -1397,6 +1397,46 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     }
 
     /**
+     * Calculation of pierce point position
+     *
+     * @param relative_pos satellite position (relative position, NEU)
+     * @param usrllh user position (absolute position, LLH)
+     * @param height_over_ellipsoid
+     * @see DO-229D A4.4.10.1 Pierce Point Location Determination
+     */
+    struct pierce_point_res_t {
+      float_t latitude, longitude;
+    };
+    static pierce_point_res_t pierce_point(
+        const enu_t &relative_pos,
+        const llh_t &usrllh,
+        const float_t &height_over_ellipsoid = 350E3) {
+      float_t el(relative_pos.elevation()),
+           az(relative_pos.azimuth());
+      // Earth's central angle between use pos. and projection of PP.
+      float_t psi_pp(M_PI - el
+          - std::asin(WGS84::R_e / (WGS84::R_e + height_over_ellipsoid) * std::cos(el)));
+      float_t phi_pp(
+          std::asin(std::sin(usrllh.latitude() * std::cos(psi_pp)
+            + std::cos(usrllh.latitude()) * std::sin(psi_pp) * std::cos(az)))); // latitude
+      float_t lambda_pp_last(
+          std::asin(std::sin(psi_pp) * std::sin(az) / std::cos(phi_pp)));
+
+      pierce_point_res_t res;
+      res.latitude = phi_pp;
+      {
+        float_t lhs(std::tan(psi_pp) * std::cos(az)), rhs(std::tan(M_PI / 2 - usrllh.latitude()));
+        if(((usrllh.latitude() > M_PI / 180 * 70) && (lhs > rhs))
+            || ((usrllh.latitude() < M_PI / 180 * -70) & (lhs < rhs))){
+          res.longitude = usrllh.longitude() + M_PI - lambda_pp_last;
+        }else{
+          res.longitude = usrllh.longitude() + lambda_pp_last;
+        }
+      }
+      return res;
+    }
+
+    /**
      * Calculate correction value in accordance with ionospheric model
      * 
      * @param relative_pos satellite position (relative position, NEU)
@@ -1416,6 +1456,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
              sc_az(rad2sc(az));
              
       // Pierce point (PP stands for the earth projection of the Pierce point)
+      // (the following equation is based on GPS ICD)
       float_t psi(0.0137 / (sc_el + 0.11) - 0.022); // central angle between user pos and PP.
       float_t phi_i(rad2sc(usrllh.latitude())
           + psi * cos(az)); // geodetic latitude of PP [sc]
