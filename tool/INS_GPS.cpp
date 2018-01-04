@@ -287,7 +287,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       dump_update(true), dump_correct(false), dump_stddev(false),
       out_is_N_packet(false),
       time_stamp(),
-      ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
+      ins_gps_integration(INS_GPS_INTEGRATION_LOOSELY), ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
       est_bias(true), use_udkf(false), use_egm(false),
       back_propagate_property(),
       realttime_property(),
