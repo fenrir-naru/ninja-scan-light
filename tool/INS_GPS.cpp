@@ -459,6 +459,8 @@ struct CalendarTimeStamp : public CalendarTime<FloatT> {
 struct A_Packet;
 struct G_Packet;
 struct G_Packet_Raw;
+struct G_Packet_Ephemeris;
+struct G_Packet_Iono_UTC;
 struct M_Packet;
 struct TimePacket;
 
@@ -467,6 +469,8 @@ struct Updatable {
   virtual void update(const A_Packet &){}
   virtual void update(const G_Packet &){}
   virtual void update(const G_Packet_Raw &){}
+  virtual void update(const G_Packet_Ephemeris &);
+  virtual void update(const G_Packet_Iono_UTC &);
   virtual void update(const M_Packet &){}
   virtual void update(const TimePacket &){}
 } updatable_blackhole;
@@ -702,7 +706,7 @@ struct G_Packet_Raw : public G_Packet {
 
   void take_consistency() const {
     // Select most preferable ephemeris
-    const_cast<space_node_t &>(raw_data.space_node).update_all_ephemeris(raw_data.gpstime);
+    const_cast<space_node_t &>(*(raw_data.space_node)).update_all_ephemeris(raw_data.gpstime);
   }
 
   typedef solver_t::user_pvt_t pvt_t;
@@ -713,7 +717,7 @@ struct G_Packet_Raw : public G_Packet {
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
-          pvt = solver_t(raw_data.space_node).solve_user_pvt(
+          pvt = solver_t(*(raw_data.space_node)).solve_user_pvt(
               raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
               raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
               raw_data.gpstime,
@@ -722,7 +726,7 @@ struct G_Packet_Raw : public G_Packet {
           break;
         }
       }
-      pvt = solver_t(raw_data.space_node).solve_user_pvt(
+      pvt = solver_t(*(raw_data.space_node)).solve_user_pvt(
           raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
           raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
           raw_data.gpstime);
@@ -751,8 +755,8 @@ struct G_Packet_Raw : public G_Packet {
     return update_solution(pvt);
   }
 
-  G_Packet_Raw(const space_node_t &_space_node)
-      : G_Packet(), raw_data(_space_node) {
+  G_Packet_Raw()
+      : G_Packet(), raw_data() {
   }
   ~G_Packet_Raw(){}
 };
@@ -794,6 +798,55 @@ struct gps_pvt_t : public G_Packet_Raw::pvt_t {
     return out;
   }
 };
+
+struct G_Packet_Ephemeris
+    : public BasicPacket<G_Packet_Ephemeris>, public G_Packet_Raw::space_node_t::Satellite::Ephemeris {
+  typedef G_Packet_Raw::space_node_t space_node_t;
+  mutable space_node_t *space_node;
+  typedef space_node_t::Satellite::Ephemeris ephemeris_t;
+
+  space_node_t::uint_t &sv_number, how; // sv_number is alias.
+  bool valid;
+  space_node_t::int_t iode2;
+
+  G_Packet_Ephemeris() : sv_number(ephemeris_t::svid), valid(false) {
+    Packet::itow = 0; // to invoke immediate update
+    ephemeris_t::iodc = ephemeris_t::iode = iode2 = -1;
+  }
+  G_Packet_Ephemeris &operator=(const G_Packet_Ephemeris &another){
+    how = another.how;
+    valid = another.valid;
+    iode2 = another.iode2;
+    BasicPacket<G_Packet_Ephemeris>::operator=(another);
+    ephemeris_t::operator=(another);
+    return *this;
+  }
+
+  void apply() const {
+    space_node->satellite(ephemeris_t::svid).register_ephemeris((const ephemeris_t &)(*this));
+  }
+};
+void Updatable::update(const G_Packet_Ephemeris &packet){
+  packet.apply();
+}
+
+struct G_Packet_Iono_UTC
+    : public BasicPacket<G_Packet_Iono_UTC>, public G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters {
+  typedef G_Packet_Raw::space_node_t space_node_t;
+  mutable space_node_t *space_node;
+  typedef space_node_t::Ionospheric_UTC_Parameters params_t;
+
+  G_Packet_Iono_UTC(){
+    Packet::itow = 0; // to invoke immediate update
+  }
+
+  void apply() const {
+    space_node->update_iono_utc((const params_t &)(*this));
+  }
+};
+void Updatable::update(const G_Packet_Iono_UTC &packet){
+  packet.apply();
+}
 
 /**
  * Magnetic sensor data
@@ -1636,17 +1689,10 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
 
 using namespace std;
 
-struct GPS_Ephemeris : public G_Packet_Raw::space_node_t::Satellite::Ephemeris {
-  typedef G_Packet_Raw::space_node_t::Satellite::Ephemeris super_t;
-  G_Packet_Raw::space_node_t::uint_t &sv_number, how;
-  bool valid;
-  G_Packet_Raw::space_node_t::int_t iode2;
-  GPS_Ephemeris() : sv_number(super_t::svid), valid(false) {}
-};
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
-    GPS_Ephemeris &ephemeris) const {
+    G_Packet_Ephemeris &ephemeris) const {
   ephemeris.WN = ephemeris_wn();
   ephemeris.URA = ephemeris_ura();
   ephemeris.SV_health = ephemeris_sv_health();
@@ -1660,7 +1706,7 @@ void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
-    GPS_Ephemeris &ephemeris) const {
+    G_Packet_Ephemeris &ephemeris) const {
   ephemeris.iode = ephemeris_iode_subframe2();
   ephemeris.c_rs = ephemeris_c_rs();
   ephemeris.delta_n = ephemeris_delta_n();
@@ -1671,13 +1717,13 @@ void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
   ephemeris.sqrt_A = ephemeris_root_a();
   ephemeris.t_oe = ephemeris_t_oe();
   ephemeris.fit_interval
-      = G_Packet_Raw::space_node_t::Satellite::Ephemeris::raw_t::fit_interval(
+      = G_Packet_Ephemeris::ephemeris_t::raw_t::fit_interval(
           ephemeris_fit(), ephemeris.iodc);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
-    GPS_Ephemeris &ephemeris) const {
+    G_Packet_Ephemeris &ephemeris) const {
   ephemeris.c_ic = ephemeris_c_ic();
   ephemeris.Omega0 = ephemeris_omega_0();
   ephemeris.c_is = ephemeris_c_is();
@@ -1791,11 +1837,19 @@ class StreamProcessor
       } status;
 
       typedef G_Packet_Raw::space_node_t space_node_t;
-      space_node_t space_node;
-      GPS_Ephemeris ephemeris_buf[32];
-      
-      G_Packet_Raw packet_raw_latest;
       typedef G_Packet_Raw::raw_data_t raw_data_t;
+      space_node_t space_node;
+      G_Packet_Raw packet_raw_latest;
+      G_Packet_Ephemeris packet_eph[32];
+      G_Packet_Iono_UTC packet_iono_utc;
+
+      void packets_association(){
+        packet_raw_latest.raw_data.space_node = &space_node;
+        for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
+          packet_eph[i].space_node = &space_node;
+        }
+        packet_iono_utc.space_node = &space_node;
+      }
 
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
@@ -1805,12 +1859,13 @@ class StreamProcessor
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           week_number(Options::gps_time_t::WN_INVALID), status(),
           space_node(),
-          packet_raw_latest(space_node) {
+          packet_raw_latest(),
+          packet_iono_utc() {
         previous_seek_next = G_Observer_t::ready();
-        for(int i(0); i < sizeof(ephemeris_buf) / sizeof(ephemeris_buf[0]); ++i){
-          ephemeris_buf[i].svid = (i + 1);
-          ephemeris_buf[i].iodc = ephemeris_buf[i].iode = ephemeris_buf[i].iode2 = -1;
+        for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
+          packet_eph[i].svid = (i + 1);
         }
+        packets_association();
       }
       ~GHandler(){}
       GHandler &operator=(const GHandler &another){
@@ -1822,8 +1877,14 @@ class StreamProcessor
         itow_ms_0x0112 = another.itow_ms_0x0112;
         status = another.status;
         week_number = another.week_number;
+
         space_node = another.space_node;
         packet_raw_latest = another.packet_raw_latest;
+        for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
+          packet_eph[i] = another.packet_eph[i];
+        }
+        packet_iono_utc = another.packet_iono_utc;
+        packets_association();
         return *this;
       }
 
@@ -1939,8 +2000,8 @@ class StreamProcessor
         }
       }
 
-      static space_node_t::Ionospheric_UTC_Parameters convert_iono_utc(
-          const G_Observer_t::subframe_t &subframe){
+      static void get_iono_utc(
+          const G_Observer_t::subframe_t &subframe, space_node_t::Ionospheric_UTC_Parameters &params){
 
         space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
 #define get8(index) (subframe.bits2u8_align(index, 8))
@@ -1977,12 +2038,12 @@ class StreamProcessor
           raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
         }
 #undef get8
-        return (space_node_t::Ionospheric_UTC_Parameters)raw;
+        params = (space_node_t::Ionospheric_UTC_Parameters)raw;
       }
 
       void check_subframe(const G_Observer_t::subframe_t &subframe){
         if((subframe.subframe_no <= 3) && (subframe.sv_number <= 32)){
-          GPS_Ephemeris &eph(ephemeris_buf[subframe.sv_number - 1]);
+          G_Packet_Ephemeris &eph(packet_eph[subframe.sv_number - 1]);
           switch(subframe.subframe_no){
             case 1: subframe.fetch_as_subframe1(eph); eph.how = subframe.how(); break;
             case 2: subframe.fetch_as_subframe2(eph); break;
@@ -1992,17 +2053,16 @@ class StreamProcessor
               && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
               && (week_number >= 0)){
             eph.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
-            space_node.satellite(eph.svid).register_ephemeris(eph);
+            outer.updatable->update(eph);
           }
         }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-          space_node_t::Ionospheric_UTC_Parameters iono_utc(
-              convert_iono_utc(subframe));
+          get_iono_utc(subframe, packet_iono_utc);
           if(week_number >= 0){ // taking account for truncation
             int week_number_base(week_number - (week_number % 0x100));
-            iono_utc.WN_t += week_number_base;
-            iono_utc.WN_LSF += week_number_base;
+            packet_iono_utc.WN_t += week_number_base;
+            packet_iono_utc.WN_LSF += week_number_base;
           }
-          space_node.update_iono_utc(iono_utc);
+          outer.updatable->update(packet_iono_utc);
         }
       }
 
@@ -2019,11 +2079,12 @@ class StreamProcessor
       }
 
       void check_ephemeris(const G_Observer_t &observer){
-        GPS_Ephemeris eph;
-        observer.fetch_ephemeris(eph);
-        if((week_number >= 0) && eph.valid){
-          eph.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
-          space_node.satellite(eph.svid).register_ephemeris(eph);
+        G_Packet_Ephemeris ephemeris;
+        observer.fetch_ephemeris(ephemeris);
+        if((week_number >= 0) && ephemeris.valid){
+          ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
+          ephemeris.space_node = &space_node;
+          outer.updatable->update(ephemeris);
         }
       }
 
@@ -3022,6 +3083,8 @@ virtual void update(const type &packet){ \
     update_func(A_Packet);
     update_func(G_Packet);
     update_func(G_Packet_Raw);
+    update_func(G_Packet_Ephemeris);
+    update_func(G_Packet_Iono_UTC);
     update_func(M_Packet);
     update_func(TimePacket);
 #undef update_func

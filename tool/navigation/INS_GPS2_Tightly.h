@@ -298,7 +298,7 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 template <class FloatT>
 struct GPS_RawData {
   typedef GPS_SpaceNode<FloatT> space_node_t;
-  const space_node_t &space_node;
+  const space_node_t *space_node;
 
   unsigned int clock_index;
 
@@ -340,18 +340,9 @@ struct GPS_RawData {
   typedef typename space_node_t::gps_time_t gps_time_t;
   gps_time_t gpstime;
 
-  GPS_RawData(const space_node_t &_space_node, const unsigned int &_clock_index = 0)
-      : clock_index(_clock_index),
-      space_node(_space_node), measurement(), gpstime() {}
+  GPS_RawData(const unsigned int &_clock_index = 0)
+      : clock_index(_clock_index), space_node(NULL), measurement(), gpstime() {}
   ~GPS_RawData(){}
-  GPS_RawData<FloatT> &operator=(const GPS_RawData<FloatT> &another){
-    if(this != &another){ // assign all except for satellite information (const-ref)
-      clock_index = another.clock_index;
-      measurement = another.measurement;
-      gpstime = another.gpstime;
-    }
-    return *this;
-  }
 };
 
 /**
@@ -421,7 +412,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       };
       typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
 
-      const space_node_t &space_node(gps.space_node);
+      const space_node_t &space_node(*(gps.space_node));
 
       it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
       if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
