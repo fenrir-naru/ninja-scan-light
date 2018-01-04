@@ -47,6 +47,11 @@
 #include "GPS.h"
 
 template <class FloatT>
+struct GPS_SinglePositioning_Options {
+
+};
+
+template <class FloatT>
 class GPS_SinglePositioning {
   private:
     GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
@@ -64,16 +69,20 @@ class GPS_SinglePositioning {
 
     typedef std::vector<std::pair<int, float_t> > prn_obs_t;
 
+    typedef GPS_SinglePositioning_Options<float_t> options_t;
+
   protected:
     const space_node_t &_space_node;
+    const options_t &_options;
 
   public:
-    GPS_SinglePositioning(const space_node_t &sn)
-        : _space_node(sn) {}
+    GPS_SinglePositioning(const space_node_t &sn, const options_t &opt = options_t())
+        : _space_node(sn), _options(opt) {}
 
     ~GPS_SinglePositioning(){}
 
     const space_node_t &space_node() const {return _space_node;}
+    const options_t &options() const {return _options;}
 
   protected:
     struct geometric_matrices_t {
