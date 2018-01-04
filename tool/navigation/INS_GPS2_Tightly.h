@@ -76,7 +76,7 @@ class INS_ClockErrorEstimated : public BaseINS {
       }
     }
 
-    INS_ClockErrorEstimated(const INS_ClockErrorEstimated &orig, const bool deepcopy = false)
+    INS_ClockErrorEstimated(const INS_ClockErrorEstimated &orig, const bool &deepcopy = false)
         : BaseINS(orig, deepcopy) {
       for(unsigned int i(0); i < CLOCKS_SUPPORTED; ++i){
         m_clock_error[i] = orig.m_clock_error[i];
@@ -208,7 +208,7 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
     Filtered_INS_ClockErrorEstimated(
         const Filtered_INS_ClockErrorEstimated &orig,
-        const bool deepcopy = false)
+        const bool &deepcopy = false)
         : BaseFINS(orig, deepcopy),
         m_beta_clock_error(orig.m_beta_clock_error),
         m_beta_clock_error_rate(orig.m_beta_clock_error_rate) {
@@ -345,7 +345,7 @@ struct GPS_RawData {
       space_node(_space_node), measurement(), gpstime() {}
   ~GPS_RawData(){}
   GPS_RawData<FloatT> &operator=(const GPS_RawData<FloatT> &another){
-    if(this != &another){ // only move measurement, not satellite information.
+    if(this != &another){ // assign all except for satellite information (const-ref)
       clock_index = another.clock_index;
       measurement = another.measurement;
       gpstime = another.gpstime;
@@ -382,7 +382,7 @@ class INS_GPS2_Tightly : public BaseFINS{
   public:
     INS_GPS2_Tightly() : BaseFINS() {}
 
-    INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool deepcopy = false)
+    INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool &deepcopy = false)
         : BaseFINS(orig, deepcopy) {
     }
 
