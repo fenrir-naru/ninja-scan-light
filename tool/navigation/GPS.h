@@ -1425,9 +1425,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       pierce_point_res_t res;
       res.latitude = phi_pp;
       {
+        const float_t phi_limit(std::asin(WGS84::R_e / (WGS84::R_e + height_over_ellipsoid)));
+        // Check whether longitude is opposite side.
+        // This is possible when pierce point is located on the horizontal plane.
+        // If pierce point height is 350km, the limit latitude yields asin(Re / (350E3 + Re)) = 71.4 [deg].
         float_t lhs(std::tan(psi_pp) * std::cos(az)), rhs(std::tan(M_PI / 2 - usrllh.latitude()));
-        if(((usrllh.latitude() > M_PI / 180 * 70) && (lhs > rhs))
-            || ((usrllh.latitude() < M_PI / 180 * -70) & (lhs < rhs))){
+        if(((usrllh.latitude() > phi_limit) && (lhs > rhs))
+            || ((usrllh.latitude() < -phi_limit) & (lhs < rhs))){
           res.longitude = usrllh.longitude() + M_PI - lambda_pp_last;
         }else{
           res.longitude = usrllh.longitude() + lambda_pp_last;
