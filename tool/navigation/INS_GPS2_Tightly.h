@@ -1,6 +1,6 @@
 /*
- *  INS_GPS2.h, header file to perform calculation of integration of INS and GPS.
- *  Copyright (C) 2015 M.Naruoka (fenrir)
+ *  INS_GPS2_Tightly.h, header file to perform calculation of tightly integration of INS and GPS.
+ *  Copyright (C) 2018 M.Naruoka (fenrir)
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
