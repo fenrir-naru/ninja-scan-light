@@ -689,13 +689,10 @@ struct G_Packet : public BasicPacket<G_Packet> {
   }
 };
 
-struct G_Packet_Raw : public G_Packet {
-  void apply(NAV &nav) const {
-    nav.update(*this);
-  }
-
+struct G_Packet_Raw : public BasicPacket<G_Packet_Raw> {
   typedef GPS_RawData<float_sylph_t> raw_data_t;
   raw_data_t raw_data;
+  Vector3<float_sylph_t> *lever_arm;
 
   operator const raw_data_t &() const {
     return raw_data;
@@ -734,30 +731,31 @@ struct G_Packet_Raw : public G_Packet {
     return pvt.error_code == pvt_t::ERROR_NO;
   }
 
-  bool update_solution(pvt_t &pvt){
-    if(!get_pvt(pvt)){return false;}
-    // TODO calculation of estimated accuracy
-    solution.v_n = pvt.user_velocity_enu.north();
-    solution.v_e = pvt.user_velocity_enu.east();
-    solution.v_d = -pvt.user_velocity_enu.up();
-    //solution.sigma_vel;
-    solution.latitude = pvt.user_position.llh.latitude();
-    solution.longitude = pvt.user_position.llh.longitude();
-    solution.height = pvt.user_position.llh.height();
-    //solution.sigma_2d;
-    //solution.sigma_height;
-    return true;
-  }
-
-  bool update_solution(){
+  operator G_Packet() const {
+    G_Packet res;
+    res.itow = this->itow;
+    res.lever_arm = this->lever_arm;
     pvt_t pvt;
-    return update_solution(pvt);
+    if(get_pvt(pvt)){
+      // TODO calculation of estimated accuracy
+      res.solution.v_n = pvt.user_velocity_enu.north();
+      res.solution.v_e = pvt.user_velocity_enu.east();
+      res.solution.v_d = -pvt.user_velocity_enu.up();
+      //res.solution.sigma_vel;
+      res.solution.latitude = pvt.user_position.llh.latitude();
+      res.solution.longitude = pvt.user_position.llh.longitude();
+      res.solution.height = pvt.user_position.llh.height();
+      //res.solution.sigma_2d;
+      //res.solution.sigma_height;
+    }else{
+      res.solution.sigma_vel = 1E4; // 10 km/s
+      res.solution.sigma_2d = 1E6; // 1000 km
+      res.solution.sigma_height = 1E6; // 1000 km
+    }
+    return res;
   }
 
-  G_Packet_Raw()
-      : G_Packet(), raw_data() {
-  }
-  ~G_Packet_Raw(){}
+  G_Packet_Raw() : raw_data(), lever_arm(NULL) {}
 };
 
 struct gps_pvt_t : public G_Packet_Raw::pvt_t {
@@ -2776,7 +2774,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     }
 
   protected:
-    void time_update_after_initialization(const G_Packet &g_packet){
+    void time_update_after_initialization(const Packet &g_packet){
       typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
       for(; it_r != recent_a.buf.rend(); ++it_r){
         if(g_packet.interval_rollover(*it_r) <= 0){break;}
@@ -2892,7 +2890,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
         if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
-            && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
+            && (pow(nav.ins_gps->v_north(), 2) + pow(nav.ins_gps->v_east(), 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
           nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow), *nav.ins_gps));
         }
       }
