@@ -298,11 +298,14 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 template <class FloatT>
 struct GPS_RawData {
   typedef GPS_SpaceNode<FloatT> space_node_t;
-  const space_node_t *space_node;
+  space_node_t *space_node;
 
   unsigned int clock_index;
 
   typedef GPS_SinglePositioning<FloatT> solver_t;
+  solver_t solver() const {
+    return solver_t(*space_node);
+  }
 
   enum measurement_items_t {
     L1_PSEUDORANGE,
@@ -439,7 +442,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         };
 
         float_t range(it2_range->second);
-        range = solver_t(space_node).range_residual(
+        range = gps.solver().range_residual(
             sat, range, time_arrival,
             pos, clock_error,
             residual);

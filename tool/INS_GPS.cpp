@@ -702,22 +702,21 @@ struct G_Packet_Raw : public G_Packet {
   }
 
   typedef raw_data_t::space_node_t space_node_t;
-  typedef raw_data_t::solver_t solver_t;
 
   void take_consistency() const {
     // Select most preferable ephemeris
     const_cast<space_node_t &>(*(raw_data.space_node)).update_all_ephemeris(raw_data.gpstime);
   }
 
-  typedef solver_t::user_pvt_t pvt_t;
+  typedef raw_data_t::solver_t::user_pvt_t pvt_t;
   bool get_pvt(pvt_t &pvt) const {
     while(true){
-      if(pvt.error_code == solver_t::user_pvt_t::ERROR_NO){
+      if(pvt.error_code == pvt_t::ERROR_NO){
         float_sylph_t delta_t(std::abs(raw_data.gpstime - pvt.receiver_time));
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
-          pvt = solver_t(*(raw_data.space_node)).solve_user_pvt(
+          pvt = raw_data.solver().solve_user_pvt(
               raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
               raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
               raw_data.gpstime,
@@ -726,13 +725,13 @@ struct G_Packet_Raw : public G_Packet {
           break;
         }
       }
-      pvt = solver_t(*(raw_data.space_node)).solve_user_pvt(
+      pvt = raw_data.solver().solve_user_pvt(
           raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
           raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
           raw_data.gpstime);
       break;
     }
-    return pvt.error_code == solver_t::user_pvt_t::ERROR_NO;
+    return pvt.error_code == pvt_t::ERROR_NO;
   }
 
   bool update_solution(pvt_t &pvt){
@@ -821,13 +820,9 @@ struct G_Packet_Ephemeris
     ephemeris_t::operator=(another);
     return *this;
   }
-
-  void apply() const {
-    space_node->satellite(ephemeris_t::svid).register_ephemeris((const ephemeris_t &)(*this));
-  }
 };
 void Updatable::update(const G_Packet_Ephemeris &packet){
-  packet.apply();
+  packet.space_node->satellite(packet.svid).register_ephemeris(packet);
 }
 
 struct G_Packet_Iono_UTC
@@ -839,13 +834,9 @@ struct G_Packet_Iono_UTC
   G_Packet_Iono_UTC(){
     Packet::itow = 0; // to invoke immediate update
   }
-
-  void apply() const {
-    space_node->update_iono_utc((const params_t &)(*this));
-  }
 };
 void Updatable::update(const G_Packet_Iono_UTC &packet){
-  packet.apply();
+  packet.space_node->update_iono_utc(packet);
 }
 
 /**
