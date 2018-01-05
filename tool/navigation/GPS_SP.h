@@ -48,7 +48,13 @@
 
 template <class FloatT>
 struct GPS_SinglePositioning_Options {
-
+  enum {
+    IONOSPHERIC_KLOBUCHAR,
+    IONOSPHERIC_NONE,
+  } ionospheric_model;
+  GPS_SinglePositioning_Options()
+      : ionospheric_model(IONOSPHERIC_KLOBUCHAR)
+      {}
 };
 
 template <class FloatT>
@@ -171,7 +177,11 @@ class GPS_SinglePositioning {
         enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
         // Ionospheric
-        residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
+        switch(_options.ionospheric_model){
+          case options_t::IONOSPHERIC_KLOBUCHAR:
+            residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
+            break;
+        }
 
         // Tropospheric
         residual.residual += _space_node.tropo_correction(relative_pos, usr_pos.llh);
@@ -240,9 +250,11 @@ class GPS_SinglePositioning {
       user_pvt_t res;
       res.receiver_time = receiver_time;
 
-      if(!_space_node.is_valid_iono_utc()){
-        res.error_code = user_pvt_t::ERROR_IONO_PARAMS_INVALID;
-        return res;
+      switch(_options.ionospheric_model){
+        case options_t::IONOSPHERIC_KLOBUCHAR:
+          if(_space_node.is_valid_iono_utc()){break;}
+          res.error_code = user_pvt_t::ERROR_IONO_PARAMS_INVALID;
+          return res;
       }
 
       typedef std::vector<std::pair<
