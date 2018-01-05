@@ -43,7 +43,7 @@
  * and global positioning system (GPS).
  * The program outputs position (longitude, latitude, and WGS84 altitude),
  * velocity (north, east, and down), and attitude (true heading, roll and pitch angles)
- * with GPS time.
+ * with a time stamp.
  *
  * It is briefly technically noted that this program utilizes loosely-coupled INS/GPS algorithm,
  * which implies at least four GPS satellites must be available to output the results.
@@ -53,15 +53,16 @@
  * in order to compensate for the output delay of a GPS receiver installed on the logger.
  *
  * Its usage is
- *   INS_GPS [option] <log.dat>,
- * where <log.dat> is mandatory value pointed to a log file gathered by a logger.
- * There are some reserved values; If <log.dat> equals to - (hyphen),
+ *   INS_GPS [option(s)] <log.dat>,
+ * where <log.dat> is a mandatory parameter pointing to a log file stored in a logger.
+ * There are some reserved values for <log.dat>; If <log.dat> equals to - (hyphen),
  * the program will try to read log data from the standard input.
  * Or, when <log.dat> is COMx for Windows or /dev/ttyACMx for *NIX,
- * the program will try to read data from the requested serial port.
+ * the program will try to read data from the specified serial port.
  *
- * The [option] is composed of optional values separated by space.
- * Its representatives are the followings:
+ * The [option(s)] is optional parameter(s).
+ * If multiple parameters are specified, they should be separated by space.
+ * The representative parameters are the followings;
  *
  *   --start_gpst=(GPS time in week [sec])
  *      specifies start GPS time for INS/GPS post-process.
@@ -79,6 +80,10 @@
  *   --dump_correct=<off|on>
  *      specifies whether the program outputs results when information processed by a GPS receiver
  *      is obtained, (so called, results for measurement update) or not. Its default is off.
+ *
+ *   --calendar_time
+ *      changes time stamp of output from (internal) GPS time of week (default)
+ *      to year, month, day of month, hour, minute, and second.
  *
  *   --init_attitude_deg=(heading [deg]),(pitch [deg]),(roll [deg])
  *      specifies initial true heading, pitch and roll angles. Their default values are
