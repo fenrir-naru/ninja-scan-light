@@ -1848,9 +1848,10 @@ class StreamProcessor
       return true;
     }
 
-    bool check_spec(const char *spec){
+    bool check_spec(const char *spec, const bool &dry_run = false){
       const char *value;
       if(value = Options::get_value(spec, "calib_file", false)){ // calibration file
+        if(dry_run){return true;}
         cerr << "IMU Calibration file (" << value << ") reading..." << endl;
         istream &in(options.spec2istream(value));
         char buf[1024];
@@ -1859,17 +1860,19 @@ class StreamProcessor
           if(!buf[0]){continue;}
           if(!a_handler.calibration.check_spec(buf)){
             cerr << "unknown_calib_param! : " << buf << endl;
+            return false;
           }
         }
         return true;
       }
 
       if(value = Options::get_value(spec, "lever_arm", false)){ // Lever Arm
+        if(dry_run){return true;}
         double buf[3];
         if(std::sscanf(value, "%lf,%lf,%lf",
             &(buf[0]), &(buf[1]), &(buf[2])) != 3){
           cerr << "(error!) Lever arm option requires 3 arguments." << endl;
-          exit(-1);
+          return false;
         }
         for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
           g_handler.lever_arm[i] = buf[i];
@@ -2341,11 +2344,35 @@ int main(int argc, char *argv[]){
   // option check...
   cerr << "Option checking..." << endl;
 
+  typedef vector<int> args_t;
+  args_t args_proc_common;
+
   for(int arg_index(1); arg_index < argc; arg_index++){
     StreamProcessor stream_processor;
+    args_t args_proc(args_proc_common);
 
+    bool flag_common(false);
     for(; arg_index < argc; arg_index++){
-      if(stream_processor.check_spec(argv[arg_index])){continue;}
+      bool flag_common_current(flag_common);
+      {
+        /* check --common, which indicates its next argument will be applied
+         * to the following logs.
+         */
+        const char *value(Options::get_value(argv[arg_index], "common"));
+        if(value){
+          flag_common = Options::is_true(value);
+          continue;
+        }else{
+          flag_common = false;
+        }
+      }
+
+      if(stream_processor.check_spec(argv[arg_index], true)){
+        args_proc.push_back(arg_index);
+        if(flag_common_current){args_proc_common.push_back(arg_index);}
+        continue;
+      }
+
       if(options.check_spec(argv[arg_index])){continue;}
 
       cerr << "Log file(" << processors.size() << "): ";
@@ -2353,8 +2380,22 @@ int main(int argc, char *argv[]){
       stream_processor.input()
           = options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in;
 
+      for(args_t::const_iterator it(args_proc.begin());
+          it != args_proc.end(); ++it){
+        if(!stream_processor.check_spec(argv[*it])){
+          exit(-1); // some error occurred
+        }
+      }
+      args_proc.clear();
+
       processors.push_back(stream_processor);
       cerr << stream_processor.calibration() << endl;
+      break;
+    }
+
+    if(args_proc.size() > args_proc_common.size()){
+      cerr << "(error!) unused log specific arguments." << endl;
+      exit(-1);
     }
   }
 
