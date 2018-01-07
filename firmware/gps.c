@@ -160,11 +160,11 @@ static void set_ubx_cfg_sbas(){
     0x06, // packet[2] 
     0x16, // packet[3] 
     expand_16(sizeof(packet) - 6), // packet[4 + 0]
-    0, // packet[6 + 0]; mode, SBAS Disabled(bit0 = 0)
-    0, // packet[6 + 1]; usage
-    0, // packet[6 + 2]; maxsbas
-    0, // packet[6 + 3]; reserved
-    expand_32(0), // packet[6 + 4], scanmode
+    0x03, // packet[6 + 0]; mode, SBAS Enabled (bit0 = 1), and allow test mode (bit1=1)
+    0, // packet[6 + 1]; usage (ignore range, correction, integrity)
+    3, // packet[6 + 2]; maxsbas
+    0, // packet[6 + 3]; scanmode2
+    expand_32(0), // packet[6 + 4], scanmode1
   };
   gps_packet_write(packet, sizeof(packet));
 }

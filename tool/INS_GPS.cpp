@@ -43,7 +43,7 @@
  * and global positioning system (GPS).
  * The program outputs position (longitude, latitude, and WGS84 altitude),
  * velocity (north, east, and down), and attitude (true heading, roll and pitch angles)
- * with GPS time.
+ * with a time stamp.
  *
  * It is briefly technically noted that this program utilizes loosely-coupled INS/GPS algorithm,
  * which implies at least four GPS satellites must be available to output the results.
@@ -53,15 +53,16 @@
  * in order to compensate for the output delay of a GPS receiver installed on the logger.
  *
  * Its usage is
- *   INS_GPS [option] <log.dat>,
- * where <log.dat> is mandatory value pointed to a log file gathered by a logger.
- * There are some reserved values; If <log.dat> equals to - (hyphen),
+ *   INS_GPS [option(s)] <log.dat>,
+ * where <log.dat> is a mandatory parameter pointing to a log file stored in a logger.
+ * There are some reserved values for <log.dat>; If <log.dat> equals to - (hyphen),
  * the program will try to read log data from the standard input.
  * Or, when <log.dat> is COMx for Windows or /dev/ttyACMx for *NIX,
- * the program will try to read data from the requested serial port.
+ * the program will try to read data from the specified serial port.
  *
- * The [option] is composed of optional values separated by space.
- * Its representatives are the followings:
+ * The [option(s)] is optional parameter(s).
+ * If multiple parameters are specified, they should be separated by space.
+ * The representative parameters are the followings;
  *
  *   --start_gpst=(GPS time in week [sec])
  *      specifies start GPS time for INS/GPS post-process.
@@ -79,6 +80,10 @@
  *   --dump_correct=<off|on>
  *      specifies whether the program outputs results when information processed by a GPS receiver
  *      is obtained, (so called, results for measurement update) or not. Its default is off.
+ *
+ *   --calendar_time
+ *      changes time stamp of output from (internal) GPS time of week (default)
+ *      to year, month, day of month, hour, minute, and second.
  *
  *   --init_attitude_deg=(heading [deg]),(pitch [deg]),(roll [deg])
  *      specifies initial true heading, pitch and roll angles. Their default values are
@@ -2513,9 +2518,10 @@ class StreamProcessor
       return true;
     }
 
-    bool check_spec(const char *spec){
+    bool check_spec(const char *spec, const bool &dry_run = false){
       const char *value;
       if(value = Options::get_value(spec, "calib_file", false)){ // calibration file
+        if(dry_run){return true;}
         cerr << "IMU Calibration file (" << value << ") reading..." << endl;
         istream &in(options.spec2istream(value));
         char buf[1024];
@@ -2524,17 +2530,19 @@ class StreamProcessor
           if(!buf[0]){continue;}
           if(!a_handler.calibration.check_spec(buf)){
             cerr << "unknown_calib_param! : " << buf << endl;
+            return false;
           }
         }
         return true;
       }
 
       if(value = Options::get_value(spec, "lever_arm", false)){ // Lever Arm
+        if(dry_run){return true;}
         double buf[3];
         if(std::sscanf(value, "%lf,%lf,%lf",
             &(buf[0]), &(buf[1]), &(buf[2])) != 3){
           cerr << "(error!) Lever arm option requires 3 arguments." << endl;
-          exit(-1);
+          return false;
         }
         for(int i(0); i < sizeof(buf) / sizeof(buf[0]); ++i){
           g_handler.lever_arm[i] = buf[i];
@@ -2546,19 +2554,21 @@ class StreamProcessor
       }
 
       if(value = Options::get_value(spec, "rinex_nav", false)){
+        if(dry_run){return true;}
         cerr << "RINEX Navigation file (" << value << ") reading..." << endl;
         istream &in(options.spec2istream(value));
         int ephemeris(RINEX_NAV_Reader<float_sylph_t>::read_all(
             in, g_handler.space_node));
         if(ephemeris < 0){
           cerr << "(error!) Invalid format!" << endl;
-          exit(-1);
+          return false;
         }else{
           cerr << "rinex_nav: " << ephemeris << " items captured." << endl;
         }
         return true;
       }
       if(value = Options::get_value(spec, "out_rinex_nav", false)){
+        if(dry_run){return true;}
         out_rinex_nav = &options.spec2ostream(value);
         cerr << "out_rinex_nav: " << value << endl;
         return true;
@@ -3098,11 +3108,35 @@ int main(int argc, char *argv[]){
   // option check...
   cerr << "Option checking..." << endl;
 
+  typedef vector<int> args_t;
+  args_t args_proc_common;
+
   for(int arg_index(1); arg_index < argc; arg_index++){
     StreamProcessor stream_processor;
+    args_t args_proc(args_proc_common);
 
+    bool flag_common(false);
     for(; arg_index < argc; arg_index++){
-      if(stream_processor.check_spec(argv[arg_index])){continue;}
+      bool flag_common_current(flag_common);
+      {
+        /* check --common, which indicates its next argument will be applied
+         * to the following logs.
+         */
+        const char *value(Options::get_value(argv[arg_index], "common"));
+        if(value){
+          flag_common = Options::is_true(value);
+          continue;
+        }else{
+          flag_common = false;
+        }
+      }
+
+      if(stream_processor.check_spec(argv[arg_index], true)){
+        args_proc.push_back(arg_index);
+        if(flag_common_current){args_proc_common.push_back(arg_index);}
+        continue;
+      }
+
       if(options.check_spec(argv[arg_index])){continue;}
 
       cerr << "Log file(" << processors.size() << "): ";
@@ -3110,8 +3144,22 @@ int main(int argc, char *argv[]){
       stream_processor.input()
           = options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in;
 
+      for(args_t::const_iterator it(args_proc.begin());
+          it != args_proc.end(); ++it){
+        if(!stream_processor.check_spec(argv[*it])){
+          exit(-1); // some error occurred
+        }
+      }
+      args_proc.clear();
+
       processors.push_back(stream_processor);
       cerr << stream_processor.calibration() << endl;
+      break;
+    }
+
+    if(args_proc.size() > args_proc_common.size()){
+      cerr << "(error!) unused log specific arguments." << endl;
+      exit(-1);
     }
   }
 
@@ -3122,15 +3170,6 @@ int main(int argc, char *argv[]){
   if(processors.size() > 1){ // TODO multiple log stream will be support.
     cerr << "(error!) too many log." << endl;
     exit(-1);
-  }
-
-  { // Synchronize GPS space node information before reading log.
-    for(processors_t::iterator it(processors.begin() + 1); it != processors.end(); ++it){
-      processors.front().gps_space_node().merge(it->gps_space_node());
-    } // gather information into the first processor.
-    for(processors_t::iterator it(processors.begin() + 1); it != processors.end(); ++it){
-      it->gps_space_node().merge(processors.front().gps_space_node());
-    } // spread information from the first processor.
   }
 
   if(options.out_sylphide){
