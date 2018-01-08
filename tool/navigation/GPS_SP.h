@@ -48,13 +48,18 @@
 
 template <class FloatT>
 struct GPS_SinglePositioning_Options {
-  enum {
+  enum ionospheric_models_t {
     IONOSPHERIC_KLOBUCHAR,
     IONOSPHERIC_NONE,
-  } ionospheric_model;
-  GPS_SinglePositioning_Options()
-      : ionospheric_model(IONOSPHERIC_KLOBUCHAR)
-      {}
+    IONOSPHERIC_MODELS,
+  };
+  bool ionospheric_models[IONOSPHERIC_MODELS];
+
+  GPS_SinglePositioning_Options(){
+    // default: broadcasted Klobuchar parameters are at least required for solution.
+    ionospheric_models[IONOSPHERIC_KLOBUCHAR] = true;
+    ionospheric_models[IONOSPHERIC_NONE] = false;
+  }
 };
 
 template <class FloatT>
@@ -89,6 +94,15 @@ class GPS_SinglePositioning {
 
     const space_node_t &space_node() const {return _space_node;}
     const options_t &options() const {return _options;}
+
+    typename options_t::ionospheric_models_t ionospheric_model_preferred() const {
+      // both priority and availability check
+      if(_options.ionospheric_models[options_t::IONOSPHERIC_KLOBUCHAR]
+          && _space_node.is_valid_iono_utc()){
+        return options_t::IONOSPHERIC_KLOBUCHAR;
+      }
+      return options_t::IONOSPHERIC_NONE;
+    }
 
   protected:
     struct geometric_matrices_t {
@@ -139,6 +153,7 @@ class GPS_SinglePositioning {
      * @param usr_pos_llh (temporal solution of) user position in latitude, longitude, and altitude format
      * @param receiver_error (temporal solution of) receiver clock error in meters
      * @param mat matrices to be stored, already initialized with appropriate size
+     * @param ionospheric_model appled ionospheric model
      * @param is_coarse_mode if true, precise correction will be skipped.
      * @return (float_t) pseudo range, which includes delay, and exclude receiver/satellite error.
      */
@@ -149,6 +164,7 @@ class GPS_SinglePositioning {
         const pos_t &usr_pos,
         const float_t &receiver_error,
         residual_t &residual,
+        const typename options_t::ionospheric_models_t &ionospheric_model,
         const bool &is_coarse_mode = false) const {
 
       // Temporal geometry range
@@ -177,7 +193,7 @@ class GPS_SinglePositioning {
         enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
         // Ionospheric
-        switch(_options.ionospheric_model){
+        switch(ionospheric_model){
           case options_t::IONOSPHERIC_KLOBUCHAR:
             residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
             break;
@@ -200,11 +216,27 @@ class GPS_SinglePositioning {
       return pseudo_range;
     }
 
+    float_t range_residual(
+        const satellite_t &sat,
+        const float_t &range,
+        const gps_time_t &time_arrival,
+        const pos_t &usr_pos,
+        const float_t &receiver_error,
+        residual_t &residual,
+        const bool &is_coarse_mode = false) const {
+      return range_residual(
+          sat, range, time_arrival,
+          usr_pos, receiver_error,
+          residual,
+          ionospheric_model_preferred(),
+          is_coarse_mode);
+    }
+
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
         ERROR_UNSOLVED,
-        ERROR_IONO_PARAMS_INVALID,
+        ERROR_INVALID_IONO_MODEL,
         ERROR_INSUFFICIENT_SATELLITES,
         ERROR_POSITION_LS,
         ERROR_POSITION_NOT_CONVERGED,
@@ -250,11 +282,10 @@ class GPS_SinglePositioning {
       user_pvt_t res;
       res.receiver_time = receiver_time;
 
-      switch(_options.ionospheric_model){
-        case options_t::IONOSPHERIC_KLOBUCHAR:
-          if(_space_node.is_valid_iono_utc()){break;}
-          res.error_code = user_pvt_t::ERROR_IONO_PARAMS_INVALID;
-          return res;
+      typename options_t::ionospheric_models_t iono(ionospheric_model_preferred());
+      if(!_options.ionospheric_models[iono]){
+        res.error_code = user_pvt_t::ERROR_INVALID_IONO_MODEL;
+        return res;
       }
 
       typedef std::vector<std::pair<
@@ -312,6 +343,7 @@ class GPS_SinglePositioning {
           range = range_residual(sat, range, time_arrival,
               res.user_position, res.receiver_error,
               residual,
+              iono,
               i <= 0);
 
           if(i <= 0){continue;}
