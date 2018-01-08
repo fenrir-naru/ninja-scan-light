@@ -300,12 +300,15 @@ struct GPS_RawData {
   typedef GPS_SpaceNode<FloatT> space_node_t;
   space_node_t *space_node;
 
-  unsigned int clock_index;
-
   typedef GPS_SinglePositioning<FloatT> solver_t;
+  typename solver_t::options_t *solver_options;
   solver_t solver() const {
-    return solver_t(*space_node);
+    return solver_options
+        ? solver_t(*space_node, *solver_options)
+        : solver_t(*space_node);
   }
+
+  unsigned int clock_index;
 
   enum measurement_items_t {
     L1_PSEUDORANGE,
@@ -344,7 +347,8 @@ struct GPS_RawData {
   gps_time_t gpstime;
 
   GPS_RawData(const unsigned int &_clock_index = 0)
-      : clock_index(_clock_index), space_node(NULL), measurement(), gpstime() {}
+      : space_node(NULL), solver_options(NULL),
+      clock_index(_clock_index), measurement(), gpstime() {}
   ~GPS_RawData(){}
 };
 
@@ -395,6 +399,9 @@ class INS_GPS2_Tightly : public BaseFINS{
     CorrectInfo<float_t> correct_info(
         const raw_data_t &gps,
         const float_t &clock_error, const float_t &clock_error_rate) const {
+
+      // check space_node is configured
+      if(!gps.space_node){return CorrectInfo<float_t>::no_info();}
 
       float_t z_serialized[64]; // maximum 64 observation values
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))

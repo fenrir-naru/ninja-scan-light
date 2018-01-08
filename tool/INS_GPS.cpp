@@ -1830,15 +1830,18 @@ class StreamProcessor
             time_stamp(TIME_STAMP_INVALID) {}
       } status;
 
+      // for tightly coupled
       typedef G_Packet_Raw::space_node_t space_node_t;
       typedef G_Packet_Raw::raw_data_t raw_data_t;
       space_node_t space_node;
+      raw_data_t::solver_t::options_t solver_options;
       G_Packet_Raw packet_raw_latest;
       G_Packet_Ephemeris packet_eph[32];
       G_Packet_Iono_UTC packet_iono_utc;
 
       void packets_association(){
         packet_raw_latest.raw_data.space_node = &space_node;
+        packet_raw_latest.raw_data.solver_options = &solver_options;
         for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
           packet_eph[i].space_node = &space_node;
         }
