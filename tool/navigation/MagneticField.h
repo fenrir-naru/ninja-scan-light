@@ -56,19 +56,23 @@ class MagneticFieldGeneric {
       model_new.name = "(generated)";
       int coef_common;
       
-      if(model_early.dof >= model_late.dof){
-        coef_common =  model_late.dof * (model_late.dof + 2);
-        model_new.dof = model_early.dof;
-        
-        for(int i(coef_common); i < model_early.dof * (model_early.dof + 2); i--){
-          model_new.coef[i] = model_early.coef[i] * (1.0 - factor);
-        }
-      }else{
-        coef_common =  model_early.dof * (model_early.dof + 2);
-        model_new.dof = model_late.dof;
-        
-        for(int i(coef_common); i < model_late.dof * (model_late.dof + 2); i--){
-          model_new.coef[i] = model_late.coef[i] * factor;
+      if(model_new.dof > 0){ // fixed DOF
+        coef_common =  model_new.dof * (model_new.dof + 2);
+      }else{ // automatically determine DOF
+        if(model_early.dof >= model_late.dof){
+          coef_common =  model_late.dof * (model_late.dof + 2);
+          model_new.dof = model_early.dof;
+
+          for(int i(coef_common); i < model_early.dof * (model_early.dof + 2); i--){
+            model_new.coef[i] = model_early.coef[i] * (1.0 - factor);
+          }
+        }else{
+          coef_common =  model_early.dof * (model_early.dof + 2);
+          model_new.dof = model_late.dof;
+
+          for(int i(coef_common); i < model_late.dof * (model_late.dof + 2); i--){
+            model_new.coef[i] = model_late.coef[i] * factor;
+          }
         }
       }
       for(int i(0); i < coef_common; i++){
@@ -78,9 +82,11 @@ class MagneticFieldGeneric {
     }
     static model_t model_inter_extra_polation(
         const FloatT &year,
-        const model_t &model_early, const model_t &model_late){
+        const model_t &model_early, const model_t &model_late,
+        const int &dof = 0){
       model_t model_new;
       model_new.year = year;
+      model_new.dof = dof; // default(0): automatically determine DOF
       model_inter_extra_polation(model_new, model_early, model_late);
       return model_new;
     }
@@ -112,53 +118,41 @@ class MagneticFieldGeneric {
       }
       model_inter_extra_polation(model_new, *a, *b);
     }
+    static model_t make_model(
+        const FloatT &year,
+        const model_t *models[], const unsigned int &models_size,
+        const int &dof = 0){
+      model_t res;
+      res.year = year;
+      res.dof = dof; // default(0): automatically determine DOF
+      make_model(res, models, models_size);
+      return res;
+    }
 
     struct field_components_res_t {FloatT north, east, down;};
-    static field_components_res_t field_components(
+  protected:
+    static field_components_res_t field_components_geocentric(
         const model_t &model,
-        const FloatT &latitude_rad, const FloatT &longitude_rad,
-        const FloatT &height_meter_wgs84){
+        const FloatT &sin_geocentric_latitude, const FloatT &cos_geocentric_latitude,
+        const FloatT &longitude_rad,
+        const FloatT &radius_meter){
       using std::cos;
       using std::sin;
       using std::pow;
       using std::sqrt;
       field_components_res_t res;
       
-      FloatT slat(sin(latitude_rad));
-      FloatT clat(cos(latitude_rad));
-      // 緯度の補正
-      {
-        FloatT latitude_deg(latitude_rad / M_PI * 180);
-        if((90.0 - latitude_deg) < 1E-3){
-          clat = cos((90.0 - 1E-3) / 180 * M_PI); // 300 ft. from North pole
-        }else if((90.0 + latitude_deg) < 1E-3){
-          clat = cos((-90.0 + 1E-3) / 180 * M_PI); // 300 ft. from South pole
-        }
-      }
-      
+      // @see http://mooring.ucsd.edu/software/matlab/mfiles/toolbox/geo/IGRF/geomag60.c
+
+      const FloatT slat(sin_geocentric_latitude);
+      const FloatT clat(cos_geocentric_latitude);
+
       FloatT sl[13] = {sin(longitude_rad)};
       FloatT cl[13] = {cos(longitude_rad)};
       
       res.north = res.east = res.down = 0;
       
-      FloatT sd(0), cd(1);
-      FloatT aa, bb, cc, dd, r, rr;
-      
-      // TODO: WGS84高度から地球中心距離への変換(だと思う)
-      {
-        static const FloatT a2(40680631.59);            /* WGS84 */
-        static const FloatT b2(40408299.98);            /* WGS84 */
-        aa = a2 * clat * clat;
-        bb = b2 * slat * slat;
-        cc = aa + bb;
-        dd = sqrt(cc);
-        FloatT height_km_wgs84(1E-3 * height_meter_wgs84);
-        r = sqrt(height_km_wgs84 * (height_km_wgs84 + 2.0 * dd) + (a2 * aa + b2 * bb) / cc);
-        cd = (height_km_wgs84 + dd) / r;
-        sd = (a2 - b2) / dd * slat * clat / r;
-        slat = slat * cd - clat * sd;
-        clat = clat * cd + slat * sd;
-      }
+      FloatT aa, bb, cc, rr;
       
       aa = sqrt(3.0);
       FloatT p[118] = {
@@ -176,8 +170,8 @@ class MagneticFieldGeneric {
         if(m > n){
           m = -1;
           n++;
-          static const FloatT earths_radius(6371.2);
-          rr = pow(earths_radius / r, n + 3);
+          static const FloatT earths_radius(6371.2E3);
+          rr = pow(earths_radius / radius_meter, n + 3);
         }
         FloatT fm(m + 1), fn(n + 1);
         if (k > 3){
@@ -216,24 +210,88 @@ class MagneticFieldGeneric {
           l += 2;
         }
       }
-  
-      aa = res.north;
-      res.north = aa * cd + res.down * sd;
-      res.down = res.down * cd - aa * sd;
-      
+
+      return res;
+    }
+
+  public:
+    static field_components_res_t field_components_geocentric(
+        const model_t &model,
+        const FloatT &geocentric_latitude,
+        const FloatT &longitude_rad,
+        const FloatT &radius_meter = 6371.2E3){
+
+      return field_components_geocentric(model,
+          std::sin(geocentric_latitude), std::cos(geocentric_latitude),
+          longitude_rad,
+          radius_meter);
+    }
+
+    static field_components_res_t field_components(
+        const model_t &model,
+        const FloatT &latitude_rad, const FloatT &longitude_rad,
+        const FloatT &height_meter){
+      using std::cos;
+      using std::sin;
+      using std::pow;
+      using std::sqrt;
+
+      FloatT slat(sin(latitude_rad)), clat(cos(latitude_rad));
+      FloatT sd, cd, r;
+
+      {
+        // Correction of latitude
+        FloatT latitude_deg(latitude_rad / M_PI * 180);
+        if((90.0 - latitude_deg) < 1E-3){
+          clat = cos((90.0 - 1E-3) / 180 * M_PI); // 300 ft. from North pole
+        }else if((90.0 + latitude_deg) < 1E-3){
+          clat = cos((-90.0 + 1E-3) / 180 * M_PI); // 300 ft. from South pole
+        }
+      }
+
+      {
+        // Convert geographic lat/lng(地理緯度経度) to geocentric lat/lng(地心緯度経度)
+        FloatT aa, bb, cc, dd;
+        static const FloatT a2(40680631.59E6);            /* WGS84, a*a (m^2) */
+        static const FloatT b2(40408299.98E6);            /* WGS84, b*b (m^2) */
+        aa = a2 * clat * clat;
+        bb = b2 * slat * slat;
+        cc = aa + bb;
+        dd = sqrt(cc);
+        r = sqrt(height_meter * (height_meter + 2.0 * dd) + (a2 * aa + b2 * bb) / cc);
+        cd = (height_meter + dd) / r;
+        sd = (a2 - b2) / dd * slat * clat / r;
+      }
+
+      field_components_res_t res(field_components_geocentric(
+          model,
+          slat * cd - clat * sd, clat * cd + slat * sd,
+          longitude_rad, r));
+
+      { // coordinate transform
+        FloatT _north(res.north);
+        res.north = _north * cd + res.down * sd;
+        res.down = res.down * cd - _north * sd;
+      }
+
       return res;
     }
 
     struct latlng_t {
       FloatT latitude, longitude;
     };
+    /**
+     * Calculate geomagnetic latitude and longitude
+     *
+     * @see "Magnetic Coordinate Systems" DOI 10.1007/s11214-016-0275-y
+     */
     static latlng_t geomagnetic_latlng(
         const model_t &model,
         const FloatT &geocentric_latitude, const FloatT &longitude){
       const FloatT &g10(model.coef[0]), &g11(model.coef[1]), &h11(model.coef[2]);
-      FloatT m[] = {g11, h11, g10};
-      FloatT b0(-std::sqrt(std::pow(m[0], 2) + std::pow(m[1], 2) + std::pow(m[2], 2)));
-      FloatT z_cd[] = {m[0] / b0, m[1] / b0, m[2] / b0};
+      FloatT m[] = {g11, h11, g10}; // Eq.(11)
+      FloatT b0(-std::sqrt(std::pow(m[0], 2) + std::pow(m[1], 2) + std::pow(m[2], 2))); // Eq.(12)
+      FloatT z_cd[] = {m[0] / b0, m[1] / b0, m[2] / b0}; // Eq.(16)
       FloatT y_cd_denom(-std::sqrt((h11 * h11) + (g11 * g11)));
       FloatT y_cd[] = {-h11 / y_cd_denom, g11 / y_cd_denom, 0}; /* = [0,0,1] * z_cd */
       FloatT x_cd[] = { /* y_cd * z_cd */
@@ -244,7 +302,7 @@ class MagneticFieldGeneric {
       FloatT
           clat(std::cos(geocentric_latitude)), slat(std::sin(geocentric_latitude)),
           clng(std::cos(longitude)), slng(std::sin(longitude));
-      FloatT vec_geoc[] = {clat * clng, clat * slng, slat};
+      FloatT vec_geoc[] = {clat * clng, clat * slng, slat}; // Eq.(13) Theta_N = (pi - lat)
       FloatT vec_geom[] = {
         x_cd[0] * vec_geoc[0] + x_cd[1] * vec_geoc[1] + x_cd[2] * vec_geoc[2],
         y_cd[0] * vec_geoc[0] + y_cd[1] * vec_geoc[1] + y_cd[2] * vec_geoc[2],
@@ -296,37 +354,38 @@ class IGRF11Generic : public MagneticFieldGeneric<FloatT> {
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF35;
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF40;
 
+    static const typename MagneticFieldGeneric<FloatT>::model_t *models[];
+
     static typename MagneticFieldGeneric<FloatT>::model_t get_model(const FloatT &year){
-      static const typename MagneticFieldGeneric<FloatT>::model_t *models[] = {
-        &IGRF00,
-        &IGRF05,
-        &IGRF10,
-        &IGRF15,
-        &IGRF20,
-        &IGRF25,
-        &IGRF30,
-        &IGRF35,
-        &IGRF40,
-        &DGRF45,
-        &DGRF50,
-        &DGRF55,
-        &DGRF60,
-        &DGRF65,
-        &DGRF70,
-        &DGRF75,
-        &DGRF80,
-        &DGRF85,
-        &DGRF90,
-        &DGRF95,
-        &DGRF2000,
-        &DGRF2005,
-        &IGRF2010,
-      };
-      typename MagneticFieldGeneric<FloatT>::model_t res;
-      res.year = year;
-      MagneticFieldGeneric<FloatT>::make_model(res, models, sizeof(models) / sizeof(models[0]));
-      return res;
+      return MagneticFieldGeneric<FloatT>::make_model(year, models, sizeof(models) / sizeof(models[0]));
     }
+};
+
+template <class FloatT>
+const typename MagneticFieldGeneric<FloatT>::model_t *IGRF11Generic<FloatT>::models[] = {
+  &IGRF00,
+  &IGRF05,
+  &IGRF10,
+  &IGRF15,
+  &IGRF20,
+  &IGRF25,
+  &IGRF30,
+  &IGRF35,
+  &IGRF40,
+  &DGRF45,
+  &DGRF50,
+  &DGRF55,
+  &DGRF60,
+  &DGRF65,
+  &DGRF70,
+  &DGRF75,
+  &DGRF80,
+  &DGRF85,
+  &DGRF90,
+  &DGRF95,
+  &DGRF2000,
+  &DGRF2005,
+  &IGRF2010,
 };
 
 typedef IGRF11Generic<double> IGRF11;
@@ -715,38 +774,39 @@ class IGRF12Generic : public IGRF11Generic<FloatT> {
     static const typename MagneticFieldGeneric<FloatT>::model_t DGRF2010;
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF2015;
 
+    static const typename MagneticFieldGeneric<FloatT>::model_t *models[];
+
     static typename MagneticFieldGeneric<FloatT>::model_t get_model(const FloatT &year){
-      static const typename MagneticFieldGeneric<FloatT>::model_t *models[] = {
-        &IGRF11Generic<FloatT>::IGRF00,
-        &IGRF11Generic<FloatT>::IGRF05,
-        &IGRF11Generic<FloatT>::IGRF10,
-        &IGRF11Generic<FloatT>::IGRF15,
-        &IGRF11Generic<FloatT>::IGRF20,
-        &IGRF11Generic<FloatT>::IGRF25,
-        &IGRF11Generic<FloatT>::IGRF30,
-        &IGRF11Generic<FloatT>::IGRF35,
-        &IGRF11Generic<FloatT>::IGRF40,
-        &IGRF11Generic<FloatT>::DGRF45,
-        &IGRF11Generic<FloatT>::DGRF50,
-        &IGRF11Generic<FloatT>::DGRF55,
-        &IGRF11Generic<FloatT>::DGRF60,
-        &IGRF11Generic<FloatT>::DGRF65,
-        &IGRF11Generic<FloatT>::DGRF70,
-        &IGRF11Generic<FloatT>::DGRF75,
-        &IGRF11Generic<FloatT>::DGRF80,
-        &IGRF11Generic<FloatT>::DGRF85,
-        &IGRF11Generic<FloatT>::DGRF90,
-        &IGRF11Generic<FloatT>::DGRF95,
-        &IGRF11Generic<FloatT>::DGRF2000,
-        &IGRF11Generic<FloatT>::DGRF2005,
-        &DGRF2010,
-        &IGRF2015,
-      };
-      typename MagneticFieldGeneric<FloatT>::model_t res;
-      res.year = year;
-      MagneticFieldGeneric<FloatT>::make_model(res, models, sizeof(models) / sizeof(models[0]));
-      return res;
+      return MagneticFieldGeneric<FloatT>::make_model(year, models, sizeof(models) / sizeof(models[0]));
     }
+};
+
+template <class FloatT>
+const typename MagneticFieldGeneric<FloatT>::model_t *IGRF12Generic<FloatT>::models[] = {
+  &IGRF11Generic<FloatT>::IGRF00,
+  &IGRF11Generic<FloatT>::IGRF05,
+  &IGRF11Generic<FloatT>::IGRF10,
+  &IGRF11Generic<FloatT>::IGRF15,
+  &IGRF11Generic<FloatT>::IGRF20,
+  &IGRF11Generic<FloatT>::IGRF25,
+  &IGRF11Generic<FloatT>::IGRF30,
+  &IGRF11Generic<FloatT>::IGRF35,
+  &IGRF11Generic<FloatT>::IGRF40,
+  &IGRF11Generic<FloatT>::DGRF45,
+  &IGRF11Generic<FloatT>::DGRF50,
+  &IGRF11Generic<FloatT>::DGRF55,
+  &IGRF11Generic<FloatT>::DGRF60,
+  &IGRF11Generic<FloatT>::DGRF65,
+  &IGRF11Generic<FloatT>::DGRF70,
+  &IGRF11Generic<FloatT>::DGRF75,
+  &IGRF11Generic<FloatT>::DGRF80,
+  &IGRF11Generic<FloatT>::DGRF85,
+  &IGRF11Generic<FloatT>::DGRF90,
+  &IGRF11Generic<FloatT>::DGRF95,
+  &IGRF11Generic<FloatT>::DGRF2000,
+  &IGRF11Generic<FloatT>::DGRF2005,
+  &DGRF2010,
+  &IGRF2015,
 };
 
 typedef IGRF12Generic<double> IGRF12;
