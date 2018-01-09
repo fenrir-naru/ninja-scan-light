@@ -34,6 +34,14 @@
 
 #include <cmath>
 
+
+/**
+ * Global TEC model NTCM-GL
+ *
+ * @see N. Jakowski, M.M. Hoque, and C. Mayer, ÅgA new global TEC model for
+ * estimating transionospheric radio wave propagation errors,Åh Journal of
+ * Geodesy, 10.1007/s00190-011-0455-1, 2011
+ */
 template <class FloatT>
 class NTCM_GL_Generic {
   public:
@@ -85,6 +93,9 @@ class NTCM_GL_Generic {
     }
 
     /**
+     * Calculate vertical Total electron count (TEC)
+     * This function is a implementation in accordance with the paper description.
+     *
      * @param lt Local time in hours [0,24)
      * @param phi Geographic latitude in radians
      * @param delta Declination of the Sun
