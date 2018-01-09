@@ -1397,7 +1397,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     }
 
     /**
-     * Calculation of pierce point position
+     * Calculate pierce point position
      *
      * @param relative_pos satellite position (relative position, NEU)
      * @param usrllh user position (absolute position, LLH)
@@ -1438,6 +1438,22 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         }
       }
       return res;
+    }
+
+    /**
+     * Calculate ratio of slant versus vertical
+     *
+     * @relative_pos satellite position (relative position, NEU)
+     * @param height_over_ellipsoid
+     * @see spherically single layer approach, for example,
+     * Eq.(3) of "Ionospheric Range Error Correction Models" by N. Jakowski
+     */
+    static float_t slant_factor(
+        const enu_t &relative_pos,
+        const float_t &height_over_ellipsoid = 350E3) {
+      return std::sqrt(
+          -std::pow(std::cos(relative_pos.elevation()) / ((height_over_ellipsoid / WGS84::R_e) + 1), 2)
+          + 1);
     }
 
     /**
