@@ -34,6 +34,8 @@
 
 #include <cmath>
 
+#include "WGS84.h"
+#include "MagneticField.h"
 
 /**
  * Global TEC model NTCM-GL
@@ -109,6 +111,40 @@ class NTCM_GL_Generic {
         const float_t &phi_m,
         const float_t &f_10_7){
       return f1(lt, phi, delta) * f2(doy) * f3(phi_m) * f4(phi_m) * f5(f_10_7);
+    }
+
+    /**
+     * Calculate vertical Total electron count (TEC)
+     * This function invokes the original tec_vert with conversion
+     *
+     * @param phi Geographic latitude in radians
+     * @param lambda Geographic longitude in radians
+     * @param year UTC floating-point year
+     * @param f_10_7 Solar activity index
+     */
+    static float_t tec_vert(
+        const float_t &phi, const float_t lambda,
+        const float_t &year_utc,
+        const float_t &f_10_7){
+
+      float_t year_int, year_frac(std::modf(year_utc, &year_int));
+      int year(year_int);
+
+      int days(365);
+      if(((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0)){days++;} // leap day
+      float_t day_utc, hr_lt((std::modf(year_utc * days, &day_utc) * 24) + (lambda / M_PI * 12));
+      if(hr_lt < 0){hr_lt += 24;}
+
+      float_t phi_m(
+          MagneticFieldGeneric<float_t>::geomagnetic_latlng(IGRF12::get_model(year_utc),
+          WGS84Generic<float_t>::geocentric_latitude(phi), lambda).latitude);
+
+      // sun declination
+      // @see https://en.wikipedia.org/wiki/Position_of_the_Sun#Declination_of_the_Sun_as_seen_from_Earth
+      float_t delta(std::asin(
+         std::sin(-23.44 / 180 * M_PI) * std::cos(M_PI * 2 * (year_frac + (10.0 / 365)))));
+
+      return tec_vert(hr_lt, phi, delta, year_frac * 365.25, phi_m, f_10_7);
     }
 };
 
