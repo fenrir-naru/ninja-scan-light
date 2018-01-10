@@ -528,7 +528,7 @@ class NAV : public Updatable {
 
       // Call Earth's magnetic field model
       MagneticField::field_components_res_t mag_model(
-          MagneticField::field_components(IGRF12::IGRF2015,
+          MagneticField::field_components(IGRF12::Preset::IGRF2015,
               latitude, longitude, altitude));
       vec_t mag_field(mag_model.north, mag_model.east, mag_model.down);
 

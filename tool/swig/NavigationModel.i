@@ -30,8 +30,8 @@
 
 %define CONCRETIZE(type)
 %template(MagneticField) MagneticFieldGeneric<type>;
-%template(IGRF11) IGRF11Generic<type>;
-%template(IGRF12) IGRF12Generic<type>;
+%template(IGRF11) MagneticFieldGeneric2<type, IGRF11Generic>;
+%template(IGRF12) MagneticFieldGeneric2<type, IGRF12Generic>;
 %template(WMM2010) WMM2010Generic<type>;
 %extend MagneticFieldModel {
 #if defined(SWIGRUBY)
@@ -106,6 +106,11 @@ struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
   }
   %typemap(varout) model_t {
   	$result = SWIG_NewPointerObj(SWIG_as_voidptr(new MagneticFieldModel($1)), $descriptor(MagneticFieldModel *), 1);
+  }
+}
+%extend MagneticFieldGeneric2 {
+  static const typename MagneticFieldGeneric<FloatT>::model_t **models() {
+    return Binder<FloatT>::models;
   }
 }
 

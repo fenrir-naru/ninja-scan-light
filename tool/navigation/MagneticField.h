@@ -318,6 +318,28 @@ class MagneticFieldGeneric {
 
 typedef MagneticFieldGeneric<double> MagneticField;
 
+template <class FloatT, template <class> class Binder>
+struct MagneticFieldGeneric2 : public MagneticFieldGeneric<FloatT> {
+  static typename MagneticFieldGeneric<FloatT>::model_t get_model(
+      const FloatT &year){
+    return MagneticFieldGeneric<FloatT>::make_model(
+        year,
+        Binder<FloatT>::models,
+        sizeof(Binder<FloatT>::models) / sizeof(Binder<FloatT>::models[0]));
+  }
+  static typename MagneticFieldGeneric<FloatT>::latlng_t geomagnetic_latlng(
+      const FloatT &year,
+      const FloatT &geocentric_latitude, const FloatT &longitude){
+    return MagneticFieldGeneric<FloatT>::geomagnetic_latlng(
+        MagneticFieldGeneric<FloatT>::make_model(
+            year,
+            Binder<FloatT>::models,
+            sizeof(Binder<FloatT>::models) / sizeof(Binder<FloatT>::models[0]),
+            1),
+        geocentric_latitude, longitude);
+  }
+};
+
 /* IGRF11 is the eleventh generation standard main field model adopted
  * by the International Association of Geomagnetism and Aeronomy (IAGA).
  * This is a degree and order 10 model from 1900 to 1995 and a degree and
@@ -328,8 +350,8 @@ typedef MagneticFieldGeneric<double> MagneticField;
  */
 
 template <class FloatT>
-class IGRF11Generic : public MagneticFieldGeneric<FloatT> {
-  public:
+struct IGRF11Generic : public MagneticFieldGeneric2<FloatT, IGRF11Generic> {
+  struct Preset {
     static const typename MagneticFieldGeneric<FloatT>::model_t DGRF2000;
     static const typename MagneticFieldGeneric<FloatT>::model_t DGRF2005;
     static const typename MagneticFieldGeneric<FloatT>::model_t DGRF45;
@@ -353,45 +375,42 @@ class IGRF11Generic : public MagneticFieldGeneric<FloatT> {
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF30;
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF35;
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF40;
+  };
 
-    static const typename MagneticFieldGeneric<FloatT>::model_t *models[];
-
-    static typename MagneticFieldGeneric<FloatT>::model_t get_model(const FloatT &year){
-      return MagneticFieldGeneric<FloatT>::make_model(year, models, sizeof(models) / sizeof(models[0]));
-    }
+  static const typename MagneticFieldGeneric<FloatT>::model_t *models[];
 };
 
 template <class FloatT>
 const typename MagneticFieldGeneric<FloatT>::model_t *IGRF11Generic<FloatT>::models[] = {
-  &IGRF00,
-  &IGRF05,
-  &IGRF10,
-  &IGRF15,
-  &IGRF20,
-  &IGRF25,
-  &IGRF30,
-  &IGRF35,
-  &IGRF40,
-  &DGRF45,
-  &DGRF50,
-  &DGRF55,
-  &DGRF60,
-  &DGRF65,
-  &DGRF70,
-  &DGRF75,
-  &DGRF80,
-  &DGRF85,
-  &DGRF90,
-  &DGRF95,
-  &DGRF2000,
-  &DGRF2005,
-  &IGRF2010,
+  &Preset::IGRF00,
+  &Preset::IGRF05,
+  &Preset::IGRF10,
+  &Preset::IGRF15,
+  &Preset::IGRF20,
+  &Preset::IGRF25,
+  &Preset::IGRF30,
+  &Preset::IGRF35,
+  &Preset::IGRF40,
+  &Preset::DGRF45,
+  &Preset::DGRF50,
+  &Preset::DGRF55,
+  &Preset::DGRF60,
+  &Preset::DGRF65,
+  &Preset::DGRF70,
+  &Preset::DGRF75,
+  &Preset::DGRF80,
+  &Preset::DGRF85,
+  &Preset::DGRF90,
+  &Preset::DGRF95,
+  &Preset::DGRF2000,
+  &Preset::DGRF2005,
+  &Preset::IGRF2010,
 };
 
 typedef IGRF11Generic<double> IGRF11;
 
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF2000 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF2000 = {
     "DGRF2000",
     2000.0,
     13,
@@ -410,7 +429,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -0.2, -0.9, -0.9, 0.3, 0.2, 0.1, 1.8, -0.4, -0.4, 1.3, -1.0, -0.4, -0.1, 0.7, 0.7, -0.4, 0.3, 0.3, 0.6, -0.1, 0.3, 0.4, -0.2, 0.0, -0.5, 0.1, -0.9, } // 13
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF2005 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF2005 = {
     "DGRF2005",
     2005.0,
     13,
@@ -429,7 +448,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -0.16, -0.88, -0.76, 0.3, 0.33, 0.28, 1.72, -0.43, -0.54, 1.18, -1.07, -0.37, -0.04, 0.75, 0.63, -0.26, 0.21, 0.35, 0.53, -0.05, 0.38, 0.41, -0.22, -0.1, -0.57, -0.18, -0.82, } // 13
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF45 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF45 = {
     "DGRF45",
     1945.0,
     10,
@@ -445,7 +464,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -3.0, 11.0, 5.0, 1.0, 1.0, 2.0, -20.0, -5.0, -1.0, -1.0, -6.0, 8.0, 6.0, -1.0, -4.0, -3.0, -2.0, 5.0, 0.0, -2.0, -2.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF50 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF50 = {
     "DGRF50",
     1950.0,
     10,
@@ -461,7 +480,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -8.0, 4.0, 13.0, -1.0, -2.0, 13.0, -10.0, -4.0, 2.0, 4.0, -3.0, 12.0, 6.0, 3.0, -3.0, 2.0, 6.0, 10.0, 11.0, 3.0, 8.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF55 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF55 = {
     "DGRF55",
     1955.0,
     10,
@@ -477,7 +496,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -3.0, -5.0, -4.0, -1.0, 0.0, 2.0, -8.0, -3.0, -2.0, 7.0, -4.0, 4.0, 1.0, -2.0, -3.0, 6.0, 7.0, -2.0, -1.0, 0.0, -3.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF60 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF60 = {
     "DGRF60",
     1960.0,
     10,
@@ -493,7 +512,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         1.0, -3.0, 4.0, 4.0, 1.0, 0.0, 0.0, -1.0, 2.0, 4.0, -5.0, 6.0, 1.0, 1.0, -1.0, -1.0, 6.0, 2.0, 0.0, 0.0, -7.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF65 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF65 = {
     "DGRF65",
     1965.0,
     10,
@@ -509,7 +528,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -2.0, -3.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 4.0, -4.0, 4.0, 0.0, 0.0, -2.0, 2.0, 3.0, 2.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF70 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF70 = {
     "DGRF70",
     1970.0,
     10,
@@ -525,7 +544,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -3.0, -3.0, 1.0, 2.0, 1.0, -5.0, 3.0, -1.0, 4.0, 6.0, -4.0, 4.0, 0.0, 1.0, -1.0, 0.0, 3.0, 3.0, 1.0, -1.0, -4.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF75 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF75 = {
     "DGRF75",
     1975.0,
     10,
@@ -541,7 +560,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -3.0, -3.0, 1.0, 2.0, 1.0, -5.0, 3.0, -2.0, 4.0, 5.0, -4.0, 4.0, -1.0, 1.0, -1.0, 0.0, 3.0, 3.0, 1.0, -1.0, -5.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF80 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF80 = {
     "DGRF80",
     1980.0,
     10,
@@ -557,7 +576,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -4.0, -4.0, 1.0, 2.0, 0.0, -5.0, 3.0, -2.0, 6.0, 5.0, -4.0, 3.0, 0.0, 1.0, -1.0, 2.0, 4.0, 3.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF85 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF85 = {
     "DGRF85",
     1985.0,
     10,
@@ -573,7 +592,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -4.0, -4.0, 1.0, 3.0, 0.0, -5.0, 3.0, -2.0, 6.0, 5.0, -4.0, 3.0, 0.0, 1.0, -1.0, 2.0, 4.0, 3.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF90 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF90 = {
     "DGRF90",
     1990.0,
     10,
@@ -589,7 +608,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 3.0, -2.0, 6.0, 4.0, -4.0, 3.0, 0.0, 1.0, -2.0, 3.0, 3.0, 3.0, -1.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF95 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::DGRF95 = {
     "DGRF95",
     1995.0,
     10,
@@ -605,7 +624,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::DGRF
         -3.0, -6.0, 1.0, 2.0, 0.0, -4.0, 4.0, -1.0, 5.0, 4.0, -5.0, 2.0, -1.0, 2.0, -2.0, 5.0, 1.0, 1.0, -2.0, 0.0, -7.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF00 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF00 = {
     "IGRF00",
     1900.0,
     10,
@@ -621,7 +640,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 2.0, 4.0, 2.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF05 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF05 = {
     "IGRF05",
     1905.0,
     10,
@@ -637,7 +656,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 2.0, 4.0, 2.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF10 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF10 = {
     "IGRF10",
     1910.0,
     10,
@@ -653,7 +672,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 2.0, 4.0, 2.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF15 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF15 = {
     "IGRF15",
     1915.0,
     10,
@@ -669,7 +688,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 1.0, 4.0, 2.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF20 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF20 = {
     "IGRF20",
     1920.0,
     10,
@@ -685,7 +704,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 1.0, 4.0, 3.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF2010 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF2010 = {
     "IGRF2010",
     2010.0,
     13,
@@ -704,7 +723,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -0.2, -0.9, -0.8, 0.3, 0.3, 0.4, 1.7, -0.4, -0.6, 1.1, -1.2, -0.3, -0.1, 0.8, 0.5, -0.2, 0.1, 0.4, 0.5, 0.0, 0.4, 0.4, -0.2, -0.3, -0.5, -0.3, -0.8, } // 13
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF25 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF25 = {
     "IGRF25",
     1925.0,
     10,
@@ -720,7 +739,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 1.0, 4.0, 3.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF30 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF30 = {
     "IGRF30",
     1930.0,
     10,
@@ -736,7 +755,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -2.0, 1.0, 4.0, 3.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF35 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF35 = {
     "IGRF35",
     1935.0,
     10,
@@ -752,7 +771,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
         -3.0, -4.0, 2.0, 2.0, 1.0, -5.0, 2.0, -2.0, 6.0, 6.0, -4.0, 4.0, 0.0, 0.0, -1.0, 2.0, 4.0, 3.0, 0.0, 0.0, -6.0, } // 10
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF40 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::Preset::IGRF40 = {
     "IGRF40",
     1940.0,
     10,
@@ -769,50 +788,47 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF11Generic<FloatT>::IGRF
     };
 
 template <class FloatT>
-class IGRF12Generic : public IGRF11Generic<FloatT> {
-  public:
+struct IGRF12Generic : public MagneticFieldGeneric2<FloatT, IGRF12Generic> {
+  struct Preset : public IGRF11Generic<FloatT>::Preset {
     static const typename MagneticFieldGeneric<FloatT>::model_t DGRF2010;
     static const typename MagneticFieldGeneric<FloatT>::model_t IGRF2015;
+  };
 
-    static const typename MagneticFieldGeneric<FloatT>::model_t *models[];
-
-    static typename MagneticFieldGeneric<FloatT>::model_t get_model(const FloatT &year){
-      return MagneticFieldGeneric<FloatT>::make_model(year, models, sizeof(models) / sizeof(models[0]));
-    }
+  static const typename MagneticFieldGeneric<FloatT>::model_t *models[];
 };
 
 template <class FloatT>
 const typename MagneticFieldGeneric<FloatT>::model_t *IGRF12Generic<FloatT>::models[] = {
-  &IGRF11Generic<FloatT>::IGRF00,
-  &IGRF11Generic<FloatT>::IGRF05,
-  &IGRF11Generic<FloatT>::IGRF10,
-  &IGRF11Generic<FloatT>::IGRF15,
-  &IGRF11Generic<FloatT>::IGRF20,
-  &IGRF11Generic<FloatT>::IGRF25,
-  &IGRF11Generic<FloatT>::IGRF30,
-  &IGRF11Generic<FloatT>::IGRF35,
-  &IGRF11Generic<FloatT>::IGRF40,
-  &IGRF11Generic<FloatT>::DGRF45,
-  &IGRF11Generic<FloatT>::DGRF50,
-  &IGRF11Generic<FloatT>::DGRF55,
-  &IGRF11Generic<FloatT>::DGRF60,
-  &IGRF11Generic<FloatT>::DGRF65,
-  &IGRF11Generic<FloatT>::DGRF70,
-  &IGRF11Generic<FloatT>::DGRF75,
-  &IGRF11Generic<FloatT>::DGRF80,
-  &IGRF11Generic<FloatT>::DGRF85,
-  &IGRF11Generic<FloatT>::DGRF90,
-  &IGRF11Generic<FloatT>::DGRF95,
-  &IGRF11Generic<FloatT>::DGRF2000,
-  &IGRF11Generic<FloatT>::DGRF2005,
-  &DGRF2010,
-  &IGRF2015,
+  &Preset::IGRF00,
+  &Preset::IGRF05,
+  &Preset::IGRF10,
+  &Preset::IGRF15,
+  &Preset::IGRF20,
+  &Preset::IGRF25,
+  &Preset::IGRF30,
+  &Preset::IGRF35,
+  &Preset::IGRF40,
+  &Preset::DGRF45,
+  &Preset::DGRF50,
+  &Preset::DGRF55,
+  &Preset::DGRF60,
+  &Preset::DGRF65,
+  &Preset::DGRF70,
+  &Preset::DGRF75,
+  &Preset::DGRF80,
+  &Preset::DGRF85,
+  &Preset::DGRF90,
+  &Preset::DGRF95,
+  &Preset::DGRF2000,
+  &Preset::DGRF2005,
+  &Preset::DGRF2010,
+  &Preset::IGRF2015,
 };
 
 typedef IGRF12Generic<double> IGRF12;
 
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::DGRF2010 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::Preset::DGRF2010 = {
     "DGRF2010",
     2010.0,
     13,
@@ -831,7 +847,7 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::DGRF
         -0.09, -0.89, -0.87, 0.31, 0.3, 0.42, 1.66, -0.45, -0.59, 1.08, -1.14, -0.31, -0.07, 0.78, 0.54, -0.18, 0.1, 0.38, 0.49, 0.02, 0.44, 0.42, -0.25, -0.26, -0.53, -0.26, -0.79, } // 13
     };
 template <class FloatT>
-const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::IGRF2015 = {
+const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::Preset::IGRF2015 = {
     "IGRF2015",
     2015.0,
     13,
@@ -860,13 +876,19 @@ const typename MagneticFieldGeneric<FloatT>::model_t IGRF12Generic<FloatT>::IGRF
  */
 
 template <class FloatT>
-class WMM2010Generic : public MagneticFieldGeneric<FloatT> {
-  public:
-    static const typename MagneticFieldGeneric<FloatT>::model_t WMM;
+struct WMM2010Generic : public MagneticFieldGeneric<FloatT> {
+  static const typename MagneticFieldGeneric<FloatT>::model_t WMM;
 
-    static typename MagneticFieldGeneric<FloatT>::model_t get_model(const FloatT &year){
-      return WMM;
-    }
+  static typename MagneticFieldGeneric<FloatT>::model_t get_model(const FloatT &year){
+    return WMM;
+  }
+  static typename MagneticFieldGeneric<FloatT>::latlng_t geomagnetic_latlng(
+      const FloatT &year,
+      const FloatT &geocentric_latitude, const FloatT &longitude){
+    return MagneticFieldGeneric<FloatT>::geomagnetic_latlng(
+        WMM,
+        geocentric_latitude, longitude);
+  }
 };
 
 typedef WMM2010Generic<double> WMM2010;
