@@ -8,6 +8,7 @@
 
 %{
 #include <string>
+#include <vector>
 
 #include "navigation/MagneticField.h"
 #include "navigation/WGS84.h"
@@ -109,8 +110,25 @@ struct MagneticFieldModel : public MagneticFieldGeneric<type>::model_t {
   }
 }
 %extend MagneticFieldGeneric2 {
-  static const typename MagneticFieldGeneric<FloatT>::model_t **models() {
-    return Binder<FloatT>::models;
+#if defined(SWIGRUBY)
+  %typemap(out) std::vector<const typename MagneticFieldGeneric<FloatT>::model_t *> {
+  	$result = rb_hash_new();
+    for(typename std::vector<const typename MagneticFieldGeneric<FloatT>::model_t *>::const_iterator it($1.begin());
+        it != $1.end();
+        ++it){
+      rb_hash_aset($result, ID2SYM(rb_intern((*it)->name)), 
+          SWIG_NewPointerObj(SWIG_as_voidptr(new MagneticFieldModel(**it)), $descriptor(MagneticFieldModel *), 1));
+    }
+  }
+#endif
+  static std::vector<const typename MagneticFieldGeneric<FloatT>::model_t *> models() {
+    std::vector<const typename MagneticFieldGeneric<FloatT>::model_t *> res;
+    for(unsigned int i(0); 
+        i < sizeof(Binder<FloatT>::models) / sizeof(Binder<FloatT>::models[0]); 
+        ++i){
+      res.push_back(Binder<FloatT>::models[i]);
+    }
+    return res;
   }
 }
 
