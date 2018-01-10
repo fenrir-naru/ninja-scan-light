@@ -136,8 +136,8 @@ class NTCM_GL_Generic {
       if(hr_lt < 0){hr_lt += 24;}
 
       float_t phi_m(
-          MagneticFieldGeneric<float_t>::geomagnetic_latlng(IGRF12::get_model(year_utc),
-          WGS84Generic<float_t>::geocentric_latitude(phi), lambda).latitude);
+          IGRF12::geomagnetic_latlng(year_utc,
+              WGS84Generic<float_t>::geocentric_latitude(phi), lambda).latitude);
 
       // sun declination
       // @see https://en.wikipedia.org/wiki/Position_of_the_Sun#Declination_of_the_Sun_as_seen_from_Earth
