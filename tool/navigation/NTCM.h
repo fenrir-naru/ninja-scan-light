@@ -165,10 +165,7 @@ class NTCM_GL_Generic {
         const float_t &f_10_7){
 
       return tec_vert(phi, lambda, year_utc,
-          MagneticFieldGeneric<float_t>::make_model(year_utc,
-              IGRF12Generic<float_t>::models,
-              sizeof(IGRF12Generic<float_t>::models) / sizeof(IGRF12Generic<float_t>::models[0]),
-              1),
+          IGRF12Generic<float_t>::get_model(year_utc, 1),
           f_10_7);
     }
 };
