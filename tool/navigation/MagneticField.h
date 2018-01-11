@@ -321,21 +321,18 @@ typedef MagneticFieldGeneric<double> MagneticField;
 template <class FloatT, template <class> class Binder>
 struct MagneticFieldGeneric2 : public MagneticFieldGeneric<FloatT> {
   static typename MagneticFieldGeneric<FloatT>::model_t get_model(
-      const FloatT &year){
+      const FloatT &year, const int &dof = 0){
     return MagneticFieldGeneric<FloatT>::make_model(
         year,
         Binder<FloatT>::models,
-        sizeof(Binder<FloatT>::models) / sizeof(Binder<FloatT>::models[0]));
+        sizeof(Binder<FloatT>::models) / sizeof(Binder<FloatT>::models[0]),
+        dof);
   }
   static typename MagneticFieldGeneric<FloatT>::latlng_t geomagnetic_latlng(
       const FloatT &year,
       const FloatT &geocentric_latitude, const FloatT &longitude){
     return MagneticFieldGeneric<FloatT>::geomagnetic_latlng(
-        MagneticFieldGeneric<FloatT>::make_model(
-            year,
-            Binder<FloatT>::models,
-            sizeof(Binder<FloatT>::models) / sizeof(Binder<FloatT>::models[0]),
-            1),
+        get_model(year, 1),
         geocentric_latitude, longitude);
   }
 };
