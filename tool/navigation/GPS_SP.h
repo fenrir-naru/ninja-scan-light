@@ -212,7 +212,13 @@ class GPS_SinglePositioning {
             residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
             break;
           case options_t::IONOSPHERIC_NTCM_GL:
-            // TODO
+            // TODO f_10_7 setup, optimization (mag_model etc.)
+            typename space_node_t::pierce_point_res_t pp(_space_node.pierce_point(relative_pos, usr_pos.llh));
+            residual.residual -= space_node_t::tec2delay(
+                _space_node.slant_factor(relative_pos)
+                * NTCM_GL_Generic<float_t>::tec_vert(
+                    pp.latitude, pp.longitude,
+                    time_arrival.year(), _options.f_10_7));
             break;
         }
 
