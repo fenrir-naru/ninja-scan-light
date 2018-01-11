@@ -119,12 +119,14 @@ class NTCM_GL_Generic {
      *
      * @param phi Geographic latitude in radians
      * @param lambda Geographic longitude in radians
-     * @param year UTC floating-point year
+     * @param year_utc UTC floating-point year
+     * @param mag_model Magnetic field model to calculate geomagnetic latitude, which requires mag_model.DOF >= 1 at least
      * @param f_10_7 Solar activity index
      */
     static float_t tec_vert(
         const float_t &phi, const float_t lambda,
         const float_t &year_utc,
+        const typename MagneticFieldGeneric<FloatT>::model_t &mag_model,
         const float_t &f_10_7){
 
       float_t year_int, year_frac(std::modf(year_utc, &year_int));
@@ -136,7 +138,8 @@ class NTCM_GL_Generic {
       if(hr_lt < 0){hr_lt += 24;}
 
       float_t phi_m(
-          IGRF12::geomagnetic_latlng(year_utc,
+          MagneticFieldGeneric<float_t>::geomagnetic_latlng(
+              mag_model,
               WGS84Generic<float_t>::geocentric_latitude(phi), lambda).latitude);
 
       // sun declination
@@ -145,6 +148,28 @@ class NTCM_GL_Generic {
          std::sin(-23.44 / 180 * M_PI) * std::cos(M_PI * 2 * (year_frac + (10.0 / 365)))));
 
       return tec_vert(hr_lt, phi, delta, year_frac * 365.25, phi_m, f_10_7);
+    }
+
+    /**
+     * Calculate vertical Total electron count (TEC)
+     * This function invokes the original tec_vert with conversion
+     *
+     * @param phi Geographic latitude in radians
+     * @param lambda Geographic longitude in radians
+     * @param year_utc UTC floating-point year
+     * @param f_10_7 Solar activity index
+     */
+    static float_t tec_vert(
+        const float_t &phi, const float_t lambda,
+        const float_t &year_utc,
+        const float_t &f_10_7){
+
+      return tec_vert(phi, lambda, year_utc,
+          MagneticFieldGeneric<float_t>::make_model(year_utc,
+              IGRF12Generic<float_t>::models,
+              sizeof(IGRF12Generic<float_t>::models) / sizeof(IGRF12Generic<float_t>::models[0]),
+              1),
+          f_10_7);
     }
 };
 
