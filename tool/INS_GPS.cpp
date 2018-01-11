@@ -2549,6 +2549,20 @@ class StreamProcessor
         return true;
       }
 
+      if(value = Options::get_value(spec, "F10.7", false)){
+        if(dry_run){return true;}
+        float_sylph_t f_10_7(std::atof(value));
+        if((f_10_7 <= 0) || (f_10_7 > 1E3)){
+          cerr << "(error!) Abnormal F10.7!" << value << endl;
+          return false;
+        }
+        cerr << "F10.7: " << f_10_7 << endl;
+        g_handler.solver_options.f_10_7 = f_10_7;
+        g_handler.solver_options.ionospheric_models[
+            G_Packet_Raw::raw_data_t::solver_t::options_t::IONOSPHERIC_NTCM_GL] = true;
+        return true;
+      }
+
       return false;
     }
 };
