@@ -1457,6 +1457,19 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     }
 
     /**
+     * Calculate ionospheric delay by using TEC
+     *
+     * @param tec TEC (total electron count)
+     * @param freq frequency (default is L1 frequency)
+     * @return delay (if delayed, positive number will be returned)
+     * @see http://www.navipedia.net/index.php/Ionospheric_Delay Eq.(13)
+     */
+    static float_t tec2delay(const float_t &tec, const float_t &freq = L1_Frequency) {
+      const float_t a_f(40.3E16 / std::pow(freq, 2));
+      return a_f * tec;
+    }
+
+    /**
      * Calculate correction value in accordance with ionospheric model
      * 
      * @param relative_pos satellite position (relative position, NEU)
