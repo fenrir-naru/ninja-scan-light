@@ -297,7 +297,7 @@ struct GPS_Time {
     t.tm_mday = t.tm_hour / 24;       t.tm_hour -= t.tm_mday * 24;
     t.tm_wday = t.tm_mday;  
     t.tm_mday += 6 + (mod_t.week * 7);
-    t.tm_year = (t.tm_mday / (365 * 3 + 366) * 4);
+    t.tm_year = (t.tm_mday / (365 * 3 + 366) * 4); // Assumption: less than 2100
     t.tm_mday -= (t.tm_year / 4) * (365 * 3 + 366); 
     if(t.tm_mday > 366){t.tm_mday -= 366; (t.tm_year)++;}
     for(int i(0); i < 2; i++){
@@ -318,7 +318,26 @@ struct GPS_Time {
     
     return t;
   }
-    
+
+  float_t year(const float_t &leap_seconds = 0) const {
+    float_t days((seconds + leap_seconds) / seconds_day + (week * 7) + 6); // days from 1980/1/1
+    float_t year4_i, year4_f(std::modf(days / (366 + 365 * 3), &year4_i)); // Assumption: less than 2100
+    float_t res(1980 + year4_i * 4);
+#define check_year(doy) \
+if(year4_f < float_t(doy) / (366 + 365 * 3)){ \
+  res += year4_f / (float_t(doy) / (366 + 365 * 3)); \
+  break; \
+} \
+res++; year4_f -= float_t(doy) / (366 + 365 * 3);
+    do{
+      check_year(366);
+      check_year(365);
+      check_year(365);
+      res += year4_f / (float_t(365) / (366 + 365 * 3));
+    }while(false);
+#undef check_year
+    return res;
+  }
   
   /**
    * When t >= self positive value will be returned,
