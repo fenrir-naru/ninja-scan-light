@@ -1438,17 +1438,24 @@ class StreamProcessor
     typedef G_Packet_Observer<float_sylph_t> G_Observer_t;
     typedef M_Packet_Observer<float_sylph_t> M_Observer_t;
 
+    struct Handler {
+      StreamProcessor &outer;
+      Handler(StreamProcessor &invoker) : outer(invoker) {}
+      Handler &operator=(const Handler &another){
+        return *this;
+      }
+    };
+
     /**
      * A page (ADC value)
      */
-    struct AHandler : public A_Observer_t {
-      StreamProcessor &outer;
+    struct AHandler : public A_Observer_t, public Handler {
       bool previous_seek_next;
       A_Packet packet_latest;
       StandardCalibration calibration;
 
       AHandler(StreamProcessor &invoker) : A_Observer_t(buffer_size),
-          outer(invoker),
+          Handler(invoker),
           packet_latest(),
           calibration() {
 
@@ -1472,13 +1479,6 @@ class StreamProcessor
         }
       }
       ~AHandler(){}
-      AHandler &operator=(const AHandler &another){
-        A_Observer_t::operator=(another);
-        previous_seek_next = another.previous_seek_next;
-        packet_latest = another.packet_latest;
-        calibration = another.calibration;
-        return *this;
-      }
       void operator()(const A_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1498,15 +1498,14 @@ class StreamProcessor
         packet_latest.accel = calibration.raw2accel(ch);
         packet_latest.omega = calibration.raw2omega(ch);
 
-        outer.updatable->update(packet_latest);
+        Handler::outer.updatable->update(packet_latest);
       }
     } a_handler;
 
     /**
      * G page (u-blox)
      */
-    struct GHandler : public G_Observer_t  {
-      StreamProcessor &outer;
+    struct GHandler : public G_Observer_t, public Handler {
       bool previous_seek_next;
       Vector3<float_sylph_t> lever_arm;
       G_Packet packet_latest;
@@ -1527,7 +1526,7 @@ class StreamProcessor
 
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
-          outer(invoker),
+          Handler(invoker),
           lever_arm(),
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
@@ -1535,17 +1534,6 @@ class StreamProcessor
         previous_seek_next = G_Observer_t::ready();
       }
       ~GHandler(){}
-      GHandler &operator=(const GHandler &another){
-        G_Observer_t::operator=(another);
-        previous_seek_next = another.previous_seek_next;
-        lever_arm = another.lever_arm;
-        packet_latest = another.packet_latest;
-        itow_ms_0x0102 = another.itow_ms_0x0102;
-        itow_ms_0x0112 = another.itow_ms_0x0112;
-        status = another.status;
-        week_number = another.week_number;
-        return *this;
-      }
 
       template <class GHandler_Packet>
       void update(const GHandler_Packet &packet){
@@ -1565,7 +1553,7 @@ class StreamProcessor
             }
             break;
         }
-        outer.updatable->update(packet);
+        Handler::outer.updatable->update(packet);
       }
 
       /**
@@ -1640,7 +1628,7 @@ class StreamProcessor
                 packet.leap_sec = (char)(buf[2]);
               }
             }
-            outer.updatable->update(packet);
+            Handler::outer.updatable->update(packet);
             break;
           }
           default: return;
@@ -1690,22 +1678,16 @@ class StreamProcessor
       }
     } g_handler;
 
-    struct MHandler : public M_Observer_t {
-      StreamProcessor &outer;
+    struct MHandler : public M_Observer_t, public Handler {
       bool previous_seek_next;
       M_Packet packet_latest;
       MHandler(StreamProcessor &invoker)
           : M_Observer_t(buffer_size),
-          outer(invoker),
+          Handler(invoker),
           packet_latest() {
         previous_seek_next = M_Observer_t::ready();
       }
       ~MHandler(){}
-      MHandler &operator=(const MHandler &another){
-        previous_seek_next = another.previous_seek_next;
-        packet_latest = another.packet_latest;
-        return *this;
-      }
       void operator()(const M_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1735,7 +1717,7 @@ class StreamProcessor
         packet_latest.mag[1] = values.y[3];
         packet_latest.mag[2] = values.z[3];
 
-        outer.updatable->update(packet_latest);
+        Handler::outer.updatable->update(packet_latest);
       }
     } m_handler;
 
@@ -1763,19 +1745,6 @@ class StreamProcessor
       m_handler = another.m_handler;
     }
     ~StreamProcessor(){}
-    
-    StreamProcessor &operator=(const StreamProcessor &another){
-      if(this != &another){
-        super_t::operator=(another);
-        updatable = another.updatable;
-        in = another.in;
-        invoked = another.invoked;
-        a_handler = another.a_handler;
-        g_handler = another.g_handler;
-        m_handler = another.m_handler;
-      }
-      return *this;
-    }
 
     Updatable *&update_target() {
       return updatable;
