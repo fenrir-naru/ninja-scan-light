@@ -1743,17 +1743,24 @@ class StreamProcessor
     typedef G_Packet_Observer<float_sylph_t> G_Observer_t;
     typedef M_Packet_Observer<float_sylph_t> M_Observer_t;
 
+    struct Handler {
+      StreamProcessor &outer;
+      Handler(StreamProcessor &invoker) : outer(invoker) {}
+      Handler &operator=(const Handler &another){
+        return *this;
+      }
+    };
+
     /**
      * A page (ADC value)
      */
-    struct AHandler : public A_Observer_t {
-      StreamProcessor &outer;
+    struct AHandler : public A_Observer_t, public Handler {
       bool previous_seek_next;
       A_Packet packet_latest;
       StandardCalibration calibration;
 
       AHandler(StreamProcessor &invoker) : A_Observer_t(buffer_size),
-          outer(invoker),
+          Handler(invoker),
           packet_latest(),
           calibration() {
 
@@ -1777,13 +1784,6 @@ class StreamProcessor
         }
       }
       ~AHandler(){}
-      AHandler &operator=(const AHandler &another){
-        A_Observer_t::operator=(another);
-        previous_seek_next = another.previous_seek_next;
-        packet_latest = another.packet_latest;
-        calibration = another.calibration;
-        return *this;
-      }
       void operator()(const A_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -1803,15 +1803,14 @@ class StreamProcessor
         packet_latest.accel = calibration.raw2accel(ch);
         packet_latest.omega = calibration.raw2omega(ch);
 
-        outer.updatable->update(packet_latest);
+        Handler::outer.updatable->update(packet_latest);
       }
     } a_handler;
 
     /**
      * G page (u-blox)
      */
-    struct GHandler : public G_Observer_t  {
-      StreamProcessor &outer;
+    struct GHandler : public G_Observer_t, public Handler {
       bool previous_seek_next;
       Vector3<float_sylph_t> lever_arm;
       G_Packet packet_latest;
@@ -1838,52 +1837,42 @@ class StreamProcessor
       G_Packet_Raw packet_raw_latest;
       G_Packet_Ephemeris packet_eph[32];
       G_Packet_Iono_UTC packet_iono_utc;
-
-      void packets_association(){
-        packet_raw_latest.raw_data.space_node = &space_node;
-        packet_raw_latest.raw_data.solver_options = &solver_options;
-        for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
-          packet_eph[i].space_node = &space_node;
+      struct tightly_associator_t {
+        GHandler &handler;
+        void associate() {
+          handler.packet_raw_latest.raw_data.space_node = &(handler.space_node);
+          handler.packet_raw_latest.raw_data.solver_options = &(handler.solver_options);
+          for(int i(0); i < sizeof(handler.packet_eph) / sizeof(handler.packet_eph[0]); ++i){
+            handler.packet_eph[i].space_node = &(handler.space_node);
+          }
+          handler.packet_iono_utc.space_node = &(handler.space_node);
         }
-        packet_iono_utc.space_node = &space_node;
-      }
+        tightly_associator_t(GHandler &h) : handler(h){
+          associate();
+        }
+        tightly_associator_t &operator=(const tightly_associator_t &another){
+          if(this != &another){associate();}
+          return *this;
+        }
+      } tightly_associator;
 
       GHandler(StreamProcessor &invoker)
           : G_Observer_t(buffer_size),
-          outer(invoker),
+          Handler(invoker),
           lever_arm(),
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           week_number(Options::gps_time_t::WN_INVALID), status(),
           space_node(),
           packet_raw_latest(),
-          packet_iono_utc() {
+          packet_iono_utc(),
+          tightly_associator(*this) {
         previous_seek_next = G_Observer_t::ready();
         for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
           packet_eph[i].svid = (i + 1);
         }
-        packets_association();
       }
       ~GHandler(){}
-      GHandler &operator=(const GHandler &another){
-        G_Observer_t::operator=(another);
-        previous_seek_next = another.previous_seek_next;
-        lever_arm = another.lever_arm;
-        packet_latest = another.packet_latest;
-        itow_ms_0x0102 = another.itow_ms_0x0102;
-        itow_ms_0x0112 = another.itow_ms_0x0112;
-        status = another.status;
-        week_number = another.week_number;
-
-        space_node = another.space_node;
-        packet_raw_latest = another.packet_raw_latest;
-        for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
-          packet_eph[i] = another.packet_eph[i];
-        }
-        packet_iono_utc = another.packet_iono_utc;
-        packets_association();
-        return *this;
-      }
 
       template <class GHandler_Packet>
       void update(const GHandler_Packet &packet){
@@ -1903,7 +1892,7 @@ class StreamProcessor
             }
             break;
         }
-        outer.updatable->update(packet);
+        Handler::outer.updatable->update(packet);
       }
 
       /**
@@ -1978,7 +1967,7 @@ class StreamProcessor
                 packet.leap_sec = (char)(buf[2]);
               }
             }
-            outer.updatable->update(packet);
+            Handler::outer.updatable->update(packet);
             break;
           }
           default: return;
@@ -2050,7 +2039,7 @@ class StreamProcessor
               && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
               && (week_number >= 0)){
             eph.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
-            outer.updatable->update(eph);
+            Handler::outer.updatable->update(eph);
           }
         }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
           get_iono_utc(subframe, packet_iono_utc);
@@ -2059,7 +2048,7 @@ class StreamProcessor
             packet_iono_utc.WN_t += week_number_base;
             packet_iono_utc.WN_LSF += week_number_base;
           }
-          outer.updatable->update(packet_iono_utc);
+          Handler::outer.updatable->update(packet_iono_utc);
         }
       }
 
@@ -2081,7 +2070,7 @@ class StreamProcessor
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
           ephemeris.space_node = &space_node;
-          outer.updatable->update(ephemeris);
+          Handler::outer.updatable->update(ephemeris);
         }
       }
 
@@ -2346,22 +2335,16 @@ class StreamProcessor
       }
     } g_handler;
 
-    struct MHandler : public M_Observer_t {
-      StreamProcessor &outer;
+    struct MHandler : public M_Observer_t, public Handler {
       bool previous_seek_next;
       M_Packet packet_latest;
       MHandler(StreamProcessor &invoker)
           : M_Observer_t(buffer_size),
-          outer(invoker),
+          Handler(invoker),
           packet_latest() {
         previous_seek_next = M_Observer_t::ready();
       }
       ~MHandler(){}
-      MHandler &operator=(const MHandler &another){
-        previous_seek_next = another.previous_seek_next;
-        packet_latest = another.packet_latest;
-        return *this;
-      }
       void operator()(const M_Observer_t &observer){
         if(!observer.validate()){return;}
 
@@ -2391,7 +2374,7 @@ class StreamProcessor
         packet_latest.mag[1] = values.y[3];
         packet_latest.mag[2] = values.z[3];
 
-        outer.updatable->update(packet_latest);
+        Handler::outer.updatable->update(packet_latest);
       }
     } m_handler;
 
@@ -2427,19 +2410,6 @@ class StreamProcessor
           RINEX_NAV_Writer<float_sylph_t>::write_all(*out_rinex_nav, g_handler.space_node);
         }
       }
-    }
-    
-    StreamProcessor &operator=(const StreamProcessor &another){
-      if(this != &another){
-        super_t::operator=(another);
-        updatable = another.updatable;
-        in = another.in;
-        invoked = another.invoked;
-        a_handler = another.a_handler;
-        g_handler = another.g_handler;
-        m_handler = another.m_handler;
-      }
-      return *this;
     }
 
     Updatable *&update_target() {
