@@ -707,7 +707,7 @@ struct G_Packet_Raw : public BasicPacket<G_Packet_Raw> {
 
   void take_consistency() const {
     // Select most preferable ephemeris
-    const_cast<space_node_t &>(*(raw_data.space_node)).update_all_ephemeris(raw_data.gpstime);
+    const_cast<space_node_t &>(raw_data.solver->space_node()).update_all_ephemeris(raw_data.gpstime);
   }
 
   typedef raw_data_t::solver_t::user_pvt_t pvt_t;
@@ -718,7 +718,7 @@ struct G_Packet_Raw : public BasicPacket<G_Packet_Raw> {
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
-          pvt = raw_data.solver().solve_user_pvt(
+          pvt = raw_data.solver->solve_user_pvt(
               raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
               raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
               raw_data.gpstime,
@@ -727,7 +727,7 @@ struct G_Packet_Raw : public BasicPacket<G_Packet_Raw> {
           break;
         }
       }
-      pvt = raw_data.solver().solve_user_pvt(
+      pvt = raw_data.solver->solve_user_pvt(
           raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
           raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
           raw_data.gpstime);
@@ -1839,15 +1839,17 @@ class StreamProcessor
       G_Packet_Iono_UTC packet_iono_utc;
       struct tightly_associator_t {
         GHandler &handler;
+        raw_data_t::solver_t solver;
         void associate() {
-          handler.packet_raw_latest.raw_data.space_node = &(handler.space_node);
-          handler.packet_raw_latest.raw_data.solver_options = &(handler.solver_options);
+          handler.packet_raw_latest.raw_data.solver = &solver;
           for(int i(0); i < sizeof(handler.packet_eph) / sizeof(handler.packet_eph[0]); ++i){
             handler.packet_eph[i].space_node = &(handler.space_node);
           }
           handler.packet_iono_utc.space_node = &(handler.space_node);
         }
-        tightly_associator_t(GHandler &h) : handler(h){
+        tightly_associator_t(GHandler &h)
+            : handler(h),
+            solver(handler.space_node, handler.solver_options){
           associate();
         }
         tightly_associator_t &operator=(const tightly_associator_t &another){

@@ -297,16 +297,10 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
 template <class FloatT>
 struct GPS_RawData {
-  typedef GPS_SpaceNode<FloatT> space_node_t;
-  space_node_t *space_node;
-
   typedef GPS_SinglePositioning<FloatT> solver_t;
-  typename solver_t::options_t *solver_options;
-  solver_t solver() const {
-    return solver_options
-        ? solver_t(*space_node, *solver_options)
-        : solver_t(*space_node);
-  }
+  solver_t *solver;
+
+  typedef typename solver_t::space_node_t space_node_t;
 
   unsigned int clock_index;
 
@@ -347,7 +341,7 @@ struct GPS_RawData {
   gps_time_t gpstime;
 
   GPS_RawData(const unsigned int &_clock_index = 0)
-      : space_node(NULL), solver_options(NULL),
+      : solver(NULL),
       clock_index(_clock_index), measurement(), gpstime() {}
   ~GPS_RawData(){}
 };
@@ -401,7 +395,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         const float_t &clock_error, const float_t &clock_error_rate) const {
 
       // check space_node is configured
-      if(!gps.space_node){return CorrectInfo<float_t>::no_info();}
+      if(!gps.solver){return CorrectInfo<float_t>::no_info();}
 
       float_t z_serialized[64]; // maximum 64 observation values
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
@@ -422,7 +416,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       };
       typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
 
-      const space_node_t &space_node(*(gps.space_node));
+      const space_node_t &space_node(gps.solver->space_node());
 
       it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
       if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
@@ -449,7 +443,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         };
 
         float_t range(it2_range->second);
-        range = gps.solver().range_residual(
+        range = gps.solver->range_residual(
             sat, range, time_arrival,
             pos, clock_error,
             residual);
