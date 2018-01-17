@@ -143,6 +143,10 @@ class GPS_SinglePositioning {
       llh_t llh;
     };
 
+    struct range_residual_options_t {
+      typename options_t::ionospheric_models_t ionospheric_model; ///< applied ionospheric model
+    };
+
     /**
      * Get range residual in accordance with current status
      *
@@ -153,7 +157,7 @@ class GPS_SinglePositioning {
      * @param usr_pos_llh (temporal solution of) user position in latitude, longitude, and altitude format
      * @param receiver_error (temporal solution of) receiver clock error in meters
      * @param mat matrices to be stored, already initialized with appropriate size
-     * @param ionospheric_model appled ionospheric model
+     * @param calc_opt range residual calculation options represented by applied ionospheric model
      * @param is_coarse_mode if true, precise correction will be skipped.
      * @return (float_t) pseudo range, which includes delay, and exclude receiver/satellite error.
      */
@@ -164,7 +168,7 @@ class GPS_SinglePositioning {
         const pos_t &usr_pos,
         const float_t &receiver_error,
         residual_t &residual,
-        const typename options_t::ionospheric_models_t &ionospheric_model,
+        const range_residual_options_t &calc_opt,
         const bool &is_coarse_mode = false) const {
 
       // Temporal geometry range
@@ -193,7 +197,7 @@ class GPS_SinglePositioning {
         enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
         // Ionospheric
-        switch(ionospheric_model){
+        switch(calc_opt.ionospheric_model){
           case options_t::IONOSPHERIC_KLOBUCHAR:
             residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
             break;
@@ -224,11 +228,14 @@ class GPS_SinglePositioning {
         const float_t &receiver_error,
         residual_t &residual,
         const bool &is_coarse_mode = false) const {
+      range_residual_options_t calc_opt = {
+        ionospheric_model_preferred(),
+      };
       return range_residual(
           sat, range, time_arrival,
           usr_pos, receiver_error,
           residual,
-          ionospheric_model_preferred(),
+          calc_opt,
           is_coarse_mode);
     }
 
@@ -282,8 +289,10 @@ class GPS_SinglePositioning {
       user_pvt_t res;
       res.receiver_time = receiver_time;
 
-      typename options_t::ionospheric_models_t iono(ionospheric_model_preferred());
-      if(!_options.ionospheric_models[iono]){
+      range_residual_options_t calc_opt = {
+        ionospheric_model_preferred(),
+      };
+      if(!_options.ionospheric_models[calc_opt.ionospheric_model]){
         res.error_code = user_pvt_t::ERROR_INVALID_IONO_MODEL;
         return res;
       }
@@ -343,7 +352,7 @@ class GPS_SinglePositioning {
           range = range_residual(sat, range, time_arrival,
               res.user_position, res.receiver_error,
               residual,
-              iono,
+              calc_opt,
               i <= 0);
 
           if(i <= 0){continue;}
