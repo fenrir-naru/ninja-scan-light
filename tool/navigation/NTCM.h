@@ -136,6 +136,7 @@ class NTCM_GL_Generic {
       if(((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0)){days++;} // leap day
       float_t day_utc, hr_lt((std::modf(year_utc * days, &day_utc) * 24) + (lambda / M_PI * 12));
       if(hr_lt < 0){hr_lt += 24;}
+      else if(hr_lt >= 24){hr_lt -= 24;}
 
       float_t phi_m(
           MagneticFieldGeneric<float_t>::geomagnetic_latlng(
