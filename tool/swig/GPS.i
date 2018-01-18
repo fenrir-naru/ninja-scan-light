@@ -69,7 +69,7 @@
       }
     }
   }
-  %typemap(typecheck) const struct tm & {
+  %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const struct tm & {
     $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
   }
   %typemap(freearg) const struct tm & {
