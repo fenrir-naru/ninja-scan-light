@@ -297,7 +297,7 @@ struct GPS_Time {
     t.tm_mday = t.tm_hour / 24;       t.tm_hour -= t.tm_mday * 24;
     t.tm_wday = t.tm_mday;  
     t.tm_mday += 6 + (mod_t.week * 7);
-    t.tm_year = (t.tm_mday / (365 * 3 + 366) * 4);
+    t.tm_year = (t.tm_mday / (365 * 3 + 366) * 4); // Assumption: less than 2100
     t.tm_mday -= (t.tm_year / 4) * (365 * 3 + 366); 
     if(t.tm_mday > 366){t.tm_mday -= 366; (t.tm_year)++;}
     for(int i(0); i < 2; i++){
@@ -318,7 +318,26 @@ struct GPS_Time {
     
     return t;
   }
-    
+
+  float_t year(const float_t &leap_seconds = 0) const {
+    float_t days((seconds + leap_seconds) / seconds_day + (week * 7) + 6); // days from 1980/1/1
+    float_t year4_i, year4_f(std::modf(days / (366 + 365 * 3), &year4_i)); // Assumption: less than 2100
+    float_t res(1980 + year4_i * 4);
+#define check_year(doy) \
+if(year4_f < float_t(doy) / (366 + 365 * 3)){ \
+  res += year4_f / (float_t(doy) / (366 + 365 * 3)); \
+  break; \
+} \
+res++; year4_f -= float_t(doy) / (366 + 365 * 3);
+    do{
+      check_year(366);
+      check_year(365);
+      check_year(365);
+      res += year4_f / (float_t(365) / (366 + 365 * 3));
+    }while(false);
+#undef check_year
+    return res;
+  }
   
   /**
    * When t >= self positive value will be returned,
@@ -1457,6 +1476,19 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     }
 
     /**
+     * Calculate ionospheric delay by using TEC
+     *
+     * @param tec TEC (total electron count)
+     * @param freq frequency (default is L1 frequency)
+     * @return delay (if delayed, positive number will be returned)
+     * @see http://www.navipedia.net/index.php/Ionospheric_Delay Eq.(13)
+     */
+    static float_t tec2delay(const float_t &tec, const float_t &freq = L1_Frequency) {
+      const float_t a_f(40.3E16 / std::pow(freq, 2));
+      return a_f * tec;
+    }
+
+    /**
      * Calculate correction value in accordance with ionospheric model
      * 
      * @param relative_pos satellite position (relative position, NEU)
@@ -1534,6 +1566,26 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           t);
     }
     
+    struct IonospericCorrection {
+      const GPS_SpaceNode<float_t> &space_node;
+      float_t operator()(
+          const enu_t &relative_pos,
+          const llh_t &usrllh,
+          const gps_time_t &t) const {
+        return space_node.iono_correction(relative_pos, usrllh, t);
+      }
+      float_t operator()(
+          const xyz_t &sat,
+          const xyz_t &usr,
+          const gps_time_t &t) const {
+        return space_node.iono_correction(sat, usr, t);
+      }
+    };
+    IonospericCorrection iono_correction() const {
+      IonospericCorrection res = {*this};
+      return res;
+    }
+
     /**
      * Calculate correction value in accordance with tropospheric model
      * 
@@ -1573,6 +1625,24 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       return tropo_correction(
           enu_t::relative(sat, usr),
           usr.llh());
+    }
+
+    struct TropospericCorrection {
+      const GPS_SpaceNode<float_t> &space_node;
+      float_t operator()(
+          const enu_t &relative_pos,
+          const llh_t &usrllh) const {
+        return space_node.tropo_correction(relative_pos, usrllh);
+      }
+      float_t operator()(
+          const xyz_t &sat,
+          const xyz_t &usr) const {
+        return space_node.tropo_correction(sat, usr);
+      }
+    };
+    TropospericCorrection tropo_correction() const {
+      TropospericCorrection res = {*this};
+      return res;
     }
 };
 

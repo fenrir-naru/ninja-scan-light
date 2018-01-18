@@ -45,19 +45,25 @@
 
 #include "param/matrix.h"
 #include "GPS.h"
+#include "NTCM.h"
 
 template <class FloatT>
 struct GPS_SinglePositioning_Options {
   enum ionospheric_models_t {
     IONOSPHERIC_KLOBUCHAR,
+    IONOSPHERIC_NTCM_GL,
     IONOSPHERIC_NONE,
     IONOSPHERIC_MODELS,
   };
   bool ionospheric_models[IONOSPHERIC_MODELS];
 
-  GPS_SinglePositioning_Options(){
+  FloatT f_10_7;
+
+  GPS_SinglePositioning_Options()
+      : f_10_7(-1) {
     // default: broadcasted Klobuchar parameters are at least required for solution.
     ionospheric_models[IONOSPHERIC_KLOBUCHAR] = true;
+    ionospheric_models[IONOSPHERIC_NTCM_GL] = false;
     ionospheric_models[IONOSPHERIC_NONE] = false;
   }
 };
@@ -100,6 +106,10 @@ class GPS_SinglePositioning {
       if(_options.ionospheric_models[options_t::IONOSPHERIC_KLOBUCHAR]
           && _space_node.is_valid_iono_utc()){
         return options_t::IONOSPHERIC_KLOBUCHAR;
+      }
+      if(_options.ionospheric_models[options_t::IONOSPHERIC_NTCM_GL]
+          && _options.f_10_7 >= 0){
+        return options_t::IONOSPHERIC_NTCM_GL;
       }
       return options_t::IONOSPHERIC_NONE;
     }
@@ -200,6 +210,15 @@ class GPS_SinglePositioning {
         switch(calc_opt.ionospheric_model){
           case options_t::IONOSPHERIC_KLOBUCHAR:
             residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
+            break;
+          case options_t::IONOSPHERIC_NTCM_GL:
+            // TODO f_10_7 setup, optimization (mag_model etc.)
+            typename space_node_t::pierce_point_res_t pp(_space_node.pierce_point(relative_pos, usr_pos.llh));
+            residual.residual -= space_node_t::tec2delay(
+                _space_node.slant_factor(relative_pos)
+                * NTCM_GL_Generic<float_t>::tec_vert(
+                    pp.latitude, pp.longitude,
+                    time_arrival.year(), _options.f_10_7));
             break;
         }
 
