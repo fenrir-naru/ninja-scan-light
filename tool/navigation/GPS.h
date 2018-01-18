@@ -45,6 +45,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <climits>
+#include <cstdlib>
 
 #include "WGS84.h"
 
@@ -204,16 +205,33 @@ struct GPS_Time {
   }
   GPS_Time(const struct tm &t, const float_t &leap_seconds = 0) {
     int days(-6);
-    int y(t.tm_year - 80); // tm_year is year minus 1900
+    int y(t.tm_year + 1900); // tm_year is year minus 1900
+    bool leap_year(y % 4 == 0);
+
+    do{ // check leap year
+      std::div_t y_400(std::div(y, 400));
+      if((y_400.quot -= 5) < 0){break;} // year < 2000
+      days -= (y_400.quot * 3); // no leap year; [2100, 2200, 2300], [2500, ...
+      if(y_400.rem == 0){break;}
+      std::div_t y_100(std::div(y_400.rem, 100));
+      days -= y_100.quot;
+      if(y_100.rem == 0){ // when year is just 2100, 2200, 2300, or 2500, ...
+        days++;
+        leap_year = false;
+      }
+    }while(false);
+
+    y -= 1980; // base is 1980/1/6
     days += y * 365 + ((y + 3) / 4);
     for(int i(0); i < t.tm_mon; i++){
       days += days_of_month[i];
-      if((i == 2) && (t.tm_year % 4 == 0)) days++;
+      if((i == 1) && leap_year){days++;}
     }
     days += t.tm_mday;
     
-    week = days / 7;
-    seconds = leap_seconds + (days % 7) * seconds_day
+    std::div_t week_day(std::div(days, 7));
+    week = week_day.quot;
+    seconds = leap_seconds + week_day.rem * seconds_day
         + t.tm_hour * 60 * 60
         + t.tm_min * 60
         + t.tm_sec;
@@ -291,23 +309,52 @@ struct GPS_Time {
     
     GPS_Time mod_t((*this) + leap_seconds);
     
-    t.tm_min = (int)(mod_t.seconds / 60);  t.tm_sec = (int)(mod_t.seconds - t.tm_min * 60);
-    t.tm_hour = (t.tm_min / 60);      t.tm_min -= t.tm_hour * 60;
-    t.tm_mday = t.tm_hour / 24;       t.tm_hour -= t.tm_mday * 24;
-    t.tm_wday = t.tm_mday;  
+    std::div_t min_sec(std::div((int)mod_t.seconds, 60));
+    t.tm_sec = min_sec.rem;
+    std::div_t hr_min(std::div(min_sec.quot, 60));
+    t.tm_min = hr_min.rem;
+    std::div_t day_hr(std::div(hr_min.quot, 24));
+    t.tm_hour = day_hr.rem;
+    t.tm_wday = t.tm_mday = day_hr.quot;
+
     t.tm_mday += 6 + (mod_t.week * 7);
-    t.tm_year = (t.tm_mday / (365 * 3 + 366) * 4); // Assumption: less than 2100
-    t.tm_mday -= (t.tm_year / 4) * (365 * 3 + 366); 
-    if(t.tm_mday > 366){t.tm_mday -= 366; (t.tm_year)++;}
-    for(int i(0); i < 2; i++){
-      if(t.tm_mday > 365){t.tm_mday -= 365; (t.tm_year)++;}
+    std::div_t days_4year(std::div(t.tm_mday, 366 + 365 * 3)); // Temporally assumption: less than 2100
+    t.tm_mday = days_4year.rem;
+    int y(days_4year.quot * 4 + 1980);
+    bool leap_year(true);
+
+    do{ // check leap year
+      std::div_t y_400(std::div(y, 400));
+      if((y_400.quot -= 5) < 0){break;} // year < 2000
+      t.tm_mday += (y_400.quot * 3); // no leap year; [2100, 2200, 2300], [2500, ...
+      if(y_400.rem == 0){break;}
+      std::div_t y_100(std::div(y_400.rem, 100));
+      t.tm_mday += y_100.quot;
+      if(y_100.rem == 0){ // when year is just 2100, 2200, 2300, or 2500, ...
+        t.tm_mday--;
+        leap_year = false;
+      }
+    }while(false);
+
+    // process 4 years
+    int doy[] = {
+      leap_year ? 366 : 365,
+      365, 365, 365
+    };
+    for(int i(0); i < sizeof(doy) / sizeof(doy[0]); ++i){
+      if(t.tm_mday <= doy[i]){break;}
+      t.tm_mday -= doy[i];
+      y++;
     }
+
+    // process current year
+    leap_year = (y % 400 == 0) || ((y % 4 == 0) && (y % 100 != 0));
     t.tm_yday = t.tm_mday;
-    t.tm_year += 80; // tm_year is year minus 1900.
+    t.tm_year = y - 1900; // tm_year is year minus 1900.
     for(t.tm_mon = 0; 
         t.tm_mday > days_of_month[t.tm_mon];
         (t.tm_mon)++){
-      if((t.tm_mon == 1) && (t.tm_year % 4 == 0)){
+      if((t.tm_mon == 1) && leap_year){
         if(t.tm_mday == 29){break;}
         else{t.tm_mday--;}
       }
