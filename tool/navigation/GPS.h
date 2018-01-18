@@ -204,8 +204,7 @@ struct GPS_Time {
   }
   GPS_Time(const struct tm &t, const float_t &leap_seconds = 0) {
     int days(-6);
-    int y(t.tm_year - 80);
-    if(y < 0){y += 100;}
+    int y(t.tm_year - 80); // tm_year is year minus 1900
     days += y * 365 + ((y + 3) / 4);
     for(int i(0); i < t.tm_mon; i++){
       days += days_of_month[i];
@@ -304,7 +303,7 @@ struct GPS_Time {
       if(t.tm_mday > 365){t.tm_mday -= 365; (t.tm_year)++;}
     }
     t.tm_yday = t.tm_mday;
-    (t.tm_year += 80) %= 100;
+    t.tm_year += 80; // tm_year is year minus 1900.
     for(t.tm_mon = 0; 
         t.tm_mday > days_of_month[t.tm_mon];
         (t.tm_mon)++){
