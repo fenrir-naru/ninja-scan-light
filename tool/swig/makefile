@@ -16,7 +16,7 @@ all : $(BUILD_DIR) depend $(PACKAGES)
 depend: $(SRCS)
 	if [ -f $(BUILD_DIR)/depend.inc ]; then rm -f $(BUILD_DIR)/depend.inc; fi
 	for i in $^; do\
-		$(SWIG) $(SWIGFLAGS) $(INCLUDES) -MM $$i  | sed -e 's/[^\.]*\.cxx/$$\(BUILD_DIR\)\/&/g' >> $(BUILD_DIR)/depend.inc;\
+		$(SWIG) $(SWIGFLAGS) $(INCLUDES) -MM -MP $$i  | sed -e 's/[^\.]*\.cxx/$$\(BUILD_DIR\)\/&/g' >> $(BUILD_DIR)/depend.inc;\
 	done
 
 -include $(BUILD_DIR)/depend.inc
