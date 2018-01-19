@@ -119,7 +119,7 @@ class NTCM_GL_Generic {
      *
      * @param phi Geographic latitude in radians
      * @param lambda Geographic longitude in radians
-     * @param year_utc UTC floating-point year
+     * @param year_utc UTC floating-point year (2000.0 means 2000/1/1 00:00:00)
      * @param mag_model Magnetic field model to calculate geomagnetic latitude, which requires mag_model.DOF >= 1 at least
      * @param f_10_7 Solar activity index
      */

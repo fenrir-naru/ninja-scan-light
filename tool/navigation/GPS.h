@@ -45,6 +45,7 @@
 #define _USE_MATH_DEFINES
 #include <cmath>
 #include <climits>
+#include <cstdlib>
 
 #include "WGS84.h"
 
@@ -183,6 +184,49 @@ struct GPS_Time {
   
   static const int days_of_month[];
   
+  /**
+   * Check whether leap year
+   *
+   * @param year
+   * @return true when leap year, otherwise false
+   */
+  static inline  bool is_leap_year(const int &year) {
+    return (year % 400 == 0) || ((year % 4 == 0) && (year % 100 != 0));
+  }
+
+  struct leap_year_prop_res_t {
+    int extra_days; ///< extra leap years since 1980
+    bool is_leap_year; ///< true when leap year
+  };
+
+  /**
+   * Check leap year property
+   * The return values are;
+   * 1) extra_days equals to years which can be divided by 4, but are not leap years
+   * since 1980 (the first GPS year), and before (and except for) this_year.
+   * 2) is_leap_year equals to whether this_year is leap year or not.
+   *
+   * @param this_year check target
+   * @param skip_init_leap_year_check whether skip initial check whether this_year is leap year or not.
+   * @return leap year property
+   */
+  static leap_year_prop_res_t leap_year_prop(const int &this_year, const bool &skip_init_leap_year_check = false){
+    leap_year_prop_res_t res = {0, skip_init_leap_year_check || (this_year % 4 == 0)};
+    do{ // check leap year
+      std::div_t y_400(std::div(this_year, 400));
+      if((y_400.quot -= 5) < 0){break;} // year < 2000
+      res.extra_days += (y_400.quot * 3); // no leap year; [2100, 2200, 2300], [2500, ...
+      if(y_400.rem == 0){break;}
+      std::div_t y_100(std::div(y_400.rem, 100));
+      res.extra_days += y_100.quot;
+      if(y_100.rem == 0){ // when this_year is just 2100, 2200, 2300, or 2500, ...
+        res.extra_days--;
+        res.is_leap_year = false;
+      }
+    }while(false);
+    return res;
+  }
+
   int week;
   float_t seconds;
   
@@ -204,17 +248,25 @@ struct GPS_Time {
   }
   GPS_Time(const struct tm &t, const float_t &leap_seconds = 0) {
     int days(-6);
-    int y(t.tm_year - 80);
-    if(y < 0){y += 100;}
+    int y(t.tm_year + 1900); // tm_year is year minus 1900
+    bool leap_year;
+    {
+      leap_year_prop_res_t prop(leap_year_prop(y));
+      days -= prop.extra_days;
+      leap_year = prop.is_leap_year;
+    }
+
+    y -= 1980; // base is 1980/1/6
     days += y * 365 + ((y + 3) / 4);
     for(int i(0); i < t.tm_mon; i++){
       days += days_of_month[i];
-      if((i == 2) && (t.tm_year % 4 == 0)) days++;
+      if((i == 1) && leap_year){days++;}
     }
     days += t.tm_mday;
     
-    week = days / 7;
-    seconds = leap_seconds + (days % 7) * seconds_day
+    std::div_t week_day(std::div(days, 7));
+    week = week_day.quot;
+    seconds = leap_seconds + week_day.rem * seconds_day
         + t.tm_hour * 60 * 60
         + t.tm_min * 60
         + t.tm_sec;
@@ -292,23 +344,44 @@ struct GPS_Time {
     
     GPS_Time mod_t((*this) + leap_seconds);
     
-    t.tm_min = (int)(mod_t.seconds / 60);  t.tm_sec = (int)(mod_t.seconds - t.tm_min * 60);
-    t.tm_hour = (t.tm_min / 60);      t.tm_min -= t.tm_hour * 60;
-    t.tm_mday = t.tm_hour / 24;       t.tm_hour -= t.tm_mday * 24;
-    t.tm_wday = t.tm_mday;  
+    std::div_t min_sec(std::div((int)mod_t.seconds, 60));
+    t.tm_sec = min_sec.rem;
+    std::div_t hr_min(std::div(min_sec.quot, 60));
+    t.tm_min = hr_min.rem;
+    std::div_t day_hr(std::div(hr_min.quot, 24));
+    t.tm_hour = day_hr.rem;
+    t.tm_wday = t.tm_mday = day_hr.quot;
+
     t.tm_mday += 6 + (mod_t.week * 7);
-    t.tm_year = (t.tm_mday / (365 * 3 + 366) * 4); // Assumption: less than 2100
-    t.tm_mday -= (t.tm_year / 4) * (365 * 3 + 366); 
-    if(t.tm_mday > 366){t.tm_mday -= 366; (t.tm_year)++;}
-    for(int i(0); i < 2; i++){
-      if(t.tm_mday > 365){t.tm_mday -= 365; (t.tm_year)++;}
+    std::div_t days_4year(std::div(t.tm_mday, 366 + 365 * 3)); // standard day of years
+    t.tm_mday = days_4year.rem;
+    int y(days_4year.quot * 4 + 1980);
+    bool leap_year;
+    {
+      leap_year_prop_res_t prop(leap_year_prop(y, true));
+      t.tm_mday += prop.extra_days;
+      leap_year = prop.is_leap_year;
     }
+
+    // process remaining 4 years
+    int doy[] = {
+      leap_year ? 366 : 365,
+      365, 365, 365
+    };
+    for(int i(0); i < sizeof(doy) / sizeof(doy[0]); ++i){
+      if(t.tm_mday <= doy[i]){break;}
+      t.tm_mday -= doy[i];
+      y++;
+    }
+
+    // process current year
+    leap_year = is_leap_year(y);
     t.tm_yday = t.tm_mday;
-    (t.tm_year += 80) %= 100;
+    t.tm_year = y - 1900; // tm_year is year minus 1900.
     for(t.tm_mon = 0; 
         t.tm_mday > days_of_month[t.tm_mon];
         (t.tm_mon)++){
-      if((t.tm_mon == 1) && (t.tm_year % 4 == 0)){
+      if((t.tm_mon == 1) && leap_year){
         if(t.tm_mday == 29){break;}
         else{t.tm_mday--;}
       }
@@ -320,23 +393,30 @@ struct GPS_Time {
   }
 
   float_t year(const float_t &leap_seconds = 0) const {
-    float_t days((seconds + leap_seconds) / seconds_day + (week * 7) + 6); // days from 1980/1/1
-    float_t year4_i, year4_f(std::modf(days / (366 + 365 * 3), &year4_i)); // Assumption: less than 2100
-    float_t res(1980 + year4_i * 4);
-#define check_year(doy) \
-if(year4_f < float_t(doy) / (366 + 365 * 3)){ \
-  res += year4_f / (float_t(doy) / (366 + 365 * 3)); \
-  break; \
-} \
-res++; year4_f -= float_t(doy) / (366 + 365 * 3);
-    do{
-      check_year(366);
-      check_year(365);
-      check_year(365);
-      res += year4_f / (float_t(365) / (366 + 365 * 3));
-    }while(false);
-#undef check_year
-    return res;
+    float_t days((seconds + leap_seconds) / seconds_day + (week * 7) + (6 - 1)); // days from 1980/1/1, whose 00:00:00 is just 0
+    float_t year4;
+    days = std::modf(days / (366 + 365 * 3), &year4) * (366 + 365 * 3);
+    int year(1980 + (int)year4 * 4);
+    bool leap_year;
+    {
+      leap_year_prop_res_t prop(leap_year_prop(year, true));
+      days += prop.extra_days;
+      leap_year = prop.is_leap_year;
+    }
+
+    // process remaining 4 years
+    int doy_i(0), doy[] = {
+      leap_year ? 366 : 365,
+      365, 365, 365,
+      is_leap_year(year + 4) ? 366 : 365,
+    };
+    for(; doy_i < sizeof(doy) / sizeof(doy[0]); ++doy_i){
+      if(days <= doy[doy_i]){break;}
+      days -= doy[doy_i];
+      year++;
+    }
+
+    return days / doy[doy_i] + year;
   }
   
   /**
