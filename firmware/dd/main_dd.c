@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, M.Naruoka (fenrir)
+ * Copyright (c) 2018, M.Naruoka (fenrir)
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -30,6 +30,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 
 #include "main.h"
 #include "util.h"
@@ -74,9 +75,6 @@ static __xdata int standby_sec = 0;
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
-static BYTE __xdata cdc_buf[512];
-static DWORD sector_start = 0, sectors = 0;
-
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -98,6 +96,9 @@ void main() {
   EX0 = 1;    // Enable
 
   while (1) {
+    static BYTE __xdata cdc_buf[512];
+    static DWORD sector_start = 0, sectors = 0;
+
     usb_polling();
 
     if(sectors > 0){ // return result
@@ -105,7 +106,7 @@ void main() {
       do{
         if(disk_read(0, cdc_buf, sector_start, 1) != RES_OK){
           sectors = 0;
-          cdc_tx(cdc_buf, sprintf(cdc_buf, "ERROR!(%ld)\n", sector_start));
+          cdc_tx(cdc_buf, sprintf(cdc_buf, "READ_ERROR!(%lu)\n", sector_start));
           break;
         }
         sector_start++; sectors--;
@@ -115,13 +116,31 @@ void main() {
 
     if(sectors == 0){ // parse input
       u16 read_bytes = cdc_rx(cdc_buf, sizeof(cdc_buf) - 1);
-      if(read_bytes > 0){
+      cdc_buf[read_bytes] = 0;
+      while(read_bytes > 0){
         DWORD dw = 0;
         u8 hit = 0, count = 0;
-        u16 i;
+        u16 i = 0;
+
+        { // check command
+          char *next;
+          DWORD v = 0;
+          if((next = strstr(cdc_buf, "count")) != 0){
+            disk_ioctl(0, GET_SECTOR_COUNT, &v);
+            cdc_tx(cdc_buf, sprintf(cdc_buf, "COUNT => %lu\n", v));
+            break;
+          }else if((next = strstr(cdc_buf, "size")) != 0){
+            disk_ioctl(0, GET_SECTOR_SIZE, &v);
+            cdc_tx(cdc_buf, sprintf(cdc_buf, "SIZE => %lu\n", v));
+            break;
+          }else if((next = strstr(cdc_buf, "read")) != 0){
+            i += (next - &(cdc_buf[0]));
+          }
+        }
+
+        // read setup
         sectors = 1;
-        cdc_buf[read_bytes] = 0;
-        for(i = 0; i <= read_bytes; ++i){
+        for(; i <= read_bytes; ++i){
           if((cdc_buf[i] >= '0') && (cdc_buf[i] <= '9')){
             dw *= 10;
             dw += (cdc_buf[i] - '0');
@@ -138,7 +157,8 @@ void main() {
             hit = 0;
           }
         }
-        cdc_tx(cdc_buf, sprintf(cdc_buf, "TRY(%ld,%ld)\n", sector_start, sectors));
+        cdc_tx(cdc_buf, sprintf(cdc_buf, "READ(%lu,%lu) => \n", sector_start, sectors));
+        break;
       }
     }
 
