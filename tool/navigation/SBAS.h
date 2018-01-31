@@ -37,6 +37,31 @@
 #ifndef __SBAS_H__
 #define __SBAS_H__
 
+#include "GPS.h"
+
+template <class FloatT = double>
+class SBAS_Signal {
+  public:
+    typedef FloatT float_t;
+    class G2 : public GPS_Signal<float_t>::PRN {
+      public:
+        typedef typename GPS_Signal<float_t>::PRN super_t;
+        G2(const int &initial_g2) : super_t((unsigned long)initial_g2) {}
+        ~G2(){}
+        bool get() const {return super_t::_content[9];}
+        void next(){
+          bool tmp(super_t::_content[1]
+                     ^ super_t::_content[2]
+                     ^ super_t::_content[5]
+                     ^ super_t::_content[7]
+                     ^ super_t::_content[8]
+                     ^ super_t::_content[9]);
+          super_t::_content <<= 1;
+          super_t::_content[0] = tmp;
+        }
+    };
+};
+
 template <class FloatT = double>
 class SBAS_SpaceNode {
   public:
@@ -47,6 +72,9 @@ class SBAS_SpaceNode {
       int g2_delay_chips;
       int initial_g2;
       const char *name;
+      typename SBAS_Signal<float_t>::G2 get_G2() const {
+        return typename SBAS_Signal<float_t>::G2(initial_g2);
+      }
     };
     static const RangingCode ranging_codes[];
 
