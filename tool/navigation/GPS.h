@@ -63,27 +63,22 @@
 #endif
 
 template <class FloatT = double>
-class CA_Code {
+class GPS_Signal {
   public:
     typedef FloatT float_t;
-    static const float_t FREQENCY;
-    static inline const float_t length_1chip() {
-      return 1. / FREQENCY;
-    }
-  public:
+
     class PRN {
       public:
         typedef std::bitset<10> content_t;
       protected:
-        content_t _content;
+        content_t content;
       public:
-        void reset(){_content.set();}
-        PRN() : _content() {reset();}
-        virtual ~PRN(){}
-        virtual bool get() const = 0;
-        virtual void next() = 0;
+        void reset(){content.set();}
+        PRN() : content() {reset();}
+        PRN(const unsigned long &init) : content(init) {}
+        ~PRN(){}
         friend std::ostream &operator<<(std::ostream &out, const PRN &prn){
-          out << const_cast<PRN *>(&prn)->_content;
+          out << const_cast<PRN &>(prn).content;
           return out;
         }
     };
@@ -92,11 +87,11 @@ class CA_Code {
       public:
         G1() : PRN() {}
         ~G1(){}
-        bool get() const {return PRN::_content[9];}
+        bool get() const {return PRN::content[9];}
         void next(){
-          bool tmp(PRN::_content[2] ^ PRN::_content[9]);
-          PRN::_content <<= 1;
-          PRN::_content[0] = tmp;
+          bool tmp(PRN::content[2] ^ PRN::content[9]);
+          PRN::content <<= 1;
+          PRN::content[0] = tmp;
         }
     };
     
@@ -106,19 +101,19 @@ class CA_Code {
       public:
         G2(int selector1, int selector2) : PRN(), _selector1(selector1), _selector2(selector2) {}
         ~G2(){}
-        bool get() const {return PRN::_content[_selector1] ^ PRN::_content[_selector2];}
+        bool get() const {return PRN::content[_selector1] ^ PRN::content[_selector2];}
         void next(){
-          bool tmp(PRN::_content[1] 
-                     ^ PRN::_content[2]
-                     ^ PRN::_content[5]
-                     ^ PRN::_content[7]
-                     ^ PRN::_content[8]
-                     ^ PRN::_content[9]);
-          PRN::_content <<= 1;
-          PRN::_content[0] = tmp;
+          bool tmp(PRN::content[1]
+                     ^ PRN::content[2]
+                     ^ PRN::content[5]
+                     ^ PRN::content[7]
+                     ^ PRN::content[8]
+                     ^ PRN::content[9]);
+          PRN::content <<= 1;
+          PRN::content[0] = tmp;
         }
-        static G2 Satellite_G2(int satellite_ID){
-          switch(satellite_ID){
+        static G2 get_G2(const int &prn){
+          switch(prn){
             case  1: return G2(1, 5);
             case  2: return G2(2, 6);
             case  3: return G2(3, 7);
@@ -159,22 +154,32 @@ class CA_Code {
           }
         }
     };
-  protected:
-    G1 _g1;
-    G2 _g2;
-  public:
-    CA_Code(int sid) : _g1(), _g2(G2::Satellite_G2(sid)){}
-    ~CA_Code(){}
-    bool get() const {return _g1.get() ^ _g2.get();}
-    int get_multi() const {return get() ? 1 : -1;}
-    void next(){
-      _g1.next();
-      _g2.next();
-    }
+
+    class CA_Code {
+      public:
+        typedef FloatT float_t;
+        static const float_t FREQENCY;
+        static const float_t length_1chip() {
+          static const float_t res(1. / FREQENCY);
+          return res;
+        }
+      protected:
+        G1 g1;
+        G2 g2;
+      public:
+        CA_Code(const int &prn) : g1(), g2(G2::get_G2(prn)){}
+        ~CA_Code(){}
+        bool get() const {return g1.get() ^ g2.get();}
+        int get_multi() const {return get() ? 1 : -1;}
+        void next(){
+          g1.next();
+          g2.next();
+        }
+    };
 };
 
 template <class FloatT>
-const typename CA_Code<FloatT>::float_t CA_Code<FloatT>::FREQENCY = 1.023E6;
+const typename GPS_Signal<FloatT>::float_t GPS_Signal<FloatT>::CA_Code::FREQENCY = 1.023E6;
 
 template <class FloatT = double>
 struct GPS_Time {
