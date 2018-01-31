@@ -69,8 +69,8 @@ class SBAS_SpaceNode {
       IONO_DELAY_CORRECTION = 26,
       SERVICE_MESSAGE = 27,
       CLOCK_EPHEMERIS_COV_MAT = 28,
-      INTERNAL_TEST_MESSAGES = 62,
-      NULL = 63,
+      INTERNAL_TEST_MESSAGE = 62,
+      NULL_MESSAGES = 63,
     }; ///< @see Table A-3
 };
 
@@ -79,13 +79,13 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
   {120,  145, 01106, "INMARSAT 3F2 AOR-E"},
   {121,  175, 01241, "INMARSAT 4F2"},
   {122,   52, 00267, "INMARSAT 3F4 AOR-W"},
-  {123,   21, 00232, "LM RPS-1, RPS-2 (note 3)"},
+  {123,   21, 00232, "LM RPS-1, RPS-2"},
   {124,  237, 01617, "Artemis"},
-  {125,  235, 01076, "LM RPS-1, RPS-2 (note 3)"},
+  {125,  235, 01076, "LM RPS-1, RPS-2"},
   {126,  886, 01764, "INMARSAT 3F5 IND-W"},
   {127,  657, 00717, "INSATNAV"},
   {128,  634, 01532, "INSATNAV"},
-  {129,  762, 01250, "MTSAT-1R (or MTSAT-2, note 2)"},
+  {129,  762, 01250, "MTSAT-1R (or MTSAT-2)"},
   {130,  355, 00341, "INMARSAT 4F1"},
   {131, 1012, 00551, "INMARSAT 3F1 IOR"},
   {132,  176, 00520, "Unallocated"},
@@ -93,7 +93,7 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
   {134,  130, 00706, "INMARSAT 3F3 POR"},
   {135,  359, 01216, "LM RPS-1"},
   {136,  595, 00740, "INMARSAT Reserved"},
-  {137,   68, 01007, "MTSAT-2 (or MTSAT-1R, note 2)"},
+  {137,   68, 01007, "MTSAT-2 (or MTSAT-1R)"},
   {138,  386, 00450, "LM RPS-2"},
 }; ///< @see Table A-1
 
