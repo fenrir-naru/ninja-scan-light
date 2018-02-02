@@ -236,13 +236,14 @@ typedef typename gps_space_node_t::type type
             }
 
             raw_t &operator=(const Ephemeris &eph){
-#define CONVERT2(TARGET, TARGET_SF) \
-{TARGET = (s32_t)((eph.TARGET + 0.5 * sf[SF_ ## TARGET_SF]) / sf[SF_ ## TARGET_SF]);}
+#define CONVERT3(TARGET_DST, TARGET_SRC, TARGET_SF) \
+{TARGET_DST = (s32_t)((TARGET_SRC + 0.5 * sf[SF_ ## TARGET_SF]) / sf[SF_ ## TARGET_SF]);}
+#define CONVERT2(TARGET, TARGET_SF) CONVERT3(eph.TARGET, eph.TARGET, TARGET_SF)
 #define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
               svid = eph.svid;
 
               URA = eph.URA;
-              CONVERT(t_0);
+              CONVERT3(t_0, std::fmod(t_0, gps_time_t::seconds_day), t_0);
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
               CONVERT2(ddx, ddxy);  CONVERT2(ddy, ddxy);  CONVERT(ddz);
@@ -250,6 +251,7 @@ typedef typename gps_space_node_t::type type
               CONVERT(a_Gf1);
 #undef CONVERT
 #undef CONVERT2
+#undef CONVERT3
               return *this;
             }
           };
