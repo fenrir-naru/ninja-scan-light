@@ -37,6 +37,8 @@
 #ifndef __SBAS_H__
 #define __SBAS_H__
 
+#include <cmath>
+
 #include "GPS.h"
 
 template <class FloatT = double>
@@ -132,13 +134,37 @@ typedef typename gps_space_node_t::type type
           uint_t svid;            ///< Satellite number
           uint_t WN;              ///< Week number
 
-          float_t t_0;            ///< Time of applicability (s)
+          float_t t_0;            ///< Time of applicability (s) <= time of a week
           int_t URA;              ///< User range accuracy (index)
           float_t x, y, z;        ///< ECEF position (m)
           float_t dx, dy, dz;     ///< ECEF velocity (m/s)
           float_t ddx, ddy, ddz;  ///< ECEF acceleration (m/s^2)
           float_t a_Gf0;           ///< Clock correction parameter (s)
           float_t a_Gf1;           ///< Clock correction parameter (s/s)
+
+          /**
+           * Adjust time of ephemeris with time of current
+           */
+          void adjust_time(const gps_time_t &t_current){
+            WN = t_current.WN;
+            float_t sec_of_a_day(std::fmod(t_current.seconds, gps_time_t::seconds_day)), t_0_orig(t_0);
+            t_0 += (t_current.seconds - sec_of_a_day);
+
+            // roll over check
+            if(sec_of_a_day - t_0_orig > gps_time_t::seconds_day / 4 * 3){
+              t_0 += gps_time_t::seconds_day;
+              if(t_0 >= gps_time_t::seconds_week){
+                WN++;
+                t_0 -= gps_time_t::seconds_week;
+              }
+            }else if(sec_of_a_day - t_0_orig < -gps_time_t::seconds_day / 4 * 3){
+              t_0 -= gps_time_t::seconds_day;
+              if(t_0 < 0){
+                WN--;
+                t_0 += gps_time_t::seconds_week;
+              }
+            }
+          }
 
           constellation_t constellation(
               const gps_time_t &t_rx, const float_t &pseudo_range = 0,
@@ -169,7 +195,7 @@ typedef typename gps_space_node_t::type type
           struct raw_t {
             u8_t  svid;           ///< Satellite number
 
-            u16_t t_0;            ///< Time of applicability (16, s)
+            u16_t t_0;            ///< Time of applicability (16, s) [0,86384] <= time of a day
             u8_t  URA;            ///< User range accuracy
             s32_t x, y, z;        ///< ECEF position (0.08(xy), 0.4(z) m)
             s32_t dx, dy, dz;     ///< ECEF velocity (0.000625(xy), 0.004(z) m)
@@ -195,10 +221,10 @@ typedef typename gps_space_node_t::type type
 {converted.TARGET = sf[SF_ ## TARGET_SF] * TARGET;}
 #define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
               converted.svid = svid;
-              converted.WN = 0; // Week number (must be configured later)
+              converted.WN = 0; // Week number (must be configured later) @see adjust_time
 
               converted.URA = URA;
-              CONVERT(t_0);
+              CONVERT(t_0);     // Time of a day => time of a week (must be configured later) @see adjust_time
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
               CONVERT2(ddx, ddxy);  CONVERT2(ddy, ddxy);  CONVERT(ddz);
