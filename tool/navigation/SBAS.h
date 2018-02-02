@@ -130,23 +130,38 @@ typedef typename gps_space_node_t::type type
          */
         struct Ephemeris {
           uint_t svid;            ///< Satellite number
+          uint_t WN;              ///< Week number
 
           float_t t_0;            ///< Time of applicability (s)
           int_t URA;              ///< User range accuracy (index)
           float_t x, y, z;        ///< ECEF position (m)
           float_t dx, dy, dz;     ///< ECEF velocity (m/s)
           float_t ddx, ddy, ddz;  ///< ECEF acceleration (m/s^2)
-          float_t a_f0;           ///< Clock correction parameter (s)
-          float_t a_f1;           ///< Clock correction parameter (s/s)
+          float_t a_Gf0;           ///< Clock correction parameter (s)
+          float_t a_Gf1;           ///< Clock correction parameter (s/s)
 
           constellation_t constellation(
-              const gps_time_t &t, const float_t &pseudo_range = 0,
+              const gps_time_t &t_rx, const float_t &pseudo_range = 0,
               const bool &with_velocity = true) const {
 
-            constellation_t res = { // TODO (A-44, A-45)
-              xyz_t(x, y, z),
-              xyz_t(dx, dy, dz),
+            float_t t_G(-t_rx.interval(WN, 0) - (pseudo_range / gps_space_node_t::light_speed));
+
+            float_t t(t_G - (a_Gf0 + a_Gf1 * (t_G - t_0))); // Eq.(A-45)
+
+            float_t delta_t(t - t_0), delta_t2(delta_t * delta_t / 2);
+
+            constellation_t res = {
+              xyz_t(
+                  x + dx * delta_t + ddx * delta_t2,
+                  y + dy * delta_t + ddy * delta_t2,
+                  z + dz * delta_t + ddz * delta_t2), // Eq. (A-44)
+              xyz_t(
+                  dx + ddx * delta_t,
+                  dy + ddy * delta_t,
+                  dz + ddz * delta_t),
             };
+
+            // TODO Sagnac correction
 
             return res;
           }
@@ -159,16 +174,16 @@ typedef typename gps_space_node_t::type type
             s32_t x, y, z;        ///< ECEF position (0.08(xy), 0.4(z) m)
             s32_t dx, dy, dz;     ///< ECEF velocity (0.000625(xy), 0.004(z) m)
             s16_t ddx, ddy, ddz;  ///< ECEF acceleration (0.0000125(xy), 0.0000625(z) m/s^2)
-            s16_t a_f0;           ///< Clock correction parameter (2^-31, s)
-            s16_t a_f1;           ///< Clock correction parameter (2^-40, s/s)
+            s16_t a_Gf0;           ///< Clock correction parameter (2^-31, s)
+            s16_t a_Gf1;           ///< Clock correction parameter (2^-40, s/s)
 
             enum {
               SF_t_0,
               SF_xy,    SF_z,
               SF_dxy,   SF_dz,
               SF_ddxy,  SF_ddz,
-              SF_a_f0,
-              SF_a_f1,
+              SF_a_Gf0,
+              SF_a_Gf1,
 
               SF_NUM,
             };
@@ -180,14 +195,15 @@ typedef typename gps_space_node_t::type type
 {converted.TARGET = sf[SF_ ## TARGET_SF] * TARGET;}
 #define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
               converted.svid = svid;
+              converted.WN = 0; // Week number (must be configured later)
 
               converted.URA = URA;
               CONVERT(t_0);
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
               CONVERT2(ddx, ddxy);  CONVERT2(ddy, ddxy);  CONVERT(ddz);
-              CONVERT(a_f0);
-              CONVERT(a_f1);
+              CONVERT(a_Gf0);
+              CONVERT(a_Gf1);
 #undef CONVERT
 #undef CONVERT2
               return converted;
@@ -204,8 +220,8 @@ typedef typename gps_space_node_t::type type
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
               CONVERT2(ddx, ddxy);  CONVERT2(ddy, ddxy);  CONVERT(ddz);
-              CONVERT(a_f0);
-              CONVERT(a_f1);
+              CONVERT(a_Gf0);
+              CONVERT(a_Gf1);
 #undef CONVERT
 #undef CONVERT2
               return *this;
@@ -214,6 +230,7 @@ typedef typename gps_space_node_t::type type
 
           bool is_equivalent(const Ephemeris &eph) const {
             do{
+              if(WN != eph.WN){break;}
               if(URA != eph.URA){break;}
 
 #define CHECK2(TARGET, TARGET_SF) \
@@ -223,8 +240,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
               CHECK2(x, xy);      CHECK2(y, xy);      CHECK(z);
               CHECK2(dx, dxy);    CHECK2(dy, dxy);    CHECK(dz);
               CHECK2(ddx, ddxy);  CHECK2(ddy, ddxy);  CHECK(ddz);
-              CHECK(a_f0);
-              CHECK(a_f1);
+              CHECK(a_Gf0);
+              CHECK(a_Gf1);
 #undef CHECK
 #undef CHECK2
               return true;
@@ -336,8 +353,8 @@ const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::Satellite
   0.004,        // SF_dz
   0.0000125,    // SF_ddxy
   0.0000625,    // SF_ddz
-  POWER_2(-31), // SF_a_f0
-  POWER_2(-40), // SF_a_f1
+  POWER_2(-31), // SF_a_Gf0
+  POWER_2(-40), // SF_a_Gf1
 };
 
 template <class FloatT>
