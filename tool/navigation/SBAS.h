@@ -120,7 +120,69 @@ typedef typename gps_space_node_t::type type
       NULL_MESSAGES = 63,
     }; ///< @see Table A-3
 
+    struct igp_pos_t {
+      int_t latitude_deg;  ///< latitude in degrees, north is positive. [-85, 85].
+      int_t longitude_deg; ///< longitude in degrees, east is positive. [-180, 175]
+    };
+    /**
+     * Resolve ionospheric grid point position
+     * @param band valid range is [0, 10]
+     * @param mask_pos valid range is [0, 200 (or 199, 191)] (be careful, not [1, 201])
+     * @return (igp_pos_t) grid point position
+     * @see Table A-14
+     */
+    static igp_pos_t igp_pos(const uint_t &band, const uint_t &mask_pos){
+      igp_pos_t res;
+      if(band <= 8){
+        uint_t row_index_28grids((band / 2) * 2); // where 28 grids at the same longitude are appeared
+        int row_index(0), col_index((int)mask_pos);
+        do{
+          int grids(row_index_28grids == row_index ? 28 : 27);
+          if(col_index < grids){
+            col_index -= 2; // col_index => [-2, 24 (or 25)]
+            if((grids > 27) && (band % 2 == 1)){ // col_index => [-3, 24]
+              col_index--;
+            }
+            break;
+          }
+          col_index -= grids;
+          row_index++;
 
+          grids = 23;
+          if(col_index < grids){break;}
+          col_index -= grids;
+          row_index++;
+        }while(row_index < 8);
+
+        if(row_index < 8){
+          res.longitude_deg = -180 + band * 40 + row_index * 5;
+          switch(col_index){
+            case -3: res.latitude_deg = -85; break;
+            case -2: res.latitude_deg = -75; break;
+            case -1: res.latitude_deg = -65; break;
+            case 23: res.latitude_deg =  65; break;
+            case 24: res.latitude_deg =  75; break;
+            case 25: res.latitude_deg =  85; break;
+            default:
+              res.latitude_deg = -55 + col_index * 5;
+              break;
+          }
+        }
+      }else if(band <= 10){
+        if(mask_pos < 72){
+          res.latitude_deg = 60;
+          res.longitude_deg = mask_pos * 5 - 180;
+        }else if(mask_pos < 192){
+          std::div_t a(std::div(mask_pos, 36));
+          res.latitude_deg = 65 + a.quot * 5;
+          res.longitude_deg = a.rem * 10 - 180;
+        }
+        if(band == 10){
+          res.latitude_deg *= -1;
+        }
+      }
+      return res;
+    }
 
     class Satellite {
       public:
