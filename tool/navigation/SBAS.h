@@ -187,6 +187,18 @@ typedef typename gps_space_node_t::type type
     struct igp_pos_index_t {
       int_t lat_index; ///< Latitude index; N85(0), N75(1), N70(2), N65(3), N60(4), ..., 0(16) ..., S60(28), S65(29), S70(30), S75(31), S85(32)
       int_t lng_index; ///< Longitude index; W180(0), W175(1), W170(2), ..., 0(36), ..., E170(70), E175(71)
+      enum {
+        LAT_INDEX_N85 = 0,  // 30 deg grid
+        LAT_INDEX_N75 = 1,  // 10 deg grid
+        LAT_INDEX_N65 = 3,  // 10 deg grid
+        LAT_INDEX_S65 = 29, // 10 deg grid
+        LAT_INDEX_S75 = 31, // 10 deg grid
+        LAT_INDEX_S85 = 32, // 30 deg grid
+        LAT_INDEX_MAX = LAT_INDEX_S85,
+      };
+      enum {
+        LNG_INDEX_MAX = 71,
+      };
       operator igp_pos_t() const {
         igp_pos_t res = {
           (lat_index % 32 == 0)
@@ -198,10 +210,12 @@ typedef typename gps_space_node_t::type type
       }
     };
     /**
-     * Convert latitude and longitude of IGP position into the corresponding indices
-     * (nearest west, and north if in south semi-sphere, south if otherwise (in north semi-sphere, or on equator), one)
+     * Find an appropriate IGP in the format of IGP position index
+     * The appropriate one means "nearest west, and north if in south semi-sphere,
+     * south if otherwise (in north semi-sphere, or on equator), one".
      * @param latitude_deg latitude in degrees; [-90, 90]
      * @param longitude_deg longitude in degrees
+     * @return IGP position index
      */
     template <class T>
     static igp_pos_index_t igp_pos_index(const T &latitude_deg, const T &longitude_deg){
@@ -217,16 +231,24 @@ typedef typename gps_space_node_t::type type
 
       igp_pos_index_t res;
       if(latitude_deg >= 85){
-        res.lat_index = 0;
-        lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
+        res.lat_index = igp_pos_index_t::LAT_INDEX_N85;
+        if(latitude_deg > 85){
+          lng_reg = (lng_reg / 90) * 90; // W180, W90, ... @see A 4.4.10.2 d)
+        }else{
+          lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
+        }
       }else if(latitude_deg <= -85){
-        res.lat_index = 32;
-        lng_reg = (lng_reg < 10) ? (160 + 180) : (((lng_reg - 10) / 30) * 30 + 10); // W170, W140, ...
+        res.lat_index = igp_pos_index_t::LAT_INDEX_S85;
+        if(latitude_deg < -85){
+          lng_reg = (lng_reg < 40) ? (130 + 180) : (((lng_reg - 40) / 90) * 90 + 40); // W140, W50, ...  @see A 4.4.10.2 e)
+        }else{
+          lng_reg = (lng_reg < 10) ? (160 + 180) : (((lng_reg - 10) / 30) * 30 + 10); // W170, W140, ...
+        }
       }else{
         if(latitude_deg >= 75){
-          res.lat_index = 1;
+          res.lat_index = igp_pos_index_t::LAT_INDEX_N75;
         }else if(latitude_deg <= -75){
-          res.lat_index = 31;
+          res.lat_index = igp_pos_index_t::LAT_INDEX_S75;
         }else if(latitude_deg >= 0){
           res.lat_index = 16 - latitude_deg / 5;
         }else{
