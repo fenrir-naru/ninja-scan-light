@@ -184,6 +184,63 @@ typedef typename gps_space_node_t::type type
       return res;
     }
 
+    struct igp_pos_index_t {
+      int_t lat_index; ///< Latitude index; N85(0), N75(1), N70(2), N65(3), N60(4), ..., 0(16) ..., S60(28), S65(29), S70(30), S75(31), S85(32)
+      int_t lng_index; ///< Longitude index; W180(0), W175(1), W170(2), ..., 0(36), ..., E170(70), E175(71)
+      operator igp_pos_t() const {
+        igp_pos_t res = {
+          (lat_index % 32 == 0)
+              ? ((lat_index == 0) ? 85 : -85)
+              : ((16 - lat_index) * 5),
+          (lng_index - 36) * 5
+        };
+        return res;
+      }
+    };
+    /**
+     * Convert latitude and longitude of IGP position into the corresponding indices
+     * (nearest west, and north if in south semi-sphere, south if otherwise (in north semi-sphere, or on equator), one)
+     * @param latitude_deg latitude in degrees; [-90, 90]
+     * @param longitude_deg longitude in degrees
+     */
+    template <class T>
+    static igp_pos_index_t igp_pos_index(const T &latitude_deg, const T &longitude_deg){
+
+      int_t lng_reg; // [0, 360), mapping W180(=> 0), ... E180(=> 360)
+      {
+        int_t lng_int(
+            (longitude_deg < -180)
+                ? (longitude_deg + ((((int_t)(-longitude_deg) + 180) / 360) * 360)) // => [*, -180) => (-180, 180]
+                : longitude_deg);
+        lng_reg = (lng_int + 180) % 360; // => [*, *] => [-180, 180)
+      }
+
+      igp_pos_index_t res;
+      if(latitude_deg >= 85){
+        res.lat_index = 0;
+        lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
+      }else if(latitude_deg <= -85){
+        res.lat_index = 32;
+        lng_reg = (lng_reg < 10) ? (160 + 180) : (((lng_reg - 10) / 30) * 30 + 10); // W170, W140, ...
+      }else{
+        if(latitude_deg >= 75){
+          res.lat_index = 1;
+        }else if(latitude_deg <= -75){
+          res.lat_index = 31;
+        }else if(latitude_deg >= 0){
+          res.lat_index = 16 - latitude_deg / 5;
+        }else{
+          res.lat_index = 16 + (-latitude_deg) / 5;
+        }
+
+        if((latitude_deg >= 65) || (latitude_deg <= -65)){
+          lng_reg = (lng_reg / 10) * 10; // W180, W170, ...
+        }
+      }
+      res.lng_index = lng_reg / 5;
+      return res;
+    }
+
     class Satellite {
       public:
         typedef typename gps_space_node_t::constellation_t constellation_t;
