@@ -120,9 +120,12 @@ typedef typename gps_space_node_t::type type
       NULL_MESSAGES = 63,
     }; ///< @see Table A-3
 
+    struct igp_pos_index_t;
+
     struct igp_pos_t {
       int_t latitude_deg;  ///< latitude in degrees, north is positive. [-85, 85].
       int_t longitude_deg; ///< longitude in degrees, east is positive. [-180, 175]
+      operator igp_pos_index_t() const;
     };
     /**
      * Resolve ionospheric grid point position
@@ -216,6 +219,7 @@ typedef typename gps_space_node_t::type type
         return res;
       }
     };
+
     /**
      * Find an appropriate IGP in the format of IGP position index
      * The appropriate one means "nearest west, and north if in south semi-sphere,
@@ -513,6 +517,19 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
   {137,   68, 01007, "MTSAT-2 (or MTSAT-1R)"},
   {138,  386, 00450, "LM RPS-2"},
 }; ///< @see Table A-1
+
+template <class FloatT>
+SBAS_SpaceNode<FloatT>::igp_pos_t::operator typename SBAS_SpaceNode<FloatT>::igp_pos_index_t() const {
+  SBAS_SpaceNode<FloatT>::igp_pos_index_t res = {
+    (latitude_deg == 85)
+        ? igp_pos_index_t::LAT_INDEX_N85
+        : ((latitude_deg == -85)
+              ? igp_pos_index_t::LAT_INDEX_S85
+              : (80 - latitude_deg) / 5),
+    (longitude_deg + 180) / 5
+  };
+  return res;
+}
 
 #define POWER_2(n) \
 (((n) >= 0) \
