@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cmath>
 
 #include "navigation/SBAS.h"
 
@@ -180,6 +181,65 @@ BOOST_AUTO_TEST_CASE(igp_pos){
       BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
       BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
       BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(igp_pos_index){
+  for(unsigned band(0); band < 11; ++band){
+    for(unsigned mask(0); mask < 201; ++mask){
+      if((band == 8) && (mask >= 200)){
+        break;
+      }else if((band >= 9) && (mask >= 192)){
+        break;
+      }
+      { // on grid
+        space_node_t::igp_pos_index_t idx(space_node_t::igp_pos_index(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]));
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << idx.lat_index << ", " << idx.lng_index);
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).longitude_deg, igp_lat_lng[band][mask][1]);
+      }
+      { // near grid
+        double
+            lat((igp_lat_lng[band][mask][0] >= 0 ? 0.5 : -0.5) + igp_lat_lng[band][mask][0]), // little north,
+            lng(0.5 + igp_lat_lng[band][mask][1]); // little east
+        space_node_t::igp_pos_index_t idx(space_node_t::igp_pos_index(lat, lng));
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
+            << idx.lat_index << "(" << lat << "), "
+            << idx.lng_index << "(" << lng << ")");
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).latitude_deg, igp_lat_lng[band][mask][0]);
+        if(lat > 85){
+          int lng_grid(90 * floor(lng / 90));
+          if(lng_grid == 180){lng_grid = -180;}
+          BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).longitude_deg, lng_grid);
+        }else if(lat < -85){
+          int lng_grid(40 + 90 * floor((lng - 40) / 90));
+          if(lng_grid == -230){lng_grid = 130;}
+          BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).longitude_deg, lng_grid);
+        }else{
+          BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).longitude_deg, igp_lat_lng[band][mask][1]);
+        }
+      }
+
+      static const int roll_over_i[] = {-360, 360};
+      for(int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
+        space_node_t::igp_pos_index_t idx(space_node_t::igp_pos_index(
+            igp_lat_lng[band][mask][0],
+            roll_over_i[i] + igp_lat_lng[band][mask][1]));
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << idx.lat_index << ", " << idx.lng_index);
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).longitude_deg, igp_lat_lng[band][mask][1]);
+      }
+
+      static const double roll_over_f[] = {-360.0, 360.0};
+      for(int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
+        space_node_t::igp_pos_index_t idx(space_node_t::igp_pos_index(
+            (double)igp_lat_lng[band][mask][0],
+            roll_over_f[i] + igp_lat_lng[band][mask][1]));
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << idx.lat_index << ", " << idx.lng_index);
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(((space_node_t::igp_pos_t)idx).longitude_deg, igp_lat_lng[band][mask][1]);
+      }
     }
   }
 }
