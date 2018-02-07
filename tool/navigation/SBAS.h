@@ -170,15 +170,22 @@ typedef typename gps_space_node_t::type type
         }
       }else if(band <= 10){
         if(mask_pos < 72){
-          res.latitude_deg = 60;
+          res.latitude_deg = 60 * ((band == 10) ? -1 : 1);
           res.longitude_deg = mask_pos * 5 - 180;
-        }else if(mask_pos < 192){
-          std::div_t a(std::div(mask_pos, 36));
-          res.latitude_deg = 65 + a.quot * 5;
+        }else if(mask_pos < 180){
+          std::div_t a(std::div(mask_pos - 72, 36));
+          res.latitude_deg = (65 + a.quot * 5) * ((band == 10) ? -1 : 1);
           res.longitude_deg = a.rem * 10 - 180;
-        }
-        if(band == 10){
-          res.latitude_deg *= -1;
+        }else if(mask_pos < 192){
+          res.latitude_deg = 85;
+          res.longitude_deg = (mask_pos - 180) * 30 - 180;
+          if(band == 10){
+            res.latitude_deg *= -1;
+            res.longitude_deg += 10;
+            if(res.longitude_deg > 180){
+              res.longitude_deg -= 360;
+            }
+          }
         }
       }
       return res;
