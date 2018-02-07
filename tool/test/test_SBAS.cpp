@@ -169,6 +169,23 @@ static const int igp_lat_lng[][201][2] = {
 #undef LNG_180W_150E
 #undef LNG_170W_160E
 
+BOOST_AUTO_TEST_CASE(igp_pos_cast){
+  for(unsigned band(0); band < 11; ++band){
+    for(unsigned mask(0); mask < 201; ++mask){
+      if((band == 8) && (mask >= 200)){
+        break;
+      }else if((band >= 9) && (mask >= 192)){
+        break;
+      }
+      space_node_t::igp_pos_t pos = {igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]};
+      BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
+      space_node_t::igp_pos_t pos2(((space_node_t::igp_pos_index_t)pos));
+      BOOST_REQUIRE_EQUAL(pos2.latitude_deg, pos.latitude_deg);
+      BOOST_REQUIRE_EQUAL(pos2.longitude_deg, pos.longitude_deg);
+    }
+  }
+}
+
 BOOST_AUTO_TEST_CASE(igp_pos){
   for(unsigned band(0); band < 11; ++band){
     for(unsigned mask(0); mask < 201; ++mask){
