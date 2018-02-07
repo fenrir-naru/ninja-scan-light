@@ -257,9 +257,9 @@ typedef typename gps_space_node_t::type type
         }else if(latitude_deg <= -75){
           res.lat_index = igp_pos_index_t::LAT_INDEX_S75;
         }else if(latitude_deg >= 0){
-          res.lat_index = 16 - latitude_deg / 5;
+          res.lat_index = 16 - (int_t)latitude_deg / 5;
         }else{
-          res.lat_index = 16 + (-latitude_deg) / 5;
+          res.lat_index = 16 + (int_t)(-latitude_deg) / 5;
         }
 
         if((latitude_deg >= 65) || (latitude_deg <= -65)){
