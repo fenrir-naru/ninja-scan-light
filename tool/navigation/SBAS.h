@@ -236,8 +236,8 @@ typedef typename gps_space_node_t::type type
         int_t lng_int(
             (longitude_deg < -180)
                 ? (longitude_deg + ((((int_t)(-longitude_deg) + 180) / 360) * 360)) // => [*, -180) => (-180, 180]
-                : longitude_deg);
-        lng_reg = (lng_int + 180) % 360; // => [*, *] => [-180, 180)
+                : longitude_deg); // [-180, *]
+        lng_reg = (lng_int + 180) % 360; // => [0, 360)
       }
 
       igp_pos_index_t res;
