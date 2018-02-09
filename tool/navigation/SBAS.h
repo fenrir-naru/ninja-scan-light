@@ -209,13 +209,30 @@ typedef typename gps_space_node_t::type type
       enum {
         LNG_INDEX_MAX = 71,
       };
+      ///< Convert latitude in degrees to index
+      static int_t lat2idx(const int_t &lat_deg){
+        return (lat_deg == 85)
+            ? LAT_INDEX_N85
+            : ((lat_deg == -85)
+                  ? LAT_INDEX_S85
+                  : (80 - lat_deg) / 5);
+      }
+      ///< Convert latitude index to degrees
+      static int_t idx2lat(const int_t &lat_idx){
+        return (lat_idx % 32 == 0)
+            ? ((lat_idx == 0) ? 85 : -85)
+            : ((16 - lat_idx) * 5);
+      }
+      ///< Convert longitude in degrees to index
+      static int_t lng2idx(const int_t &lng_deg){
+        return (lng_deg + 180) / 5;
+      }
+      ///< Convert longitude index to degrees
+      static int_t idx2lng(const int_t &lng_idx){
+        return (lng_idx - 36) * 5;
+      }
       operator igp_pos_t() const {
-        igp_pos_t res = {
-          (lat_index % 32 == 0)
-              ? ((lat_index == 0) ? 85 : -85)
-              : ((16 - lat_index) * 5),
-          (lng_index - 36) * 5
-        };
+        igp_pos_t res = {idx2lat(lat_index), idx2lng(lng_index)};
         return res;
       }
     };
@@ -523,13 +540,8 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
 template <class FloatT>
 SBAS_SpaceNode<FloatT>::igp_pos_t::operator typename SBAS_SpaceNode<FloatT>::igp_pos_index_t() const {
   SBAS_SpaceNode<FloatT>::igp_pos_index_t res = {
-    (latitude_deg == 85)
-        ? igp_pos_index_t::LAT_INDEX_N85
-        : ((latitude_deg == -85)
-              ? igp_pos_index_t::LAT_INDEX_S85
-              : (80 - latitude_deg) / 5),
-    (longitude_deg + 180) / 5
-  };
+      igp_pos_index_t::lat2idx(latitude_deg),
+      igp_pos_index_t::lng2idx(longitude_deg)};
   return res;
 }
 
