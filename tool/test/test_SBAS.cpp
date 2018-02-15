@@ -203,6 +203,9 @@ BOOST_AUTO_TEST_CASE(igp_pos){
 }
 
 BOOST_AUTO_TEST_CASE(igp_corresponding){
+  typedef space_node_t::igp_corresponding_t<int> res_i_t;
+  typedef space_node_t::igp_corresponding_t<double> res_d_t;
+
   for(unsigned band(0); band < 11; ++band){
     for(unsigned mask(0); mask < 201; ++mask){
       if((band == 8) && (mask >= 200)){
@@ -210,52 +213,74 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
       }else if((band >= 9) && (mask >= 192)){
         break;
       }
+
       { // on grid
-        space_node_t::igp_pos_t pos(space_node_t::igp_corresponding(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]));
-        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
-        BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
-        BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
+        res_i_t res(space_node_t::igp_corresponding(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]));
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
+            << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
+        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
+        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, 0);
+        BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, 0);
       }
       { // near grid
+        double delta_lat(igp_lat_lng[band][mask][0] >= 0 ? 0.5 : -0.5), delta_lng(0.5);
         double
-            lat((igp_lat_lng[band][mask][0] >= 0 ? 0.5 : -0.5) + igp_lat_lng[band][mask][0]), // little north,
-            lng(0.5 + igp_lat_lng[band][mask][1]); // little east
-        space_node_t::igp_pos_t pos(space_node_t::igp_corresponding(lat, lng));
+            lat(delta_lat + igp_lat_lng[band][mask][0]),
+            lng(delta_lng + igp_lat_lng[band][mask][1]);
+        res_d_t res(space_node_t::igp_corresponding(lat, lng));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
-            << pos.latitude_deg << "(" << lat << "), "
-            << pos.longitude_deg << "(" << lng << ")");
-        BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
+            << res.igp.latitude_deg << "(" << lat << "), "
+            << res.igp.longitude_deg << "(" << lng << ")");
+
+        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, delta_lat);
+
         if(lat > 85){
           int lng_grid(90 * floor(lng / 90));
           if(lng_grid == 180){lng_grid = -180;}
-          BOOST_REQUIRE_EQUAL(pos.longitude_deg, lng_grid);
+          double delta_lng2(delta_lng + igp_lat_lng[band][mask][1] - lng_grid);
+          BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, lng_grid);
+          BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, delta_lng2);
         }else if(lat < -85){
           int lng_grid(40 + 90 * floor((lng - 40) / 90));
           if(lng_grid == -230){lng_grid = 130;}
-          BOOST_REQUIRE_EQUAL(pos.longitude_deg, lng_grid);
+          double delta_lng2(delta_lng + igp_lat_lng[band][mask][1] - lng_grid);
+          if(delta_lng2 < -180){delta_lng2 += 360;}
+          BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, lng_grid);
+          BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, delta_lng2);
         }else{
-          BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
+          BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
+          BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, delta_lng);
         }
       }
 
+      // on grid, roll over (int)
       static const int roll_over_i[] = {-360, 360};
       for(int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
-        space_node_t::igp_pos_t pos(space_node_t::igp_corresponding(
+        res_i_t res(space_node_t::igp_corresponding(
             igp_lat_lng[band][mask][0],
             roll_over_i[i] + igp_lat_lng[band][mask][1]));
-        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
-        BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
-        BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
+            << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
+        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
+        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, 0);
+        BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, 0);
       }
 
+      // on grid, roll over (double)
       static const double roll_over_f[] = {-360.0, 360.0};
       for(int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
-        space_node_t::igp_pos_t pos(space_node_t::igp_corresponding(
+        res_d_t res(space_node_t::igp_corresponding(
             (double)igp_lat_lng[band][mask][0],
             roll_over_f[i] + igp_lat_lng[band][mask][1]));
-        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
-        BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
-        BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
+            << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
+        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
+        BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
+        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, 0);
+        BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, 0);
       }
     }
   }

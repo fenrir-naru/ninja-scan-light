@@ -237,36 +237,48 @@ typedef typename gps_space_node_t::type type
       }
     };
 
+    template <class T>
+    struct igp_corresponding_t {
+      igp_pos_t igp;
+      struct {
+        T latitude_deg, longitude_deg;
+      } delta;
+    };
     /**
-     * Find a corresponding IGP
+     * Find a corresponding IGP, and compute distance (delta) from the IGP.
      * The "corresponding" one means "nearest west, and north if in south semi-sphere,
      * south if otherwise (in north semi-sphere, or on equator), one".
      * @param latitude_deg latitude in degrees; [-90, 90]
      * @param longitude_deg longitude in degrees
-     * @return IGP position
+     * @return corresponding IGP position and delta
      */
     template <class T>
-    static igp_pos_t igp_corresponding(const T &latitude_deg, const T &longitude_deg){
+    static igp_corresponding_t<T> igp_corresponding(const T &latitude_deg, const T &longitude_deg){
 
-      int_t lng_reg; // [0, 360), mapping W180(=> 0), ... E180(=> 360)
+      T lng(longitude_deg); // => [-180, 180)
+      int_t lng_reg; // => [0, 360), mapping W180(=> 0), ... E180(=> 360)
       {
-        int_t lng_int(
-            (longitude_deg < -180)
-                ? (longitude_deg + ((((int_t)(-longitude_deg) + 180) / 360) * 360)) // => [*, 0) => (-180, 180]
-                : longitude_deg); // [-180, *]
-        lng_reg = (lng_int + 180) % 360; // => [0, 360)
+        if(longitude_deg < -180){
+          lng += (((int_t)(-longitude_deg + 180) / 360) * 360); // => [-*, -180) => (-180, 180]
+          if(lng == 180){
+            lng -= 360; // 180 => -180
+          }
+        }else{
+          lng -= (((int_t)(longitude_deg + 180) / 360) * 360); // => [-180, +*] => [-180, 180)
+        }
+        lng_reg = 180 + lng; // => [0, 360)
       }
 
-      igp_pos_t res;
+      igp_corresponding_t<T> res;
       if(latitude_deg >= 85){
-        res.latitude_deg = 85;
+        res.igp.latitude_deg = 85;
         if(latitude_deg > 85){
           lng_reg = (lng_reg / 90) * 90; // W180, W90, ... @see A 4.4.10.2 d)
         }else{
           lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
         }
       }else if(latitude_deg <= -85){
-        res.latitude_deg = -85;
+        res.igp.latitude_deg = -85;
         if(latitude_deg < -85){
           lng_reg = (lng_reg < 40) ? (130 + 180) : (((lng_reg - 40) / 90) * 90 + 40); // W140, W50, ...  @see A 4.4.10.2 e)
         }else{
@@ -274,22 +286,25 @@ typedef typename gps_space_node_t::type type
         }
       }else{
         if(latitude_deg >= 75){
-          res.latitude_deg = 75;
+          res.igp.latitude_deg = 75;
         }else if(latitude_deg <= -75){
-          res.latitude_deg = -75;
+          res.igp.latitude_deg = -75;
         }else if(latitude_deg >= 0){
-          res.latitude_deg = ((int_t)latitude_deg / 5) * 5;
+          res.igp.latitude_deg = ((int_t)latitude_deg / 5) * 5;
         }else{
-          res.latitude_deg = -((int_t)(-latitude_deg) / 5) * 5;
+          res.igp.latitude_deg = -((int_t)(-latitude_deg) / 5) * 5;
         }
 
-        if((res.latitude_deg >= 65) || (res.latitude_deg <= -65)){
+        if((res.igp.latitude_deg >= 65) || (res.igp.latitude_deg <= -65)){
           lng_reg = (lng_reg / 10) * 10; // W180, W170, ...
         }else{
           lng_reg = (lng_reg / 5) * 5; // W180, W175, ...
         }
       }
-      res.longitude_deg = lng_reg - 180; // [0, 360) => [-180, 180)
+      res.igp.longitude_deg = lng_reg - 180; // [0, 360) => [-180, 180)
+      res.delta.latitude_deg = latitude_deg - res.igp.latitude_deg;
+      res.delta.longitude_deg = lng - res.igp.longitude_deg;
+      if(res.delta.longitude_deg < 0){res.delta.longitude_deg += 360;} // always east (delta.lng >= 0)
       return res;
     }
 
