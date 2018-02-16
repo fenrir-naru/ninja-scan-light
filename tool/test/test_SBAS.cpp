@@ -15,6 +15,7 @@
 using namespace std;
 
 typedef SBAS_SpaceNode<double> space_node_t;
+typedef typename space_node_t::IonosphericGridPoints igp_t;
 
 BOOST_AUTO_TEST_SUITE(SBAS)
 
@@ -177,9 +178,9 @@ BOOST_AUTO_TEST_CASE(igp_pos_cast){
       }else if((band >= 9) && (mask >= 192)){
         break;
       }
-      space_node_t::igp_pos_t pos = {igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]};
+      igp_t::position_t pos = {igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]};
       BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
-      space_node_t::igp_pos_t pos2(((space_node_t::igp_pos_index_t)pos));
+      igp_t::position_t pos2(((igp_t::position_index_t)pos));
       BOOST_REQUIRE_EQUAL(pos2.latitude_deg, pos.latitude_deg);
       BOOST_REQUIRE_EQUAL(pos2.longitude_deg, pos.longitude_deg);
     }
@@ -194,7 +195,7 @@ BOOST_AUTO_TEST_CASE(igp_pos){
       }else if((band >= 9) && (mask >= 192)){
         break;
       }
-      space_node_t::igp_pos_t pos(space_node_t::igp_pos(band, mask));
+      igp_t::position_t pos(igp_t::position(band, mask));
       BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
       BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
       BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
@@ -203,8 +204,7 @@ BOOST_AUTO_TEST_CASE(igp_pos){
 }
 
 BOOST_AUTO_TEST_CASE(igp_corresponding){
-  typedef space_node_t::igp_corresponding_t<int> res_i_t;
-  typedef space_node_t::igp_corresponding_t<double> res_d_t;
+  typedef igp_t::corresponding_t res_t;
 
   for(unsigned band(0); band < 11; ++band){
     for(unsigned mask(0); mask < 201; ++mask){
@@ -215,7 +215,7 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
       }
 
       { // on grid
-        res_i_t res(space_node_t::igp_corresponding(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]));
+        res_t res(igp_t::find_corresponding(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
             << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
         BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
@@ -228,7 +228,7 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
         double
             lat(delta_lat + igp_lat_lng[band][mask][0]),
             lng(delta_lng + igp_lat_lng[band][mask][1]);
-        res_d_t res(space_node_t::igp_corresponding(lat, lng));
+        res_t res(igp_t::find_corresponding(lat, lng));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
             << res.igp.latitude_deg << "(" << lat << "), "
             << res.igp.longitude_deg << "(" << lng << ")");
@@ -258,7 +258,7 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
       // on grid, roll over (int)
       static const int roll_over_i[] = {-360, 360};
       for(int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
-        res_i_t res(space_node_t::igp_corresponding(
+        res_t res(igp_t::find_corresponding(
             igp_lat_lng[band][mask][0],
             roll_over_i[i] + igp_lat_lng[band][mask][1]));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
@@ -272,7 +272,7 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
       // on grid, roll over (double)
       static const double roll_over_f[] = {-360.0, 360.0};
       for(int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
-        res_d_t res(space_node_t::igp_corresponding(
+        res_t res(igp_t::find_corresponding(
             (double)igp_lat_lng[band][mask][0],
             roll_over_f[i] + igp_lat_lng[band][mask][1]));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "

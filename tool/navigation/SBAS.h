@@ -120,193 +120,196 @@ typedef typename gps_space_node_t::type type
       NULL_MESSAGES = 63,
     }; ///< @see Table A-3
 
-    struct igp_pos_index_t;
+    class IonosphericGridPoints {
 
-    struct igp_pos_t {
-      int_t latitude_deg;  ///< latitude in degrees, north is positive. [-85, 85].
-      int_t longitude_deg; ///< longitude in degrees, east is positive. [-180, 175]
-      operator igp_pos_index_t() const;
-    };
-    /**
-     * Resolve ionospheric grid point position
-     * @param band valid range is [0, 10]
-     * @param mask_pos valid range is [0, 200 (or 199, 191)] (be careful, not [1, 201])
-     * @return (igp_pos_t) grid point position
-     * @see Table A-14
-     */
-    static igp_pos_t igp_pos(const uint_t &band, const uint_t &mask_pos){
-      igp_pos_t res;
-      if(band <= 8){
-        uint_t row_index_28grids((band / 2) * 2); // where 28 grids at the same longitude are appeared
-        int row_index(0), col_index((int)mask_pos);
-        do{
-          int grids(row_index_28grids == row_index ? 28 : 27);
-          if(col_index < grids){
-            col_index -= 2; // col_index => [-2, 24 (or 25)]
-            if((grids > 27) && (band % 2 == 1)){ // col_index => [-3, 24]
-              col_index--;
+      public:
+        struct position_index_t;
+
+        struct position_t {
+          int_t latitude_deg;  ///< latitude in degrees, north is positive. [-85, 85].
+          int_t longitude_deg; ///< longitude in degrees, east is positive. [-180, 175]
+          operator position_index_t() const;
+        };
+        /**
+         * Resolve ionospheric grid point position
+         * @param band valid range is [0, 10]
+         * @param mask_pos valid range is [0, 200 (or 199, 191)] (be careful, not [1, 201])
+         * @return (pos_t) grid point position
+         * @see Table A-14
+         */
+        static position_t position(const uint_t &band, const uint_t &mask_pos){
+          position_t res;
+          if(band <= 8){
+            uint_t row_index_28grids((band / 2) * 2); // where 28 grids at the same longitude are appeared
+            int row_index(0), col_index((int)mask_pos);
+            do{
+              int grids(row_index_28grids == row_index ? 28 : 27);
+              if(col_index < grids){
+                col_index -= 2; // col_index => [-2, 24 (or 25)]
+                if((grids > 27) && (band % 2 == 1)){ // col_index => [-3, 24]
+                  col_index--;
+                }
+                break;
+              }
+              col_index -= grids;
+              row_index++;
+
+              grids = 23;
+              if(col_index < grids){break;}
+              col_index -= grids;
+              row_index++;
+            }while(row_index < 8);
+
+            if(row_index < 8){
+              res.longitude_deg = -180 + band * 40 + row_index * 5;
+              switch(col_index){
+                case -3: res.latitude_deg = -85; break;
+                case -2: res.latitude_deg = -75; break;
+                case -1: res.latitude_deg = -65; break;
+                case 23: res.latitude_deg =  65; break;
+                case 24: res.latitude_deg =  75; break;
+                case 25: res.latitude_deg =  85; break;
+                default:
+                  res.latitude_deg = -55 + col_index * 5;
+                  break;
+              }
             }
-            break;
-          }
-          col_index -= grids;
-          row_index++;
-
-          grids = 23;
-          if(col_index < grids){break;}
-          col_index -= grids;
-          row_index++;
-        }while(row_index < 8);
-
-        if(row_index < 8){
-          res.longitude_deg = -180 + band * 40 + row_index * 5;
-          switch(col_index){
-            case -3: res.latitude_deg = -85; break;
-            case -2: res.latitude_deg = -75; break;
-            case -1: res.latitude_deg = -65; break;
-            case 23: res.latitude_deg =  65; break;
-            case 24: res.latitude_deg =  75; break;
-            case 25: res.latitude_deg =  85; break;
-            default:
-              res.latitude_deg = -55 + col_index * 5;
-              break;
-          }
-        }
-      }else if(band <= 10){
-        if(mask_pos < 72){
-          res.latitude_deg = 60 * ((band == 10) ? -1 : 1);
-          res.longitude_deg = mask_pos * 5 - 180;
-        }else if(mask_pos < 180){
-          std::div_t a(std::div(mask_pos - 72, 36));
-          res.latitude_deg = (65 + a.quot * 5) * ((band == 10) ? -1 : 1);
-          res.longitude_deg = a.rem * 10 - 180;
-        }else if(mask_pos < 192){
-          res.latitude_deg = 85;
-          res.longitude_deg = (mask_pos - 180) * 30 - 180;
-          if(band == 10){
-            res.latitude_deg *= -1;
-            res.longitude_deg += 10;
-            if(res.longitude_deg > 180){
-              res.longitude_deg -= 360;
+          }else if(band <= 10){
+            if(mask_pos < 72){
+              res.latitude_deg = 60 * ((band == 10) ? -1 : 1);
+              res.longitude_deg = mask_pos * 5 - 180;
+            }else if(mask_pos < 180){
+              std::div_t a(std::div(mask_pos - 72, 36));
+              res.latitude_deg = (65 + a.quot * 5) * ((band == 10) ? -1 : 1);
+              res.longitude_deg = a.rem * 10 - 180;
+            }else if(mask_pos < 192){
+              res.latitude_deg = 85;
+              res.longitude_deg = (mask_pos - 180) * 30 - 180;
+              if(band == 10){
+                res.latitude_deg *= -1;
+                res.longitude_deg += 10;
+                if(res.longitude_deg > 180){
+                  res.longitude_deg -= 360;
+                }
+              }
             }
           }
+          return res;
         }
-      }
-      return res;
-    }
 
-    struct igp_pos_index_t {
-      int_t lat_index; ///< Latitude index; N85(0), N75(1), N70(2), N65(3), N60(4), ..., 0(16) ..., S60(28), S65(29), S70(30), S75(31), S85(32)
-      int_t lng_index; ///< Longitude index; W180(0), W175(1), W170(2), ..., 0(36), ..., E170(70), E175(71)
-      enum {
-        LAT_INDEX_N85 = 0,  // 30 deg grid
-        LAT_INDEX_N75 = 1,  // 10 deg grid
-        LAT_INDEX_N65 = 3,  // 10 deg grid
-        LAT_INDEX_S65 = 29, // 10 deg grid
-        LAT_INDEX_S75 = 31, // 10 deg grid
-        LAT_INDEX_S85 = 32, // 30 deg grid
-        LAT_INDEX_MAX = LAT_INDEX_S85,
-      };
-      enum {
-        LNG_INDEX_MAX = 71,
-      };
-      ///< Convert latitude in degrees to index
-      static int_t lat2idx(const int_t &lat_deg){
-        return (lat_deg == 85)
-            ? LAT_INDEX_N85
-            : ((lat_deg == -85)
-                  ? LAT_INDEX_S85
-                  : (80 - lat_deg) / 5);
-      }
-      ///< Convert latitude index to degrees
-      static int_t idx2lat(const int_t &lat_idx){
-        return (lat_idx % 32 == 0)
-            ? ((lat_idx == 0) ? 85 : -85)
-            : ((16 - lat_idx) * 5);
-      }
-      ///< Convert longitude in degrees to index
-      static int_t lng2idx(const int_t &lng_deg){
-        return (lng_deg + 180) / 5;
-      }
-      ///< Convert longitude index to degrees
-      static int_t idx2lng(const int_t &lng_idx){
-        return (lng_idx - 36) * 5;
-      }
-      operator igp_pos_t() const {
-        igp_pos_t res = {idx2lat(lat_index), idx2lng(lng_index)};
-        return res;
-      }
-    };
-
-    template <class T>
-    struct igp_corresponding_t {
-      igp_pos_t igp;
-      struct {
-        T latitude_deg, longitude_deg;
-      } delta;
-    };
-    /**
-     * Find a corresponding IGP, and compute distance (delta) from the IGP.
-     * The "corresponding" one means "nearest west, and north if in south semi-sphere,
-     * south if otherwise (in north semi-sphere, or on equator), one".
-     * @param latitude_deg latitude in degrees; [-90, 90]
-     * @param longitude_deg longitude in degrees
-     * @return corresponding IGP position and delta
-     */
-    template <class T>
-    static igp_corresponding_t<T> igp_corresponding(const T &latitude_deg, const T &longitude_deg){
-
-      T lng(longitude_deg); // => [-180, 180)
-      int_t lng_reg; // => [0, 360), mapping W180(=> 0), ... E180(=> 360)
-      {
-        if(longitude_deg < -180){
-          lng += (((int_t)(-longitude_deg + 180) / 360) * 360); // => [-*, -180) => (-180, 180]
-          if(lng == 180){
-            lng -= 360; // 180 => -180
+        struct position_index_t {
+          int_t lat_index; ///< Latitude index; N85(0), N75(1), N70(2), N65(3), N60(4), ..., 0(16) ..., S60(28), S65(29), S70(30), S75(31), S85(32)
+          int_t lng_index; ///< Longitude index; W180(0), W175(1), W170(2), ..., 0(36), ..., E170(70), E175(71)
+          enum {
+            LAT_INDEX_N85 = 0,  // 30 deg grid
+            LAT_INDEX_N75 = 1,  // 10 deg grid
+            LAT_INDEX_N65 = 3,  // 10 deg grid
+            LAT_INDEX_S65 = 29, // 10 deg grid
+            LAT_INDEX_S75 = 31, // 10 deg grid
+            LAT_INDEX_S85 = 32, // 30 deg grid
+            LAT_INDEX_MAX = LAT_INDEX_S85,
+          };
+          enum {
+            LNG_INDEX_MAX = 71,
+          };
+          ///< Convert latitude in degrees to index
+          static int_t lat2idx(const int_t &lat_deg){
+            return (lat_deg == 85)
+                ? LAT_INDEX_N85
+                : ((lat_deg == -85)
+                      ? LAT_INDEX_S85
+                      : (80 - lat_deg) / 5);
           }
-        }else{
-          lng -= (((int_t)(longitude_deg + 180) / 360) * 360); // => [-180, +*] => [-180, 180)
-        }
-        lng_reg = 180 + lng; // => [0, 360)
-      }
+          ///< Convert latitude index to degrees
+          static int_t idx2lat(const int_t &lat_idx){
+            return (lat_idx % 32 == 0)
+                ? ((lat_idx == 0) ? 85 : -85)
+                : ((16 - lat_idx) * 5);
+          }
+          ///< Convert longitude in degrees to index
+          static int_t lng2idx(const int_t &lng_deg){
+            return (lng_deg + 180) / 5;
+          }
+          ///< Convert longitude index to degrees
+          static int_t idx2lng(const int_t &lng_idx){
+            return (lng_idx - 36) * 5;
+          }
+          operator position_t() const {
+            position_t res = {idx2lat(lat_index), idx2lng(lng_index)};
+            return res;
+          }
+        };
 
-      igp_corresponding_t<T> res;
-      if(latitude_deg >= 85){
-        res.igp.latitude_deg = 85;
-        if(latitude_deg > 85){
-          lng_reg = (lng_reg / 90) * 90; // W180, W90, ... @see A 4.4.10.2 d)
-        }else{
-          lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
-        }
-      }else if(latitude_deg <= -85){
-        res.igp.latitude_deg = -85;
-        if(latitude_deg < -85){
-          lng_reg = (lng_reg < 40) ? (130 + 180) : (((lng_reg - 40) / 90) * 90 + 40); // W140, W50, ...  @see A 4.4.10.2 e)
-        }else{
-          lng_reg = (lng_reg < 10) ? (160 + 180) : (((lng_reg - 10) / 30) * 30 + 10); // W170, W140, ...
-        }
-      }else{
-        if(latitude_deg >= 75){
-          res.igp.latitude_deg = 75;
-        }else if(latitude_deg <= -75){
-          res.igp.latitude_deg = -75;
-        }else if(latitude_deg >= 0){
-          res.igp.latitude_deg = ((int_t)latitude_deg / 5) * 5;
-        }else{
-          res.igp.latitude_deg = -((int_t)(-latitude_deg) / 5) * 5;
-        }
+        struct corresponding_t {
+          position_t igp;
+          struct {
+            float_t latitude_deg, longitude_deg;
+          } delta;
+        };
+        /**
+         * Find a corresponding IGP, and compute distance (delta) from the IGP.
+         * The "corresponding" one means "nearest west, and north if in south semi-sphere,
+         * south if otherwise (in north semi-sphere, or on equator), one".
+         * @param latitude_deg latitude in degrees; [-90, 90]
+         * @param longitude_deg longitude in degrees
+         * @return corresponding IGP position and delta
+         */
+        template <class T>
+        static corresponding_t find_corresponding(const T &latitude_deg, const T &longitude_deg){
 
-        if((res.igp.latitude_deg >= 65) || (res.igp.latitude_deg <= -65)){
-          lng_reg = (lng_reg / 10) * 10; // W180, W170, ...
-        }else{
-          lng_reg = (lng_reg / 5) * 5; // W180, W175, ...
+          T lng(longitude_deg); // => [-180, 180)
+          int_t lng_reg; // => [0, 360), mapping W180(=> 0), ... E180(=> 360)
+          {
+            if(longitude_deg < -180){
+              lng += (((int_t)(-longitude_deg + 180) / 360) * 360); // => [-*, -180) => (-180, 180]
+              if(lng == 180){
+                lng -= 360; // 180 => -180
+              }
+            }else{
+              lng -= (((int_t)(longitude_deg + 180) / 360) * 360); // => [-180, +*] => [-180, 180)
+            }
+            lng_reg = 180 + lng; // => [0, 360)
+          }
+
+          corresponding_t res;
+          if(latitude_deg >= 85){
+            res.igp.latitude_deg = 85;
+            if(latitude_deg > 85){
+              lng_reg = (lng_reg / 90) * 90; // W180, W90, ... @see A 4.4.10.2 d)
+            }else{
+              lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
+            }
+          }else if(latitude_deg <= -85){
+            res.igp.latitude_deg = -85;
+            if(latitude_deg < -85){
+              lng_reg = (lng_reg < 40) ? (130 + 180) : (((lng_reg - 40) / 90) * 90 + 40); // W140, W50, ...  @see A 4.4.10.2 e)
+            }else{
+              lng_reg = (lng_reg < 10) ? (160 + 180) : (((lng_reg - 10) / 30) * 30 + 10); // W170, W140, ...
+            }
+          }else{
+            if(latitude_deg >= 75){
+              res.igp.latitude_deg = 75;
+            }else if(latitude_deg <= -75){
+              res.igp.latitude_deg = -75;
+            }else if(latitude_deg >= 0){
+              res.igp.latitude_deg = ((int_t)latitude_deg / 5) * 5;
+            }else{
+              res.igp.latitude_deg = -((int_t)(-latitude_deg) / 5) * 5;
+            }
+
+            if((res.igp.latitude_deg >= 65) || (res.igp.latitude_deg <= -65)){
+              lng_reg = (lng_reg / 10) * 10; // W180, W170, ...
+            }else{
+              lng_reg = (lng_reg / 5) * 5; // W180, W175, ...
+            }
+          }
+          res.igp.longitude_deg = lng_reg - 180; // [0, 360) => [-180, 180)
+          res.delta.latitude_deg = latitude_deg - res.igp.latitude_deg;
+          res.delta.longitude_deg = lng - res.igp.longitude_deg;
+          if(res.delta.longitude_deg < 0){res.delta.longitude_deg += 360;} // always east (delta.lng >= 0)
+          return res;
         }
-      }
-      res.igp.longitude_deg = lng_reg - 180; // [0, 360) => [-180, 180)
-      res.delta.latitude_deg = latitude_deg - res.igp.latitude_deg;
-      res.delta.longitude_deg = lng - res.igp.longitude_deg;
-      if(res.delta.longitude_deg < 0){res.delta.longitude_deg += 360;} // always east (delta.lng >= 0)
-      return res;
-    }
+    };
 
     class Satellite {
       public:
@@ -553,10 +556,10 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
 }; ///< @see Table A-1
 
 template <class FloatT>
-SBAS_SpaceNode<FloatT>::igp_pos_t::operator typename SBAS_SpaceNode<FloatT>::igp_pos_index_t() const {
-  SBAS_SpaceNode<FloatT>::igp_pos_index_t res = {
-      igp_pos_index_t::lat2idx(latitude_deg),
-      igp_pos_index_t::lng2idx(longitude_deg)};
+SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_t::operator typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_index_t() const {
+  SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_index_t res = {
+      position_index_t::lat2idx(latitude_deg),
+      position_index_t::lng2idx(longitude_deg)};
   return res;
 }
 
