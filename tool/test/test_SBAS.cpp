@@ -15,7 +15,7 @@
 using namespace std;
 
 typedef SBAS_SpaceNode<double> space_node_t;
-typedef typename space_node_t::IonosphericGridPoints igp_t;
+typedef space_node_t::IonosphericGridPoints igp_t;
 
 BOOST_AUTO_TEST_SUITE(SBAS)
 
@@ -203,8 +203,30 @@ BOOST_AUTO_TEST_CASE(igp_pos){
   }
 }
 
-BOOST_AUTO_TEST_CASE(igp_corresponding){
-  typedef igp_t::corresponding_t res_t;
+void check_pivot_of_grid_point(const igp_t::pivot_t &pivot, const unsigned &band, const unsigned &mask){
+
+  BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
+      << pivot.igp.latitude_deg << ", " << pivot.igp.longitude_deg);
+
+  int delta_lat(0);
+  if(igp_lat_lng[band][mask][0] == 85){
+    delta_lat = -10;
+  }else if(igp_lat_lng[band][mask][0] == -85){
+    delta_lat = 10;
+  }else if(igp_lat_lng[band][mask][0] > 0){
+    delta_lat = -5;
+  }else if(igp_lat_lng[band][mask][0] < 0){
+    delta_lat = 5;
+  }
+
+  BOOST_REQUIRE_EQUAL(pivot.igp.latitude_deg, igp_lat_lng[band][mask][0] + delta_lat);
+  BOOST_REQUIRE_EQUAL(pivot.igp.longitude_deg, igp_lat_lng[band][mask][1]);
+  BOOST_REQUIRE_EQUAL(pivot.delta.latitude_deg, -delta_lat);
+  BOOST_REQUIRE_EQUAL(pivot.delta.longitude_deg, 0);
+}
+
+BOOST_AUTO_TEST_CASE(igp_pivot){
+  typedef igp_t::pivot_t res_t;
 
   for(unsigned band(0); band < 11; ++band){
     for(unsigned mask(0); mask < 201; ++mask){
@@ -215,20 +237,16 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
       }
 
       { // on grid
-        res_t res(igp_t::find_corresponding(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]));
-        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
-            << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
-        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
-        BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
-        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, 0);
-        BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, 0);
+        check_pivot_of_grid_point(
+            igp_t::pivot(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]),
+            band, mask);
       }
       { // near grid
         double delta_lat(igp_lat_lng[band][mask][0] >= 0 ? 0.5 : -0.5), delta_lng(0.5);
         double
             lat(delta_lat + igp_lat_lng[band][mask][0]),
             lng(delta_lng + igp_lat_lng[band][mask][1]);
-        res_t res(igp_t::find_corresponding(lat, lng));
+        res_t res(igp_t::pivot(lat, lng));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
             << res.igp.latitude_deg << "(" << lat << "), "
             << res.igp.longitude_deg << "(" << lng << ")");
@@ -249,6 +267,12 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
           if(delta_lng2 < -180){delta_lng2 += 360;}
           BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, lng_grid);
           BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, delta_lng2);
+        }else if((lat > 60) || (lat < -60)){
+          int lng_grid(10 * floor(lng / 10));
+          double delta_lng2(delta_lng + igp_lat_lng[band][mask][1] - lng_grid);
+          if(delta_lng2 < -180){delta_lng2 += 360;}
+          BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, lng_grid);
+          BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, delta_lng2);
         }else{
           BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
           BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, delta_lng);
@@ -258,29 +282,21 @@ BOOST_AUTO_TEST_CASE(igp_corresponding){
       // on grid, roll over (int)
       static const int roll_over_i[] = {-360, 360};
       for(int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
-        res_t res(igp_t::find_corresponding(
-            igp_lat_lng[band][mask][0],
-            roll_over_i[i] + igp_lat_lng[band][mask][1]));
-        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
-            << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
-        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
-        BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
-        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, 0);
-        BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, 0);
+        check_pivot_of_grid_point(
+            igp_t::pivot(
+              igp_lat_lng[band][mask][0],
+              roll_over_i[i] + igp_lat_lng[band][mask][1]),
+            band, mask);
       }
 
       // on grid, roll over (double)
       static const double roll_over_f[] = {-360.0, 360.0};
       for(int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
-        res_t res(igp_t::find_corresponding(
-            (double)igp_lat_lng[band][mask][0],
-            roll_over_f[i] + igp_lat_lng[band][mask][1]));
-        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
-            << res.igp.latitude_deg << ", " << res.igp.longitude_deg);
-        BOOST_REQUIRE_EQUAL(res.igp.latitude_deg, igp_lat_lng[band][mask][0]);
-        BOOST_REQUIRE_EQUAL(res.igp.longitude_deg, igp_lat_lng[band][mask][1]);
-        BOOST_REQUIRE_EQUAL(res.delta.latitude_deg, 0);
-        BOOST_REQUIRE_EQUAL(res.delta.longitude_deg, 0);
+        check_pivot_of_grid_point(
+            igp_t::pivot(
+              (double)igp_lat_lng[band][mask][0],
+              roll_over_f[i] + igp_lat_lng[band][mask][1]),
+            band, mask);
       }
     }
   }

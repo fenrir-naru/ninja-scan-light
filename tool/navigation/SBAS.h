@@ -240,22 +240,27 @@ typedef typename gps_space_node_t::type type
           }
         };
 
-        struct corresponding_t {
+        struct pivot_t {
           position_t igp;
           struct {
             float_t latitude_deg, longitude_deg;
           } delta;
         };
         /**
-         * Find a corresponding IGP, and compute distance (delta) from the IGP.
-         * The "corresponding" one means "nearest west, and north if in south semi-sphere,
+         * Find a pivot IGP, and compute distance (delta) from the IGP.
+         * The "pivot" one means "nearest west, and north if in south semi-sphere,
          * south if otherwise (in north semi-sphere, or on equator), one".
+         * If the specified input latitude is not identical to zero, and exactly same as a latitude where IGPs exist,
+         * then the return IGP is shifted to the nearest west (north semisphere) or north (east semisphere) point.
+         * For example:
+         * 1) (lat, lng) = (10, 0) => igp = {5, 0}, delta = {5, 0}
+         * 2) (lat, lng) = (85, 15) => igp = {75, 10}, delta = {10, 5}
          * @param latitude_deg latitude in degrees; [-90, 90]
          * @param longitude_deg longitude in degrees
-         * @return corresponding IGP position and delta
+         * @return pivot IGP position and delta
          */
         template <class T>
-        static corresponding_t find_corresponding(const T &latitude_deg, const T &longitude_deg){
+        static pivot_t pivot(const T &latitude_deg, const T &longitude_deg){
 
           T lng(longitude_deg); // => [-180, 180)
           int_t lng_reg; // => [0, 360), mapping W180(=> 0), ... E180(=> 360)
@@ -271,33 +276,39 @@ typedef typename gps_space_node_t::type type
             lng_reg = 180 + lng; // => [0, 360)
           }
 
-          corresponding_t res;
-          if(latitude_deg >= 85){
+          pivot_t res;
+          if(latitude_deg > 85){
             res.igp.latitude_deg = 85;
-            if(latitude_deg > 85){
-              lng_reg = (lng_reg / 90) * 90; // W180, W90, ... @see A 4.4.10.2 d)
-            }else{
+            lng_reg = (lng_reg / 90) * 90; // W180, W90, ... @see A 4.4.10.2 d), and P-2
+            /*if(latitude_deg == 85){
+              // intentionally commented out; when exactly same as lat == 85,
+              // a lat-10 deg grid will be used, because of P-2.
               lng_reg = (lng_reg / 30) * 30; // W180, W150, ...
-            }
-          }else if(latitude_deg <= -85){
+            }*/
+          }else if(latitude_deg < -85){
             res.igp.latitude_deg = -85;
-            if(latitude_deg < -85){
-              lng_reg = (lng_reg < 40) ? (130 + 180) : (((lng_reg - 40) / 90) * 90 + 40); // W140, W50, ...  @see A 4.4.10.2 e)
-            }else{
+            lng_reg = (lng_reg < 40) ? (130 + 180) : (((lng_reg - 40) / 90) * 90 + 40); // W140, W50, ...  @see A 4.4.10.2 e), and P-2
+            /*if(latitude_deg == -85){
+              // intentionally commented out
               lng_reg = (lng_reg < 10) ? (160 + 180) : (((lng_reg - 10) / 30) * 30 + 10); // W170, W140, ...
-            }
+            }*/
           }else{
-            if(latitude_deg >= 75){
+            if(latitude_deg > 75){
               res.igp.latitude_deg = 75;
-            }else if(latitude_deg <= -75){
+            }else if(latitude_deg < -75){
               res.igp.latitude_deg = -75;
-            }else if(latitude_deg >= 0){
-              res.igp.latitude_deg = ((int_t)latitude_deg / 5) * 5;
             }else{
-              res.igp.latitude_deg = -((int_t)(-latitude_deg) / 5) * 5;
+              if(latitude_deg >= 0){
+                res.igp.latitude_deg = ((int_t)latitude_deg / 5) * 5;
+              }else{
+                res.igp.latitude_deg = -((int_t)(-latitude_deg) / 5) * 5;
+              }
+              if((res.igp.latitude_deg == latitude_deg) && (res.igp.latitude_deg != 0)){ // on grid point latitude, see P-2
+                res.igp.latitude_deg += (res.igp.latitude_deg > 0 ? -5 : 5);
+              }
             }
 
-            if((res.igp.latitude_deg >= 65) || (res.igp.latitude_deg <= -65)){
+            if((res.igp.latitude_deg >= 60) || (res.igp.latitude_deg <= -60)){
               lng_reg = (lng_reg / 10) * 10; // W180, W170, ...
             }else{
               lng_reg = (lng_reg / 5) * 5; // W180, W175, ...
