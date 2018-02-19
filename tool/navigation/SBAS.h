@@ -526,9 +526,16 @@ typedef typename gps_space_node_t::type type
                   pivot.delta.latitude_deg + (north_hemisphere ? 5 : -5), pivot.delta.longitude_deg + 5},
             };
             for(int i(0); i < 4; ++i){ // a-3) four point interpolation
-              // TODO
-              // When pivot lat = 55, -55, one 10x10 trapezoids are unable to be formed,
-              // because of lack of grid points at lat = 65, -65.
+
+              if((lat_deg_abs == 55)
+                  && (rect_10_10[i].rect.igp[1].latitude_deg * (north_hemisphere ? 1 : -1) == 65)
+                  && ((rect_10_10[i].rect.igp[1].longitude_deg + 180) % 10 != 0)){
+                // When pivot lat = 55, -55, one 10x10 trapezoids are unable to be formed,
+                // because of lack of grid points at lat = 65, -65.
+                rect_10_10[i].availability = 0;
+                continue;
+              }
+
               if((rect_10_10[i].availability = check_avialability(rect_10_10[i].rect)) == 4){
                 rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
                 return;
@@ -563,9 +570,15 @@ typedef typename gps_space_node_t::type type
                   pivot.delta.latitude_deg + (north_hemisphere ? 5 : -5), pivot.delta.longitude_deg},
             };
             for(int i(0); i < 2; ++i){ // b-3) four point interpolation
-              // TODO
-              // When pivot lat = 70, -70, one 10x10 trapezoids are unable to be formed,
-              // because of no grid point at lat = 80, -80.
+
+              if((lat_deg_abs == 70)
+                  && (rect_10_10[i].rect.igp[1].latitude_deg * (north_hemisphere ? 1 : -1) == 80)){
+                // When pivot lat = 70, -70, one 10x10 trapezoids are unable to be formed,
+                // because of no grid point at lat = 80, -80.
+                rect_10_10[i].availability = 0;
+                continue;
+              }
+
               if((rect_10_10[i].availability = check_avialability(rect_10_10[i].rect)) == 4){
                 rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
                 return;
