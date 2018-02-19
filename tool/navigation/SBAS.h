@@ -129,6 +129,15 @@ typedef typename gps_space_node_t::type type
           int_t latitude_deg;  ///< latitude in degrees, north is positive. [-85, 85].
           int_t longitude_deg; ///< longitude in degrees, east is positive. [-180, 175]
           operator position_index_t() const;
+          /**
+           * Compute longitude difference from another IGP.
+           * @param from
+           * @return difference (always positive) [0, 360)
+           */
+          int_t delta_lng(const position_t &from) const {
+            int_t res(longitude_deg - from.longitude_deg);
+            return (res < 0) ? (res + 360) : res;
+          }
         };
         /**
          * Resolve ionospheric grid point position
@@ -319,6 +328,181 @@ typedef typename gps_space_node_t::type type
           res.delta.longitude_deg = lng - res.igp.longitude_deg;
           if(res.delta.longitude_deg < 0){res.delta.longitude_deg += 360;} // always east (delta.lng >= 0)
           return res;
+        }
+
+        struct rectangle_t {
+          /**
+           * igp(2)=[1] -- igp(1)=[0]           igp(3)=[2] -- igp(4)=[3]
+           *      |             |     in north,      |         |         in south
+           * igp(3)=[2] -- igp(4)=[3]           igp(2)=[1] -- igp(1)=[0]
+           * This is based on Fig.A-19.
+           * result of get_pivot() will be assigned to igp(3)=[2].
+           *
+           * assumption
+           * igp[0].lat = igp[1].lat, igp[2].lat = igp[3].lat
+           * igp[1].lng < igp[0].lng, igp[2].lng < igp[3].lng, (igp[1].lng is not necessarily indentical to igp[2].lng)
+           */
+          position_t igp[4];
+          float_t weight[4];
+
+          /**
+           * @param delta_phi
+           * @param delta_lambda
+           * @see Fig.A-19
+           */
+          void compute_weight(const float_t &delta_phi, const float_t &delta_lambda){
+            // (A-25)-(A-32)
+            float_t
+                w_lat10(delta_phi / (igp[1].latitude_deg - igp[2].latitude_deg)), // a.k.a. y_pp
+                w_lat23(1. - w_lat10),
+                w_lng0(delta_lambda / igp[0].delta_lng(igp[1])),
+                w_lng3((delta_lambda + igp[2].delta_lng(igp[1])) / igp[3].delta_lng(igp[2])); // a.k.a. x_pp
+            // res = (w_lng0 * [0] + (1. - w_lng0) * [1]) * w_lat10 + ((1. - w_lng3) * [2] + w_lng3 * [3]) * w_lat23;
+            weight[0] = w_lng0        * w_lat10;
+            weight[1] = (1. - w_lng0) * w_lat10;
+            weight[2] = (1. - w_lng3) * w_lat23;
+            weight[3] = w_lng3        * w_lat23;
+          }
+          void compute_weight_pole(const float_t &delta_phi, const float_t &delta_lambda){
+            float_t
+                y_pp(delta_phi * ((delta_phi < 0) ? -1 : 1) / 10), // (A-33)
+                x_pp((1. - y_pp * 2) * (delta_lambda / 90) + y_pp), // (A-34)
+                x_pp_inv(1. - x_pp),
+                y_pp_inv(1. - y_pp);
+            weight[0] = x_pp     * y_pp;
+            weight[1] = x_pp_inv * y_pp;
+            weight[2] = x_pp_inv * y_pp_inv;
+            weight[3] = x_pp     * y_pp_inv;
+          }
+
+          static rectangle_t generate(const position_t &pivot,
+              const int_t &delta_lat = 5, const int_t &delta_lng = 5){
+            int_t lng(pivot.longitude_deg + delta_lng);
+            if(lng >= 180){lng -= 360;}
+            rectangle_t res = {{
+              {pivot.latitude_deg + delta_lat, lng},
+              {pivot.latitude_deg + delta_lat, pivot.longitude_deg},
+              pivot,
+              {pivot.latitude_deg,             lng},
+            }};
+            return res;
+          }
+          static rectangle_t generate_pole(const position_t &pivot){
+            int_t
+                lng0(pivot.longitude_deg - 180),
+                lng1(pivot.longitude_deg - 90),
+                lng3(pivot.longitude_deg + 90);
+            rectangle_t res = {{
+              {pivot.latitude_deg, (lng0 < -180) ? (lng0 + 360) : lng0},
+              {pivot.latitude_deg, (lng1 < -180) ? (lng1 + 360) : lng1},
+              pivot,
+              {pivot.latitude_deg, (lng3 >= 180) ? (lng3 - 360) : lng3},
+            }};
+            return res;
+          }
+          rectangle_t expand(const int_t &delta_lat, const int_t &delta_lng) const {
+            rectangle_t res(*this);
+            if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check semi-sphere
+              res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat); // positive and north
+            }else{
+              res.igp[2].latitude_deg = (res.igp[3].latitude_deg += delta_lat);
+            }
+            if(delta_lng > 0){
+              res.igp[0].longitude_deg += delta_lng;
+              if(res.igp[0].longitude_deg >= 180){res.igp[0].longitude_deg -= 360;}
+              res.igp[3].longitude_deg = res.igp[0].longitude_deg;
+            }else{
+              res.igp[1].longitude_deg += delta_lng;
+              if(res.igp[1].longitude_deg < -180){res.igp[1].longitude_deg += 360;}
+              res.igp[2].longitude_deg = res.igp[1].longitude_deg;
+            }
+            return res;
+          }
+        };
+
+        void interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const { // TODO return type
+          pivot_t pivot(get_pivot(latitude_deg, longitude_deg));
+
+          bool north_semisphere(pivot.igp.latitude_deg >= 0);
+          int_t lat_deg_abs(pivot.igp.latitude_deg * (north_semisphere ? 1 : -1));
+
+          // TODO check igp availability
+          if(lat_deg_abs <= 55){
+            rectangle_t rect_5_5(rectangle_t::generate(pivot, north_semisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
+
+            rectangle_t rect_10_10[] = { // A4.4.10.2 a-3), 5x5 => 10x10
+              rect_5_5.expand( 5,  5),
+              rect_5_5.expand( 5, -5),
+              rect_5_5.expand(-5,  5),
+              rect_5_5.expand(-5, -5),
+            };
+            for(int i(0); i < 4; ++i){
+              // TODO
+              // When pivot lat = 55, -55, one 10x10 rectangles are unable to be formed,
+              // because of lack of grid points at lat = 65, -65.
+            }
+          }else if(lat_deg_abs <= 70){
+            rectangle_t rect_5_10(rectangle_t::generate(pivot, north_semisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
+
+            rectangle_t rect_10_10[] = { // A4.4.10.2 b-3) , 5x10 => 10x10
+              rect_5_10.expand( 5, 0),
+              rect_5_10.expand(-5, 0),
+            };
+            for(int i(0); i < 2; ++i){
+              // TODO
+              // When pivot lat = 70, -70, one 10x10 rectangles are unable to be formed,
+              // because of no grid point at lat = 80, -80.
+            }
+          }else if(lat_deg_abs <= 75){
+            rectangle_t rect_10_10(rectangle_t::generate(pivot, north_semisphere ? 10 : -10, 10));
+
+            // maximum 4 trials
+            // 1)   10x30, both 85 points are band 9-10 (30 deg separation)
+            // 2,3) 10X30, one 85 point is in band 0-8, the other is in band 9-10
+            // 4)   10x90, both 85 points are band 0-8 (90 deg separation)
+
+            int_t lng_85_west_low_band, lng_85_west_high_band;
+            int_t lng_85_east_low_band, lng_85_east_high_band;
+            {
+              int_t lng_reg(pivot.igp.longitude_deg + 180); // [-180, 180) => [0, 360)
+              if(north_semisphere){
+                lng_85_west_low_band = (lng_reg / 30 * 30) - 180; // W180, W150, ...
+                lng_85_west_high_band = (lng_reg / 90 * 90) - 180; // W180, W90, ...
+              }else{
+                lng_85_west_low_band = (lng_reg < 10) ? 160 : (((lng_reg - 10) / 30) * 30 - 170); // W170, W140, ..., E160
+                lng_85_west_high_band = (lng_reg < 40) ? 130 : (((lng_reg - 40) / 90) * 90 - 140); // W140, W50, ..., E130
+              }
+              lng_85_east_low_band = lng_85_west_low_band + 30;
+              lng_85_east_high_band = lng_85_west_high_band + 90;
+              if(lng_85_east_low_band >= 180){lng_85_east_low_band -= 360;}
+              if(lng_85_east_high_band >= 180){lng_85_east_high_band -= 360;}
+            }
+
+            { // 1st trial
+              rect_10_10.igp[1].longitude_deg = lng_85_west_low_band;
+              rect_10_10.igp[0].longitude_deg = lng_85_east_low_band;
+            }
+
+            if((lng_85_west_low_band != lng_85_west_high_band)
+                && (lng_85_east_low_band != lng_85_east_high_band)){ // just middle case: |<--(90)--|<--(30)-->|---->|
+              { // 2nd trial
+                rect_10_10.igp[1].longitude_deg = lng_85_west_high_band;
+                rect_10_10.igp[0].longitude_deg = lng_85_east_low_band;
+              }
+
+              { // 3rd trial
+                rect_10_10.igp[1].longitude_deg = lng_85_west_low_band;
+                rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
+              }
+            }
+
+            { // last (4th) trial
+              rect_10_10.igp[1].longitude_deg = lng_85_west_high_band;
+              rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
+            }
+          }else{ // pole
+            rectangle_t rect(rectangle_t::generate_pole(pivot));
+          }
         }
     };
 
