@@ -343,6 +343,7 @@ typedef typename gps_space_node_t::type type
            * igp[1].lng < igp[0].lng, igp[2].lng < igp[3].lng, (igp[1].lng is not necessarily indentical to igp[2].lng)
            */
           position_t igp[4];
+          bool checked[4]; ///< If igp[i] has been check to be available, true; otherwise, false.
           float_t weight[4];
 
           /**
@@ -378,11 +379,18 @@ typedef typename gps_space_node_t::type type
            * @return If extrapolation occurs, false is returned; otherwise true.
            */
           bool compute_weight_three(const float_t &delta_phi, const float_t &delta_lambda,
-              const int_t &skip = 0){
+              const int_t &skip){
             float_t
                 y_pp(delta_phi / (igp[1].latitude_deg - igp[2].latitude_deg)),
                 x_pp(delta_lambda / igp[3].delta_lng(igp[2]));
             switch(skip){ // assignment rule: sum is 1, weight of non-diagonal point is remain?
+              case 0:
+                weight[0] = 0;
+                weight[1] = y_pp;
+                weight[2] = 1. - x_pp - y_pp;
+                weight[3] = x_pp;
+                if(weight[2] < 0){return false;}
+                break;
               case 1:
                 weight[0] = y_pp;
                 weight[1] = 0;
@@ -398,21 +406,26 @@ typedef typename gps_space_node_t::type type
                 if(weight[0] < 0){return false;}
                 break;
               case 3:
+              default:
                 weight[0] = x_pp;
                 weight[1] = y_pp - x_pp;
                 weight[2] = 1. - y_pp;
                 weight[3] = 0;
                 if(weight[1] < 0){return false;}
                 break;
-              case 0:
-              default:
-                weight[0] = 0;
-                weight[1] = y_pp;
-                weight[2] = 1. - x_pp - y_pp;
-                weight[3] = x_pp;
-                if(weight[2] < 0){return false;}
             }
             return true;
+          }
+          /**
+           * @return If three point interpolation is successfully prepared, true; otherwise false.
+           */
+          bool compute_weight_three(const float_t &delta_phi, const float_t &delta_lambda){
+            for(int i(0); i <= 3; i++){
+              if(!checked[i]){ // automatically find unavailable point
+                return compute_weight_three(delta_phi, delta_lambda, i);
+              }
+            }
+            return false;
           }
 
           static trapezoid_t generate_rectangle(const position_t &pivot,
@@ -424,6 +437,8 @@ typedef typename gps_space_node_t::type type
               {pivot.latitude_deg + delta_lat, pivot.longitude_deg},
               pivot,
               {pivot.latitude_deg,             lng},
+            }, {
+              false, false, false, false,
             }};
             return res;
           }
@@ -437,28 +452,48 @@ typedef typename gps_space_node_t::type type
               {pivot.latitude_deg, (lng1 < -180) ? (lng1 + 360) : lng1},
               pivot,
               {pivot.latitude_deg, (lng3 >= 180) ? (lng3 - 360) : lng3},
+            }, {
+              false, false, false, false,
             }};
             return res;
           }
           trapezoid_t expand_rectangle(const int_t &delta_lat, const int_t &delta_lng) const {
             trapezoid_t res(*this);
-            if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check semi-sphere
-              res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat); // positive and north
-            }else{
-              res.igp[2].latitude_deg = (res.igp[3].latitude_deg += delta_lat);
+            if(delta_lat != 0){
+              if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check semi-sphere
+                res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat); // positive and north
+                res.checked[1] = res.checked[0] = false;
+              }else{
+                res.igp[2].latitude_deg = (res.igp[3].latitude_deg += delta_lat);
+                res.checked[2] = res.checked[3] = false;
+              }
             }
             if(delta_lng > 0){
               res.igp[0].longitude_deg += delta_lng;
               if(res.igp[0].longitude_deg >= 180){res.igp[0].longitude_deg -= 360;}
               res.igp[3].longitude_deg = res.igp[0].longitude_deg;
-            }else{
+              res.checked[3] = res.checked[0] = false;
+            }else if(delta_lng < 0){
               res.igp[1].longitude_deg += delta_lng;
               if(res.igp[1].longitude_deg < -180){res.igp[1].longitude_deg += 360;}
               res.igp[2].longitude_deg = res.igp[1].longitude_deg;
+              res.checked[2] = res.checked[1] = false;
             }
             return res;
           }
         };
+
+        /**
+         * @return available IGP(s)
+         */
+        int_t check_avialability(trapezoid_t &target) const {
+          int_t res(0);
+          for(int i(0); i < 4; ++i){
+            if(target.checked[i]){res++; continue;}
+            // TODO
+          }
+          return res;
+        }
 
         void interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const { // TODO return type
           pivot_t pivot(get_pivot(latitude_deg, longitude_deg));
@@ -466,37 +501,86 @@ typedef typename gps_space_node_t::type type
           bool north_semisphere(pivot.igp.latitude_deg >= 0);
           int_t lat_deg_abs(pivot.igp.latitude_deg * (north_semisphere ? 1 : -1));
 
-          // TODO check igp availability
           if(lat_deg_abs <= 55){
             trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
+            switch(check_avialability(rect_5_5)){
+              case 4: // a-1)
+                rect_5_5.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
+                return;
+              case 3: // a-2)
+                if(rect_5_5.compute_weight_three(pivot.delta.latitude_deg, pivot.delta.longitude_deg)){
+                  return;
+                }
+            }
 
-            trapezoid_t rect_10_10[] = { // A4.4.10.2 a-3), 5x5 => 10x10
-              rect_5_5.expand_rectangle( 5,  5),
-              rect_5_5.expand_rectangle( 5, -5),
-              rect_5_5.expand_rectangle(-5,  5),
-              rect_5_5.expand_rectangle(-5, -5),
+            struct {
+              trapezoid_t rect;
+              float_t delta_lat, delta_lng;
+              int_t availability;
+            } rect_10_10[] = { // A4.4.10.2 a-3), 5x5 => 10x10
+              {rect_5_5.expand_rectangle( 5,  5), pivot.delta.latitude_deg, pivot.delta.longitude_deg},
+              {rect_5_5.expand_rectangle( 5, -5), pivot.delta.latitude_deg, pivot.delta.longitude_deg + 5},
+              {rect_5_5.expand_rectangle(-5,  5),
+                  pivot.delta.latitude_deg + (north_semisphere ? 5 : -5), pivot.delta.longitude_deg},
+              {rect_5_5.expand_rectangle(-5, -5),
+                  pivot.delta.latitude_deg + (north_semisphere ? 5 : -5), pivot.delta.longitude_deg + 5},
             };
-            for(int i(0); i < 4; ++i){
+            for(int i(0); i < 4; ++i){ // a-3) four point interpolation
               // TODO
               // When pivot lat = 55, -55, one 10x10 trapezoids are unable to be formed,
               // because of lack of grid points at lat = 65, -65.
+              if((rect_10_10[i].availability = check_avialability(rect_10_10[i].rect)) == 4){
+                rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
+                return;
+              }
+            }
+            for(int i(0); i < 4; ++i){ // a-4) three point interpolation
+              if((rect_10_10[i].availability == 3)
+                  && rect_10_10[i].rect.compute_weight_three(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng)){
+                return;
+              }
             }
           }else if(lat_deg_abs <= 70){
             trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
+            switch(check_avialability(rect_5_10)){
+              case 4: // b-1)
+                rect_5_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
+                return;
+              case 3: // b-2)
+                if(rect_5_10.compute_weight_three(pivot.delta.latitude_deg, pivot.delta.longitude_deg)){
+                  return;
+                }
+            }
 
-            trapezoid_t rect_10_10[] = { // A4.4.10.2 b-3) , 5x10 => 10x10
-              rect_5_10.expand_rectangle( 5, 0),
-              rect_5_10.expand_rectangle(-5, 0),
+            struct {
+              trapezoid_t rect;
+              float_t delta_lat, delta_lng;
+              int_t availability;
+            } rect_10_10[] = { // A4.4.10.2 b-3) , 5x10 => 10x10
+              {rect_5_10.expand_rectangle( 5, 0),
+                  pivot.delta.latitude_deg, pivot.delta.longitude_deg},
+              {rect_5_10.expand_rectangle(-5, 0),
+                  pivot.delta.latitude_deg + (north_semisphere ? 5 : -5), pivot.delta.longitude_deg},
             };
-            for(int i(0); i < 2; ++i){
+            for(int i(0); i < 2; ++i){ // b-3) four point interpolation
               // TODO
               // When pivot lat = 70, -70, one 10x10 trapezoids are unable to be formed,
               // because of no grid point at lat = 80, -80.
+              if((rect_10_10[i].availability = check_avialability(rect_10_10[i].rect)) == 4){
+                rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
+                return;
+              }
+            }
+            for(int i(0); i < 2; ++i){ // b-4) three point interpolation
+              if((rect_10_10[i].availability == 3)
+                  && rect_10_10[i].rect.compute_weight_three(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng)){
+                return;
+              }
             }
           }else if(lat_deg_abs <= 75){
             trapezoid_t rect_10_10(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 10 : -10, 10));
 
-            // maximum 4 trials
+            // maximum 4 kinds of trial
             // 1)   10x30, both 85 points are band 9-10 (30 deg separation)
             // 2,3) 10X30, one 85 point is in band 0-8, the other is in band 9-10
             // 4)   10x90, both 85 points are band 0-8 (90 deg separation)
@@ -518,31 +602,72 @@ typedef typename gps_space_node_t::type type
               if(lng_85_east_high_band >= 180){lng_85_east_high_band -= 360;}
             }
 
-            { // 1st trial
+            { // check 1)
               rect_10_10.igp[1].longitude_deg = lng_85_west_low_band;
               rect_10_10.igp[0].longitude_deg = lng_85_east_low_band;
-            }
-
-            if((lng_85_west_low_band != lng_85_west_high_band)
-                && (lng_85_east_low_band != lng_85_east_high_band)){ // just middle case: |<--(90)--|<--(30)-->|---->|
-              { // 2nd trial
-                rect_10_10.igp[1].longitude_deg = lng_85_west_high_band;
-                rect_10_10.igp[0].longitude_deg = lng_85_east_low_band;
-              }
-
-              { // 3rd trial
-                rect_10_10.igp[1].longitude_deg = lng_85_west_low_band;
-                rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
+              if(check_avialability(rect_10_10) == 4){
+                rect_10_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
+                return;
               }
             }
 
-            { // last (4th) trial
-              rect_10_10.igp[1].longitude_deg = lng_85_west_high_band;
-              rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
+            if(rect_10_10.checked[2] && rect_10_10.checked[3]){
+              // Requirement: lower latitude point information is broadcasted.
+
+              bool check_again(true);
+
+              do{
+                if(lng_85_west_low_band == lng_85_west_high_band){
+                  // |[1]<--(30)-->[0]|----(90)---->|
+                  if(rect_10_10.checked[1]){
+                    // prepare for the last trial
+                    rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
+                    //rect_10_10.checked[0] = false; // already set
+                  }else{
+                    check_again = false;
+                  }
+                  break;
+                }
+                if(lng_85_east_low_band == lng_85_east_high_band){
+                  // |<----(90)----|[1]<--(30)-->[0]|
+                  if(rect_10_10.checked[0]){
+                    // prepare for the last trial
+                    rect_10_10.igp[1].longitude_deg = lng_85_west_high_band;
+                    //rect_10_10.checked[1] = false; // already set
+                  }else{
+                    check_again = false;
+                  }
+                  break;
+                }
+
+                // just middle case: |<--(90)--|[1]<--(30)-->[0]|---->|
+
+                if(!rect_10_10.checked[0]){ // check 2) |<--(90)--|[1]<--(30)-->[0]|---->[0]'|
+                  rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
+                  //rect_10_10.checked[0] = false; // already set, 1st trial
+                }
+
+                if(!rect_10_10.checked[1]){ // check 3) |[1]'<--(90)--|[1]<--(30)-->[0]|---->|
+                  rect_10_10.igp[1].longitude_deg = lng_85_west_high_band;
+                  //rect_10_10.checked[1] = false; // already set, 1st trial
+                }
+              }while(false);
+
+              // check 2-4)
+              if(check_again && (check_avialability(rect_10_10) == 4)){
+                rect_10_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
+                return;
+              }
             }
           }else{ // pole
             trapezoid_t rect(trapezoid_t::generate_rectangle_pole(pivot));
+            if(check_avialability(rect) == 4){
+              rect.compute_weight_pole(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
+              return;
+            }
           }
+
+          // Correction unavailable
         }
     };
 
