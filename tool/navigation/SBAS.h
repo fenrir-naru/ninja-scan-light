@@ -247,7 +247,7 @@ typedef typename gps_space_node_t::type type
           } delta;
         };
         /**
-         * Find a pivot IGP, and compute distance (delta) from the IGP.
+         * Get a pivot IGP, and compute distance (delta) from the IGP.
          * The "pivot" one means "nearest west, and north if in south semi-sphere,
          * south if otherwise (in north semi-sphere, or on equator), one".
          * If the specified input latitude is not identical to zero, and exactly same as a latitude where IGPs exist,
@@ -260,7 +260,7 @@ typedef typename gps_space_node_t::type type
          * @return pivot IGP position and delta
          */
         template <class T>
-        static pivot_t pivot(const T &latitude_deg, const T &longitude_deg){
+        static pivot_t get_pivot(const T &latitude_deg, const T &longitude_deg){
 
           T lng(longitude_deg); // => [-180, 180)
           int_t lng_reg; // => [0, 360), mapping W180(=> 0), ... E180(=> 360)
