@@ -330,7 +330,7 @@ typedef typename gps_space_node_t::type type
           return res;
         }
 
-        struct rectangle_t {
+        struct trapezoid_t {
           /**
            * igp(2)=[1] -- igp(1)=[0]           igp(3)=[2] -- igp(4)=[3]
            *      |             |     in north,      |         |         in south
@@ -374,12 +374,52 @@ typedef typename gps_space_node_t::type type
             weight[2] = x_pp_inv * y_pp_inv;
             weight[3] = x_pp     * y_pp_inv;
           }
+          /**
+           * @return If extrapolation occurs, false is returned; otherwise true.
+           */
+          bool compute_weight_three(const float_t &delta_phi, const float_t &delta_lambda,
+              const int_t &skip = 0){
+            float_t
+                y_pp(delta_phi / (igp[1].latitude_deg - igp[2].latitude_deg)),
+                x_pp(delta_lambda / igp[3].delta_lng(igp[2]));
+            switch(skip){ // assignment rule: sum is 1, weight of non-diagonal point is remain?
+              case 1:
+                weight[0] = y_pp;
+                weight[1] = 0;
+                weight[2] = 1. - x_pp;
+                weight[3] = x_pp - y_pp;
+                if(weight[3] < 0){return false;}
+                break;
+              case 2:
+                weight[0] = x_pp + y_pp - 1;
+                weight[1] = 1. - x_pp;
+                weight[2] = 0;
+                weight[3] = 1. - y_pp;
+                if(weight[0] < 0){return false;}
+                break;
+              case 3:
+                weight[0] = x_pp;
+                weight[1] = y_pp - x_pp;
+                weight[2] = 1. - y_pp;
+                weight[3] = 0;
+                if(weight[1] < 0){return false;}
+                break;
+              case 0:
+              default:
+                weight[0] = 0;
+                weight[1] = y_pp;
+                weight[2] = 1. - x_pp - y_pp;
+                weight[3] = x_pp;
+                if(weight[2] < 0){return false;}
+            }
+            return true;
+          }
 
-          static rectangle_t generate(const position_t &pivot,
+          static trapezoid_t generate_rectangle(const position_t &pivot,
               const int_t &delta_lat = 5, const int_t &delta_lng = 5){
             int_t lng(pivot.longitude_deg + delta_lng);
             if(lng >= 180){lng -= 360;}
-            rectangle_t res = {{
+            trapezoid_t res = {{
               {pivot.latitude_deg + delta_lat, lng},
               {pivot.latitude_deg + delta_lat, pivot.longitude_deg},
               pivot,
@@ -387,12 +427,12 @@ typedef typename gps_space_node_t::type type
             }};
             return res;
           }
-          static rectangle_t generate_pole(const position_t &pivot){
+          static trapezoid_t generate_rectangle_pole(const position_t &pivot){
             int_t
                 lng0(pivot.longitude_deg - 180),
                 lng1(pivot.longitude_deg - 90),
                 lng3(pivot.longitude_deg + 90);
-            rectangle_t res = {{
+            trapezoid_t res = {{
               {pivot.latitude_deg, (lng0 < -180) ? (lng0 + 360) : lng0},
               {pivot.latitude_deg, (lng1 < -180) ? (lng1 + 360) : lng1},
               pivot,
@@ -400,8 +440,8 @@ typedef typename gps_space_node_t::type type
             }};
             return res;
           }
-          rectangle_t expand(const int_t &delta_lat, const int_t &delta_lng) const {
-            rectangle_t res(*this);
+          trapezoid_t expand_rectangle(const int_t &delta_lat, const int_t &delta_lng) const {
+            trapezoid_t res(*this);
             if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check semi-sphere
               res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat); // positive and north
             }else{
@@ -428,33 +468,33 @@ typedef typename gps_space_node_t::type type
 
           // TODO check igp availability
           if(lat_deg_abs <= 55){
-            rectangle_t rect_5_5(rectangle_t::generate(pivot, north_semisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
+            trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
 
-            rectangle_t rect_10_10[] = { // A4.4.10.2 a-3), 5x5 => 10x10
-              rect_5_5.expand( 5,  5),
-              rect_5_5.expand( 5, -5),
-              rect_5_5.expand(-5,  5),
-              rect_5_5.expand(-5, -5),
+            trapezoid_t rect_10_10[] = { // A4.4.10.2 a-3), 5x5 => 10x10
+              rect_5_5.expand_rectangle( 5,  5),
+              rect_5_5.expand_rectangle( 5, -5),
+              rect_5_5.expand_rectangle(-5,  5),
+              rect_5_5.expand_rectangle(-5, -5),
             };
             for(int i(0); i < 4; ++i){
               // TODO
-              // When pivot lat = 55, -55, one 10x10 rectangles are unable to be formed,
+              // When pivot lat = 55, -55, one 10x10 trapezoids are unable to be formed,
               // because of lack of grid points at lat = 65, -65.
             }
           }else if(lat_deg_abs <= 70){
-            rectangle_t rect_5_10(rectangle_t::generate(pivot, north_semisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
+            trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
 
-            rectangle_t rect_10_10[] = { // A4.4.10.2 b-3) , 5x10 => 10x10
-              rect_5_10.expand( 5, 0),
-              rect_5_10.expand(-5, 0),
+            trapezoid_t rect_10_10[] = { // A4.4.10.2 b-3) , 5x10 => 10x10
+              rect_5_10.expand_rectangle( 5, 0),
+              rect_5_10.expand_rectangle(-5, 0),
             };
             for(int i(0); i < 2; ++i){
               // TODO
-              // When pivot lat = 70, -70, one 10x10 rectangles are unable to be formed,
+              // When pivot lat = 70, -70, one 10x10 trapezoids are unable to be formed,
               // because of no grid point at lat = 80, -80.
             }
           }else if(lat_deg_abs <= 75){
-            rectangle_t rect_10_10(rectangle_t::generate(pivot, north_semisphere ? 10 : -10, 10));
+            trapezoid_t rect_10_10(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 10 : -10, 10));
 
             // maximum 4 trials
             // 1)   10x30, both 85 points are band 9-10 (30 deg separation)
@@ -501,7 +541,7 @@ typedef typename gps_space_node_t::type type
               rect_10_10.igp[0].longitude_deg = lng_85_east_high_band;
             }
           }else{ // pole
-            rectangle_t rect(rectangle_t::generate_pole(pivot));
+            trapezoid_t rect(trapezoid_t::generate_rectangle_pole(pivot));
           }
         }
     };
