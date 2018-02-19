@@ -257,10 +257,10 @@ typedef typename gps_space_node_t::type type
         };
         /**
          * Get a pivot IGP, and compute distance (delta) from the IGP.
-         * The "pivot" one means "nearest west, and north if in south semi-sphere,
-         * south if otherwise (in north semi-sphere, or on equator), one".
+         * The "pivot" one means "nearest west, and north if in south hemisphere,
+         * south if otherwise (in north hemisphere, or on equator), one".
          * If the specified input latitude is not identical to zero, and exactly same as a latitude where IGPs exist,
-         * then the return IGP is shifted to the nearest west (north semisphere) or north (east semisphere) point.
+         * then the return IGP is shifted to the nearest west (north hemisphere) or north (east hemisphere) point.
          * For example:
          * 1) (lat, lng) = (10, 0) => igp = {5, 0}, delta = {5, 0}
          * 2) (lat, lng) = (85, 15) => igp = {75, 10}, delta = {10, 5}
@@ -460,7 +460,7 @@ typedef typename gps_space_node_t::type type
           trapezoid_t expand_rectangle(const int_t &delta_lat, const int_t &delta_lng) const {
             trapezoid_t res(*this);
             if(delta_lat != 0){
-              if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check semi-sphere
+              if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check hemisphere
                 res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat); // positive and north
                 res.checked[1] = res.checked[0] = false;
               }else{
@@ -498,11 +498,11 @@ typedef typename gps_space_node_t::type type
         void interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const { // TODO return type
           pivot_t pivot(get_pivot(latitude_deg, longitude_deg));
 
-          bool north_semisphere(pivot.igp.latitude_deg >= 0);
-          int_t lat_deg_abs(pivot.igp.latitude_deg * (north_semisphere ? 1 : -1));
+          bool north_hemisphere(latitude_deg >= 0);
+          int_t lat_deg_abs(pivot.igp.latitude_deg * (north_hemisphere ? 1 : -1));
 
           if(lat_deg_abs <= 55){
-            trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
+            trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot, north_hemisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
             switch(check_avialability(rect_5_5)){
               case 4: // a-1)
                 rect_5_5.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
@@ -521,9 +521,9 @@ typedef typename gps_space_node_t::type type
               {rect_5_5.expand_rectangle( 5,  5), pivot.delta.latitude_deg, pivot.delta.longitude_deg},
               {rect_5_5.expand_rectangle( 5, -5), pivot.delta.latitude_deg, pivot.delta.longitude_deg + 5},
               {rect_5_5.expand_rectangle(-5,  5),
-                  pivot.delta.latitude_deg + (north_semisphere ? 5 : -5), pivot.delta.longitude_deg},
+                  pivot.delta.latitude_deg + (north_hemisphere ? 5 : -5), pivot.delta.longitude_deg},
               {rect_5_5.expand_rectangle(-5, -5),
-                  pivot.delta.latitude_deg + (north_semisphere ? 5 : -5), pivot.delta.longitude_deg + 5},
+                  pivot.delta.latitude_deg + (north_hemisphere ? 5 : -5), pivot.delta.longitude_deg + 5},
             };
             for(int i(0); i < 4; ++i){ // a-3) four point interpolation
               // TODO
@@ -541,7 +541,7 @@ typedef typename gps_space_node_t::type type
               }
             }
           }else if(lat_deg_abs <= 70){
-            trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
+            trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot, north_hemisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
             switch(check_avialability(rect_5_10)){
               case 4: // b-1)
                 rect_5_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
@@ -560,7 +560,7 @@ typedef typename gps_space_node_t::type type
               {rect_5_10.expand_rectangle( 5, 0),
                   pivot.delta.latitude_deg, pivot.delta.longitude_deg},
               {rect_5_10.expand_rectangle(-5, 0),
-                  pivot.delta.latitude_deg + (north_semisphere ? 5 : -5), pivot.delta.longitude_deg},
+                  pivot.delta.latitude_deg + (north_hemisphere ? 5 : -5), pivot.delta.longitude_deg},
             };
             for(int i(0); i < 2; ++i){ // b-3) four point interpolation
               // TODO
@@ -578,7 +578,7 @@ typedef typename gps_space_node_t::type type
               }
             }
           }else if(lat_deg_abs <= 75){
-            trapezoid_t rect_10_10(trapezoid_t::generate_rectangle(pivot, north_semisphere ? 10 : -10, 10));
+            trapezoid_t rect_10_10(trapezoid_t::generate_rectangle(pivot, north_hemisphere ? 10 : -10, 10));
 
             // maximum 4 kinds of trial
             // 1)   10x30, both 85 points are band 9-10 (30 deg separation)
@@ -589,7 +589,7 @@ typedef typename gps_space_node_t::type type
             int_t lng_85_east_low_band, lng_85_east_high_band;
             {
               int_t lng_reg(pivot.igp.longitude_deg + 180); // [-180, 180) => [0, 360)
-              if(north_semisphere){
+              if(north_hemisphere){
                 lng_85_west_low_band = (lng_reg / 30 * 30) - 180; // W180, W150, ...
                 lng_85_west_high_band = (lng_reg / 90 * 90) - 180; // W180, W90, ...
               }else{
