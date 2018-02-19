@@ -356,8 +356,8 @@ typedef typename gps_space_node_t::type type
             float_t
                 w_lat10(delta_phi / (igp[1].latitude_deg - igp[2].latitude_deg)), // a.k.a. y_pp
                 w_lat23(1. - w_lat10),
-                w_lng0(delta_lambda / igp[0].delta_lng(igp[1])),
-                w_lng3((delta_lambda + igp[2].delta_lng(igp[1])) / igp[3].delta_lng(igp[2])); // a.k.a. x_pp
+                w_lng0((delta_lambda + igp[2].delta_lng(igp[1])) / igp[0].delta_lng(igp[1])),
+                w_lng3(delta_lambda / igp[3].delta_lng(igp[2])); // a.k.a. x_pp
             // res = (w_lng0 * [0] + (1. - w_lng0) * [1]) * w_lat10 + ((1. - w_lng3) * [2] + w_lng3 * [3]) * w_lat23;
             weight[0] = w_lng0        * w_lat10;
             weight[1] = (1. - w_lng0) * w_lat10;
