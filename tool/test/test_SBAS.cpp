@@ -238,7 +238,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
 
       { // on grid
         check_pivot_of_grid_point(
-            igp_t::pivot(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]),
+            igp_t::get_pivot(igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]),
             band, mask);
       }
       { // near grid
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
         double
             lat(delta_lat + igp_lat_lng[band][mask][0]),
             lng(delta_lng + igp_lat_lng[band][mask][1]);
-        res_t res(igp_t::pivot(lat, lng));
+        res_t res(igp_t::get_pivot(lat, lng));
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
             << res.igp.latitude_deg << "(" << lat << "), "
             << res.igp.longitude_deg << "(" << lng << ")");
@@ -283,7 +283,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
       static const int roll_over_i[] = {-360, 360};
       for(int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
         check_pivot_of_grid_point(
-            igp_t::pivot(
+            igp_t::get_pivot(
               igp_lat_lng[band][mask][0],
               roll_over_i[i] + igp_lat_lng[band][mask][1]),
             band, mask);
@@ -293,7 +293,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
       static const double roll_over_f[] = {-360.0, 360.0};
       for(int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
         check_pivot_of_grid_point(
-            igp_t::pivot(
+            igp_t::get_pivot(
               (double)igp_lat_lng[band][mask][0],
               roll_over_f[i] + igp_lat_lng[band][mask][1]),
             band, mask);
