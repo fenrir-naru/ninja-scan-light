@@ -1,8 +1,10 @@
 #include <iostream>
 #include <cmath>
+#include <vector>
 
 #include "navigation/SBAS.h"
 
+#include <boost/format.hpp>
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
 
@@ -16,6 +18,27 @@ using namespace std;
 
 typedef SBAS_SpaceNode<double> space_node_t;
 typedef space_node_t::IonosphericGridPoints igp_t;
+
+typedef vector<igp_t::trapezoid_t> trapezoid_list_t;
+
+trapezoid_list_t trapezoid_list;
+ostream &operator<<(ostream &out, const igp_t::trapezoid_t &target){
+  out << trapezoid_list.size() << ": ";
+  for(int i(0); i < 4; i++){
+    if(i != 0){out << ", ";}
+    out << boost::format("(% 3d, % 4d)") % target.igp[i].latitude_deg % target.igp[i].longitude_deg;
+  }
+  return out;
+}
+
+template <>
+template <>
+int SBAS_SpaceNode<double>::IonosphericGridPoints::check_avialability_hook<int>(
+    SBAS_SpaceNode<double>::IonosphericGridPoints::trapezoid_t &in, const int &out) const {
+  BOOST_TEST_MESSAGE(in);
+  trapezoid_list.push_back(in);
+  return 0; // for test
+}
 
 BOOST_AUTO_TEST_SUITE(SBAS)
 
@@ -197,6 +220,7 @@ BOOST_AUTO_TEST_CASE(igp_pos){
       }
       igp_t::position_t pos(igp_t::position(band, mask));
       BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
+      BOOST_REQUIRE(pos.is_predefined());
       BOOST_REQUIRE_EQUAL(pos.latitude_deg, igp_lat_lng[band][mask][0]);
       BOOST_REQUIRE_EQUAL(pos.longitude_deg, igp_lat_lng[band][mask][1]);
     }
@@ -297,6 +321,35 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
               (double)igp_lat_lng[band][mask][0],
               roll_over_f[i] + igp_lat_lng[band][mask][1]),
             band, mask);
+      }
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(igp_interpolate_shape){
+  for(unsigned band(0); band < 11; ++band){
+    for(unsigned mask(0); mask < 201; ++mask){
+      if((band == 8) && (mask >= 200)){
+        break;
+      }else if((band >= 9) && (mask >= 192)){
+        break;
+      }
+
+      { // near grid
+        double delta_lat(igp_lat_lng[band][mask][0] >= 0 ? 0.5 : -0.5), delta_lng(0.5);
+        double
+            lat(delta_lat + igp_lat_lng[band][mask][0]),
+            lng(delta_lng + igp_lat_lng[band][mask][1]);
+        BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
+            << "(" << lat << "), " << "(" << lng << ")");
+        trapezoid_list.clear();
+        igp_t().interpolate(lat, lng);
+        for(trapezoid_list_t::const_iterator it(trapezoid_list.begin());
+            it != trapezoid_list.end(); ++it){
+          for(int i(0); i < 4; ++i){
+            BOOST_REQUIRE(it->igp[i].is_predefined());
+          }
+        }
       }
     }
   }
