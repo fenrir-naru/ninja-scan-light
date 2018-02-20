@@ -120,6 +120,66 @@ typedef typename gps_space_node_t::type type
       NULL_MESSAGES = 63,
     }; ///< @see Table A-3
 
+    struct DataBlock {
+      static u8_t bits2u8(const char *buf, const uint_t &index){
+        std::div_t aligned(std::div(index, 8));
+        u8_t res(buf[aligned.quot]);
+        if(aligned.rem > 0){
+          res = ((res << aligned.rem) | (((u8_t)buf[aligned.quot + 1]) >> (8 - aligned.rem)));
+        }
+        return res;
+      }
+      static u8_t bits2u8(const char *buf, const uint_t &index, const uint_t &length){
+        return (bits2u8(buf, index) >> (8 - length));
+      }
+      static u16_t bits2u16(const char *buf, const uint_t &index, const uint_t &length){
+        return ((((u16_t)bits2u8(buf, index)) << 8) | bits2u8(buf, index + 8) >> (16 - length));
+      }
+
+      static u8_t preamble(const char *buf){
+        return (u8_t)buf[0];
+      }
+      static u8_t message_type(const char *buf){
+        return ((u8_t)buf[1]) >> 2; // 6 bits
+      }
+
+      struct Type18 { ///< @see Table A-15 IONO_GRID_POINT_MASKS
+        static u8_t broadcasted_bands(const char *buf){
+          return bits2u8(buf, 8 + 6, 4);
+        }
+        static u8_t band(const char *buf){
+          return bits2u8(buf, 8 + 6 + 4, 4);
+        }
+        static u8_t iodi(const char *buf){
+          return bits2u8(buf, 8 + 6 + 4 + 4, 2);
+        }
+      };
+
+      struct Type26 { ///< @see Table A-16 IONO_DELAY_CORRECTION
+        static u8_t band(const char *buf){
+          return bits2u8(buf, 8 + 6, 4);
+        }
+        static u8_t block_id(const char *buf){
+          return bits2u8(buf, 8 + 6 + 4, 4);
+        }
+        struct igp_info_t {
+          u16_t delay;
+          u8_t error_indicator;
+        };
+        static igp_info_t igp_info(const char *buf, const uint_t &offset){
+          uint_t index(8 + 6 + 4 + 4 + (13 * offset));
+          igp_info_t res = {
+            bits2u16(buf, index, 9),
+            bits2u8(buf, index + 9, 4),
+          };
+          return res;
+        }
+        static u8_t iodi(const char *buf){
+          return bits2u8(buf, 8 + 6 + 4 + 4 + (13 * 15), 4);
+        }
+      };
+    };
+
     class IonosphericGridPoints {
 
       public:
