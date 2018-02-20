@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cmath>
 #include <vector>
+#include <bitset>
 
 #include "navigation/SBAS.h"
 
@@ -350,6 +351,20 @@ BOOST_AUTO_TEST_CASE(igp_interpolate_shape){
             BOOST_REQUIRE(it->igp[i].is_predefined());
           }
         }
+      }
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(data_block_decorder){
+  for(unsigned int i(0); i < 0x100; i++){
+    for(unsigned int j(0); j < 0x100; j++){
+      char buf[] = {(char)(unsigned char)i, (char)(unsigned char)j};
+      bitset<16> b((unsigned long long)((i << 8) + j));
+      for(unsigned int offset(0); offset <= 8; offset++){
+        unsigned char buf2(space_node_t::DataBlock::bits2u8(buf, offset));
+        bitset<16> b2(b >> (8 - offset));
+        BOOST_REQUIRE_EQUAL((b2.to_ulong() & 0xFF), buf2);
       }
     }
   }
