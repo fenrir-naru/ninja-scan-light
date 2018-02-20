@@ -457,14 +457,28 @@ typedef typename gps_space_node_t::type type
             }};
             return res;
           }
+          /**
+           * Get expanded rectangle
+           *
+           * @param delta_lat When positive, move a parallel between igp[1] and igp[0] toward the nearer pole;
+           * when negative, move a parallel between igp[2] and igp[3] toward the other pole.
+           * Be careful, when negative, the difference of IPP from pivot, i.e. igp[2], should be recalculated.
+           *
+           * @param delta_lng When positive, move a meridian between igp[0] and igp[3] east;
+           * when negative, move a meridian between igp[1] and igp[2] west.
+           * Be careful, when negative, the difference of IPP from pivot, i.e. igp[2], should be recalculated.
+           *
+           * @return Expanded rectangle
+           */
           trapezoid_t expand_rectangle(const int_t &delta_lat, const int_t &delta_lng) const {
             trapezoid_t res(*this);
             if(delta_lat != 0){
-              if((delta_lat > 0) && (res.igp[2].latitude_deg >= 0)){ // check hemisphere
-                res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat); // positive and north
+              int_t delta_lat2(delta_lat * ((res.igp[1].latitude_deg >= 0) ? 1 : -1)); // check hemisphere
+              if(delta_lat > 0){
+                res.igp[1].latitude_deg = (res.igp[0].latitude_deg += delta_lat2);
                 res.checked[1] = res.checked[0] = false;
               }else{
-                res.igp[2].latitude_deg = (res.igp[3].latitude_deg += delta_lat);
+                res.igp[2].latitude_deg = (res.igp[3].latitude_deg += delta_lat2);
                 res.checked[2] = res.checked[3] = false;
               }
             }
