@@ -129,6 +129,33 @@ typedef typename gps_space_node_t::type type
           int_t latitude_deg;  ///< latitude in degrees, north is positive. [-85, 85].
           int_t longitude_deg; ///< longitude in degrees, east is positive. [-180, 175]
           operator position_index_t() const;
+          bool is_predefined() const {
+
+            // range check
+            if((latitude_deg < -85) || (latitude_deg > 85)){return false;}
+            if((longitude_deg < -180) || (longitude_deg >= 180)){return false;}
+
+            // at least, on 5 deg grid
+            if((latitude_deg + 85) % 5 != 0){return false;}
+            int_t lng_reg(longitude_deg + 180);
+            if(lng_reg % 5 != 0){return false;}
+
+            switch(latitude_deg){
+              case 80:
+              case -80:
+                return false;
+              case 85:
+                return (lng_reg % 30 == 0); // W180(=0), W150(=30), ...
+              case -85:
+                return (lng_reg % 30 == 10); // W170(=10), W140(=40), ...
+            }
+
+            if((latitude_deg >= 65) || (latitude_deg <= -65)){
+              return (lng_reg % 10 == 0);
+            }
+
+            return true;
+          }
           /**
            * Compute longitude difference from another IGP.
            * @param from
