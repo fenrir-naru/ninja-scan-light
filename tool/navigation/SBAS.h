@@ -497,6 +497,11 @@ typedef typename gps_space_node_t::type type
           }
         };
 
+        template <class T>
+        T check_avialability_hook(trapezoid_t &in, const T &out) const {
+          return out; // for debug
+        }
+
         /**
          * @return available IGP(s)
          */
@@ -506,7 +511,7 @@ typedef typename gps_space_node_t::type type
             if(target.checked[i]){res++; continue;}
             // TODO
           }
-          return res;
+          return check_avialability_hook(target, res);
         }
 
         void interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const { // TODO return type
@@ -516,7 +521,7 @@ typedef typename gps_space_node_t::type type
           int_t lat_deg_abs(pivot.igp.latitude_deg * (north_hemisphere ? 1 : -1));
 
           if(lat_deg_abs <= 55){
-            trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot, north_hemisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
+            trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot.igp, north_hemisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
             switch(check_avialability(rect_5_5)){
               case 4: // a-1)
                 rect_5_5.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
@@ -562,7 +567,7 @@ typedef typename gps_space_node_t::type type
               }
             }
           }else if(lat_deg_abs <= 70){
-            trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot, north_hemisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
+            trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot.igp, north_hemisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
             switch(check_avialability(rect_5_10)){
               case 4: // b-1)
                 rect_5_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
@@ -605,7 +610,7 @@ typedef typename gps_space_node_t::type type
               }
             }
           }else if(lat_deg_abs <= 75){
-            trapezoid_t rect_10_10(trapezoid_t::generate_rectangle(pivot, north_hemisphere ? 10 : -10, 10));
+            trapezoid_t rect_10_10(trapezoid_t::generate_rectangle(pivot.igp, north_hemisphere ? 10 : -10, 10));
 
             // maximum 4 kinds of trial
             // 1)   10x30, both 85 points are band 9-10 (30 deg separation)
@@ -687,7 +692,7 @@ typedef typename gps_space_node_t::type type
               }
             }
           }else{ // pole
-            trapezoid_t rect(trapezoid_t::generate_rectangle_pole(pivot));
+            trapezoid_t rect(trapezoid_t::generate_rectangle_pole(pivot.igp));
             if(check_avialability(rect) == 4){
               rect.compute_weight_pole(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
               return;
