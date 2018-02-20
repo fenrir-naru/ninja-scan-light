@@ -121,19 +121,37 @@ typedef typename gps_space_node_t::type type
     }; ///< @see Table A-3
 
     struct DataBlock {
-      static u8_t bits2u8(const char *buf, const uint_t &index){
+      template <class T>
+      static T bits2num(const char *buf, const uint_t &index){
         std::div_t aligned(std::div(index, 8));
-        u8_t res(buf[aligned.quot]);
+        T res((u8_t)buf[aligned.quot++]);
+        for(int i(0); i < sizeof(T) - 1; ++i){
+          res <<= 8;
+          res |= (u8_t)buf[aligned.quot++];
+        }
         if(aligned.rem > 0){
-          res = ((res << aligned.rem) | (((u8_t)buf[aligned.quot + 1]) >> (8 - aligned.rem)));
+          res = ((res << aligned.rem) | (((u8_t)buf[aligned.quot]) >> (8 - aligned.rem)));
         }
         return res;
+      }
+
+      static u8_t bits2u8(const char *buf, const uint_t &index){
+        return bits2num<u8_t>(buf, index);
       }
       static u8_t bits2u8(const char *buf, const uint_t &index, const uint_t &length){
         return (bits2u8(buf, index) >> (8 - length));
       }
+      static u16_t bits2u16(const char *buf, const uint_t &index){
+        return bits2num<u16_t>(buf, index);
+      }
       static u16_t bits2u16(const char *buf, const uint_t &index, const uint_t &length){
-        return ((((u16_t)bits2u8(buf, index)) << 8) | bits2u8(buf, index + 8) >> (16 - length));
+        return (bits2u16(buf, index) >> (16 - length));
+      }
+      static u32_t bits2u32(const char *buf, const uint_t &index){
+        return bits2num<u32_t>(buf, index);
+      }
+      static u32_t bits2u32(const char *buf, const uint_t &index, const uint_t &length){
+        return (bits2u32(buf, index) >> (32 - length));
       }
 
       static u8_t preamble(const char *buf){
@@ -176,6 +194,48 @@ typedef typename gps_space_node_t::type type
         }
         static u8_t iodi(const char *buf){
           return bits2u8(buf, 8 + 6 + 4 + 4 + (13 * 15), 4);
+        }
+      };
+
+      struct Type9 { ///< @see Table A-18 GEO_NAVIGATION
+        static u16_t t0(const char *buf){
+          return bits2u16(buf, 22, 13);
+        }
+        static u8_t ura(const char *buf){
+          return bits2u8(buf, 35, 4);
+        }
+        static s32_t x(const char *buf){
+          return ((s32_t)bits2u32(buf, 39)) >> (32 - 30); // 30 bits
+        }
+        static s32_t y(const char *buf){
+          return ((s32_t)bits2u32(buf, 69)) >> (32 - 30); // 30 bits
+        }
+        static s32_t z(const char *buf){
+          return ((s32_t)bits2u32(buf, 99)) >> (32 - 25); // 25 bits
+        }
+        static s32_t x_dot(const char *buf){
+          return ((s32_t)bits2u32(buf, 124)) >> (32 - 17); // 17 bits
+        }
+        static s32_t y_dot(const char *buf){
+          return ((s32_t)bits2u32(buf, 141)) >> (32 - 17); // 17 bits
+        }
+        static s32_t z_dot(const char *buf){
+          return ((s32_t)bits2u32(buf, 158)) >> (32 - 18); // 18 bits
+        }
+        static s16_t x_ddot(const char *buf){
+          return ((s16_t)bits2u16(buf, 176)) >> (16 - 10); // 10 bits
+        }
+        static s16_t y_ddot(const char *buf){
+          return ((s16_t)bits2u16(buf, 186)) >> (16 - 10); // 10 bits
+        }
+        static s16_t z_ddot(const char *buf){
+          return ((s16_t)bits2u16(buf, 196)) >> (16 - 10); // 10 bits
+        }
+        static s16_t a_Gf0(const char *buf){
+          return ((s16_t)bits2u16(buf, 206)) >> (16 - 12); // 12 bits
+        }
+        static s8_t a_Gf1(const char *buf){
+          return (s8_t)bits2u8(buf, 218); // 8 bits
         }
       };
     };
