@@ -134,110 +134,65 @@ typedef typename gps_space_node_t::type type
         }
         return res;
       }
-
-      static u8_t bits2u8(const char *buf, const uint_t &index){
-        return bits2num<u8_t>(buf, index);
-      }
-      static u8_t bits2u8(const char *buf, const uint_t &index, const uint_t &length){
-        return (bits2u8(buf, index) >> (8 - length));
-      }
-      static u16_t bits2u16(const char *buf, const uint_t &index){
-        return bits2num<u16_t>(buf, index);
-      }
-      static u16_t bits2u16(const char *buf, const uint_t &index, const uint_t &length){
-        return (bits2u16(buf, index) >> (16 - length));
-      }
-      static u32_t bits2u32(const char *buf, const uint_t &index){
-        return bits2num<u32_t>(buf, index);
-      }
-      static u32_t bits2u32(const char *buf, const uint_t &index, const uint_t &length){
-        return (bits2u32(buf, index) >> (32 - length));
+      template <class T>
+      static T bits2num(const char *buf, const uint_t &index, const uint_t &length){
+        return (bits2num<T>(buf, index) >> ((sizeof(T) * 8) - length));
       }
 
-      static u8_t preamble(const char *buf){
-        return (u8_t)buf[0];
-      }
-      static u8_t message_type(const char *buf){
-        return ((u8_t)buf[1]) >> 2; // 6 bits
-      }
+#define convert_u(bits, offset_bits, length, name) \
+static u ## bits ## _t name(const char *buf){ \
+  return bits2num<u ## bits ## _t>(buf, offset_bits, length); \
+}
+#define convert_s(bits, offset_bits, length, name) \
+static s ## bits ## _t name(const char *buf){ \
+  return ((s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits, length)) \
+      >> (bits - length); \
+}
+#define convert_u_ch(bits, offset_bits, length, ch_offset_bits, name) \
+static u ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
+  return bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length); \
+}
+#define convert_s_ch(bits, offset_bits, length, ch_offset_bits, name) \
+static s ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
+  return ((s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length)) \
+      >> (bits - length); \
+}
+      convert_u(8, 0, 8, preamble);
+      convert_u(8, 8, 6, message_type);
 
       struct Type18 { ///< @see Table A-15 IONO_GRID_POINT_MASKS
-        static u8_t broadcasted_bands(const char *buf){
-          return bits2u8(buf, 8 + 6, 4);
-        }
-        static u8_t band(const char *buf){
-          return bits2u8(buf, 8 + 6 + 4, 4);
-        }
-        static u8_t iodi(const char *buf){
-          return bits2u8(buf, 8 + 6 + 4 + 4, 2);
-        }
+        convert_u(8, 14, 4, broadcasted_bands);
+        convert_u(8, 18, 4, band);
+        convert_u(8, 22, 2, iodi);
       };
 
       struct Type26 { ///< @see Table A-16 IONO_DELAY_CORRECTION
-        static u8_t band(const char *buf){
-          return bits2u8(buf, 8 + 6, 4);
-        }
-        static u8_t block_id(const char *buf){
-          return bits2u8(buf, 8 + 6 + 4, 4);
-        }
-        struct igp_info_t {
-          u16_t delay;
-          u8_t error_indicator;
-        };
-        static igp_info_t igp_info(const char *buf, const uint_t &offset){
-          uint_t index(8 + 6 + 4 + 4 + (13 * offset));
-          igp_info_t res = {
-            bits2u16(buf, index, 9),
-            bits2u8(buf, index + 9, 4),
-          };
-          return res;
-        }
-        static u8_t iodi(const char *buf){
-          return bits2u8(buf, 8 + 6 + 4 + 4 + (13 * 15), 4);
-        }
+        convert_u(8, 14, 4, band);
+        convert_u(8, 18, 4, block_id);
+        convert_u_ch(16, 22, 9, 13, delay);
+        convert_u_ch( 8, 31, 4, 13, error_indicator);
+        convert_u(8, 22 + (13 * 15), 4, iodi);
       };
 
       struct Type9 { ///< @see Table A-18 GEO_NAVIGATION
-        static u16_t t0(const char *buf){
-          return bits2u16(buf, 22, 13);
-        }
-        static u8_t ura(const char *buf){
-          return bits2u8(buf, 35, 4);
-        }
-        static s32_t x(const char *buf){
-          return ((s32_t)bits2u32(buf, 39)) >> (32 - 30); // 30 bits
-        }
-        static s32_t y(const char *buf){
-          return ((s32_t)bits2u32(buf, 69)) >> (32 - 30); // 30 bits
-        }
-        static s32_t z(const char *buf){
-          return ((s32_t)bits2u32(buf, 99)) >> (32 - 25); // 25 bits
-        }
-        static s32_t x_dot(const char *buf){
-          return ((s32_t)bits2u32(buf, 124)) >> (32 - 17); // 17 bits
-        }
-        static s32_t y_dot(const char *buf){
-          return ((s32_t)bits2u32(buf, 141)) >> (32 - 17); // 17 bits
-        }
-        static s32_t z_dot(const char *buf){
-          return ((s32_t)bits2u32(buf, 158)) >> (32 - 18); // 18 bits
-        }
-        static s16_t x_ddot(const char *buf){
-          return ((s16_t)bits2u16(buf, 176)) >> (16 - 10); // 10 bits
-        }
-        static s16_t y_ddot(const char *buf){
-          return ((s16_t)bits2u16(buf, 186)) >> (16 - 10); // 10 bits
-        }
-        static s16_t z_ddot(const char *buf){
-          return ((s16_t)bits2u16(buf, 196)) >> (16 - 10); // 10 bits
-        }
-        static s16_t a_Gf0(const char *buf){
-          return ((s16_t)bits2u16(buf, 206)) >> (16 - 12); // 12 bits
-        }
-        static s8_t a_Gf1(const char *buf){
-          return (s8_t)bits2u8(buf, 218); // 8 bits
-        }
+        convert_u(16, 22, 13, t0);
+        convert_u( 8, 35,  4, ura);
+        convert_s(32, 39, 30, x);
+        convert_s(32, 69, 30, y);
+        convert_s(32, 99, 25, z);
+        convert_s(32, 124, 17, x_dot);
+        convert_s(32, 141, 17, y_dot);
+        convert_s(32, 158, 18, z_dot);
+        convert_s(16, 176, 10, x_ddot);
+        convert_s(16, 186, 10, y_ddot);
+        convert_s(16, 196, 10, z_ddot);
+        convert_s(16, 206, 12, a_Gf0);
+        convert_s( 8, 218,  8, a_Gf1);
       };
+#undef convert_s_ch
+#undef convert_u_ch
+#undef convert_s
+#undef convert_u
     };
 
     class IonosphericGridPoints {

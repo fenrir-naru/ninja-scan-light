@@ -362,7 +362,7 @@ BOOST_AUTO_TEST_CASE(data_block_decorder){
       char buf[] = {(char)(unsigned char)i, (char)(unsigned char)j};
       bitset<16> b((unsigned long long)((i << 8) + j));
       for(unsigned int offset(0); offset <= 8; offset++){
-        unsigned char buf2(space_node_t::DataBlock::bits2u8(buf, offset));
+        unsigned char buf2(space_node_t::DataBlock::bits2num<unsigned char>(buf, offset));
         bitset<16> b2(b >> (8 - offset));
         BOOST_REQUIRE_EQUAL((b2.to_ulong() & 0xFF), buf2);
       }
