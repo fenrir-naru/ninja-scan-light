@@ -189,6 +189,19 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
         convert_s(16, 206, 12, a_Gf0);
         convert_s( 8, 218,  8, a_Gf1);
       };
+
+      struct Type17 { ///< @see Table A-17 GEO_SAT_ALNAMACS
+        convert_u_ch( 8, 14,  2, 67, id);
+        convert_u_ch( 8, 16,  8, 67, prn);
+        convert_u_ch( 8, 24,  8, 67, health_status);
+        convert_s_ch(16, 32, 15, 67, x);
+        convert_s_ch(16, 47, 15, 67, y);
+        convert_s_ch(16, 62,  9, 67, z);
+        convert_s_ch( 8, 71,  3, 67, x_dot);
+        convert_s_ch( 8, 74,  3, 67, y_dot);
+        convert_s_ch( 8, 77,  4, 67, z_dot);
+        convert_u(16, 215, 11, t0);
+      };
 #undef convert_s_ch
 #undef convert_u_ch
 #undef convert_s
@@ -883,8 +896,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
             s32_t x, y, z;        ///< ECEF position (0.08(xy), 0.4(z) m)
             s32_t dx, dy, dz;     ///< ECEF velocity (0.000625(xy), 0.004(z) m)
             s16_t ddx, ddy, ddz;  ///< ECEF acceleration (0.0000125(xy), 0.0000625(z) m/s^2)
-            s16_t a_Gf0;           ///< Clock correction parameter (2^-31, s)
-            s16_t a_Gf1;           ///< Clock correction parameter (2^-40, s/s)
+            s16_t a_Gf0;          ///< Clock correction parameter (2^-31, s)
+            s16_t a_Gf1;          ///< Clock correction parameter (2^-40, s/s)
 
             enum {
               SF_t_0,
