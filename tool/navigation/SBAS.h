@@ -149,11 +149,11 @@ static s ## bits ## _t name(const char *buf){ \
       >> (bits - length); \
 }
 #define convert_u_ch(bits, offset_bits, length, ch_offset_bits, name) \
-static u ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
+static u ## bits ## _t name(const char *buf, const uint_t &ch){ \
   return bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length); \
 }
 #define convert_s_ch(bits, offset_bits, length, ch_offset_bits, name) \
-static s ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
+static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
   return ((s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length)) \
       >> (bits - length); \
 }
@@ -180,12 +180,12 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
         convert_s(32, 39, 30, x);
         convert_s(32, 69, 30, y);
         convert_s(32, 99, 25, z);
-        convert_s(32, 124, 17, x_dot);
-        convert_s(32, 141, 17, y_dot);
-        convert_s(32, 158, 18, z_dot);
-        convert_s(16, 176, 10, x_ddot);
-        convert_s(16, 186, 10, y_ddot);
-        convert_s(16, 196, 10, z_ddot);
+        convert_s(32, 124, 17, dx);
+        convert_s(32, 141, 17, dy);
+        convert_s(32, 158, 18, dz);
+        convert_s(16, 176, 10, ddx);
+        convert_s(16, 186, 10, ddy);
+        convert_s(16, 196, 10, ddz);
         convert_s(16, 206, 12, a_Gf0);
         convert_s( 8, 218,  8, a_Gf1);
       };
@@ -897,7 +897,21 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch = 0){ \
             s32_t dx, dy, dz;     ///< ECEF velocity (0.000625(xy), 0.004(z) m)
             s16_t ddx, ddy, ddz;  ///< ECEF acceleration (0.0000125(xy), 0.0000625(z) m/s^2)
             s16_t a_Gf0;          ///< Clock correction parameter (2^-31, s)
-            s16_t a_Gf1;          ///< Clock correction parameter (2^-40, s/s)
+            s8_t a_Gf1;           ///< Clock correction parameter (2^-40, s/s)
+
+            static raw_t fetch(const char *buf){
+              typedef typename DataBlock::Type9 msg_t;
+              raw_t res = {
+                0, // svid
+                msg_t::t0(buf), // t_0
+                msg_t::ura(buf), // URA
+                msg_t::x(buf), msg_t::y(buf), msg_t::z(buf), // x, y, z
+                msg_t::dx(buf), msg_t::dy(buf), msg_t::dz(buf), // dx, dy, dz
+                msg_t::ddx(buf), msg_t::ddy(buf), msg_t::ddz(buf), // ddx, ddy, ddz
+                msg_t::a_Gf0(buf), msg_t::a_Gf1(buf), // a_Gf0, a_Gf1
+              };
+              return res;
+            }
 
             enum {
               SF_t_0,
@@ -986,7 +1000,6 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           float_t dx, dy, dz; ///< ECEF velocity (m/s)
           float_t t_0;        ///< Time of applicability (s)
 
-
           ///< Up-cast to ephemeris
           operator Ephemeris() const {
             Ephemeris converted = {
@@ -1009,6 +1022,19 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
             s16_t x, y, z;    ///< ECEF position (2600(xy), 26000(z), m)
             s8_t dx, dy, dz;  ///< ECEF velocity (10(xy), 60(z), m/s)
             u16_t t_0;        ///< Time of applicability (64, s)
+
+            static raw_t fetch(const char *buf, const uint_t &ch){
+              typedef typename DataBlock::Type17 msg_t;
+              raw_t res = {
+                msg_t::id(buf, ch), // data_id
+                msg_t::prn(buf, ch), // prn
+                msg_t::health_status(buf, ch), // SV_health
+                msg_t::x(buf, ch), msg_t::y(buf, ch), msg_t::z(buf, ch), // x, y, z
+                msg_t::dx(buf, ch), msg_t::dy(buf, ch), msg_t::dz(buf, ch), // dx, dy, dz
+                msg_t::t0(buf), // t_0
+              };
+              return res;
+            }
 
             enum {
               SF_xy,  SF_z,
