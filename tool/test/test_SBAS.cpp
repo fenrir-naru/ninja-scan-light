@@ -38,6 +38,7 @@ int SBAS_SpaceNode<double>::IonosphericGridPoints::check_avialability_hook<int>(
     SBAS_SpaceNode<double>::IonosphericGridPoints::trapezoid_t &in, const int &out) const {
   BOOST_TEST_MESSAGE(in);
   trapezoid_list.push_back(in);
+  in.checked[2] = in.checked[3] = true;
   return 0; // for test
 }
 
@@ -327,7 +328,137 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
   }
 }
 
-BOOST_AUTO_TEST_CASE(igp_interpolate_shape){
+/**
+ * @param in_lat [-90, 90]
+ * @param in_lng [-180, 180)
+ */
+void igp_interpolate_check(const double &in_lat, const double &in_lng){
+  bool north_hemisphere(in_lat >= 0);
+
+  trapezoid_list.clear();
+  igp_t().interpolate(in_lat, in_lng);
+
+  // simple check
+  for(trapezoid_list_t::const_iterator it(trapezoid_list.begin());
+      it != trapezoid_list.end(); ++it){
+    for(int i(0); i < 4; ++i){
+      BOOST_REQUIRE(it->igp[i].is_predefined()); // grids are predefined?
+    }
+    { // trapezoid?
+      BOOST_REQUIRE_EQUAL(it->igp[0].latitude_deg, it->igp[1].latitude_deg);
+      BOOST_REQUIRE_EQUAL(it->igp[2].latitude_deg, it->igp[3].latitude_deg);
+    }
+
+    { // check igp[2]
+      if(in_lat == 0){
+        BOOST_REQUIRE_EQUAL(it->igp[2].latitude_deg, 0);
+      }else if(north_hemisphere){
+        BOOST_REQUIRE_LT(it->igp[2].latitude_deg, in_lat);
+      }else{
+        BOOST_REQUIRE_GT(it->igp[2].latitude_deg, in_lat);
+      }
+
+      if((trapezoid_list.front().igp[2].latitude_deg == -85)
+          && (in_lng < -140)){
+        BOOST_REQUIRE_EQUAL(it->igp[2].longitude_deg, 130);
+      }else if((trapezoid_list.front().igp[2].longitude_deg == -180)
+          && (it->igp[2].longitude_deg > 0)){
+        if(trapezoid_list.front().igp[2].latitude_deg * (north_hemisphere ? 1 : -1) <= 55){
+          BOOST_REQUIRE_EQUAL(it->igp[2].longitude_deg, 175);
+        }else{
+          BOOST_REQUIRE(
+              (trapezoid_list.front().igp[2].latitude_deg == -75)
+              && ((it->igp[2].longitude_deg == 160)
+                  || (it->igp[2].longitude_deg == 130)));
+        }
+      }else if((trapezoid_list.front().igp[2].longitude_deg == -170)
+          && (it->igp[2].longitude_deg > 0)){
+        BOOST_REQUIRE(
+            (trapezoid_list.front().igp[2].latitude_deg == -85)
+            && (it->igp[2].longitude_deg == 130));
+      }else{
+        BOOST_REQUIRE_LE(it->igp[2].longitude_deg, in_lng);
+      }
+    }
+  }
+
+  // precise check
+  static const struct {
+    int lat_max;
+    int num_min, num_max;
+    struct {
+      int lat, lng;
+    } spacing[5];
+  } props[] = {
+    55, 5, 5, {{ 5,  5}, {10, 10}, {10, 10}, {10, 10}, {10, 10}},
+    60, 4, 4, {{ 5,  5}, {10, 10}, {10, 10}, {10, 10}},
+    70, 3, 3, {{ 5, 10}, {10, 10}, {10, 10}},
+    75, 2, 2, {{ 5, 10}, {10, 10}},
+    85, 1, 2, {{10, 10}, {10, 10}},
+  };
+
+  for(int i(0); i < sizeof(props) / sizeof(props[0]); i++){ // lat = [-75, 75]
+    if(abs(in_lat) > props[i].lat_max){continue;}
+
+    BOOST_REQUIRE_GE(trapezoid_list.size(), props[i].num_min); // number of candidates
+    BOOST_REQUIRE_LE(trapezoid_list.size(), props[i].num_max); // number of candidates
+    for(int i2(0); i2 < trapezoid_list.size(); ++i2){
+      { // check latitude
+        { // spacing
+          BOOST_REQUIRE_EQUAL(
+              trapezoid_list[i2].igp[1].latitude_deg - trapezoid_list[i2].igp[2].latitude_deg,
+              props[i].spacing[i2].lat * (north_hemisphere ? 1 : -1));
+          BOOST_REQUIRE_EQUAL(
+              trapezoid_list[i2].igp[0].latitude_deg - trapezoid_list[i2].igp[3].latitude_deg,
+              props[i].spacing[i2].lat * (north_hemisphere ? 1 : -1));
+        }
+
+        // opposite of igp[2] equals igp[0]
+        if(north_hemisphere){
+          BOOST_REQUIRE_GE(trapezoid_list[i2].igp[0].latitude_deg, in_lat);
+        }else{
+          BOOST_REQUIRE_LE(trapezoid_list[i2].igp[0].latitude_deg, in_lat);
+        }
+      }
+      { // check longitude; rectangle and spacing
+        if(props[i].lat_max < 85){
+          BOOST_REQUIRE_EQUAL(
+              trapezoid_list[i2].igp[0].longitude_deg,
+              trapezoid_list[i2].igp[3].longitude_deg);
+          BOOST_REQUIRE_EQUAL(
+              trapezoid_list[i2].igp[1].longitude_deg,
+              trapezoid_list[i2].igp[2].longitude_deg);
+          BOOST_REQUIRE_EQUAL(
+              trapezoid_list[i2].igp[0].delta_lng(trapezoid_list[i2].igp[1]),
+              props[i].spacing[i2].lng);
+        }else{
+          BOOST_REQUIRE_LE(
+              trapezoid_list[i2].igp[0].delta_lng(trapezoid_list[i2].igp[1]),
+              90);
+        }
+        BOOST_REQUIRE_EQUAL(
+            trapezoid_list[i2].igp[3].delta_lng(trapezoid_list[i2].igp[2]),
+            props[i].spacing[i2].lng);
+
+        if(trapezoid_list[i2].igp[3].longitude_deg <= -175){
+          BOOST_REQUIRE_GT(trapezoid_list[i2].igp[3].longitude_deg + 360, in_lng);
+        }else{
+          BOOST_REQUIRE_GT(trapezoid_list[i2].igp[3].longitude_deg, in_lng);
+        }
+      }
+    }
+    return;
+  }
+
+  { // pole
+    BOOST_REQUIRE_EQUAL(trapezoid_list.size(), 1); // number of candidates
+    BOOST_REQUIRE_EQUAL(
+        trapezoid_list.front().igp[1].latitude_deg,
+        trapezoid_list.front().igp[2].latitude_deg);
+  }
+}
+
+BOOST_AUTO_TEST_CASE(igp_interpolate_near_grid){
   for(unsigned band(0); band < 11; ++band){
     for(unsigned mask(0); mask < 201; ++mask){
       if((band == 8) && (mask >= 200)){
@@ -343,14 +474,7 @@ BOOST_AUTO_TEST_CASE(igp_interpolate_shape){
             lng(delta_lng + igp_lat_lng[band][mask][1]);
         BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => "
             << "(" << lat << "), " << "(" << lng << ")");
-        trapezoid_list.clear();
-        igp_t().interpolate(lat, lng);
-        for(trapezoid_list_t::const_iterator it(trapezoid_list.begin());
-            it != trapezoid_list.end(); ++it){
-          for(int i(0); i < 4; ++i){
-            BOOST_REQUIRE(it->igp[i].is_predefined());
-          }
-        }
+        igp_interpolate_check(lat, lng);
       }
     }
   }
