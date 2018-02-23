@@ -34,7 +34,7 @@ ostream &operator<<(ostream &out, const igp_t::trapezoid_t &target){
 
 template <>
 template <>
-int SBAS_SpaceNode<double>::IonosphericGridPoints::check_avialability_hook<int>(
+int SBAS_SpaceNode<double>::IonosphericGridPoints::check_availability_hook<int>(
     SBAS_SpaceNode<double>::IonosphericGridPoints::trapezoid_t &in, const int &out) const {
   BOOST_TEST_MESSAGE(in);
   trapezoid_list.push_back(in);
