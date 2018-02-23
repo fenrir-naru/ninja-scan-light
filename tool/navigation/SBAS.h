@@ -234,6 +234,61 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
     class IonosphericGridPoints {
 
       public:
+        struct PointProperty {
+          float_t delay; // [m]
+          float_t sigma; // [m^2]
+
+          struct raw_t {
+            u16_t delay;
+            u8_t error_indicator;
+
+            static raw_t fetch(const char *buf, const uint_t &ch){
+              typedef typename DataBlock::Type26 msg_t;
+              raw_t res = {
+                msg_t::delay(buf, ch), // delay
+                msg_t::error_indicator(buf, ch), // error_indicator
+              };
+              return res;
+            }
+
+            enum {
+              DELAY_DONY_USE = 0x1FF,
+              ERROR_INDICATOR_NOT_MONITORED = 15,
+            };
+
+            static float_t indicator2sigma(const u8_t &v){
+              switch(v){ ///< @see Table A-17
+                case 0:   return 0.0084;
+                case 1:   return 0.0333;
+                case 2:   return 0.0749;
+                case 3:   return 0.1331;
+                case 4:   return 0.2079;
+                case 5:   return 0.2994;
+                case 6:   return 0.4075;
+                case 7:   return 0.5322;
+                case 8:   return 0.6735;
+                case 9:   return 0.8315;
+                case 10:  return 1.1974;
+                case 11:  return 1.8709;
+                case 12:  return 3.3260;
+                case 13:  return 20.7870;
+                case 14:  return 187.0826;
+              }
+              return -1;
+            }
+            operator PointProperty() const {
+              PointProperty res = {
+                0.125 * delay,
+                indicator2sigma(error_indicator),
+              };
+              return res;
+            }
+            bool available() const {
+              return (delay < DELAY_DONY_USE);
+            }
+          };
+        };
+
         struct position_index_t;
 
         struct position_t {
