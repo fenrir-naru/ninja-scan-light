@@ -695,34 +695,35 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
 
       public:
         template <class T>
-        T check_avialability_hook(trapezoid_t &in, const T &out) const {
+        T check_availability_hook(trapezoid_t &in, const T &out) const {
           return out; // for debug
         }
         /**
          * @return available IGP(s)
          */
-        int_t check_avialability(trapezoid_t &target) const {
+        int_t check_availability(trapezoid_t &target, const typename PointProperty::raw_t *(&cache)[4]) const {
           int_t res(0);
           for(int i(0); i < 4; ++i){
             if(target.checked[i]){res++; continue;}
             position_index_t index(target.igp[i]);
-            if(properties[index.lat_index][index.lng_index].available()){ // TODO make cache
+            if((cache[i] = &properties[index.lat_index][index.lng_index])->available()){
               target.checked[i] = true;
               res++;
             }
           }
-          return check_avialability_hook(target, res);
+          return check_availability_hook(target, res);
         }
 
         void interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const { // TODO return type
           pivot_t pivot(get_pivot(latitude_deg, longitude_deg));
+          const typename PointProperty::raw_t *selected[4];
 
           bool north_hemisphere(latitude_deg >= 0);
           int_t lat_deg_abs(pivot.igp.latitude_deg * (north_hemisphere ? 1 : -1));
 
           if(lat_deg_abs <= 55){
             trapezoid_t rect_5_5(trapezoid_t::generate_rectangle(pivot.igp, north_hemisphere ? 5 : -5, 5)); // A4.4.10.2 a-1)
-            switch(check_avialability(rect_5_5)){
+            switch(check_availability(rect_5_5, selected)){
               case 4: // a-1)
                 rect_5_5.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
                 return;
@@ -755,7 +756,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
                 continue;
               }
 
-              if((rect_10_10[i].availability = check_avialability(rect_10_10[i].rect)) == 4){
+              if((rect_10_10[i].availability = check_availability(rect_10_10[i].rect, selected)) == 4){
                 rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
                 return;
               }
@@ -768,7 +769,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             }
           }else if(lat_deg_abs <= 70){
             trapezoid_t rect_5_10(trapezoid_t::generate_rectangle(pivot.igp, north_hemisphere ? 5 : -5, 10)); // A4.4.10.2 b-1)
-            switch(check_avialability(rect_5_10)){
+            switch(check_availability(rect_5_10, selected)){
               case 4: // b-1)
                 rect_5_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
                 return;
@@ -798,7 +799,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
                 continue;
               }
 
-              if((rect_10_10[i].availability = check_avialability(rect_10_10[i].rect)) == 4){
+              if((rect_10_10[i].availability = check_availability(rect_10_10[i].rect, selected)) == 4){
                 rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
                 return;
               }
@@ -837,7 +838,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             { // check 1)
               rect_10_10.igp[1].longitude_deg = lng_85_west_low_band;
               rect_10_10.igp[0].longitude_deg = lng_85_east_low_band;
-              if(check_avialability(rect_10_10) == 4){
+              if(check_availability(rect_10_10, selected) == 4){
                 rect_10_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
                 return;
               }
@@ -886,14 +887,14 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
               }while(false);
 
               // check 2-4)
-              if(check_again && (check_avialability(rect_10_10) == 4)){
+              if(check_again && (check_availability(rect_10_10, selected) == 4)){
                 rect_10_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
                 return;
               }
             }
           }else{ // pole
             trapezoid_t rect(trapezoid_t::generate_rectangle_pole(pivot.igp));
-            if(check_avialability(rect) == 4){
+            if(check_availability(rect, selected) == 4){
               rect.compute_weight_pole(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
               return;
             }
