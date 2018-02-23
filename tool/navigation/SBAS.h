@@ -164,6 +164,29 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
         convert_u(8, 14, 4, broadcasted_bands);
         convert_u(8, 18, 4, band);
         convert_u(8, 22, 2, iodi);
+        struct mask_t {
+          u8_t valid;
+          union {
+            u8_t linear[201];
+            u8_t block[14][15];
+          };
+        };
+        static mask_t mask(const char *buf){
+          mask_t res = {0};
+          buf = &buf[2]; // 24 bits shift
+          // [mask7, mask6, .., mask0], [mask15, mask14, .., mask8], ...
+          u8_t compared(0);
+          for(int i(0); i < 201; ++i, compared >>= 1){
+            if(compared == 0){ // rotate
+              compared = 0x80;
+              buf++;
+            }
+            if((u8_t)(*buf) & compared){
+              res.linear[res.valid++] = i;
+            }
+          }
+          return res;
+        }
       };
 
       struct Type26 { ///< @see Table A-16 IONO_DELAY_CORRECTION
