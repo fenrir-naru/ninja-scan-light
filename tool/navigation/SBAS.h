@@ -690,11 +690,14 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
           }
         };
 
+      protected:
+        typename PointProperty::raw_t properties[position_index_t::LAT_INDEX_MAX + 1][position_index_t::LNG_INDEX_MAX + 1];
+
+      public:
         template <class T>
         T check_avialability_hook(trapezoid_t &in, const T &out) const {
           return out; // for debug
         }
-
         /**
          * @return available IGP(s)
          */
@@ -702,7 +705,11 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
           int_t res(0);
           for(int i(0); i < 4; ++i){
             if(target.checked[i]){res++; continue;}
-            // TODO
+            position_index_t index(target.igp[i]);
+            if(properties[index.lat_index][index.lng_index].available()){ // TODO make cache
+              target.checked[i] = true;
+              res++;
+            }
           }
           return check_avialability_hook(target, res);
         }
@@ -894,6 +901,15 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
 
           // Correction unavailable
         }
+
+        IonosphericGridPoints(){
+          for(int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
+            for(int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
+              properties[i][j].delay = PointProperty::raw_t::DELAY_DONY_USE;
+            }
+          }
+        }
+        ~IonosphericGridPoints(){}
     };
 
     class Satellite {
