@@ -494,4 +494,28 @@ BOOST_AUTO_TEST_CASE(data_block_decorder){
   }
 }
 
+BOOST_AUTO_TEST_CASE(data_block_type18){
+  char buf[(250 + 7) / 8] = {0};
+  static const int mask_max(16); // check for [0,15] mask
+  for(int i(0); i < (1 << mask_max); ++i){
+    *(unsigned char *)(&buf[3]) = (unsigned char)(i & 0xFF);
+    *(unsigned char *)(&buf[4]) = (unsigned char)((i >> 8) & 0xFF);
+
+    space_node_t::DataBlock::Type18::mask_t res(space_node_t::DataBlock::Type18::mask(buf));
+
+    BOOST_TEST_MESSAGE(i << ", valid(" << (int)res.valid << ")");
+    int res_offset(0);
+    for(int j(0); j < mask_max; ++j){
+      div_t k(div(j, 8));
+      if((res_offset < res.valid) && (res.linear[res_offset] == j)){
+        res_offset++;
+        BOOST_TEST_MESSAGE(i << ", mask(" << j << ")");
+        BOOST_REQUIRE(i & (1 << ((k.quot * 8) + (7 - k.rem))));
+      }else{
+        BOOST_REQUIRE(!(i & (1 << ((k.quot * 8) + (7 - k.rem)))));
+      }
+    }
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
