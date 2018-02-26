@@ -166,9 +166,10 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
         convert_u(8, 22, 2, iodi);
         struct mask_t {
           u8_t valid;
+          static const int each_block = 15;
           union {
             u8_t linear[201];
-            u8_t block[14][15];
+            u8_t block[14][each_block];
           };
         };
         /**
@@ -273,6 +274,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
               DELAY_DONT_USE = 0x1FF,
               ERROR_INDICATOR_NOT_MONITORED = 15,
             };
+
+            static const raw_t unavailable;
 
             static float_t raw2delay(const u16_t &v){
               return 0.125 * v;
@@ -949,11 +952,82 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
           return PointProperty::unavailable;
         }
 
+      protected:
+        struct {
+          u8_t iodi;
+          typename DataBlock::Type18::mask_t mask;
+        } masks[11];
+
+      public:
+        /**
+         * Update mask
+         * @param band IGP band
+         * @param iodi_new Issue of data, ionospheric
+         * @param mask_new New mask
+         * @return True if mask is updated and changed, otherwise false.
+         */
+        bool update_mask(const u8_t &band,
+            const u8_t &iodi_new,
+            const typename DataBlock::Type18::mask_t &mask_new){
+          if(masks[band].iodi == iodi_new){return false;} // lazy decline of update
+
+          // remove points which is not activated in the new mask
+          typename DataBlock::Type18::mask_t &mask_old(masks[band].mask);
+          for(u8_t i(0), j(0); i < mask_old.valid; ++i){
+            bool still_use(false);
+            for(; j < mask_new.valid; ++j){
+              if(mask_old.linear[i] < mask_new.linear[j]){
+                break;
+              }
+              if(mask_old.linear[i] == mask_new.linear[j]){
+                still_use = true;
+                ++j;
+                break;
+              }
+            }
+            if(still_use){continue;}
+            position_index_t index(position(band, mask_old.linear[i]));
+            properties[index.lat_index][index.lng_index] = PointProperty::raw_t::DELAY_DONT_USE;
+          }
+
+          masks[band].iodi = iodi_new;
+          mask_old = mask_new;
+          return true;
+        }
+
+        bool update_mask(const char *type18){
+          typedef typename DataBlock::Type18 msg_t;
+          u8_t band(msg_t::band(type18));
+          return update_mask(band, msg_t::iodi(type18), msg_t::mask(type18, band));
+        }
+
+        bool register_igp(const char *type26){
+          typedef typename DataBlock::Type26 msg_t;
+          u8_t band(msg_t::band(type26));
+          if(masks[band].iodi != msg_t::iodi(type26)){return false;}
+          u8_t *mask_pos(masks[band].mask.block[msg_t::block_id(type26)]);
+          int i_max(masks[band].mask.valid - (mask_pos - masks[band].mask.linear));
+          if(i_max > DataBlock::Type18::mask_t::each_block){
+            i_max = DataBlock::Type18::mask_t::each_block;
+          }
+          for(int i(0); i < i_max; ++i, ++mask_pos){
+            position_index_t index(position(band, *mask_pos));
+            typename PointProperty::raw_t &dst(properties[index.lat_index][index.lng_index]);
+            dst.delay = msg_t::delay(type26, i);
+            dst.error_indicator = msg_t::error_indicator(type26, i);
+          }
+          return true;
+        }
+
         IonosphericGridPoints(){
           for(int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
             for(int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
-              properties[i][j].delay = PointProperty::raw_t::DELAY_DONT_USE;
+              properties[i][j] = PointProperty::raw_t::unavailable;
             }
+          }
+          for(int i(0); i < sizeof(masks) / sizeof(masks[0]); ++i){
+            masks[i].iodi = 4; // out of valid range
+            masks[i].mask.valid = 0;
           }
         }
         ~IonosphericGridPoints(){}
@@ -1228,6 +1302,13 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
   {137,   68, 01007, "MTSAT-2 (or MTSAT-1R)"},
   {138,  386, 00450, "LM RPS-2"},
 }; ///< @see Table A-1
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty::raw_t
+    SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty::raw_t::unavailable = {
+  DELAY_DONT_USE,
+  ERROR_INDICATOR_NOT_MONITORED,
+};
 
 template <class FloatT>
 const typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty
