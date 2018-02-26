@@ -175,7 +175,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
          * @param band [0,10]
          * @return Number of mask bits
          */
-        static uint_t mask_bits(const uint_t &band){
+        static u8_t mask_bits(const u8_t &band){
           switch(band){
             case 8:
               return 200;
@@ -186,12 +186,12 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
               return 201;
           }
         }
-        static mask_t mask(const char *buf, const uint_t &band){
+        static mask_t mask(const char *buf, const u8_t &band){
           mask_t res = {0};
           buf = &buf[2]; // 24 bits shift
           // [mask7, mask6, .., mask0], [mask15, mask14, .., mask8], ...
           u8_t compared(0);
-          for(int i(0); i < mask_bits(band); ++i, compared >>= 1){
+          for(u8_t i(0); i < mask_bits(band); ++i, compared >>= 1){
             if(compared == 0){ // rotate
               compared = 0x80;
               buf++;
@@ -363,26 +363,26 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
          * @return (pos_t) grid point position
          * @see Table A-14
          */
-        static position_t position(const uint_t &band, const uint_t &mask_pos){
+        static position_t position(const u8_t &band, const u8_t &mask_pos){
           position_t res;
           if(band <= 8){
-            uint_t row_index_28grids((band / 2) * 2); // where 28 grids at the same longitude are appeared
+            u8_t row_index_28(band & (~(u8_t)0x01)); // where 28 grid points on the same longitude are appeared
             int row_index(0), col_index((int)mask_pos);
             do{
-              int grids(row_index_28grids == row_index ? 28 : 27);
-              if(col_index < grids){
+              int points(row_index_28 == row_index ? 28 : 27);
+              if(col_index < points){
                 col_index -= 2; // col_index => [-2, 24 (or 25)]
-                if((grids > 27) && (band % 2 == 1)){ // col_index => [-3, 24]
+                if((points > 27) && (band % 2 == 1)){ // col_index => [-3, 24]
                   col_index--;
                 }
                 break;
               }
-              col_index -= grids;
+              col_index -= points;
               row_index++;
 
-              grids = 23;
-              if(col_index < grids){break;}
-              col_index -= grids;
+              points = 23;
+              if(col_index < points){break;}
+              col_index -= points;
               row_index++;
             }while(row_index < 8);
 
