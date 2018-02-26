@@ -171,12 +171,27 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             u8_t block[14][15];
           };
         };
-        static mask_t mask(const char *buf){
+        /**
+         * @param band [0,10]
+         * @return Number of mask bits
+         */
+        static uint_t mask_bits(const uint_t &band){
+          switch(band){
+            case 8:
+              return 200;
+            case 9:
+            case 10:
+              return 192;
+            default:
+              return 201;
+          }
+        }
+        static mask_t mask(const char *buf, const uint_t &band){
           mask_t res = {0};
           buf = &buf[2]; // 24 bits shift
           // [mask7, mask6, .., mask0], [mask15, mask14, .., mask8], ...
           u8_t compared(0);
-          for(int i(0); i < 201; ++i, compared >>= 1){
+          for(int i(0); i < mask_bits(band); ++i, compared >>= 1){
             if(compared == 0){ // rotate
               compared = 0x80;
               buf++;
@@ -186,6 +201,9 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             }
           }
           return res;
+        }
+        static mask_t mask(const char *buf){
+          return mask(buf, band(buf));
         }
       };
 

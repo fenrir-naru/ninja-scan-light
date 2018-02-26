@@ -195,14 +195,18 @@ static const int igp_lat_lng[][201][2] = {
 #undef LNG_180W_150E
 #undef LNG_170W_160E
 
+BOOST_AUTO_TEST_CASE(igp_band_mask){
+  for(unsigned band(0); band < 11; ++band){
+    for(unsigned mask(space_node_t::DataBlock::Type18::mask_bits(band)); mask < 201; ++mask){
+      BOOST_REQUIRE_EQUAL(igp_lat_lng[band][mask][0], 0); // out of bands => check default value(0)
+      BOOST_REQUIRE_EQUAL(igp_lat_lng[band][mask][1], 0);
+    }
+  }
+}
+
 BOOST_AUTO_TEST_CASE(igp_pos_cast){
   for(unsigned band(0); band < 11; ++band){
-    for(unsigned mask(0); mask < 201; ++mask){
-      if((band == 8) && (mask >= 200)){
-        break;
-      }else if((band >= 9) && (mask >= 192)){
-        break;
-      }
+    for(unsigned mask(0); mask < space_node_t::DataBlock::Type18::mask_bits(band); ++mask){
       igp_t::position_t pos = {igp_lat_lng[band][mask][0], igp_lat_lng[band][mask][1]};
       BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
       igp_t::position_t pos2(((igp_t::position_index_t)pos));
@@ -214,12 +218,7 @@ BOOST_AUTO_TEST_CASE(igp_pos_cast){
 
 BOOST_AUTO_TEST_CASE(igp_pos){
   for(unsigned band(0); band < 11; ++band){
-    for(unsigned mask(0); mask < 201; ++mask){
-      if((band == 8) && (mask >= 200)){
-        break;
-      }else if((band >= 9) && (mask >= 192)){
-        break;
-      }
+    for(unsigned mask(0); mask < space_node_t::DataBlock::Type18::mask_bits(band); ++mask){
       igp_t::position_t pos(igp_t::position(band, mask));
       BOOST_TEST_MESSAGE("(band, mask) = (" << band << ", " << mask << ") => " << pos.latitude_deg << ", " << pos.longitude_deg);
       BOOST_REQUIRE(pos.is_predefined());
@@ -255,12 +254,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
   typedef igp_t::pivot_t res_t;
 
   for(unsigned band(0); band < 11; ++band){
-    for(unsigned mask(0); mask < 201; ++mask){
-      if((band == 8) && (mask >= 200)){
-        break;
-      }else if((band >= 9) && (mask >= 192)){
-        break;
-      }
+    for(unsigned mask(0); mask < space_node_t::DataBlock::Type18::mask_bits(band); ++mask){
 
       { // on grid
         check_pivot_of_grid_point(
@@ -335,8 +329,9 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
 void igp_interpolate_check(const double &in_lat, const double &in_lng){
   bool north_hemisphere(in_lat >= 0);
 
+  static igp_t igp;
   trapezoid_list.clear();
-  igp_t().interpolate(in_lat, in_lng);
+  igp.interpolate(in_lat, in_lng);
 
   // simple check
   for(trapezoid_list_t::const_iterator it(trapezoid_list.begin());
@@ -460,12 +455,7 @@ void igp_interpolate_check(const double &in_lat, const double &in_lng){
 
 BOOST_AUTO_TEST_CASE(igp_interpolate_near_grid){
   for(unsigned band(0); band < 11; ++band){
-    for(unsigned mask(0); mask < 201; ++mask){
-      if((band == 8) && (mask >= 200)){
-        break;
-      }else if((band >= 9) && (mask >= 192)){
-        break;
-      }
+    for(unsigned mask(0); mask < space_node_t::DataBlock::Type18::mask_bits(band); ++mask){
 
       { // near grid
         double delta_lat(igp_lat_lng[band][mask][0] >= 0 ? 0.5 : -0.5), delta_lng(0.5);
