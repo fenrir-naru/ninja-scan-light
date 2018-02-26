@@ -236,7 +236,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
       public:
         struct PointProperty {
           float_t delay; // [m]
-          float_t sigma; // [m^2]
+          float_t sigma; // [m^2], negative value means "not monitored"
 
           struct raw_t {
             u16_t delay;
@@ -252,11 +252,15 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             }
 
             enum {
-              DELAY_DONY_USE = 0x1FF,
+              DELAY_DONT_USE = 0x1FF,
               ERROR_INDICATOR_NOT_MONITORED = 15,
             };
 
-            static float_t indicator2sigma(const u8_t &v){
+            static float_t raw2delay(const u16_t &v){
+              return 0.125 * v;
+            }
+
+            static float_t raw2sigma(const u8_t &v){
               switch(v){ ///< @see Table A-17
                 case 0:   return 0.0084;
                 case 1:   return 0.0333;
@@ -278,15 +282,17 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             }
             operator PointProperty() const {
               PointProperty res = {
-                0.125 * delay,
-                indicator2sigma(error_indicator),
+                raw2delay(delay),
+                raw2sigma(error_indicator),
               };
               return res;
             }
-            bool available() const {
-              return (delay < DELAY_DONY_USE);
+            bool is_available() const {
+              return (delay < DELAY_DONT_USE);
             }
           };
+
+          static const PointProperty unavailable;
         };
 
         struct position_index_t;
@@ -621,6 +627,27 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             return false;
           }
 
+          PointProperty compute_property(const typename PointProperty::raw_t *(&selected)[4]){
+            float_t delay_raw(0), sigma(0);
+            bool use_sigma(true);
+            for(int i(0); i <= 3; i++){
+              if(!checked[i]){continue;}
+              delay_raw += weight[i] * selected[i]->delay;
+              if(selected[i]->error_indicator == PointProperty::raw_t::ERROR_INDICATOR_NOT_MONITORED){
+                use_sigma = false;
+              }else{
+                sigma += weight[i] * PointProperty::raw_t::raw2sigma(selected[i]->error_indicator);
+              }
+            }
+            PointProperty res = {
+              PointProperty::raw_t::raw2delay(delay_raw),
+              use_sigma
+                  ? sigma
+                  : PointProperty::raw_t::raw2sigma(PointProperty::raw_t::ERROR_INDICATOR_NOT_MONITORED),
+            };
+            return res;
+          }
+
           static trapezoid_t generate_rectangle(const position_t &pivot,
               const int_t &delta_lat = 5, const int_t &delta_lng = 5){
             int_t lng(pivot.longitude_deg + delta_lng);
@@ -706,7 +733,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
           for(int i(0); i < 4; ++i){
             if(target.checked[i]){res++; continue;}
             position_index_t index(target.igp[i]);
-            if((cache[i] = &properties[index.lat_index][index.lng_index])->available()){
+            if((cache[i] = &properties[index.lat_index][index.lng_index])->is_available()){
               target.checked[i] = true;
               res++;
             }
@@ -714,7 +741,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
           return check_availability_hook(target, res);
         }
 
-        void interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const { // TODO return type
+        PointProperty interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const {
           pivot_t pivot(get_pivot(latitude_deg, longitude_deg));
           const typename PointProperty::raw_t *selected[4];
 
@@ -726,10 +753,10 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             switch(check_availability(rect_5_5, selected)){
               case 4: // a-1)
                 rect_5_5.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
-                return;
+                return rect_5_5.compute_property(selected);
               case 3: // a-2)
                 if(rect_5_5.compute_weight_three(pivot.delta.latitude_deg, pivot.delta.longitude_deg)){
-                  return;
+                  return rect_5_5.compute_property(selected);
                 }
             }
 
@@ -758,13 +785,13 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
 
               if((rect_10_10[i].availability = check_availability(rect_10_10[i].rect, selected)) == 4){
                 rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
-                return;
+                return rect_10_10[i].rect.compute_property(selected);
               }
             }
             for(int i(0); i < 4; ++i){ // a-4) three point interpolation
               if((rect_10_10[i].availability == 3)
                   && rect_10_10[i].rect.compute_weight_three(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng)){
-                return;
+                return rect_10_10[i].rect.compute_property(selected);
               }
             }
           }else if(lat_deg_abs <= 70){
@@ -772,10 +799,10 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             switch(check_availability(rect_5_10, selected)){
               case 4: // b-1)
                 rect_5_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
-                return;
+                return rect_5_10.compute_property(selected);
               case 3: // b-2)
                 if(rect_5_10.compute_weight_three(pivot.delta.latitude_deg, pivot.delta.longitude_deg)){
-                  return;
+                  return rect_5_10.compute_property(selected);
                 }
             }
 
@@ -801,13 +828,13 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
 
               if((rect_10_10[i].availability = check_availability(rect_10_10[i].rect, selected)) == 4){
                 rect_10_10[i].rect.compute_weight(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng);
-                return;
+                return rect_10_10[i].rect.compute_property(selected);
               }
             }
             for(int i(0); i < 2; ++i){ // b-4) three point interpolation
               if((rect_10_10[i].availability == 3)
                   && rect_10_10[i].rect.compute_weight_three(rect_10_10[i].delta_lat, rect_10_10[i].delta_lng)){
-                return;
+                return rect_10_10[i].rect.compute_property(selected);
               }
             }
           }else if(lat_deg_abs <= 75){
@@ -840,7 +867,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
               rect_10_10.igp[0].longitude_deg = lng_85_east_low_band;
               if(check_availability(rect_10_10, selected) == 4){
                 rect_10_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
-                return;
+                return rect_10_10.compute_property(selected);
               }
             }
 
@@ -889,24 +916,25 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
               // check 2-4)
               if(check_again && (check_availability(rect_10_10, selected) == 4)){
                 rect_10_10.compute_weight(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
-                return;
+                return rect_10_10.compute_property(selected);
               }
             }
           }else{ // pole
             trapezoid_t rect(trapezoid_t::generate_rectangle_pole(pivot.igp));
             if(check_availability(rect, selected) == 4){
               rect.compute_weight_pole(pivot.delta.latitude_deg, pivot.delta.longitude_deg);
-              return;
+              return rect.compute_property(selected);
             }
           }
 
           // Correction unavailable
+          return PointProperty::unavailable;
         }
 
         IonosphericGridPoints(){
           for(int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
             for(int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
-              properties[i][j].delay = PointProperty::raw_t::DELAY_DONY_USE;
+              properties[i][j].delay = PointProperty::raw_t::DELAY_DONT_USE;
             }
           }
         }
@@ -1182,6 +1210,13 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
   {137,   68, 01007, "MTSAT-2 (or MTSAT-1R)"},
   {138,  386, 00450, "LM RPS-2"},
 }; ///< @see Table A-1
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty
+    SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty::unavailable = {
+  0,
+  raw_t::raw2sigma(raw_t::ERROR_INDICATOR_NOT_MONITORED),
+};
 
 template <class FloatT>
 SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_t::operator typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_index_t() const {
