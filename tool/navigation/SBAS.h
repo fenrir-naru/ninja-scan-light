@@ -994,13 +994,33 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
           mask_old = mask_new;
           return true;
         }
-
+        /**
+         * Update mask with broadcasted data
+         * @param type18 Type 18 message
+         * @return True if mask is updated and changed, otherwise false.
+         */
         bool update_mask(const char *type18){
           typedef typename DataBlock::Type18 msg_t;
           u8_t band(msg_t::band(type18));
           return update_mask(band, msg_t::iodi(type18), msg_t::mask(type18, band));
         }
 
+        /**
+         * Register new ionospheric grind point property
+         * @param IGP position
+         * @param prop New property
+         * @return Always true
+         */
+        bool register_igp(const position_t &pos, const typename PointProperty::raw_t &prop){
+          position_index_t index(pos);
+          properties[index.lat_index][index.lng_index] = prop;
+          return true;
+        }
+        /**
+         * Register new properties of ionospheric grind points (IGPs) with broadcasted data
+         * @param type26 Type 26 message
+         * @return True if IGPs are registered, otherwise false
+         */
         bool register_igp(const char *type26){
           typedef typename DataBlock::Type26 msg_t;
           u8_t band(msg_t::band(type26));
@@ -1011,10 +1031,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             i_max = DataBlock::Type18::mask_t::each_block;
           }
           for(int i(0); i < i_max; ++i, ++mask_pos){
-            position_index_t index(position(band, *mask_pos));
-            typename PointProperty::raw_t &dst(properties[index.lat_index][index.lng_index]);
-            dst.delay = msg_t::delay(type26, i);
-            dst.error_indicator = msg_t::error_indicator(type26, i);
+            register_igp(position(band, *mask_pos), PointProperty::raw_t::fetch(type26, i));
           }
           return true;
         }
