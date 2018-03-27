@@ -708,12 +708,12 @@ class GPS_SpaceNode {
             float_t Ek(eccentric_anomaly(tk));
 
             // Relativistic correction term
-            float_t tr(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
+            float_t dt_r(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
                 * e * sqrt_A * sin(Ek));
 
-            float_t dt(a_f0 + a_f1 * tk + a_f2 * pow2(tk));
+            float_t dt_sv(a_f0 + a_f1 * tk + a_f2 * pow2(tk) + dt_r);
 
-            return dt + tr - t_GD;
+            return dt_sv - t_GD;
           }
 
           float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
@@ -724,12 +724,12 @@ class GPS_SpaceNode {
             float_t Ek_dot(eccentric_anomaly_dot(Ek));
 
             // Derivative of Relativistic correction term
-            float_t tr_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
+            float_t dt_r_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
                 * e * sqrt_A * Ek_dot * cos(Ek));
 
-            float_t dt_dot(a_f1 + a_f2 * 2 * tk);
+            float_t dt_sv_dot(a_f1 + a_f2 * 2 * tk + dt_r_dot);
 
-            return dt_dot + tr_dot;
+            return dt_sv_dot;
           }
 
           constellation_t constellation(
