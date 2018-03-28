@@ -699,9 +699,12 @@ class GPS_SpaceNode {
            *
            * @param t current time
            * @param pseudo_range pseudo range in meters
+           * @param gamma factor for compensation of group delay
+           * L1 = 1, L2 = (77/60)^2, see ICD 20.3.3.3.3.2 L1 - L2 Correction
            * @return in seconds
            */
-          float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const{
+          float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0,
+              const float_t &gamma = 1) const{
 
             float_t transit_time(pseudo_range / light_speed);
             float_t tk(period_from_time_of_clock(t) - transit_time);
@@ -713,7 +716,7 @@ class GPS_SpaceNode {
 
             float_t dt_sv(a_f0 + a_f1 * tk + a_f2 * pow2(tk) + dt_r);
 
-            return dt_sv - t_GD;
+            return dt_sv - (gamma * t_GD);
           }
 
           float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
