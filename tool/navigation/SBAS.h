@@ -246,6 +246,20 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
         convert_s_ch( 8, 77,  4, 67, z_dot);
         convert_u(16, 215, 11, t0);
       };
+
+      struct Type12 { // @see Table A-22 SBAS network Time/UTC parameters
+        convert_s(32,  14, 24, A1_SNT);
+        convert_s(32,  38, 32, A0_SNT);
+        convert_u( 8,  70,  8, t_ot);
+        convert_u( 8,  78,  8, WN_t);
+        convert_s( 8,  86,  8, delta_t_LS);
+        convert_u( 8,  94,  8, WN_LSF);
+        convert_u( 8, 102,  8, DN);
+        convert_s( 8, 110,  8, delta_t_LSF);
+        convert_u( 8, 118,  3, UTC_standard_identifier);
+        convert_u(32, 121, 20, TOW);
+        convert_u(16, 141, 10, WN);
+      };
 #undef convert_s_ch
 #undef convert_u_ch
 #undef convert_s
@@ -1168,6 +1182,71 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
       return -(d_hyd + d_wet) * m_el;
     }
 
+    /**
+     * UTC parameters
+     *
+     */
+    struct UTC_Parameters {
+      float_t A1;          ///< UTC parameter for SBAS network time (s/s)
+      float_t A0;          ///< UTC parameter for SBAS network time (s)
+      uint_t t_ot;         ///< Epoch time (UTC) (s)
+      uint_t WN_t;         ///< Epoch time (UTC) (weeks)
+      int_t delta_t_LS;    ///< Current leap seconds (s)
+      uint_t WN_LSF;       ///< Last leap second update week (weeks)
+      uint_t DN;           ///< Last leap second update day (days)
+      int_t delta_t_LSF;   ///< Updated leap seconds (s)
+
+      struct raw_t {
+        s32_t A1;           ///< UTC parameter (-50, s/s)
+        s32_t A0;           ///< UTC parameter (-30, s)
+        u8_t  t_ot;         ///< Epoch time (UTC) (12, s)
+        u8_t  WN_t;         ///< Epoch time (UTC) (weeks, truncated)
+        s8_t  delta_t_LS;   ///< Current leap seconds (s)
+        u8_t  WN_LSF;       ///< Last leap second update week (weeks, truncated)
+        u8_t  DN;           ///< Last leap second update day (days)
+        s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
+
+        static raw_t fetch(const char *buf){
+          typedef typename DataBlock::Type12 msg_t;
+          raw_t res = {
+            msg_t::A1_SNT(buf),
+            msg_t::A0_SNT(buf),
+            msg_t::t_ot(buf),
+            msg_t::WN_t(buf),
+            msg_t::delta_t_LS(buf),
+            msg_t::WN_LSF(buf),
+            msg_t::DN(buf),
+            msg_t::delta_t_LSF(buf),
+          };
+          return res;
+        }
+
+        enum {
+          SF_A1,
+          SF_A0,
+
+          SF_NUM,
+        };
+        static const float_t sf[SF_NUM];
+
+        operator UTC_Parameters() const {
+          UTC_Parameters converted;
+#define CONVERT(TARGET) \
+{converted.TARGET = sf[SF_ ## TARGET] * TARGET;}
+            CONVERT(A1);
+            CONVERT(A0);
+            converted.t_ot = ((uint_t)t_ot) << 12;
+            converted.WN_t = WN_t;
+            converted.delta_t_LS = delta_t_LS;
+            converted.WN_LSF = WN_LSF;
+            converted.DN = DN;
+            converted.delta_t_LSF = delta_t_LSF;
+#undef CONVERT
+          return converted;
+        };
+      };
+    };
+
     class Satellite {
       public:
         typedef typename gps_space_node_t::constellation_t constellation_t;
@@ -1487,6 +1566,12 @@ const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::Satellite
   10,     // SF_dxy
   60,     // SF_dz
   64,     // SF_t_0
+};
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::UTC_Parameters::raw_t::sf[] = {
+  POWER_2(-50), // SF_A1
+  POWER_2(-30), // SF_A0
 };
 
 #undef POWER_2
