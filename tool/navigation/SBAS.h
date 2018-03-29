@@ -1053,6 +1053,24 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
     };
 
     /**
+     * Calculate Sagnac correction range in meter, which must be accounted
+     * for residual calculation of pseudo range.
+     *
+     * @param sat_pos Satellite position
+     * @param usr_pos User position
+     * @return correction range
+     * @see A.4.4.11
+     * @see SBAS_SpaceNode::Satellite::Ephemeris::constellation
+     */
+    static float_t sagnac_correction(
+        const xyz_t sat_pos,
+        const xyz_t usr_pos) {
+      return WGS84::Omega_Earth_IAU
+          * (sat_pos.x() * usr_pos.y() - sat_pos.y() * usr_pos.x())
+          / gps_space_node_t::light_speed;
+    }
+
+    /**
      * Calculate correction value in accordance with tropospheric model
      *
      * @param year_utc UTC floating-point year
@@ -1215,7 +1233,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
                   dz + ddz * delta_t),
             };
 
-            // TODO Sagnac correction
+            // Be careful, Sagnac correction must be performed before geometric distance calculation
+            // @see SBAS_SpaceNode::sagnac_correction
 
             return res;
           }
