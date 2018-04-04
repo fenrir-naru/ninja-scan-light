@@ -63,6 +63,12 @@ extern __bit gps_utc_valid;
 extern __xdata struct tm gps_utc;
 
 typedef struct {
+  s16 lat; // 1E-2 [deg]; [-90.00, 90.00]
+  s16 lng; // 1E-2 [deg]; (-180.00, 180.00]
+  s16 alt; // [m]; [-32768, 32767]
+} gps_pos_t;
+
+typedef struct {
   u8 msg_class;
   u8 msg_id;
   u8 rate;
