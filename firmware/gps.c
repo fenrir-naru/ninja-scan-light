@@ -602,9 +602,20 @@ static void make_packet(packet_t *packet){
             if((ubx_state.index > 10) && (ubx_state.index <= 22)){
               *((u8 *)(((u8 *)&(buf.b[4])) + ((ubx_state.index - 11) % 4))) = c;
               switch(ubx_state.index){
-                case 14: buf.pos.lat = (s16)(*(s32 *)&(buf.b[4]) / 100000); break;
-                case 18: buf.pos.lng = (s16)(*(s32 *)&(buf.b[4]) / 100000); break;
-                case 22: buf.pos.alt = (s16)(*(s32 *)&(buf.b[4]) / 1000); break; // TODO consider overflow
+                case 14: buf.pos.lng = (s16)(*(s32 *)&(buf.b[4]) / 100000); break;
+                case 18: buf.pos.lat = (s16)(*(s32 *)&(buf.b[4]) / 100000); break;
+                case 22: {
+                  s32 v = *(s32 *)&(buf.b[4]) / 1000;
+                  // consider overflow
+                  if(v > 0x7FFF){
+                    buf.pos.alt = 0x7FFF;
+                  }else if(v < -0x8000){
+                    buf.pos.alt = -0x8000;
+                  }else{
+                    buf.pos.alt = (s16)v;
+                  }
+                  break;
+                }
               }
             }
             break;
