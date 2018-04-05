@@ -31,7 +31,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 #include "main.h"
 #include "config.h"
@@ -127,7 +126,7 @@ long data_hub_read_long(FIL *f){
     return 0;
   }
   buf[res] = '\0';
-  return atol(buf);
+  return str2num(buf, NULL);
 }
 
 static FIL file;
