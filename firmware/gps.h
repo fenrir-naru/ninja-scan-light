@@ -57,6 +57,15 @@ typedef struct {
   u32 itow_ms;
 } gps_time_t;
 extern __xdata gps_time_t gps_time;
+typedef enum {
+  FIX_NO = 0,
+  FIX_DEAD_RECKONING_ONLY = 1,
+  FIX_2D = 2,
+  FIX_3D = 3,
+  FIX_DEAD_RECKONING_COMBINED = 4,
+  FIX_TIME_ONLY = 5,
+} gps_fix_type_t;
+extern __xdata gps_fix_type_t gps_fix_type;
 extern __xdata u8 gps_num_of_sat;
 
 extern __bit gps_utc_valid;
@@ -67,6 +76,7 @@ typedef struct {
   s16 lng; // 1E-2 [deg]; (-180.00, 180.00]
   s16 alt; // [m]; [-32768, 32767]
 } gps_pos_t;
+extern __xdata void (*gps_position_monitor)(__xdata gps_pos_t *);
 
 typedef struct {
   u8 msg_class;
