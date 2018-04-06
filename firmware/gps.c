@@ -363,9 +363,9 @@ static void make_packet(packet_t *packet){
     } ubx_state = {0};
     
     static __xdata u32 ephemeris_received_gps = 0;
-    static __xdata u8 svid;
     static __xdata union {
       u8 b[8];
+      u8 svid;
       struct {
         gps_time_t time;
         u8 fix_type;
@@ -492,9 +492,9 @@ static void make_packet(packet_t *packet){
             }else if((ubx_state.packet_type == NAV_TIMEUTC) && (gps_utc.tm_mday > 0)){
               gps_utc.tm_year -= 1900;
               gps_utc_valid = TRUE;
-            }else if((ubx_state.packet_type == AID_EPH) && (svid <= UBX_GPS_MAX_ID)){
+            }else if((ubx_state.packet_type == AID_EPH) && (buf.svid <= UBX_GPS_MAX_ID)){
               u32 mask = 1;
-              mask <<= (svid - 1);
+              mask <<= (buf.svid - 1);
               if(ubx_state.size > (8 + 8)){
                 ephemeris_received_gps |= mask;
               }else{
@@ -580,15 +580,15 @@ static void make_packet(packet_t *packet){
             if(ubx_state.index < (6 + 8)){break;}
             switch(ubx_state.index % 12){
               case ((6 + 8) % 12) + 2:
-                svid = c;
+                buf.svid = c;
                 break;
               case ((6 + 8) % 12) + 3: {
                 u32 mask = 1;
-                if(svid > UBX_GPS_MAX_ID){break;}
-                mask <<= (svid - 1);
+                if(buf.svid > UBX_GPS_MAX_ID){break;}
+                mask <<= (buf.svid - 1);
                 if(c & 0x08){
                   if(!(ephemeris_received_gps & mask)){
-                    poll_aid_eph(svid);
+                    poll_aid_eph(buf.svid);
                   }
                 }else{
                   ephemeris_received_gps &= ~mask;
@@ -621,7 +621,7 @@ static void make_packet(packet_t *packet){
             break;
           }
           case AID_EPH: {
-            if(ubx_state.index == (6 + 1)){svid = c;}
+            if(ubx_state.index == (6 + 1)){buf.svid = c;}
             break;
           }
         }
