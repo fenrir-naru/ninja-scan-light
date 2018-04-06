@@ -59,6 +59,7 @@ deploy:
     on:
       tags: true
   - provider: bintray
+    skip_cleanup: true
     user: fenrir-naru
     key:
       secure: $BINTRAY_TOKEN
