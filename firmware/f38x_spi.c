@@ -66,7 +66,7 @@ void spi_send_8clock(){
 }
 
 /**
- * Function sends one byte to spi and reads ony byte from spi
+ * Function sends one byte to spi and reads one byte from spi
  * it will be written with SYSCLK as clk
  * 
  * @param byte value to write

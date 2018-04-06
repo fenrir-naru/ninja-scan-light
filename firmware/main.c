@@ -173,7 +173,7 @@ void main() {
 
   // Time Pulse Interrupt config (-INT0)
   IT0 = 1;    // Edge sense
-  //PX0 = 1;    // Proiority High
+  //PX0 = 1;    // Priority High
   EX0 = 1;    // Enable
 
   if(main_loop_prologue){

@@ -140,7 +140,7 @@ static void inquiry(){
 }
 
 /**
- * This function responses to resply the requested sense
+ * This function responses to reply the requested sense
  * 
  */
 static void request_sense(){
@@ -154,7 +154,7 @@ static void request_sense(){
     | (0x00 & 0x80),  // FileMark, for READ and SPACE commands
     0x00, 0x00, 0x00, 0x00,   // device type or command specific (SPC-33.1.18)
     0x0a,             // AddSenseLen,number of additional sense bytes that follow <=244 n-7 (n=17 (0..17))
-    0x00, 0x00, 0x00, 0x00,   // CmdSpecificInfo, depends on command on which exception occured
+    0x00, 0x00, 0x00, 0x00,   // CmdSpecificInfo, depends on command on which exception occurred
     0x20,             // ASC, additional sense code = Invalid command opcode
     0x00,             // ASCQ, additional sense code qualifier Section 4.5.2.1 SPC-3 = Invalid command opcode
     0x00,             // FRUC, Field Replaceable Unit Code 4.5.2.5 SPC-3
@@ -177,7 +177,7 @@ static __xdata struct {
     {0x00, 0x00, 0x00}, sizeof(read_format_capacities_param.read_capacity10_param)};
 
 /**
- * This function responses to capacity informations request
+ * This function responses to capacity information request
  * 
  */
 static void read_capacity10(){
