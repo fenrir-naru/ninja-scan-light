@@ -113,9 +113,9 @@ static void power_on_delay(){
    */
 
   // step 1
-  P0MDOUT = P1MDOUT = P3MDOUT = 0;
+  // P0MDOUT = P1MDOUT = P3MDOUT = 0; // default
   P2MDOUT = (0x04 | 0x08);
-  P0 = P1 = P3 = 0xFF;
+  // P0 = P1 = P3 = 0xFF; // default
   P2 = ~(0x04 | 0x08);
 
   p21_low();
@@ -124,7 +124,7 @@ static void power_on_delay(){
   while(!(OSCLCN & 0x40)); // wait for ready
 
   // step 2
-  TMR3CN = 0x00;    // Stop Timer3; Clear TF3;
+  //TMR3CN = 0x00;    // Stop Timer3; Clear TF3; default
   CKCON |= 0xC0;   // Timer3 clocked based on SYSCLK;
   TMR3RL = (0x10000 - 40000);  // Re-initialize reload value (40KHz, 1s)
   TMR3 = 0xFFFF;    // Set to reload immediately
