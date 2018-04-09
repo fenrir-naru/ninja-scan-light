@@ -303,8 +303,8 @@ __xdata gps_time_t gps_time = {-1, 0};
 __xdata gps_fix_type_t gps_fix_type;
 __xdata u8 gps_num_of_sat = 0;
 
-static __xdata s8 leap_seconds = 0;
 #if USE_GPS_STD_TIME
+static __xdata s8 leap_seconds = 0;
 time_t gps_std_time(time_t *timer) {
   time_t res = 0;
   if(gps_time.wn >= 0){ // valid
@@ -367,6 +367,7 @@ static void make_packet(packet_t *packet){
     static __xdata u32 ephemeris_received_gps = 0;
     static __xdata union {
       u8 b[12];
+      s8 leap_seconds;
       u8 svid;
       struct {
         gps_time_t time;
@@ -492,6 +493,9 @@ static void make_packet(packet_t *packet){
               gps_fix_type = (gps_fix_type_t)buf.stat.fix_type;
               gps_num_of_sat = buf.stat.num_of_sat;
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
+#if USE_GPS_STD_TIME
+              leap_seconds = buf.leap_seconds;
+#endif
               static __xdata u8 sv_eph_selector = 0;
               if((++sv_eph_selector) > UBX_GPS_MAX_ID){
                 sv_eph_selector = 0;
@@ -533,7 +537,7 @@ static void make_packet(packet_t *packet){
         switch(ubx_state.packet_type){
           case NAV_TIMEGPS:
             if(ubx_state.index == 17){
-              leap_seconds = (s8)c;
+              buf.leap_seconds = (s8)c;
             }
             break;
           case NAV_TIMEUTC:
