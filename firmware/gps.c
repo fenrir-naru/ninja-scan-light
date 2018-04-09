@@ -241,7 +241,6 @@ static void set_ubx_cfg_msg(ubx_cfg_t *message){
 }
 
 void gps_init(){
-  
   // init wait
   wait_ms(100);
   
@@ -375,6 +374,14 @@ static void make_packet(packet_t *packet){
         u8 num_of_sat;
       } stat;
       gps_pos_t pos;
+      struct {
+        u16 year; // Year
+        u8 mon;   // Month   [1-12]
+        u8 mday;  // Day     [1-31]
+        u8 hour;  // Hours   [0-23]
+        u8 min;   // Minutes [0-59]
+        u8 sec;   // Seconds [0-59]
+      } utc;
     } buf;
     
     u8 c = *(dst++);
@@ -492,8 +499,14 @@ static void make_packet(packet_t *packet){
               }else{
                 poll_aid_eph(sv_eph_selector);
               }
-            }else if((ubx_state.packet_type == NAV_TIMEUTC) && (gps_utc.tm_mday > 0)){
-              gps_utc.tm_year -= 1900;
+            }else if((ubx_state.packet_type == NAV_TIMEUTC) && (buf.utc.mday > 0)){
+              gps_utc_valid = FALSE;
+              gps_utc.tm_year = buf.utc.year - 1900;  // Year since 1900
+              gps_utc.tm_mon  = buf.utc.mon - 1;      // Month   [0-11]
+              gps_utc.tm_mday = buf.utc.mday;         // Day     [1-31]
+              gps_utc.tm_hour = buf.utc.hour;         // Hours   [0-23]
+              gps_utc.tm_min  = buf.utc.min;          // Minutes [0-59]
+              gps_utc.tm_sec  = buf.utc.sec;          // Seconds [0-60]
               gps_utc_valid = TRUE;
             }else if((ubx_state.packet_type == AID_EPH) && (buf.svid <= UBX_GPS_MAX_ID)){
               u32 mask = 1;
@@ -524,18 +537,12 @@ static void make_packet(packet_t *packet){
             }
             break;
           case NAV_TIMEUTC:
-            switch(ubx_state.index){
-              case 19:
-                gps_utc_valid = FALSE;
-              case 20:
-                *((u8 *)(((u8 *)&gps_utc.tm_year) + (ubx_state.index - 19))) = c;
-                break;
-              case 21: gps_utc.tm_mon = c - 1; break;
-              case 22: gps_utc.tm_mday = c; break;
-              case 23: gps_utc.tm_hour = c; break;
-              case 24: gps_utc.tm_min = c; break;
-              case 25: gps_utc.tm_sec = c; break;
-              case 26: if(!(c & 0x04)){gps_utc.tm_mday = 0; /*invalid UTC;*/} break;
+            if((ubx_state.index >= 19) && (ubx_state.index < 26)){
+              buf.b[ubx_state.index - 19] = c;
+            }else if(ubx_state.index == 26){
+              if(!(c & 0x04)){
+                buf.utc.mday = 0; /*invalid UTC;*/
+              }
             }
             break;
           case RXM_RAW:
