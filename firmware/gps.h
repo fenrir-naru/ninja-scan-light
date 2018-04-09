@@ -72,9 +72,9 @@ extern __bit gps_utc_valid;
 extern __xdata struct tm gps_utc;
 
 typedef struct {
-  s16 lat; // 1E-2 [deg]; [-90.00, 90.00]
-  s16 lng; // 1E-2 [deg]; (-180.00, 180.00]
-  s16 alt; // [m]; [-32768, 32767]
+  s32 lng; // 1E-7 [deg]; (-180, 180]
+  s32 lat; // 1E-7 [deg]; [-90, 90]
+  s32 alt; // 1E-3 [m];
 } gps_pos_t;
 extern __xdata void (*gps_position_monitor)(__xdata gps_pos_t *);
 

@@ -368,7 +368,6 @@ static void make_packet(packet_t *packet){
     static __xdata u32 ephemeris_received_gps = 0;
     static __xdata union {
       u8 b[12];
-      s32 v_s32[3];
       u8 svid;
       struct {
         gps_time_t time;
@@ -505,16 +504,6 @@ static void make_packet(packet_t *packet){
                 ephemeris_received_gps &= ~mask;
               }
             }else if((ubx_state.packet_type == NAV_POSLLH) && gps_position_monitor){
-              buf.pos.lng = (s16)(buf.v_s32[0] / 100000);
-              buf.pos.lat = (s16)(buf.v_s32[1] / 100000);
-              // consider overflow
-              if(buf.v_s32[2] >= (0x7FFFL * 1000)){
-                buf.pos.alt = 0x7FFF;
-              }else if(buf.v_s32[2] < (-0x8000L * 1000)){
-                buf.pos.alt = -0x8000;
-              }else{
-                buf.pos.alt = (s16)(buf.v_s32[2] / 1000);
-              }
               gps_position_monitor(&(buf.pos));
             }
           }else{ // incorrect checksum
