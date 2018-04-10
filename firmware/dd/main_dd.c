@@ -48,13 +48,9 @@ volatile __xdata u32 tickcount = 0;
 volatile __xdata u8 sys_state = 0;
 volatile u8 timeout_10ms = 0;
 
-__xdata void (*main_loop_prologue)() = NULL;
-
 static void sysclk_init();
 static void port_init();
 static void timer_init();
-
-static __xdata int standby_sec = 0;
 
 #ifdef USE_ASM_FOR_SFR_MANIP
 #define p21_hiz()   {__asm orl _P2,SHARP  0x02 __endasm; }
@@ -278,7 +274,6 @@ static void timer_init(){
 void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
 
   static u8 loop_50ms = 0;
-  static u8 snapshot_gps = 0;
   static u8 snapshot_state = 0;
   static u8 loop_10s = 0;
 
@@ -299,12 +294,7 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
         sys_state = 0;
         if(loop_10s >= 200){ // 50 * 200 = 10000 [ms]
           loop_10s = 0;
-          snapshot_gps = 0;
         }
-      }
-      if(snapshot_gps > 0){
-        led4_on();
-        snapshot_gps--;
       }
       if(snapshot_state & 0x01){
         led3_on();
