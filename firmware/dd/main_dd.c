@@ -72,6 +72,8 @@ static void timer_init();
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
+FATFS __at (0x01D0) fs;
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -133,14 +135,19 @@ void main() {
           }else if((next = strstr(cdc_buf, "read")) != 0){
             i += (next - &(cdc_buf[0]));
           }else if((next = strstr(cdc_buf, "format")) != 0){
-            FRESULT res = f_mkfs(0, 0, 0);
-            switch(res){
-              case FR_OK:
-                cdc_tx(cdc_buf, sprintf(cdc_buf, "DONE\n"));
-                break;
-              default:
-                cdc_tx(cdc_buf, sprintf(cdc_buf, "FAILED! => %d\n", res));
+            FRESULT res;
+            const char *step = "mount";
+            if((res = f_mount(0, &fs)) == FR_OK){
+              step = "mkfs";
+              if((res = f_mkfs(0, 0, 0)) == FR_OK){
+                step = "unmount";
+                if((res = f_mount(0, NULL)) == FR_OK){
+                  cdc_tx(cdc_buf, sprintf(cdc_buf, "DONE\n"));
+                  break;
+                }
+              }
             }
+            cdc_tx(cdc_buf, sprintf(cdc_buf, "FAILED!(%s) => %d\n", step, res));
             break;
           }
         }
