@@ -31,8 +31,8 @@ PACKAGE = NinjaScanLight_DD.hex
 BIN_PATH = /usr/bin:/usr/local/bin
 CXX = sdcc
 AS = sdas8051
-CPPFLAGS = -V --use-stdout -D__SDCC__ -D__F380_VER__
-CFLAGS = -V --debug --stack-auto --nooverlay --model-small --use-stdout -D__SDCC__ -D__F380_VER__ --opt-code-speed #-mmcs51
+CPPFLAGS = -V --use-stdout -D__SDCC__ -D__F380_VER__ -D_USE_MKFS=1
+CFLAGS = -V --debug --stack-auto --nooverlay --model-small --use-stdout -D__SDCC__ -D__F380_VER__ -D_USE_MKFS=1 --opt-code-speed #-mmcs51
 LFLAGS = -V --debug --use-stdout --stack-auto --model-small --iram-size 0x0100 --xram-loc 0x0800 --xram-size 0x0800 --code-size 0xfc00  #-mmcs51
 ASFLAGS = -plosgff
 MKFILE_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
