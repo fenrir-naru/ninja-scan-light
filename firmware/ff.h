@@ -203,6 +203,14 @@ typedef enum {
 
 typedef enum {
   FMKFS_INIT,
+  FMKFS_MOUNTED,
+  FMKFS_DISK_STAT,
+  FMKFS_SCT_PER_CLST,
+  FMKFS_FMT,
+  FMKFS_FAT_START,
+  FMKFS_CLST,
+  FMKFS_BPB,
+  FMKFS_FAT_INIT,
 } FMKFS_PHASE;
 
 
@@ -233,7 +241,7 @@ FRESULT	f_getlabel (const TCHAR* path, TCHAR* label, DWORD* sn);	/* Get volume l
 FRESULT	f_setlabel (const TCHAR* label);							/* Set volume label */
 FRESULT f_forward (FIL* fp, UINT(*func)(const BYTE*,UINT), UINT btf, UINT* bf);	/* Forward data to the stream */
 #if _USE_MKFS_MONITOR
-FRESULT f_mkfs (BYTE vol, BYTE sfd, UINT au, void (*)(FMKFS_PHASE, void *)); /* Create a file system on the drive with monitor function */
+FRESULT f_mkfs (BYTE vol, BYTE sfd, UINT au, __code void (*monitor)(FMKFS_PHASE phase, void *ptr)); /* Create a file system on the drive with monitor function */
 #else
 FRESULT f_mkfs (BYTE vol, BYTE sfd, UINT au);           /* Create a file system on the drive */
 #endif

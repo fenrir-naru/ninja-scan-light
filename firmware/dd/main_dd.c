@@ -72,7 +72,27 @@ static void timer_init();
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
-FATFS __at (0x01D0) fs;
+static FATFS __at (0x01D0) fs;
+
+static BYTE __xdata cdc_buf[512];
+#define printf_cdc(fmt, ...) \
+cdc_tx(cdc_buf, sprintf(cdc_buf, fmt, __VA_ARGS__));
+#define puts_cdc(str) \
+cdc_tx(str "\n", sizeof(str));
+
+static void mkfs_monitor(FMKFS_PHASE phase, void *ptr){
+  switch(phase){
+    case FMKFS_INIT:          puts_cdc("mkfs#init"); break;
+    case FMKFS_MOUNTED:       printf_cdc("mkfs#mounted(%d)\n", *(BYTE *)ptr); break;
+    case FMKFS_DISK_STAT:     printf_cdc("mkfs#disk_stat(%d)\n", *(DSTATUS *)ptr); break;
+    case FMKFS_SCT_PER_CLST:  printf_cdc("mkfs#sector(%d)\n", *(UINT *)ptr); break;
+    case FMKFS_FMT:           printf_cdc("mkfs#format_type(%d)\n", *(BYTE *)ptr); break;
+    case FMKFS_FAT_START:     printf_cdc("mkfs#FAT_start(%d)\n", *(DWORD *)ptr); break;
+    case FMKFS_CLST:          printf_cdc("mkfs#cluster(%d)\n", *(DWORD *)ptr); break;
+    case FMKFS_BPB:           puts_cdc("mkfs#BPB"); break;
+    case FMKFS_FAT_INIT:      printf_cdc("mkfs#FAT_init(%d)\n", *(UINT *)ptr); break;
+  }
+}
 
 void main() {
   sysclk_init(); // Initialize oscillator
@@ -95,13 +115,7 @@ void main() {
   EX0 = 1;    // Enable
 
   while (1) {
-    static BYTE __xdata cdc_buf[512];
     static DWORD sector_start = 0, sectors = 0;
-
-#define printf_cdc(fmt, ...) \
-cdc_tx(cdc_buf, sprintf(cdc_buf, fmt, __VA_ARGS__));
-#define puts_cdc(str) \
-cdc_tx(str "\n", sizeof(str));
 
     usb_polling();
 
@@ -144,7 +158,7 @@ cdc_tx(str "\n", sizeof(str));
             const char *step = "mount";
             if((res = f_mount(0, &fs)) == FR_OK){
               step = "mkfs";
-              if((res = f_mkfs(0, 0, 0, NULL)) == FR_OK){
+              if((res = f_mkfs(0, 0, 0, mkfs_monitor)) == FR_OK){
                 step = "unmount";
                 if((res = f_mount(0, NULL)) == FR_OK){
                   puts_cdc("DONE");
@@ -180,12 +194,12 @@ cdc_tx(str "\n", sizeof(str));
         break;
       }
     }
-#undef printf_cdc
-#undef puts_cdc
-
     sys_state |= SYS_POLLING_ACTIVE;
   }
 }
+#undef printf_cdc
+#undef puts_cdc
+
 
 // System clock selections (SFR CLKSEL)
 #define SYS_INT_OSC              0x00        // Select to use internal oscillator

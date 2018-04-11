@@ -3809,7 +3809,7 @@ FRESULT f_mkfs (
 	BYTE sfd,		/* Partitioning rule 0:FDISK, 1:SFD */
 	UINT au			/* Allocation unit size [bytes] */
 #if _USE_MKFS_MONITOR
-	, void (*monitor)(FMKFS_PHASE, void *) /* callback to monitor progress */
+	, __code void (*monitor)(FMKFS_PHASE phase, void *ptr) /* callback to monitor progress */
 #endif
 )
 {
@@ -3840,6 +3840,7 @@ if(monitor){monitor(phase, value);}
 	fs->fs_type = 0;
 	pdrv = LD2PD(vol);	/* Physical drive */
 	part = LD2PT(vol);	/* Partition (0:auto detect, 1-4:get from partition table)*/
+	gate(FMKFS_MOUNTED, &vol);
 
 	/* Get disk statics */
 	stat = disk_initialize(pdrv);
@@ -3864,6 +3865,7 @@ if(monitor){monitor(phase, value);}
 		b_vol = (sfd) ? 0 : 63;		/* Volume start sector */
 		n_vol -= b_vol;				/* Volume size */
 	}
+	gate(FMKFS_DISK_STAT, &stat);
 
 	if (!au) {				/* AU auto selection */
 		vs = n_vol / (2000 / (SS(fs) / 512));
@@ -3873,12 +3875,14 @@ if(monitor){monitor(phase, value);}
 	au /= SS(fs);		/* Number of sectors per cluster */
 	if (au == 0) au = 1;
 	if (au > 128) au = 128;
+	gate(FMKFS_SCT_PER_CLST, &au);
 
 	/* Pre-compute number of clusters and FAT sub-type */
 	n_clst = n_vol / au;
 	fmt = FS_FAT12;
 	if (n_clst >= MIN_FAT16) fmt = FS_FAT16;
 	if (n_clst >= MIN_FAT32) fmt = FS_FAT32;
+	gate(FMKFS_FMT, &fmt);
 
 	/* Determine offset and size of FAT structure */
 	if (fmt == FS_FAT32) {
@@ -3895,6 +3899,7 @@ if(monitor){monitor(phase, value);}
 	b_dir = b_fat + n_fat * N_FATS;		/* Directory area start sector */
 	b_data = b_dir + n_dir;				/* Data area start sector */
 	if (n_vol < b_data + au - b_vol) return FR_MKFS_ABORTED;	/* Too small volume */
+	gate(FMKFS_FAT_START, &b_fat);
 
 	/* Align data start sector to erase block boundary (for flash memory media) */
 	if (disk_ioctl(pdrv, GET_BLOCK_SIZE, &n) != RES_OK || !n || n > 32768) n = 1;
@@ -3912,6 +3917,7 @@ if(monitor){monitor(phase, value);}
 	if (   (fmt == FS_FAT16 && n_clst < MIN_FAT16)
 		|| (fmt == FS_FAT32 && n_clst < MIN_FAT32))
 		return FR_MKFS_ABORTED;
+	gate(FMKFS_CLST, &n_clst);
 
 	switch (fmt) {	/* Determine system ID for partition table */
 	case FS_FAT12:	sys = 0x01; break;
@@ -3990,6 +3996,7 @@ if(monitor){monitor(phase, value);}
 		return FR_DISK_ERR;
 	if (fmt == FS_FAT32)							/* Write backup VBR if needed (VBR+6) */
 		disk_write(pdrv, tbl, b_vol + 6, 1);
+	gate(FMKFS_BPB, 0);
 
 	/* Initialize FAT area */
 	wsect = b_fat;
@@ -4012,6 +4019,7 @@ if(monitor){monitor(phase, value);}
 			if (disk_write(pdrv, tbl, wsect++, 1) != RES_OK)
 				return FR_DISK_ERR;
 		}
+		gate(FMKFS_FAT_INIT, &i);
 	}
 
 	/* Initialize root directory */
