@@ -73,6 +73,9 @@
 
 #if !defined(_USE_MKFS)
 #define	_USE_MKFS		0	/* 0:Disable or 1:Enable */
+#if !defined(_USE_MKFS_MONITOR)
+#define _USE_MKFS_MONITOR 0
+#endif
 #endif
 /* To enable f_mkfs function, set _USE_MKFS to 1 and set _FS_READONLY to 0 */
 

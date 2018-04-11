@@ -144,7 +144,7 @@ cdc_tx(str "\n", sizeof(str));
             const char *step = "mount";
             if((res = f_mount(0, &fs)) == FR_OK){
               step = "mkfs";
-              if((res = f_mkfs(0, 0, 0)) == FR_OK){
+              if((res = f_mkfs(0, 0, 0, NULL)) == FR_OK){
                 step = "unmount";
                 if((res = f_mount(0, NULL)) == FR_OK){
                   puts_cdc("DONE");

@@ -3808,8 +3808,18 @@ FRESULT f_mkfs (
 	BYTE vol,		/* Logical drive number */
 	BYTE sfd,		/* Partitioning rule 0:FDISK, 1:SFD */
 	UINT au			/* Allocation unit size [bytes] */
+#if _USE_MKFS_MONITOR
+	, void (*monitor)(FMKFS_PHASE, void *) /* callback to monitor progress */
+#endif
 )
 {
+#if _USE_MKFS_MONITOR
+#define gate(phase, value) \
+if(monitor){monitor(phase, value);}
+#else
+#define gate(phase, value)
+#endif
+
 	static const WORD vst[] = { 1024,   512,  256,  128,   64,    32,   16,    8,    4,    2,   0};
 	static const WORD cst[] = {32768, 16384, 8192, 4096, 2048, 16384, 8192, 4096, 2048, 1024, 512};
 	BYTE fmt, md, sys, *tbl, pdrv, part;
@@ -3819,7 +3829,7 @@ FRESULT f_mkfs (
 	DWORD n_vol, n_rsv, n_fat, n_dir;	/* Size */
 	FATFS *fs;
 	DSTATUS stat;
-
+	gate(FMKFS_INIT, 0);
 
 	/* Check mounted drive and clear work area */
 	if (vol >= _VOLUMES) return FR_INVALID_DRIVE;
@@ -4032,6 +4042,7 @@ FRESULT f_mkfs (
 	}
 
 	return (disk_ioctl(pdrv, CTRL_SYNC, 0) == RES_OK) ? FR_OK : FR_DISK_ERR;
+#undef gate
 }
 
 
