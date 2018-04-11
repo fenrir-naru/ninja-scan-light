@@ -98,6 +98,11 @@ void main() {
     static BYTE __xdata cdc_buf[512];
     static DWORD sector_start = 0, sectors = 0;
 
+#define printf_cdc(fmt, ...) \
+cdc_tx(cdc_buf, sprintf(cdc_buf, fmt, __VA_ARGS__));
+#define puts_cdc(str) \
+cdc_tx(str "\n", sizeof(str));
+
     usb_polling();
 
     if(sectors > 0){ // return result
@@ -105,7 +110,7 @@ void main() {
       do{
         if(disk_read(0, cdc_buf, sector_start, 1) != RES_OK){
           sectors = 0;
-          cdc_tx(cdc_buf, sprintf(cdc_buf, "READ_ERROR!(%lu)\n", sector_start));
+          printf_cdc("READ_ERROR!(%lu)\n", sector_start);
           break;
         }
         sector_start++; sectors--;
@@ -126,11 +131,11 @@ void main() {
           DWORD v = 0;
           if((next = strstr(cdc_buf, "count")) != 0){
             disk_ioctl(0, GET_SECTOR_COUNT, &v);
-            cdc_tx(cdc_buf, sprintf(cdc_buf, "COUNT => %lu\n", v));
+            printf_cdc("COUNT => %lu\n", v);
             break;
           }else if((next = strstr(cdc_buf, "size")) != 0){
             disk_ioctl(0, GET_SECTOR_SIZE, &v);
-            cdc_tx(cdc_buf, sprintf(cdc_buf, "SIZE => %lu\n", v));
+            printf_cdc("SIZE => %lu\n", v);
             break;
           }else if((next = strstr(cdc_buf, "read")) != 0){
             i += (next - &(cdc_buf[0]));
@@ -142,12 +147,12 @@ void main() {
               if((res = f_mkfs(0, 0, 0)) == FR_OK){
                 step = "unmount";
                 if((res = f_mount(0, NULL)) == FR_OK){
-                  cdc_tx(cdc_buf, sprintf(cdc_buf, "DONE\n"));
+                  puts_cdc("DONE");
                   break;
                 }
               }
             }
-            cdc_tx(cdc_buf, sprintf(cdc_buf, "FAILED!(%s) => %d\n", step, res));
+            printf_cdc("FAILED!(%s) => %d\n", step, res);
             break;
           }
         }
@@ -171,10 +176,12 @@ void main() {
             hit = 0;
           }
         }
-        cdc_tx(cdc_buf, sprintf(cdc_buf, "READ(%lu,%lu) => \n", sector_start, sectors));
+        printf_cdc("READ(%lu,%lu) => \n", sector_start, sectors);
         break;
       }
     }
+#undef printf_cdc
+#undef puts_cdc
 
     sys_state |= SYS_POLLING_ACTIVE;
   }
