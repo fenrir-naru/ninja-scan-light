@@ -3822,7 +3822,7 @@ if(monitor){monitor(phase, value);}
 	BYTE fmt, md, *tbl, pdrv;
 	DWORD n_clst;
 	DWORD b_vol, b_fat;	/* LBA */
-	DWORD n_fat, n_dir;	/* Size */
+	DWORD n_fat; WORD n_dir;	/* Size */
 	gate(FMKFS_INIT, 0);
 
   {
@@ -3908,7 +3908,7 @@ if(monitor){monitor(phase, value);}
       n_fat = (fmt == FS_FAT12) ? (n_clst * 3 + 1) / 2 + 3 : (n_clst * 2) + 4;
       n_fat = (n_fat + SS(fs) - 1) / SS(fs);
       n_rsv = 1;
-      n_dir = (DWORD)N_ROOTDIR * SZ_DIR / SS(fs);
+      n_dir = (WORD)((DWORD)N_ROOTDIR * SZ_DIR / SS(fs));
     }
     {
       DWORD b_data;
