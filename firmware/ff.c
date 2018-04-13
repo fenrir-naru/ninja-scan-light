@@ -3953,17 +3953,17 @@ if(monitor){monitor(phase, value);}
       default: 		sys = 0x0C;
       }
 
+      md = 0xF8;
       if (_MULTI_PARTITION && part) {
         /* Update system ID in the partition table */
         tbl = &fs->win[MBR_Table + (part - 1) * SZ_PTE];
         tbl[4] = sys;
         if (disk_write(pdrv, fs->win, 0, 1) != RES_OK) return FR_DISK_ERR;
-        md = 0xF8;
       } else {
         if (sfd) {	/* No partition table (SFD) */
           md = 0xF0;
         } else {	/* Create partition table (FDISK) */
-          DWORD n;
+          WORD n;
           mem_set(fs->win, 0, SS(fs));
           tbl = fs->win+MBR_Table;	/* Create partition table for single partition in the drive */
           tbl[1] = 1;						/* Partition start head */
@@ -3979,7 +3979,6 @@ if(monitor){monitor(phase, value);}
           ST_WORD2(fs->win+BS_55AA, 0xAA55);	/* MBR signature */
           if (disk_write(pdrv, fs->win, 0, 1) != RES_OK)	/* Write it to the MBR sector */
             return FR_DISK_ERR;
-          md = 0xF8;
         }
       }
     }
