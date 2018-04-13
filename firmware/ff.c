@@ -3803,22 +3803,21 @@ FRESULT f_forward (
 #define N_ROOTDIR	512		/* Number of root dir entries for FAT12/16 */
 #define N_FATS		1		/* Number of FAT copies (1 or 2) */
 
-FRESULT f_mkfs (
-	BYTE vol,		/* Logical drive number */
-	BYTE sfd,		/* Partitioning rule 0:FDISK, 1:SFD */
-	UINT au			/* Allocation unit size [bytes] */
 #if _USE_MKFS_MONITOR
-	, __code void (*monitor)(FMKFS_PHASE phase, void *ptr) /* callback to monitor progress */
-#endif
-)
-{
-#if _USE_MKFS_MONITOR
+__code void (* __xdata f_mkfs_monitor)(FMKFS_PHASE phase, void *ptr)
+    = NULL; /* callback to monitor progress */
 #define gate(phase, value) \
-if(monitor){monitor(phase, value);}
+if(f_mkfs_monitor){f_mkfs_monitor(phase, value);}
 #else
 #define gate(phase, value)
 #endif
 
+FRESULT f_mkfs (
+	BYTE vol,		/* Logical drive number */
+	BYTE sfd,		/* Partitioning rule 0:FDISK, 1:SFD */
+	UINT au			/* Allocation unit size [bytes] */
+)
+{
 	BYTE fmt, md, *tbl, pdrv;
 	DWORD n_clst;
 	DWORD b_vol, b_fat;	/* LBA */
@@ -4087,10 +4086,9 @@ if(monitor){monitor(phase, value);}
 	}
 
 	return (disk_ioctl(pdrv, CTRL_SYNC, 0) == RES_OK) ? FR_OK : FR_DISK_ERR;
-#undef gate
 #undef part
 }
-
+#undef gate
 
 #if _MULTI_PARTITION
 /*-----------------------------------------------------------------------*/

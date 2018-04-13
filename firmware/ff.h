@@ -201,6 +201,7 @@ typedef enum {
 } FRESULT;
 
 
+#if _USE_MKFS_MONITOR
 typedef enum {
   FMKFS_INIT,
   FMKFS_MOUNTED,
@@ -212,7 +213,8 @@ typedef enum {
   FMKFS_BPB,
   FMKFS_FAT_INIT,
 } FMKFS_PHASE;
-
+extern __code void (* __xdata f_mkfs_monitor)(FMKFS_PHASE phase, void *ptr); /* Monitor function for f_mkfs */
+#endif
 
 /*--------------------------------------------------------------*/
 /* FatFs module application interface                           */
@@ -240,11 +242,7 @@ FRESULT f_getcwd (TCHAR* buff, UINT len);							/* Get current directory */
 FRESULT	f_getlabel (const TCHAR* path, TCHAR* label, DWORD* sn);	/* Get volume label */
 FRESULT	f_setlabel (const TCHAR* label);							/* Set volume label */
 FRESULT f_forward (FIL* fp, UINT(*func)(const BYTE*,UINT), UINT btf, UINT* bf);	/* Forward data to the stream */
-#if _USE_MKFS_MONITOR
-FRESULT f_mkfs (BYTE vol, BYTE sfd, UINT au, __code void (*monitor)(FMKFS_PHASE phase, void *ptr)); /* Create a file system on the drive with monitor function */
-#else
 FRESULT f_mkfs (BYTE vol, BYTE sfd, UINT au);           /* Create a file system on the drive */
-#endif
 FRESULT	f_fdisk (BYTE pdrv, const DWORD szt[], void* work);			/* Divide a physical drive into some partitions */
 int f_putc (TCHAR c, FIL* fp);										/* Put a character to the file */
 int f_puts (const TCHAR* str, FIL* cp);								/* Put a string to the file */
