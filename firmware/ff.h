@@ -212,6 +212,7 @@ typedef enum {
   FMKFS_CLST,
   FMKFS_BPB,
   FMKFS_FAT_INIT,
+  FMKFS_FAT_ENTRY_CLR,
 } FMKFS_PHASE;
 extern __code void (* __xdata f_mkfs_monitor)(FMKFS_PHASE phase, void *ptr); /* Monitor function for f_mkfs */
 #endif

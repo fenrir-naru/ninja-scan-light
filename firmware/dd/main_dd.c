@@ -87,10 +87,11 @@ static void mkfs_monitor(FMKFS_PHASE phase, void *ptr){
     case FMKFS_DISK_STAT:     printf_cdc("mkfs#disk_stat(%d)\n", *(DSTATUS *)ptr); break;
     case FMKFS_SCT_PER_CLST:  printf_cdc("mkfs#sector(%d)\n", *(UINT *)ptr); break;
     case FMKFS_FMT:           printf_cdc("mkfs#format_type(%d)\n", *(BYTE *)ptr); break;
-    case FMKFS_FAT_START:     printf_cdc("mkfs#FAT_start(%d)\n", *(DWORD *)ptr); break;
-    case FMKFS_CLST:          printf_cdc("mkfs#cluster(%d)\n", *(DWORD *)ptr); break;
-    case FMKFS_BPB:           puts_cdc("mkfs#BPB"); break;
-    case FMKFS_FAT_INIT:      printf_cdc("mkfs#FAT_init(%d)\n", *(UINT *)ptr); break;
+    case FMKFS_FAT_START:     printf_cdc("mkfs#FAT_start(%lu)\n", *(DWORD *)ptr); break;
+    case FMKFS_CLST:          printf_cdc("mkfs#cluster(%lu)\n", *(DWORD *)ptr); break;
+    case FMKFS_BPB:           printf_cdc("mkfs#BPB(%lu)\n", *(DWORD *)ptr); break;
+    case FMKFS_FAT_INIT:      printf_cdc("mkfs#FAT_init(%d)\n", *(BYTE *)ptr); break;
+    case FMKFS_FAT_ENTRY_CLR: printf_cdc("mkfs#FAT_ent_clr(%lu)\n", *(DWORD *)ptr); break;
   }
 }
 

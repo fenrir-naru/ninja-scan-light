@@ -4025,43 +4025,49 @@ FRESULT f_mkfs (
       return FR_DISK_ERR;
     if (fmt == FS_FAT32)							/* Write backup VBR if needed (VBR+6) */
       disk_write(pdrv, tbl, b_vol + 6, 1);
-    gate(FMKFS_BPB, 0);
+    gate(FMKFS_BPB, &n_fat);
   }
 
+
 	{
-	  UINT i;
-    /* Initialize FAT area */
 #define wsect b_fat
-    //DWORD wsect = b_fat;
-    for (i = 0; i < N_FATS; i++) {		/* Initialize each FAT copy */
-      DWORD n;
-      mem_set(tbl, 0, SS(fs));			/* 1st sector of the FAT  */
-      n = md;								/* Media descriptor byte */
-      if (fmt != FS_FAT32) {
-        n |= (fmt == FS_FAT12) ? 0x00FFFF00 : 0xFFFFFF00;
-        ST_DWORD(tbl+0, n);				/* Reserve cluster #0-1 (FAT12/16) */
-      } else {
-        n |= 0xFFFFFF00;
-        ST_DWORD(tbl+0, n);				/* Reserve cluster #0-1 (FAT32) */
-        ST_DWORD(tbl+4, 0xFFFFFFFF);
-        ST_DWORD(tbl+8, 0x0FFFFFFF);	/* Reserve cluster #2 for root dir */
-      }
-      if (disk_write(pdrv, tbl, wsect++, 1) != RES_OK)
-        return FR_DISK_ERR;
-      mem_set(tbl, 0, SS(fs));			/* Fill following FAT entries with zero */
-      for (n = 1; n < n_fat; n++) {		/* This loop may take a time on FAT32 volume due to many single sector writes */
+	  //DWORD wsect = b_fat;
+	  {
+      BYTE i;
+      /* Initialize FAT area */
+      for (i = 0; i < N_FATS; i++) {		/* Initialize each FAT copy */
+        DWORD n;
+        gate(FMKFS_FAT_INIT, &i);
+        mem_set(tbl, 0, SS(fs));			/* 1st sector of the FAT  */
+        n = md;								/* Media descriptor byte */
+        if (fmt != FS_FAT32) {
+          n |= (fmt == FS_FAT12) ? 0x00FFFF00 : 0xFFFFFF00;
+          ST_DWORD(tbl+0, n);				/* Reserve cluster #0-1 (FAT12/16) */
+        } else {
+          n |= 0xFFFFFF00;
+          ST_DWORD(tbl+0, n);				/* Reserve cluster #0-1 (FAT32) */
+          ST_DWORD(tbl+4, 0xFFFFFFFF);
+          ST_DWORD(tbl+8, 0x0FFFFFFF);	/* Reserve cluster #2 for root dir */
+        }
         if (disk_write(pdrv, tbl, wsect++, 1) != RES_OK)
           return FR_DISK_ERR;
+        mem_set(tbl, 0, SS(fs));			/* Fill following FAT entries with zero */
+        for (n = n_fat; n > 0; n--, wsect++) {		/* This loop may take a time on FAT32 volume due to many single sector writes */
+          gate(FMKFS_FAT_ENTRY_CLR, &n);
+          if (disk_write(pdrv, tbl, wsect, 1) != RES_OK)
+            return FR_DISK_ERR;
+        }
       }
-      gate(FMKFS_FAT_INIT, &i);
     }
 
-    /* Initialize root directory */
-    i = (fmt == FS_FAT32) ? au : n_dir;
-    do {
-      if (disk_write(pdrv, tbl, wsect++, 1) != RES_OK)
-        return FR_DISK_ERR;
-    } while (--i);
+    {
+      /* Initialize root directory */
+      UINT i = (fmt == FS_FAT32) ? au : n_dir;
+      do {
+        if (disk_write(pdrv, tbl, wsect++, 1) != RES_OK)
+          return FR_DISK_ERR;
+      } while (--i);
+    }
 
 #if _USE_ERASE	/* Erase data area if needed */
     {
@@ -4072,7 +4078,7 @@ FRESULT f_mkfs (
     }
 #endif
 #undef wsect
-	}
+  }
 
 	/* Create FSInfo if needed */
 	if (fmt == FS_FAT32) {
