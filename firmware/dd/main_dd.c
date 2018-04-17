@@ -41,19 +41,16 @@
 
 #include "diskio.h"
 #include "usb_cdc.h"
+#include "ff.h"
 
 volatile __xdata u32 global_ms = 0;
 volatile __xdata u32 tickcount = 0;
 volatile __xdata u8 sys_state = 0;
 volatile u8 timeout_10ms = 0;
 
-__xdata void (*main_loop_prologue)() = NULL;
-
 static void sysclk_init();
 static void port_init();
 static void timer_init();
-
-static __xdata int standby_sec = 0;
 
 #ifdef USE_ASM_FOR_SFR_MANIP
 #define p21_hiz()   {__asm orl _P2,SHARP  0x02 __endasm; }
@@ -75,6 +72,31 @@ static __xdata int standby_sec = 0;
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
+static FATFS __at (0x01D0) fs;
+
+static BYTE __xdata cdc_buf[512];
+#define printf_cdc(fmt, ...) \
+cdc_tx(cdc_buf, sprintf(cdc_buf, fmt, __VA_ARGS__));
+#define puts_cdc(str) \
+cdc_tx(str "\n", sizeof(str));
+
+static void mkfs_monitor(FMKFS_PHASE phase, void *ptr){
+  switch(phase){
+    case FMKFS_INIT:          puts_cdc("mkfs#init"); break;
+    case FMKFS_MOUNTED:       printf_cdc("mkfs#mounted(%d)\n", *(BYTE *)ptr); break;
+    case FMKFS_DISK_STAT:     printf_cdc("mkfs#disk_stat(%d)\n", *(DSTATUS *)ptr); break;
+    case FMKFS_SCT_PER_CLST:  printf_cdc("mkfs#sector(%d)\n", *(UINT *)ptr); break;
+    case FMKFS_FMT:           printf_cdc("mkfs#format_type(%d)\n", *(BYTE *)ptr); break;
+    case FMKFS_FAT_START:     printf_cdc("mkfs#FAT_start(%lu)\n", *(DWORD *)ptr); break;
+    case FMKFS_CLST:          printf_cdc("mkfs#cluster(%lu)\n", *(DWORD *)ptr); break;
+    case FMKFS_BPB:           printf_cdc("mkfs#BPB(%lu)\n", *(DWORD *)ptr); break;
+    case FMKFS_FAT_INIT:      printf_cdc("mkfs#FAT_init(%d)\n", *(BYTE *)ptr); break;
+    case FMKFS_FAT_ENTRY_CLR: printf_cdc("mkfs#FAT_ent_clr(%lu)\n", *(DWORD *)ptr); break;
+    default: return;
+  }
+  cdc_tx(NULL, 0);
+}
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -95,8 +117,9 @@ void main() {
   //PX0 = 1;    // Priority High
   EX0 = 1;    // Enable
 
+  f_mkfs_monitor = mkfs_monitor;
+
   while (1) {
-    static BYTE __xdata cdc_buf[512];
     static DWORD sector_start = 0, sectors = 0;
 
     usb_polling();
@@ -106,7 +129,7 @@ void main() {
       do{
         if(disk_read(0, cdc_buf, sector_start, 1) != RES_OK){
           sectors = 0;
-          cdc_tx(cdc_buf, sprintf(cdc_buf, "READ_ERROR!(%lu)\n", sector_start));
+          printf_cdc("READ_ERROR!(%lu)\n", sector_start);
           break;
         }
         sector_start++; sectors--;
@@ -127,14 +150,29 @@ void main() {
           DWORD v = 0;
           if((next = strstr(cdc_buf, "count")) != 0){
             disk_ioctl(0, GET_SECTOR_COUNT, &v);
-            cdc_tx(cdc_buf, sprintf(cdc_buf, "COUNT => %lu\n", v));
+            printf_cdc("COUNT => %lu\n", v);
             break;
           }else if((next = strstr(cdc_buf, "size")) != 0){
             disk_ioctl(0, GET_SECTOR_SIZE, &v);
-            cdc_tx(cdc_buf, sprintf(cdc_buf, "SIZE => %lu\n", v));
+            printf_cdc("SIZE => %lu\n", v);
             break;
           }else if((next = strstr(cdc_buf, "read")) != 0){
             i += (next - &(cdc_buf[0]));
+          }else if((next = strstr(cdc_buf, "format")) != 0){
+            FRESULT res;
+            const char *step = "mount";
+            if((res = f_mount(0, &fs)) == FR_OK){
+              step = "mkfs";
+              if((res = f_mkfs(0, 0, 0)) == FR_OK){
+                step = "unmount";
+                if((res = f_mount(0, NULL)) == FR_OK){
+                  puts_cdc("DONE");
+                  break;
+                }
+              }
+            }
+            printf_cdc("FAILED!(%s) => %d\n", step, res);
+            break;
           }
         }
 
@@ -157,14 +195,16 @@ void main() {
             hit = 0;
           }
         }
-        cdc_tx(cdc_buf, sprintf(cdc_buf, "READ(%lu,%lu) => \n", sector_start, sectors));
+        printf_cdc("READ(%lu,%lu) => \n", sector_start, sectors);
         break;
       }
     }
-
     sys_state |= SYS_POLLING_ACTIVE;
   }
 }
+#undef printf_cdc
+#undef puts_cdc
+
 
 // System clock selections (SFR CLKSEL)
 #define SYS_INT_OSC              0x00        // Select to use internal oscillator
@@ -267,7 +307,6 @@ static void timer_init(){
 void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
 
   static u8 loop_50ms = 0;
-  static u8 snapshot_gps = 0;
   static u8 snapshot_state = 0;
   static u8 loop_10s = 0;
 
@@ -288,12 +327,7 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
         sys_state = 0;
         if(loop_10s >= 200){ // 50 * 200 = 10000 [ms]
           loop_10s = 0;
-          snapshot_gps = 0;
         }
-      }
-      if(snapshot_gps > 0){
-        led4_on();
-        snapshot_gps--;
       }
       if(snapshot_state & 0x01){
         led3_on();

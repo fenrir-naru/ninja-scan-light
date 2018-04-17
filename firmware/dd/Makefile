@@ -31,8 +31,8 @@ PACKAGE = NinjaScanLight_DD.hex
 BIN_PATH = /usr/bin:/usr/local/bin
 CXX = sdcc
 AS = sdas8051
-CPPFLAGS = -V --use-stdout -D__SDCC__ -D__F380_VER__
-CFLAGS = -V --debug --stack-auto --nooverlay --model-small --use-stdout -D__SDCC__ -D__F380_VER__ --opt-code-speed #-mmcs51
+CPPFLAGS = -V --use-stdout -D__SDCC__ -D__F380_VER__ -D_USE_MKFS=1 -D_USE_MKFS_MONITOR=1
+CFLAGS = -V --debug --stack-auto --nooverlay --model-small --use-stdout -D__SDCC__ -D__F380_VER__ -D_USE_MKFS=1 -D_USE_MKFS_MONITOR=1 --opt-code-speed #-mmcs51
 LFLAGS = -V --debug --use-stdout --stack-auto --model-small --iram-size 0x0100 --xram-loc 0x0800 --xram-size 0x0800 --code-size 0xfc00  #-mmcs51
 ASFLAGS = -plosgff
 MKFILE_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
@@ -44,16 +44,16 @@ LIBS = #-L
 SRCS_C = \
 	$(addprefix $(SRC_DIR)/,diskio.c f38x_spi.c f38x_usb.c ff.c mmc.c scsi.c util.c) $(shell ls $(SRC_DIR)/usb*.c) $(MKFILE_DIR)/main_dd.c
 SRCS_ASM = \
-	$(shell ls $(SRC_DIR)/*.asm || echo '')
+	$(shell ls $(SRC_DIR)/*.asm 2>/dev/null || echo '')
 
-OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.rel, $(SRCS_C)) $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.rel, $(SRCS_ASM))
+OBJS = $(addprefix $(BUILD_DIR)/,$(notdir $(patsubst %.c,%.rel, $(SRCS_C)) $(patsubst %.asm,%.rel, $(SRCS_ASM))))
 
-all : $(BUILD_DIR) depend $(PACKAGE)
+all : $(BUILD_DIR) $(PACKAGE)
 
-# ヘッダーファイルの依存関係
-depend: $(SRCS_C)
+# Generate dependency of *.c
+$(BUILD_DIR)/depend.inc: $(SRCS_C) Makefile
 	export PATH=$(BIN_PATH):$$PATH; \
-	for i in $^; do \
+	for i in $(SRCS_C); do \
 		$(CXX) -E -MMM $(INCLUDES) $(CPPFLAGS) $$i >> tempfile; \
 		if ! [ $$? = 0 ]; then \
 			rm -f tempfile; \
@@ -65,15 +65,16 @@ depend: $(SRCS_C)
 
 -include $(BUILD_DIR)/depend.inc
 
-$(BUILD_DIR)/%.rel : $(SRC_DIR)/%.c
+$(BUILD_DIR)/%.rel :
 	export PATH=$(BIN_PATH):$$PATH; \
-	$(CXX) -c $(CFLAGS) $(INCLUDES) -o $@ $<
-
-$(BUILD_DIR)/%.rel : $(SRC_DIR)/%.asm
-	export PATH=$(BIN_PATH):$$PATH; \
-	cp $< $(BUILD_DIR)/; \
-	cd $(BUILD_DIR); \
-	$(AS) $(ASFLAGS) $<
+	case "$<" in \
+	*\.c) \
+		$(CXX) -c $(CFLAGS) $(INCLUDES) -o $@ $< \
+		;; \
+	*) \
+		$(AS) $(ASFLAGS) $@ $(filter %$(basename $(notdir $@)).asm,$(SRCS_ASM)) \
+		;; \
+	esac
 
 $(PACKAGE) : $(patsubst %,$(BUILD_DIR)/%,$(PACKAGE))
 
@@ -90,5 +91,5 @@ clean :
 
 run : all
 
-.PHONY : clean all depend
+.PHONY : clean all
 
