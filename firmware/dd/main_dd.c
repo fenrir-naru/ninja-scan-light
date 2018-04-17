@@ -92,7 +92,9 @@ static void mkfs_monitor(FMKFS_PHASE phase, void *ptr){
     case FMKFS_BPB:           printf_cdc("mkfs#BPB(%lu)\n", *(DWORD *)ptr); break;
     case FMKFS_FAT_INIT:      printf_cdc("mkfs#FAT_init(%d)\n", *(BYTE *)ptr); break;
     case FMKFS_FAT_ENTRY_CLR: printf_cdc("mkfs#FAT_ent_clr(%lu)\n", *(DWORD *)ptr); break;
+    default: return;
   }
+  cdc_tx(NULL, 0);
 }
 
 void main() {
