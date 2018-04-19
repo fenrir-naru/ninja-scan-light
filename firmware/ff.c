@@ -389,10 +389,13 @@ typedef struct {
 
 
 /* FAT sub-type boundaries */
+#define MAX_DIR   0x200000    /* Max size of FAT directory */
+#define MAX_FAT12 0xFF5     /* Max FAT12 clusters (differs from specs, but right for real DOS/Windows behavior) */
 /* Note that the FAT spec by Microsoft says 4085 but Windows works with 4087! */
-#define MIN_FAT16	4086	/* Minimum number of clusters for FAT16 */
-#define	MIN_FAT32	65526	/* Minimum number of clusters for FAT32 */
-
+#define MIN_FAT16 4086	/* Minimum number of clusters for FAT16 */
+#define MAX_FAT16 0xFFF5      /* Max FAT16 clusters (differs from specs, but right for real DOS/Windows behavior) */
+#define MIN_FAT32 65526	/* Minimum number of clusters for FAT32 */
+#define MAX_FAT32 0x0FFFFFF5    /* Max FAT32 clusters (not specified, practical limit) */
 
 /* FatFs refers the members in the FAT structures as byte array instead of
 / structure member because the structure is not binary compatible between
@@ -3865,6 +3868,8 @@ FRESULT f_mkfs (
       gate(FMKFS_DISK_STAT, &stat);
     }
 
+#if 0
+    // FatFs 0.09b
     if (!au) {				/* AU auto selection */
       DWORD vs = n_vol / (2000 / (SS(fs) / 512));
 #if 0
@@ -3942,7 +3947,98 @@ FRESULT f_mkfs (
     if (   (fmt == FS_FAT16 && n_clst < MIN_FAT16)
       || (fmt == FS_FAT32 && n_clst < MIN_FAT32))
       return FR_MKFS_ABORTED;
-    gate(FMKFS_CLST, &n_clst);
+#else
+    // FatFs 0.13b
+    {
+      UINT au_orig = (au /= SS(fs));
+      DWORD n;
+      fmt = FS_FAT16;
+      do {
+        /* Pre-determine number of clusters and FAT sub-type */
+        if (fmt == FS_FAT32) {  /* FAT32 volume */
+          if (au == 0) { /* au auto-selection */
+            //BYTE i;
+            //static const WORD cst32[] = {1, 2, 4, 8, 16, 32, 0};  /* Cluster size boundary for FAT32 volume (128Ks unit) */
+            n = n_vol / 0x20000; /* Volume size in unit of 128KS */
+            //for (i = 0, au = 1; cst32[i] && cst32[i] <= n; i++, au <<= 1) ; /* Get from table */
+            for (au = 1; (au < 64) && (au <= n); au <<= 1);
+          }
+          n_clst = n_vol / au;  /* Number of clusters */
+          n_fat = (n_clst * 4 + 8 + SS(fs) - 1) / SS(fs);  /* FAT size [sector] */
+          n_rsv = 32;  /* Number of reserved sectors */
+          n_dir = 0;   /* No static directory */
+          if (n_clst <= MAX_FAT16 || n_clst > MAX_FAT32) return FR_MKFS_ABORTED;
+        } else {        /* FAT volume */
+          if (au == 0) { /* au auto-selection */
+            BYTE i;
+            static const WORD cst[] = {1, 4, 16, 64, 256, 512, 0};  /* Cluster size boundary for FAT volume (4Ks unit) */
+            n = n_vol / 0x1000;  /* Volume size in unit of 4KS */
+            for (i = 0, au = 1; cst[i] && cst[i] <= n; i++, au <<= 1) ; /* Get from table */
+          }
+          n_clst = n_vol / au;
+          if (n_clst > MAX_FAT12) {
+            n = n_clst * 2 + 4;   /* FAT size [byte] */
+          } else {
+            fmt = FS_FAT12;
+            n = (n_clst * 3 + 1) / 2 + 3; /* FAT size [byte] */
+          }
+          n_fat = (n + SS(fs) - 1) / SS(fs);   /* FAT size [sector] */
+          n_rsv = 1;           /* Number of reserved sectors */
+          n_dir = (WORD)((DWORD)N_ROOTDIR * SZ_DIR / SS(fs));  /* Rootdir size [sector] */
+        }
+        gate(FMKFS_FMT, &fmt);
+        gate(FMKFS_SCT_PER_CLST, &au);
+
+        {
+          DWORD b_data;
+          b_fat = b_vol + n_rsv;           /* FAT base */
+          b_data = b_fat + n_fat * N_FATS + n_dir;  /* Data base */
+          if (n_vol < b_data + au * 16 - b_vol) return FR_MKFS_ABORTED;  /* Too small volume */
+
+          /* Align data base to erase block boundary (for flash memory media) */
+          if (disk_ioctl(pdrv, GET_BLOCK_SIZE, &n) != RES_OK || !n || n > 32768) n = 1;
+          n = ((b_data + n - 1) & ~(n - 1)) - b_data; /* Next nearest erase block from current data base */
+          n /= N_FATS;
+          if (fmt == FS_FAT32) {    /* FAT32: Move FAT base */
+            n_rsv += n; b_fat += n;
+          } else {          /* FAT: Expand FAT size */
+            n_fat += n;
+          }
+        }
+        gate(FMKFS_FAT_START, &b_fat);
+
+        /* Determine number of clusters and final check of validity of the FAT sub-type */
+        n_clst = (n_vol - n_rsv - n_fat * N_FATS - n_dir) / au;
+        if (fmt == FS_FAT32) {
+          if (n_clst <= MAX_FAT16) {  /* Too few clusters for FAT32 */
+            if ((au_orig == 0) && ((au >>= 1) > 0)) continue; /* Adjust cluster size and retry */
+            return FR_MKFS_ABORTED;
+          }
+        }
+        if (fmt == FS_FAT16) {
+          if (n_clst > MAX_FAT16) { /* Too many clusters for FAT16 */
+            if (au_orig == 0) {
+              if((au <<= 1) <= 64){
+                continue;   /* Adjust cluster size and retry */
+              }else{
+                au = 0;
+              }
+            }
+            fmt = FS_FAT32; continue; /* Switch type to FAT32 and retry */
+          }
+          if  (n_clst <= MAX_FAT12) { /* Too few clusters for FAT16 */
+            if ((au_orig == 0) && (au <<= 1) <= 128) continue; /* Adjust cluster size and retry */
+            return FR_MKFS_ABORTED;
+          }
+        }
+        if (fmt == FS_FAT12 && n_clst > MAX_FAT12) return FR_MKFS_ABORTED; /* Too many clusters for FAT12 */
+
+        /* Ok, it is the valid cluster configuration */
+        gate(FMKFS_CLST, &n_clst);
+        break;
+      } while (1);
+    }
+#endif
 
     {
       BYTE sys;
