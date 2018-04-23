@@ -65,7 +65,12 @@ static void sysclk_init();
 static void port_init();
 static void timer_init();
 
-static __xdata int power_on_delay_sec;
+typedef struct {
+  long delay_sec;
+} software_reset_survive_t;
+
+static __idata __at (0x100 - sizeof(software_reset_survive_t))
+    software_reset_survive_t software_reset_survive;
 
 #ifdef USE_ASM_FOR_SFR_MANIP
 #define p21_hiz()   {__asm orl _P2,SHARP  0x02 __endasm; }
@@ -91,14 +96,14 @@ static __xdata int power_on_delay_sec;
 
 static void power_on_delay_check(FIL *f){
   // extract stanby time[s] from file
-  power_on_delay_sec = (int)data_hub_read_long(f);
+  software_reset_survive.delay_sec = data_hub_read_long(f);
 }
 
 static void power_on_delay(){
-  if((REG01CN & 0x40) || (RSTSRC & 0x02)
-      || (power_on_delay_sec <= 0)){
-    // Skip either when USB is connected, initial power on, or no delay
-    power_on_delay_sec = 0;
+  if((REG01CN & 0x40) || (!(RSTSRC & 0x10))
+      || (software_reset_survive.delay_sec <= 0)){
+    // Skip either when USB is connected, software reset is not invoked, or no delay
+    software_reset_survive.delay_sec = 0;
     return;
   }
 
@@ -134,10 +139,10 @@ static void power_on_delay(){
 
   TMR3CN |= 0x04;   // Start Timer3(TR3)
   do{
-    if(power_on_delay_sec & 0x0F){led34_off();}else{led34_on();}
+    if(software_reset_survive.delay_sec & 0x0F){led34_off();}else{led34_on();}
     while(!(TMR3CN & 0x80));
     TMR3CN &=~0x80;
-  }while((--power_on_delay_sec) > 0);
+  }while((--software_reset_survive.delay_sec) > 0);
 
   // step 3
   software_reset();
@@ -159,7 +164,7 @@ void main() {
     if(RSTSRC & 0x02){
       // When initial power on, which causes power on reset (RSTSRC.1(PORSF) = 1).
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
-      if(power_on_delay_sec > 0){software_reset();}
+      if(software_reset_survive.delay_sec > 0){software_reset();}
     }
   }
 #endif
