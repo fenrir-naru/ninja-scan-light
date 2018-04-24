@@ -100,7 +100,7 @@ static void power_on_delay_check(FIL *f){
 }
 
 static void power_on_delay(){
-  if((REG01CN & 0x40) || (!(RSTSRC & 0x10))
+  if((REG01CN & 0x40) || (RSTSRC & 0x02) || (!(RSTSRC & 0x10))
       || (software_reset_survive.delay_sec <= 0)){
     // Skip either when USB is connected, software reset is not invoked, or no delay
     software_reset_survive.delay_sec = 0;
@@ -122,6 +122,7 @@ static void power_on_delay(){
   P2MDOUT = (0x04 | 0x08);
   // P0 = P1 = P3 = 0xFF; // default
   P2 = ~(0x04 | 0x08);
+  XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
 
   p21_low();
 
@@ -149,8 +150,6 @@ static void power_on_delay(){
 }
 
 void main() {
-  power_on_delay();
-
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
   port_init(); // Initialize crossbar and GPIO
@@ -418,5 +417,6 @@ DWORD get_fattime(){
 
 unsigned char _sdcc_external_startup(){
   PCA0MD &= ~0x40; ///< Disable Watchdog timer
+  power_on_delay();
   return 0;
 }
