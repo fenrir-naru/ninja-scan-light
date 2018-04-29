@@ -58,12 +58,12 @@ typedef struct {
 } gps_time_t;
 extern __xdata gps_time_t gps_time;
 typedef enum {
-  FIX_NO = 0,
-  FIX_DEAD_RECKONING_ONLY = 1,
-  FIX_2D = 2,
-  FIX_3D = 3,
-  FIX_DEAD_RECKONING_COMBINED = 4,
-  FIX_TIME_ONLY = 5,
+  GPS_FIX_NO = 0,
+  GPS_FIX_DEAD_RECKONING_ONLY = 1,
+  GPS_FIX_2D = 2,
+  GPS_FIX_3D = 3,
+  GPS_FIX_DEAD_RECKONING_COMBINED = 4,
+  GPS_FIX_TIME_ONLY = 5,
 } gps_fix_type_t;
 extern __xdata gps_fix_type_t gps_fix_type;
 extern __xdata u8 gps_num_of_sat;
