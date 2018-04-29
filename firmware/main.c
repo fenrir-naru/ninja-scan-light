@@ -193,7 +193,7 @@ void main() {
   //PX0 = 1;    // Priority High
   EX0 = 1;    // Enable
 
-  if(main_loop_prologue){
+  while(main_loop_prologue){
     main_loop_prologue();
   }
 
