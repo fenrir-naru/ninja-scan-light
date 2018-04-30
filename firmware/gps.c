@@ -300,7 +300,7 @@ static void poll_aid_hui(){
 
 volatile __bit gps_time_modified = FALSE;
 __xdata gps_time_t gps_time = {-1, 0};
-__xdata gps_fix_type_t gps_fix_type;
+__xdata u8 gps_fix_info;
 __xdata u8 gps_num_of_sat = 0;
 
 #if USE_GPS_STD_TIME
@@ -373,6 +373,7 @@ static void make_packet(packet_t *packet){
         gps_time_t time;
         u8 num_of_sat;
         u8 fix_type;
+        u32 pos_accuracy;
       } stat;
       gps_pos_t pos;
       struct {
@@ -479,22 +480,34 @@ static void make_packet(packet_t *packet){
             }
           }else if(ubx_state.ck_b == c){ // correct checksum
             if(ubx_state.packet_type == (GPS_TIME_FROM_RAW_DATA ? RXM_RAW : NAV_SOL)){
-              u16 ms = buf.stat.time.itow_ms % 1000;
-              if((ms >= 200) && (ms <= 800)){
-                buf.stat.time.itow_ms += (1000 - ms);
-                if(buf.stat.time.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
-                  buf.stat.time.itow_ms = 0;
-                  buf.stat.time.wn++;
+              {
+                u16 ms = buf.stat.time.itow_ms % 1000;
+                if((ms >= 200) && (ms <= 800)){
+                  buf.stat.time.itow_ms += (1000 - ms);
+                  if(buf.stat.time.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
+                    buf.stat.time.itow_ms = 0;
+                    buf.stat.time.wn++;
+                  }
+                  gps_time_modified = FALSE;
+                  memcpy(&gps_time, &buf.stat.time, sizeof(gps_time_t));
+                  gps_time_modified = TRUE;
                 }
-                gps_time_modified = FALSE;
-                memcpy(&gps_time, &buf.stat.time, sizeof(gps_time_t));
-                gps_time_modified = TRUE;
               }
               gps_num_of_sat = buf.stat.num_of_sat;
 #if GPS_TIME_FROM_RAW_DATA
             }else if(ubx_state.packet_type == NAV_SOL){
 #endif
-              gps_fix_type = (gps_fix_type_t)buf.stat.fix_type;
+              gps_fix_info = buf.stat.fix_type;
+              if(buf.stat.pos_accuracy < 0x1000000){
+                u16 acc = (u16)(buf.stat.pos_accuracy >> 8);
+                if(acc <= (10000 >> 8)){ // 10000 cm = 100 m
+                  gps_fix_info |= GPS_POS_ACC_100M;
+                }else if(acc <= (50000 >> 8)){ // 50000 cm = 500 m
+                  gps_fix_info |= GPS_POS_ACC_500M;
+                }else if(acc <= (100000 >> 8)){ // 100000 cm = 1 km
+                  gps_fix_info |= GPS_POS_ACC_1KM;
+                }
+              }
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
 #if USE_GPS_STD_TIME
               leap_seconds = buf.leap_seconds;
@@ -590,6 +603,12 @@ static void make_packet(packet_t *packet){
 #endif
               case 17:
                 buf.stat.fix_type = c;
+                break;
+              case 31:
+              case 32:
+              case 33:
+              case 34:
+                *((u8 *)(((u8 *)&(buf.stat.pos_accuracy)) + (ubx_state.index - 31))) = c;
                 break;
             }
             break;
