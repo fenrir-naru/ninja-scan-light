@@ -371,8 +371,8 @@ static void make_packet(packet_t *packet){
       u8 svid;
       struct {
         gps_time_t time;
-        u8 fix_type;
         u8 num_of_sat;
+        u8 fix_type;
       } stat;
       gps_pos_t pos;
       struct {
@@ -490,8 +490,11 @@ static void make_packet(packet_t *packet){
                 memcpy(&gps_time, &buf.stat.time, sizeof(gps_time_t));
                 gps_time_modified = TRUE;
               }
-              gps_fix_type = (gps_fix_type_t)buf.stat.fix_type;
               gps_num_of_sat = buf.stat.num_of_sat;
+#if GPS_TIME_FROM_RAW_DATA
+            }else if(ubx_state.packet_type == NAV_SOL){
+#endif
+              gps_fix_type = (gps_fix_type_t)buf.stat.fix_type;
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
 #if USE_GPS_STD_TIME
               leap_seconds = buf.leap_seconds;
