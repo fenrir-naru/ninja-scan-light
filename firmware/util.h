@@ -81,6 +81,7 @@ u16 swap_u16(u16 w);
 #define max(a,b) (((a)>(b))?(a):(b))
 
 u16 crc16(u8 *buf, u8 size, u16 crc);
+long str2num(char *str, char **endptr);
 
 #endif /* __UTIL_H__ */
 

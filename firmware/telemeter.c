@@ -30,7 +30,7 @@
  */
 
 #include <ctype.h>
-#include <stdlib.h>
+#include <stdio.h>
 
 #include "telemeter.h"
 #include "config.h"
@@ -183,7 +183,7 @@ static void expect(FIL *file){
       case WAITING:
         if(is_endline){
           buf[buf_length] = '\0';
-          wait_ms((unsigned int)atol(buf));
+          wait_ms((unsigned int)str2num(buf, NULL));
           state = INIT;
         }else if(buf_length < (sizeof(buf) - 1)){
           buf[buf_length++] = c;

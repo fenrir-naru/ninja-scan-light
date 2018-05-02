@@ -160,3 +160,42 @@ u16 crc16(u8 *buf, u8 size, u16 crc){
   }
   return crc;
 }
+
+long str2num(char *s, char **endptr){
+  long res = 0;
+  char neg = FALSE;
+  char c;
+
+  while(c = *s){
+    /* skip till we find either a digit or '+' or '-' */
+    if((c <= '9') && (c >= '0')){
+      res = (c - '0');
+    }else if(c == '+'){
+
+    }else if(c == '-'){
+      neg = TRUE;
+    }else{
+      switch(c){
+        case ' ':
+        case '\t':
+        case '\n':
+        case '\r':
+        case '\v':
+        case '\f':
+          s++;
+          continue;
+      }
+      break;
+    }
+
+    while((c = *(++s)) && (c >= '0') && (c <= '9')){
+      c -= '0';
+      res = res * 10 + (neg ? -c : c);
+    }
+
+    break;
+  }
+
+  if(endptr){*endptr = s;}
+  return res;
+}

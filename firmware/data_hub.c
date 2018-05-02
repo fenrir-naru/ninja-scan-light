@@ -31,7 +31,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 
 #include "main.h"
 #include "config.h"
@@ -120,14 +119,17 @@ static void set_new_config(FIL *f){
 }
 
 long data_hub_read_long(FIL *f){
-  // extract integer number from file
+  // extract integer number from file, multiple invocation is supported.
   char buf[16];
-  u16 res;
-  if(f_read(f, buf, sizeof(buf) - 1, &res) != FR_OK){
-    return 0;
+  u16 read_bytes;
+  long res = 0;
+  if(f_read(f, buf, sizeof(buf) - 1, &read_bytes) == FR_OK){
+    char *endptr;
+    buf[read_bytes] = '\0';
+    res = str2num(buf, &endptr);
+    f_lseek(f, f_tell(f) - read_bytes + (endptr - buf));
   }
-  buf[res] = '\0';
-  return atol(buf);
+  return res;
 }
 
 static FIL file;

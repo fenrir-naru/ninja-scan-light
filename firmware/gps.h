@@ -57,10 +57,36 @@ typedef struct {
   u32 itow_ms;
 } gps_time_t;
 extern __xdata gps_time_t gps_time;
+
+typedef enum {
+  GPS_FIX_NO = 0,
+  GPS_FIX_DEAD_RECKONING_ONLY = 1,
+  GPS_FIX_2D = 2,
+  GPS_FIX_3D = 3,
+  GPS_FIX_DEAD_RECKONING_COMBINED = 4,
+  GPS_FIX_TIME_ONLY = 5,
+} gps_fix_type_t;
+typedef enum {
+  GPS_POS_ACC_BAD = 0,
+  GPS_POS_ACC_1KM = (1 << 3),
+  GPS_POS_ACC_500M = (2 << 3),
+  GPS_POS_ACC_100M = (3 << 3),
+} gps_pos_accuracy_t; // larger value has better accuracy, opposite to error!
+extern __xdata u8 gps_fix_info; // bit[0..2] = fix_type, bit[3..4] = pos_accuracy
+#define gps_fix_type ((gps_fix_type_t)(gps_fix_info & 0x07))
+#define gps_pos_accuracy ((gps_pos_accuracy_t)(gps_fix_info & 0x18))
+
 extern __xdata u8 gps_num_of_sat;
 
 extern __bit gps_utc_valid;
 extern __xdata struct tm gps_utc;
+
+typedef struct {
+  s32 lng; // 1E-7 [deg]; (-180, 180]
+  s32 lat; // 1E-7 [deg]; [-90, 90]
+  s32 alt; // 1E-3 [m];
+} gps_pos_t;
+extern __xdata void (*gps_position_monitor)(__xdata gps_pos_t *);
 
 typedef struct {
   u8 msg_class;

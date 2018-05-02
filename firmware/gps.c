@@ -241,7 +241,6 @@ static void set_ubx_cfg_msg(ubx_cfg_t *message){
 }
 
 void gps_init(){
-  
   // init wait
   wait_ms(100);
   
@@ -301,10 +300,11 @@ static void poll_aid_hui(){
 
 volatile __bit gps_time_modified = FALSE;
 __xdata gps_time_t gps_time = {-1, 0};
+__xdata u8 gps_fix_info;
 __xdata u8 gps_num_of_sat = 0;
 
-static __xdata s8 leap_seconds = 0;
 #if USE_GPS_STD_TIME
+static __xdata s8 leap_seconds = 0;
 time_t gps_std_time(time_t *timer) {
   time_t res = 0;
   if(gps_time.wn >= 0){ // valid
@@ -323,7 +323,7 @@ __xdata struct tm gps_utc;
 
 typedef enum {
   UNKNOWN = 0,
-  NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, NAV_SVINFO,
+  NAV_SOL, NAV_TIMEGPS, NAV_TIMEUTC, NAV_SVINFO, NAV_POSLLH,
   RXM_RAW, RXM_SFRB,
   AID_HUI, AID_EPH,
 } packet_type_t;
@@ -340,6 +340,8 @@ static void push_telemetry(char c){
     index = 0;
   }
 }
+
+__xdata void (*gps_position_monitor)(__xdata gps_pos_t *) = NULL;
 
 #define UBX_GPS_MAX_ID 32
 static void make_packet(packet_t *packet){
@@ -363,9 +365,26 @@ static void make_packet(packet_t *packet){
     } ubx_state = {0};
     
     static __xdata u32 ephemeris_received_gps = 0;
-    static __xdata u8 svid;
-    static __xdata gps_time_t time_buf;
-    static __xdata u8 num_of_sat_buf;
+    static __xdata union {
+      u8 b[12];
+      s8 leap_seconds;
+      u8 svid;
+      struct {
+        gps_time_t time;
+        u8 num_of_sat;
+        u8 fix_type;
+        u32 pos_accuracy;
+      } stat;
+      gps_pos_t pos;
+      struct {
+        u16 year; // Year
+        u8 mon;   // Month   [1-12]
+        u8 mday;  // Day     [1-31]
+        u8 hour;  // Hours   [0-23]
+        u8 min;   // Minutes [0-59]
+        u8 sec;   // Seconds [0-59]
+      } utc;
+    } buf;
     
     u8 c = *(dst++);
     
@@ -405,6 +424,7 @@ static void make_packet(packet_t *packet){
         switch(ubx_state.ck_a){
           case 0x01:
             switch(c){
+              case 0x02: ubx_state.packet_type = NAV_POSLLH; break;
               case 0x06: ubx_state.packet_type = NAV_SOL; break;
               case 0x20: ubx_state.packet_type = NAV_TIMEGPS; break;
               case 0x21: ubx_state.packet_type = NAV_TIMEUTC; break;
@@ -439,6 +459,7 @@ static void make_packet(packet_t *packet){
         { /* packet size check */
           u8 size_true = 0;
           switch(ubx_state.packet_type){
+            case NAV_POSLLH:  size_true = (8 + 28); break;
             case NAV_SOL:     size_true = (8 + 52); break;
             case NAV_TIMEGPS: size_true = (8 + 16); break;
             case NAV_TIMEUTC: size_true = (8 + 20); break;
@@ -459,19 +480,38 @@ static void make_packet(packet_t *packet){
             }
           }else if(ubx_state.ck_b == c){ // correct checksum
             if(ubx_state.packet_type == (GPS_TIME_FROM_RAW_DATA ? RXM_RAW : NAV_SOL)){
-              u16 ms = time_buf.itow_ms % 1000;
-              if((ms >= 200) && (ms <= 800)){
-                time_buf.itow_ms += (1000 - ms);
-                if(time_buf.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
-                  time_buf.itow_ms = 0;
-                  time_buf.wn++;
+              {
+                u16 ms = buf.stat.time.itow_ms % 1000;
+                if((ms >= 200) && (ms <= 800)){
+                  buf.stat.time.itow_ms += (1000 - ms);
+                  if(buf.stat.time.itow_ms >= (u32)60 * 60 * 24 * 7 * 1000){
+                    buf.stat.time.itow_ms = 0;
+                    buf.stat.time.wn++;
+                  }
+                  gps_time_modified = FALSE;
+                  memcpy(&gps_time, &buf.stat.time, sizeof(gps_time_t));
+                  gps_time_modified = TRUE;
                 }
-                gps_time_modified = FALSE;
-                memcpy(&gps_time, &time_buf, sizeof(gps_time_t));
-                gps_time_modified = TRUE;
               }
-              gps_num_of_sat = num_of_sat_buf;
+              gps_num_of_sat = buf.stat.num_of_sat;
+#if GPS_TIME_FROM_RAW_DATA
+            }else if(ubx_state.packet_type == NAV_SOL){
+#endif
+              gps_fix_info = buf.stat.fix_type;
+              if(buf.stat.pos_accuracy < 0x1000000){
+                u16 acc = (u16)(buf.stat.pos_accuracy >> 8);
+                if(acc <= (10000 >> 8)){ // 10000 cm = 100 m
+                  gps_fix_info |= GPS_POS_ACC_100M;
+                }else if(acc <= (50000 >> 8)){ // 50000 cm = 500 m
+                  gps_fix_info |= GPS_POS_ACC_500M;
+                }else if(acc <= (100000 >> 8)){ // 100000 cm = 1 km
+                  gps_fix_info |= GPS_POS_ACC_1KM;
+                }
+              }
             }else if(ubx_state.packet_type == NAV_TIMEGPS){
+#if USE_GPS_STD_TIME
+              leap_seconds = buf.leap_seconds;
+#endif
               static __xdata u8 sv_eph_selector = 0;
               if((++sv_eph_selector) > UBX_GPS_MAX_ID){
                 sv_eph_selector = 0;
@@ -479,17 +519,25 @@ static void make_packet(packet_t *packet){
               }else{
                 poll_aid_eph(sv_eph_selector);
               }
-            }else if((ubx_state.packet_type == NAV_TIMEUTC) && (gps_utc.tm_mday > 0)){
-              gps_utc.tm_year -= 1900;
+            }else if((ubx_state.packet_type == NAV_TIMEUTC) && (buf.utc.mday > 0)){
+              gps_utc_valid = FALSE;
+              gps_utc.tm_year = buf.utc.year - 1900;  // Year since 1900
+              gps_utc.tm_mon  = buf.utc.mon - 1;      // Month   [0-11]
+              gps_utc.tm_mday = buf.utc.mday;         // Day     [1-31]
+              gps_utc.tm_hour = buf.utc.hour;         // Hours   [0-23]
+              gps_utc.tm_min  = buf.utc.min;          // Minutes [0-59]
+              gps_utc.tm_sec  = buf.utc.sec;          // Seconds [0-60]
               gps_utc_valid = TRUE;
-            }else if((ubx_state.packet_type == AID_EPH) && (svid <= UBX_GPS_MAX_ID)){
+            }else if((ubx_state.packet_type == AID_EPH) && (buf.svid <= UBX_GPS_MAX_ID)){
               u32 mask = 1;
-              mask <<= (svid - 1);
+              mask <<= (buf.svid - 1);
               if(ubx_state.size > (8 + 8)){
                 ephemeris_received_gps |= mask;
               }else{
                 ephemeris_received_gps &= ~mask;
               }
+            }else if((ubx_state.packet_type == NAV_POSLLH) && gps_position_monitor){
+              gps_position_monitor(&(buf.pos));
             }
           }else{ // incorrect checksum
             // do something
@@ -505,74 +553,78 @@ static void make_packet(packet_t *packet){
         switch(ubx_state.packet_type){
           case NAV_TIMEGPS:
             if(ubx_state.index == 17){
-              leap_seconds = (s8)c;
+              buf.leap_seconds = (s8)c;
             }
             break;
           case NAV_TIMEUTC:
-            switch(ubx_state.index){
-              case 19:
-                gps_utc_valid = FALSE;
-              case 20:
-                *((u8 *)(((u8 *)&gps_utc.tm_year) + (ubx_state.index - 19))) = c;
-                break;
-              case 21: gps_utc.tm_mon = c - 1; break;
-              case 22: gps_utc.tm_mday = c; break;
-              case 23: gps_utc.tm_hour = c; break;
-              case 24: gps_utc.tm_min = c; break;
-              case 25: gps_utc.tm_sec = c; break;
-              case 26: if(!(c & 0x04)){gps_utc.tm_mday = 0; /*invalid UTC;*/} break;
+            if((ubx_state.index >= 19) && (ubx_state.index < 26)){
+              buf.b[ubx_state.index - 19] = c;
+            }else if(ubx_state.index == 26){
+              if(!(c & 0x04)){
+                buf.utc.mday = 0; /*invalid UTC;*/
+              }
             }
             break;
-#if GPS_TIME_FROM_RAW_DATA // switch for gps_time source, RXM_RAW or NAV_SOL
           case RXM_RAW:
+#if GPS_TIME_FROM_RAW_DATA // switch for gps_time source, RXM_RAW or NAV_SOL
             switch(ubx_state.index){
               case 7:
               case 8:
               case 9:
               case 10:
-                *((u8 *)(((u8 *)&(time_buf.itow_ms)) + (ubx_state.index - 7))) = c;
+                *((u8 *)(((u8 *)&(buf.stat.time.itow_ms)) + (ubx_state.index - 7))) = c;
                 break;
               case 11:
               case 12:
-                *((u8 *)(((u8 *)&(time_buf.wn)) + (ubx_state.index - 11))) = c;
+                *((u8 *)(((u8 *)&(buf.stat.time.wn)) + (ubx_state.index - 11))) = c;
                 break;
               case 13:
-                num_of_sat_buf = c;
+                buf.stat.num_of_sat = c;
                 break;
             }
+#endif
             break;
-#else
           case NAV_SOL:
             switch(ubx_state.index){
+#if !GPS_TIME_FROM_RAW_DATA // switch for gps_time source, RXM_RAW or NAV_SOL
               case 7:
               case 8:
               case 9:
               case 10:
-                *((u8 *)(((u8 *)&(time_buf.itow_ms)) + (ubx_state.index - 7))) = c;
+                *((u8 *)(((u8 *)&(buf.stat.time.itow_ms)) + (ubx_state.index - 7))) = c;
                 break;
               case 15:
               case 16:
-                *((u8 *)(((u8 *)&(time_buf.wn)) + (ubx_state.index - 15))) = c;
+                *((u8 *)(((u8 *)&(buf.stat.time.wn)) + (ubx_state.index - 15))) = c;
                 break;
               case 54:
-                num_of_sat_buf = c;
+                buf.stat.num_of_sat = c;
+                break;
+#endif
+              case 17:
+                buf.stat.fix_type = c;
+                break;
+              case 31:
+              case 32:
+              case 33:
+              case 34:
+                *((u8 *)(((u8 *)&(buf.stat.pos_accuracy)) + (ubx_state.index - 31))) = c;
                 break;
             }
             break;
-#endif
           case NAV_SVINFO: {
             if(ubx_state.index < (6 + 8)){break;}
             switch(ubx_state.index % 12){
               case ((6 + 8) % 12) + 2:
-                svid = c;
+                buf.svid = c;
                 break;
               case ((6 + 8) % 12) + 3: {
                 u32 mask = 1;
-                if(svid > UBX_GPS_MAX_ID){break;}
-                mask <<= (svid - 1);
+                if(buf.svid > UBX_GPS_MAX_ID){break;}
+                mask <<= (buf.svid - 1);
                 if(c & 0x08){
                   if(!(ephemeris_received_gps & mask)){
-                    poll_aid_eph(svid);
+                    poll_aid_eph(buf.svid);
                   }
                 }else{
                   ephemeris_received_gps &= ~mask;
@@ -582,8 +634,14 @@ static void make_packet(packet_t *packet){
             }
             break;
           }
+          case NAV_POSLLH: {
+            if((ubx_state.index > 10) && (ubx_state.index <= 22)){
+              buf.b[ubx_state.index - 11] = c;
+            }
+            break;
+          }
           case AID_EPH: {
-            if(ubx_state.index == (6 + 1)){svid = c;}
+            if(ubx_state.index == (6 + 1)){buf.svid = c;}
             break;
           }
         }

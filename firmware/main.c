@@ -65,7 +65,12 @@ static void sysclk_init();
 static void port_init();
 static void timer_init();
 
-static __xdata int standby_sec = 0;
+typedef struct {
+  long delay_sec;
+} software_reset_survive_t;
+
+static __idata __at (0x100 - sizeof(software_reset_survive_t))
+    software_reset_survive_t software_reset_survive;
 
 #ifdef USE_ASM_FOR_SFR_MANIP
 #define p21_hiz()   {__asm orl _P2,SHARP  0x02 __endasm; }
@@ -87,12 +92,21 @@ static __xdata int standby_sec = 0;
 #define led34_off() (P2 &= ~(0x04 | 0x08))
 #endif
 
+#define software_reset() {RSTSRC = 0x10;} // RSTSRC.4(SWRSF) = 1 causes software reset
+
 static void power_on_delay_check(FIL *f){
   // extract stanby time[s] from file
-  standby_sec = (int)data_hub_read_long(f);
+  software_reset_survive.delay_sec = data_hub_read_long(f);
 }
 
 static void power_on_delay(){
+  if((REG01CN & 0x40) || (RSTSRC & 0x02) || (!(RSTSRC & 0x10))
+      || (software_reset_survive.delay_sec <= 0)){
+    // Skip either when USB is connected, software reset is not invoked, or no delay
+    software_reset_survive.delay_sec = 0;
+    return;
+  }
+
   /* How to standby with minimum power consumption
    * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P2.2, P2.3).
    * 1-2. Shutdown LTC3550 buck regulator
@@ -104,10 +118,11 @@ static void power_on_delay(){
    */
 
   // step 1
-  P0MDOUT = P1MDOUT = P3MDOUT = 0;
+  // P0MDOUT = P1MDOUT = P3MDOUT = 0; // default
   P2MDOUT = (0x04 | 0x08);
-  P0 = P1 = P3 = 0xFF;
+  // P0 = P1 = P3 = 0xFF; // default
   P2 = ~(0x04 | 0x08);
+  XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
 
   p21_low();
 
@@ -115,24 +130,23 @@ static void power_on_delay(){
   while(!(OSCLCN & 0x40)); // wait for ready
 
   // step 2
-  TMR3CN = 0x00;    // Stop Timer3; Clear TF3;
+  //TMR3CN = 0x00;    // Stop Timer3; Clear TF3; default
   CKCON |= 0xC0;   // Timer3 clocked based on SYSCLK;
   TMR3RL = (0x10000 - 40000);  // Re-initialize reload value (40KHz, 1s)
   TMR3 = 0xFFFF;    // Set to reload immediately
   CLKSEL = (CLKSEL & ~0x07) | 0x04; // Select L-F oscillator
 
-  SPI0CN &= ~0x01; // Disable SPI
   OSCICN &= ~0x80; // Disable H-F oscillator
 
   TMR3CN |= 0x04;   // Start Timer3(TR3)
-  while(standby_sec-- > 0){
-    if(standby_sec & 0x0F){led34_off();}else{led34_on();}
+  do{
+    if(software_reset_survive.delay_sec & 0x0F){led34_off();}else{led34_on();}
     while(!(TMR3CN & 0x80));
     TMR3CN &=~0x80;
-  }
+  }while((--software_reset_survive.delay_sec) > 0);
 
   // step 3
-  RSTSRC = 0x10; // RSTSRC.4(SWRSF) = 1 causes software reset
+  software_reset();
 }
 
 void main() {
@@ -144,10 +158,13 @@ void main() {
   data_hub_init();
 
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
-  if((!(REG01CN & 0x40)) && (RSTSRC & 0x02)){
-    // When USB is disconnected, check power on reset, which causes RSTSRC.1(PORSF) = 1.
-    data_hub_load_config("DELAY.CFG", power_on_delay_check);
-    if(standby_sec > 0){power_on_delay();}
+  if(!(REG01CN & 0x40)){
+    // When USB is disconnected
+    if(RSTSRC & 0x02){
+      // When initial power on, which causes power on reset (RSTSRC.1(PORSF) = 1).
+      data_hub_load_config("DELAY.CFG", power_on_delay_check);
+      if(software_reset_survive.delay_sec > 0){software_reset();}
+    }
   }
 #endif
 
@@ -176,7 +193,7 @@ void main() {
   //PX0 = 1;    // Priority High
   EX0 = 1;    // Enable
 
-  if(main_loop_prologue){
+  while(main_loop_prologue){
     main_loop_prologue();
   }
 
@@ -400,5 +417,6 @@ DWORD get_fattime(){
 
 unsigned char _sdcc_external_startup(){
   PCA0MD &= ~0x40; ///< Disable Watchdog timer
+  power_on_delay();
   return 0;
 }
