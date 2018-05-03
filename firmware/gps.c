@@ -254,12 +254,6 @@ void gps_sleep(){
 }
 
 void gps_init(){
-#if (!defined(NINJA_VER)) || (NINJA_VER < 200)
-  { // awake from inactive
-    static const __code unsigned char dummy[] = {0xFF};
-    gps_write(dummy, sizeof(dummy));
-  }
-#endif
   // init wait
   wait_ms(100);
   

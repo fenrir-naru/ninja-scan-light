@@ -95,7 +95,7 @@ static __idata __at (0x100 - sizeof(software_reset_survive_t))
 #define software_reset() {RSTSRC = 0x10;} // RSTSRC.4(SWRSF) = 1 causes software reset
 
 static void power_on_delay_check(FIL *f){
-  // extract stanby time[s] from file
+  // extract standby time[s] from file
   software_reset_survive.delay_sec = data_hub_read_long(f);
 }
 
@@ -108,17 +108,19 @@ static void power_on_delay(){
   }
 
   /* How to standby with minimum power consumption
-   * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P2.2, P2.3).
+   * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P0.4, P2.2, P2.3).
    * 1-2. Shutdown LTC3550 buck regulator
    * 1-3. Enable the low frequency internal oscillator
    * 2-1. Selecting the low frequency oscillator
    * 2-2. Disable unused peripherals including the high frequency oscillator
    * 2-3. Standby for the specified time
-   * 3.   Perform software reset.
+   * 3-1. Wake up GPS
+   * 3-2. Perform software reset.
    */
 
   // step 1
-  // P0MDOUT = P1MDOUT = P3MDOUT = 0; // default
+  // P1MDOUT = P3MDOUT = 0; // default
+  P0MDOUT = 0x10;
   P2MDOUT = (0x04 | 0x08);
   // P0 = P1 = P3 = 0xFF; // default
   P2 = ~(0x04 | 0x08);
@@ -146,6 +148,16 @@ static void power_on_delay(){
   }while((--software_reset_survive.delay_sec) > 0);
 
   // step 3
+  {
+    u8 i;
+    for(i = 0; i < 8; ++i){
+      P0 &= ~0x10;
+      _nop_();
+      P0 |= 0x10;
+      _nop_();
+    }
+  }
+
   software_reset();
 }
 
@@ -163,11 +175,9 @@ void main() {
       // When initial power on, which causes power on reset (RSTSRC.1(PORSF) = 1).
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
       if(software_reset_survive.delay_sec > 0){
-#if (!defined(NINJA_VER)) || (NINJA_VER < 200)
         uart0_init();
         EA = 1;
         gps_sleep();
-#endif
         software_reset();
       }
     }
