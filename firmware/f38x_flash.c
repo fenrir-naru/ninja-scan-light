@@ -29,43 +29,82 @@
  *
  */
 
+#include <string.h>
+
 #include "f38x_flash.h"
 #include "c8051f380.h"
 #include "main.h"
 #include "util.h"
 
-static __bit ea_orig;
-static __xdata u8 FLSCL_orig, VDM0CN_orig, RSTSRC_orig;
+typedef struct {
+  u8 ea, flscl, vdm0cn, rstsrc;
+} backup_t;
 
 /*
  * @see http://community.silabs.com/t5/8-bit-MCU-Knowledge-Base/FLASH-Corruption/ta-p/110449
  * @see http://community.silabs.com/t5/8-bit-MCU-Knowledge-Base/All-about-the-VDD-Monitor/ta-p/110805
  */
 
-static void prologue(){
-  ea_orig = EA; // Preserve EA
+#if 1
+static void prologue(backup_t *res){
+  backup_t orig;
+
+  orig.ea = EA; // Preserve EA
   EA = 0; // Disable interrupts
 
-  FLSCL_orig = FLSCL & 0x90;
+  orig.flscl = FLSCL & 0x90;
   if(SYSCLK > 25000000UL){ // check clock speed
-    FLSCL = (FLSCL_orig | 0x10);
+    FLSCL = (orig.flscl | 0x10);
   }
 
-  VDM0CN_orig = VDM0CN;
+  orig.vdm0cn = VDM0CN;
   if(!(VDM0CN & 0x80)){
-    VDM0CN = (VDM0CN_orig | 0x80); // Enable VDD monitor
+    VDM0CN = (orig.vdm0cn | 0x80); // Enable VDD monitor
     wait_us(100);
   }
-  RSTSRC_orig = RSTSRC & 0xA6;
-  RSTSRC = (RSTSRC_orig | 0x02); // Enable VDD monitor as a reset source; do not use a bit-wise OP
-}
 
-static void epilogue(){
-  RSTSRC = RSTSRC_orig;
-  VDM0CN = VDM0CN_orig;
-  FLSCL = FLSCL_orig;
-  EA = ea_orig; // Restore interrupts
+  orig.rstsrc = RSTSRC & 0xA6;
+  RSTSRC = (orig.rstsrc | 0x02); // Enable VDD monitor as a reset source; do not use a bit-wise OP
+
+  memcpy(res, &orig, sizeof(backup_t));
 }
+#else
+#define prologue(res){ \
+\
+  (res)->ea = EA; /* Preserve EA */ \
+  EA = 0; /* Disable interrupts */ \
+\
+  (res)->flscl = FLSCL & 0x90; \
+  if(SYSCLK > 25000000UL){ /* check clock speed */ \
+    FLSCL = ((res)->flscl | 0x10); \
+  } \
+\
+  (res)->vdm0cn = VDM0CN; \
+  if(!(VDM0CN & 0x80)){ \
+    VDM0CN = ((res)->vdm0cn | 0x80); /* Enable VDD monitor */ \
+    wait_us(100); \
+  } \
+\
+  (res)->rstsrc = RSTSRC & 0xA6; \
+  RSTSRC = ((res)->rstsrc | 0x02); /* Enable VDD monitor as a reset source; do not use a bit-wise OP */ \
+}
+#endif
+
+#if 0
+static void epilogue(const backup_t *in){
+  RSTSRC = in->rstsrc;
+  VDM0CN = in->vdm0cn;
+  FLSCL = in->flscl;
+  EA = in->ea ? 1 : 0; /* Restore interrupts */
+}
+#else
+#define epilogue(in) { \
+  RSTSRC = (in)->rstsrc; \
+  VDM0CN = (in)->vdm0cn; \
+  FLSCL = (in)->flscl; \
+  EA = (in)->ea ? 1 : 0; /* Restore interrupts */ \
+}
+#endif
 
 #define set_keys() { \
   FLKEY = 0xA5; \
@@ -91,26 +130,28 @@ static u8 check_erased(flash_address_t addr, u16 size){
 }
 
 void flash_erase_page(flash_address_t addr){
+  backup_t orig;
 #if 1
   addr &= ~((flash_address_t)FLASH_PAGESIZE - 1);
   if(check_erased(addr, FLASH_PAGESIZE)){return;}
 #endif
 
-  prologue();
+  prologue(&orig);
 
   set_keys();
   PSCTL |= 0x03; // PSWE = 1, PSEE = 1
   write_byte(addr, 0);
   PSCTL &= ~0x03; // PSWE = 0, PSEE = 0
 
-  epilogue();
+  epilogue(&orig);
 }
 
 static u16 write_zeros(flash_address_t dst, u8 *src, u16 size){
   u16 size_orig = size;
   u8 b[2];
   if(size > 0){
-    prologue();
+    backup_t orig;
+    prologue(&orig);
 #if 0 // smaller ROM required, however slower
     do{
       b[0] = *(src++);
@@ -153,7 +194,7 @@ static u16 write_zeros(flash_address_t dst, u8 *src, u16 size){
       PSCTL &= ~0x01; // PSWE = 0
     }
 #endif
-    epilogue();
+    epilogue(&orig);
   }
   return size_orig;
 }
