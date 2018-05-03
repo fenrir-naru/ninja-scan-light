@@ -157,16 +157,21 @@ void main() {
   spi_init();
   data_hub_init();
 
-#if defined(NINJA_VER) && (NINJA_VER >= 200)
   if(!(REG01CN & 0x40)){
     // When USB is disconnected
     if(RSTSRC & 0x02){
       // When initial power on, which causes power on reset (RSTSRC.1(PORSF) = 1).
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
-      if(software_reset_survive.delay_sec > 0){software_reset();}
+      if(software_reset_survive.delay_sec > 0){
+#if (!defined(NINJA_VER)) || (NINJA_VER < 200)
+        uart0_init();
+        EA = 1;
+        gps_sleep();
+#endif
+        software_reset();
+      }
     }
   }
-#endif
 
   timer_init();
   uart0_init();
