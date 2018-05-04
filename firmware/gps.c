@@ -45,7 +45,7 @@
 #include "util.h"
 #include "telemeter.h"
 
-void gps_write(char *buf, u8 size){
+static void gps_write(char *buf, u8 size){
   u8 written = 0;
   while(TRUE){
     written = uart0_write(buf, size);
@@ -236,6 +236,19 @@ static void set_ubx_cfg_msg(ubx_cfg_t *message){
     message->msg_class, // packet[6 + 0]
     message->msg_id,    // packet[6 + 1]
     message->rate,      // packet[6 + 2]
+  };
+  gps_packet_write(packet, sizeof(packet));
+}
+
+void gps_sleep(){
+  static const __code unsigned char packet[8 + 6] = {
+    0xB5, // packet[0]
+    0x62, // packet[1]
+    0x02, // packet[2]
+    0x41, // packet[3]
+    expand_16(sizeof(packet) - 6), // packet[4 + 0]
+    expand_32(0), // packet[6 + 0], infinite sleep
+    expand_32(2), // packet[6 + 4]
   };
   gps_packet_write(packet, sizeof(packet));
 }

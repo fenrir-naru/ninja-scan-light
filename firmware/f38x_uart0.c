@@ -88,11 +88,11 @@ static void uart0_bauding_config(u16 baudrate_register){
   TR1 = 1;
 }
 
-#define _uart0_bauding(baudrate) \
-  uart0_bauding_config((u16)(SYSCLK/2/baudrate))
+#define _uart0_bauding(baudrate, clk) \
+  uart0_bauding_config((u16)(clk/2/baudrate))
 
 void uart0_bauding(u32 baudrate){
-  _uart0_bauding(baudrate);
+  _uart0_bauding(baudrate, SYSCLK);
 }
 
 /**
@@ -107,11 +107,20 @@ void uart0_init() {
   fifo_char_init(&fifo_tx0, buffer_tx0, UART0_TX_BUFFER_SIZE); 
   fifo_char_init(&fifo_rx0, buffer_rx0, UART0_RX_BUFFER_SIZE); 
 
-  _uart0_bauding(DEFAULT_BAUDRATE);
+  _uart0_bauding(DEFAULT_BAUDRATE, SYSCLK);
 
   TB80 = 0;         // TB80 is used for writing flag. '1' means writing, otherwise '0'.
   ES0 = 1;          // Enable interrupt
   //PS0 = 1;          // Interrupt priority
+}
+
+void uart0_init_boot() {
+  SCON0 = 0x10;     // SCON0: 8-bit variable bit rate
+                    //        level of STOP bit is ignored
+                    //        RX enabled
+                    //        ninth bits are zeros
+                    //        clear RI0 and TI0 bits
+  _uart0_bauding(DEFAULT_BAUDRATE, SYSCLK_BOOT);
 }
 
 /**
@@ -122,15 +131,24 @@ void uart0_init() {
  * @return (FIFO_SIZE_T) the size of registered data to buffer
  */
 FIFO_SIZE_T uart0_write(char *buf, FIFO_SIZE_T size){
-  // TB80 is used for writing flag.
-  // if '0', which indicates not writing, interrupt must be invoked manually.
   if(size){
-    size = fifo_char_write(&fifo_tx0, buf, size);
-    CRITICAL_UART0(
-      if(!(SCON0 & 0x0A)){ // !TB80 && !TI0
-        TI0 = 1; // Manual interrupt
-      }
-    );
+    if(ES0){ // non blocking
+      // TB80 is used for writing flag.
+      // if '0', which indicates not writing, interrupt must be invoked manually.
+      size = fifo_char_write(&fifo_tx0, buf, size);
+      CRITICAL_UART0(
+        if(!(SCON0 & 0x0A)){ // !TB80 && !TI0
+          TI0 = 1; // Manual interrupt
+        }
+      );
+    }else{ // blocking
+      FIFO_SIZE_T i = size;
+      do{
+        SBUF0 = *(buf++);
+        while(!TI0);
+        TI0 = 0;
+      }while(--i);
+    }
   }
   return size;
 }
