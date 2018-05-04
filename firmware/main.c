@@ -157,6 +157,47 @@ static void power_on_delay(){
   software_reset();
 }
 
+static void position_monitor(__xdata gps_pos_t *pos){
+  switch(gps_fix_type){
+    case GPS_FIX_3D:
+    case GPS_FIX_DEAD_RECKONING_COMBINED:
+      if(gps_pos_accuracy < GPS_POS_ACC_100M){break;}
+      gps_position_monitor = NULL;
+      break;
+  }
+}
+static void position_check_loop(){
+  u8 sat_max = 0;
+  u8 retry = 0;
+  gps_position_monitor = position_monitor;
+  while(gps_position_monitor && (usb_mode == USB_INACTIVE)){
+    while(tickcount % 0x1000 == 0){ // Timeout 40.96 [s]
+      if(sat_max >= 4){
+        software_reset_survive.delay_sec = 120; // Sleep 2 min.
+      }else if(++retry >= 3){
+        software_reset_survive.delay_sec = 600; // Sleep 10 min.
+      }else{
+        break;
+      }
+      software_reset();
+    }
+
+    gps_polling();
+    if(gps_num_of_sat > sat_max){
+      sat_max = gps_num_of_sat;
+    }
+    data_hub_polling();
+    usb_polling();
+
+    sys_state |= SYS_POLLING_ACTIVE;
+  }
+  gps_position_monitor = NULL;
+  main_loop_prologue = NULL;
+}
+static void position_check(FIL *f){
+  main_loop_prologue = position_check_loop;
+}
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -171,6 +212,9 @@ void main() {
       // When initial power on, which causes power on reset (RSTSRC.1(PORSF) = 1).
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
       if(software_reset_survive.delay_sec > 0){software_reset();}
+    }
+    if(!main_loop_prologue){
+      data_hub_load_config("POSITION.CFG", position_check);
     }
   }
 
