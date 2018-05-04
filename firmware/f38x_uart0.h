@@ -37,6 +37,7 @@
 
 void uart0_bauding(u32 baudrate);
 void uart0_init();
+void uart0_init_boot();
 
 #define UART0_TX_BUFFER_SIZE 32
 #define UART0_RX_BUFFER_SIZE (0x100 - 32)

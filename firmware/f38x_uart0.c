@@ -114,6 +114,15 @@ void uart0_init() {
   //PS0 = 1;          // Interrupt priority
 }
 
+void uart0_init_boot() {
+  SCON0 = 0x10;     // SCON0: 8-bit variable bit rate
+                    //        level of STOP bit is ignored
+                    //        RX enabled
+                    //        ninth bits are zeros
+                    //        clear RI0 and TI0 bits
+  _uart0_bauding(DEFAULT_BAUDRATE, SYSCLK_BOOT);
+}
+
 /**
  * Register transmitting data via UART0
  * 
@@ -122,15 +131,24 @@ void uart0_init() {
  * @return (FIFO_SIZE_T) the size of registered data to buffer
  */
 FIFO_SIZE_T uart0_write(char *buf, FIFO_SIZE_T size){
-  // TB80 is used for writing flag.
-  // if '0', which indicates not writing, interrupt must be invoked manually.
   if(size){
-    size = fifo_char_write(&fifo_tx0, buf, size);
-    CRITICAL_UART0(
-      if(!(SCON0 & 0x0A)){ // !TB80 && !TI0
-        TI0 = 1; // Manual interrupt
-      }
-    );
+    if(ES0){ // non blocking
+      // TB80 is used for writing flag.
+      // if '0', which indicates not writing, interrupt must be invoked manually.
+      size = fifo_char_write(&fifo_tx0, buf, size);
+      CRITICAL_UART0(
+        if(!(SCON0 & 0x0A)){ // !TB80 && !TI0
+          TI0 = 1; // Manual interrupt
+        }
+      );
+    }else{ // blocking
+      FIFO_SIZE_T i = size;
+      do{
+        SBUF0 = *(buf++);
+        while(!TI0);
+        TI0 = 0;
+      }while(--i);
+    }
   }
   return size;
 }
