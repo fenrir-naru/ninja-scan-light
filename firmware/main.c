@@ -115,7 +115,7 @@ static void power_on_delay(){
    * 2-1. Selecting the low frequency oscillator
    * 2-2. Disable unused peripherals including the high frequency oscillator
    * 2-3. Standby for the specified time
-   * 3-1. Wake up GPS
+   * 3-1. Wake GPS up
    * 3-2. Perform software reset.
    */
 
@@ -153,10 +153,7 @@ static void power_on_delay(){
   }while((--software_reset_survive.delay_sec) > 0);
 
   // step 3
-  {
-    static const char dummy[] = {0xFF};
-    uart0_write(dummy , sizeof(dummy));
-  }
+  gps_wakeup();
   software_reset();
 }
 

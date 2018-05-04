@@ -252,6 +252,10 @@ void gps_sleep(){
   };
   gps_packet_write(packet, sizeof(packet));
 }
+void gps_wakeup(){
+  static const char dummy[] = {0xFF};
+  gps_write(dummy, sizeof(dummy));
+}
 
 void gps_init(){
   // init wait
