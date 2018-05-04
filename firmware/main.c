@@ -109,8 +109,9 @@ static void power_on_delay(){
 
   /* How to standby with minimum power consumption
    * 1-1. Set all pins are configured as Hi-Z (open-drain and H) (except for P0.4, P2.2, P2.3).
-   * 1-2. Shutdown LTC3550 buck regulator
-   * 1-3. Enable the low frequency internal oscillator
+   * 1-2. Sleep GPS
+   * 1-3. Shutdown LTC3550 buck regulator by pulling P2.1 to L (Effective only for ver.2)
+   * 1-4. Enable the low frequency internal oscillator
    * 2-1. Selecting the low frequency oscillator
    * 2-2. Disable unused peripherals including the high frequency oscillator
    * 2-3. Standby for the specified time
@@ -124,7 +125,11 @@ static void power_on_delay(){
   P2MDOUT = (0x04 | 0x08);
   // P0 = P1 = P3 = 0xFF; // default
   P2 = ~(0x04 | 0x08);
+  XBR0 = 0x01;  // Enable UART0
   XBR1 = 0xC0;  // Enable crossbar & Disable weak pull-up
+
+  uart0_init_boot();
+  gps_sleep();
 
   p21_low();
 
@@ -149,15 +154,9 @@ static void power_on_delay(){
 
   // step 3
   {
-    u8 i;
-    for(i = 0; i < 8; ++i){
-      P0 &= ~0x10;
-      _nop_();
-      P0 |= 0x10;
-      _nop_();
-    }
+    static const char dummy[] = {0xFF};
+    uart0_write(dummy , sizeof(dummy));
   }
-
   software_reset();
 }
 
@@ -174,12 +173,7 @@ void main() {
     if(RSTSRC & 0x02){
       // When initial power on, which causes power on reset (RSTSRC.1(PORSF) = 1).
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
-      if(software_reset_survive.delay_sec > 0){
-        uart0_init();
-        EA = 1;
-        gps_sleep();
-        software_reset();
-      }
+      if(software_reset_survive.delay_sec > 0){software_reset();}
     }
   }
 
