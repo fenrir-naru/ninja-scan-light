@@ -34,6 +34,7 @@
 
 #include "main.h"
 #include "util.h"
+#include "config.h"
 
 #include "c8051f380.h"
 #include "f38x_usb.h"
@@ -162,6 +163,22 @@ static void position_monitor(__xdata gps_pos_t *pos){
     case GPS_FIX_3D:
     case GPS_FIX_DEAD_RECKONING_COMBINED:
       if(gps_pos_accuracy < GPS_POS_ACC_100M){break;}
+
+      {
+        u8 i, in_range = TRUE;
+        for(i = 0; i < 3; ++i){
+          u8
+              a = (config.position_upper.v[i] >= config.position_lower.v[i]),
+              b = (config.position_upper.v[i] < pos->v[i]),
+              c = (config.position_lower.v[i] > pos->v[i]);
+          if(a ? (b || c) : (b && c)){
+            in_range = FALSE;
+            break;
+          }
+        }
+        if(!in_range){break;}
+      }
+
       gps_position_monitor = NULL;
       break;
   }

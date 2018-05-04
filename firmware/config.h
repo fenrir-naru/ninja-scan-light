@@ -59,6 +59,7 @@ typedef struct {
       ubx_cfg_t item[4];
     } g_page;
   } telemetry_truncate;
+  gps_pos_t position_upper, position_lower;
 } config_t;
 
 #define CONFIG_ADDRESS 0xF000
