@@ -37,7 +37,12 @@
 //#define _USB_LOW_SPEED_                      // Change this comment to make Full/Low speed
 
 // SYSCLK frequency in Hz
-#define SYSCLK    48000000UL
+#define SYSCLK      48000000UL
+#define SYSCLK_BOOT 1500000UL
+/*
+ * C8051F34X => 12MHz / 1(CLKSEL.CLKSL) / 8(OSCICN.IFCN)
+ * C8051F38X,EFM8UB2 => 48MHz / 4(CLKSEL.CLKSL) / 8(OSCICN.IFCN)
+ */
 
 extern __xdata void (*main_loop_prologue)();
 
