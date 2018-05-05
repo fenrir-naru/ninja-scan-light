@@ -159,60 +159,65 @@ static void power_on_delay(){
 }
 
 static void position_monitor(__xdata gps_pos_t *pos){
+  typedef enum {
+    GPS_SAT_0 = 0,
+    GPS_SAT_1 = 1,
+    GPS_SAT_2 = 2,
+    GPS_SAT_3 = 3,
+    GPS_OUT_OF_RANGE,
+    GPS_IN_RANGE,
+  } gps_state_t;
+  static __xdata gps_state_t periodic = GPS_SAT_0;
+  static __xdata u16 periodic_count = 0;
+  gps_state_t current = GPS_OUT_OF_RANGE;
   switch(gps_fix_type){
     case GPS_FIX_3D:
     case GPS_FIX_DEAD_RECKONING_COMBINED:
-      if(gps_pos_accuracy < GPS_POS_ACC_100M){break;}
-
-      {
-        u8 i, in_range = TRUE;
+      if(gps_pos_accuracy >= GPS_POS_ACC_100M){
+        u8 i;
+        current = GPS_IN_RANGE;
         for(i = 0; i < 3; ++i){
           u8
               a = (config.position_upper.v[i] >= config.position_lower.v[i]),
               b = (config.position_upper.v[i] < pos->v[i]),
               c = (config.position_lower.v[i] > pos->v[i]);
           if(a ? (b || c) : (b && c)){
-            in_range = FALSE;
+            current = GPS_OUT_OF_RANGE;
             break;
           }
         }
-        if(!in_range){break;}
       }
-
-      gps_position_monitor = NULL;
       break;
-  }
-}
-static void position_check_loop(){
-  u8 sat_max = 0;
-  u8 retry = 0;
-  gps_position_monitor = position_monitor;
-  while(gps_position_monitor && (usb_mode == USB_INACTIVE)){
-    while(tickcount % 0x1000 == 0){ // Timeout 40.96 [s]
-      if(sat_max >= 4){
-        software_reset_survive.delay_sec = 120; // Sleep 2 min.
-      }else if(++retry >= 3){
-        software_reset_survive.delay_sec = 600; // Sleep 10 min.
-      }else{
-        break;
+    default:
+      if(gps_num_of_sat < 4){
+        current = (gps_state_t)gps_num_of_sat;
       }
+  }
+  if(periodic < current){periodic = current;}
+  if(usb_mode != USB_INACTIVE){
+    periodic_count = 0;
+    return;
+  }
+  ++periodic_count;
+  if(periodic <= GPS_SAT_3){
+    if(periodic_count >= 0x800){ // Timeout 409.6 [s] @ 5Hz
+      software_reset_survive.delay_sec = 900; // Sleep 15 min.
       software_reset();
     }
-
-    gps_polling();
-    if(gps_num_of_sat > sat_max){
-      sat_max = gps_num_of_sat;
+  }else if(periodic <= GPS_OUT_OF_RANGE){
+    if(periodic_count >= 0x100){ // Timeout 51.2 [s] @ 5Hz
+      software_reset_survive.delay_sec = 120; // Sleep 2 min.
+      software_reset();
     }
-    data_hub_polling();
-    usb_polling();
-
-    sys_state |= SYS_POLLING_ACTIVE;
+  }else{
+    if(periodic_count >= 0x100){
+      periodic = GPS_SAT_0;
+      periodic_count = 0;
+    }
   }
-  gps_position_monitor = NULL;
-  main_loop_prologue = NULL;
 }
 static void position_check(FIL *f){
-  main_loop_prologue = position_check_loop;
+  gps_position_monitor = position_monitor;
 }
 
 void main() {
@@ -230,9 +235,7 @@ void main() {
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
       if(software_reset_survive.delay_sec > 0){software_reset();}
     }
-    if(!main_loop_prologue){
-      data_hub_load_config("POSITION.CFG", position_check);
-    }
+    data_hub_load_config("POSITION.CFG", position_check);
   }
 
   timer_init();
