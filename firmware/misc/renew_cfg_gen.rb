@@ -31,6 +31,13 @@ class U32 < C_NUMBER
   end
 end
 
+class S32 < C_NUMBER
+  TYPENAME = :s32
+  def S32.pack(v)
+    [v < 0 ? (0xFFFFFFFF + v + 1) : v].pack('V')
+  end
+end
+
 class UBX_CFG
   TYPENAME = :ubx_cfg_t
   def UBX_CFG.to_str(v)
@@ -47,6 +54,11 @@ class C_ARRAY
     @type = type
     @size = size
   end
+end
+
+class GPS_POS
+  TYPENAME = :gps_pos_t
+  UNION = C_ARRAY::new(S32, 3)
 end
 
 class String
@@ -90,7 +102,13 @@ def get_value(elm, opt = {:verbose => true}, level = 0, res = "")
     }
     res += "},".pretty(level)
   else
-    res += "#{elm[1].to_str(elm[2])},#{" // #{elm[0]}" if opt[:verbose]}".pretty(level)
+    res += begin
+      buf = "{#{" // #{elm[0]}" if opt[:verbose]}".pretty(level)
+      buf += get_value(["(union)", elm[1]::UNION, *elm[2..-1]], opt, level + 1)
+      buf + "},".pretty(level)
+    rescue
+      "#{elm[1].to_str(elm[2])},#{" // #{elm[0]}" if opt[:verbose]}".pretty(level)
+    end
   end
   res.chomp!.slice!(-1) if level == 0
   return res
@@ -107,7 +125,11 @@ def get_binary(elm, res = "")
       res += elm[1].type.pack(elm[2 + i])
     }
   else
-    res += elm[1].pack(elm[2])
+    begin
+      res += get_binary([elm[0], elm[1]::UNION, *elm[2..-1]])
+    rescue
+      res += elm[1].pack(elm[2])
+    end
   end
   return res
 end
@@ -148,7 +170,13 @@ config = [:config, # The following is the default, please customize it!
         [0x01, 0x06, 5], # NAV-SOL: approximately 1 Hz]
       ]
     ]
-  ]
+  ],
+  [:position_upper, GPS_POS,
+    1800000000, 900000000, 100000000 # position upper bounds (longitude[E-7deg], latitude[E-7deg], altitude[mm])
+  ],
+  [:position_lower, GPS_POS,
+    -1800000000, -900000000, -100000000, # position lower bounds (longitude[E-7deg], latitude[E-7deg], altitude[mm])
+  ],
 ]
 
 $stderr.puts "Generate #{get_struct(config)} = #{get_value(config)};"
