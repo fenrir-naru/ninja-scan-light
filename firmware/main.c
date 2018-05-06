@@ -217,7 +217,23 @@ static void position_monitor(__xdata gps_pos_t *pos){
   }
 }
 static void position_check(FIL *f){
-  gps_position_monitor = position_monitor;
+  if(f_size(f)){ // check new configuration
+    // file format must be "lng_upper lng_lower lat_upper lat_lower alt_upper alt_lower"
+    DWORD f_pos = f_tell(f);
+    __xdata config_t *config_new
+        = (__xdata config_t *)0x400; // temporary buffer at the same address of USB FIFO
+    u8 i;
+    memcpy(config_new, &config, sizeof(config_t));
+    for(i = 0; i < 3; ++i){
+      config_new->position_upper.v[i] = data_hub_read_long(f);
+      config_new->position_lower.v[i] = data_hub_read_long(f);
+      if(f_tell(f) == f_pos){break;}
+      f_pos = f_tell(f);
+    }
+    if((i == 3) && (memcmp(&config, config_new, sizeof(config)) != 0)){
+      config_renew(config_new);
+    }
+  }
   {
     u8 i, j;
     for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
@@ -226,6 +242,7 @@ static void position_check(FIL *f){
       }
     }
   }
+  gps_position_monitor = position_monitor;
 }
 
 void main() {
