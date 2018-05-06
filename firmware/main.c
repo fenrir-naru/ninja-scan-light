@@ -158,6 +158,7 @@ static void power_on_delay(){
   software_reset();
 }
 
+static __xdata u8 position_polarity = 0;
 static void position_monitor(__xdata gps_pos_t *pos){
   typedef enum {
     GPS_SAT_0 = 0,
@@ -174,14 +175,13 @@ static void position_monitor(__xdata gps_pos_t *pos){
     case GPS_FIX_3D:
     case GPS_FIX_DEAD_RECKONING_COMBINED:
       if(gps_pos_accuracy >= GPS_POS_ACC_100M){
-        u8 i;
+        u8 i, j;
         current = GPS_IN_RANGE;
-        for(i = 0; i < 3; ++i){
+        for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
           u8
-              a = (config.position_upper.v[i] >= config.position_lower.v[i]),
-              b = (config.position_upper.v[i] < pos->v[i]),
-              c = (config.position_lower.v[i] > pos->v[i]);
-          if(a ? (b || c) : (b && c)){
+              a = (config.position_upper.v[i] < pos->v[i]),
+              b = (config.position_lower.v[i] > pos->v[i]);
+          if((position_polarity & j) ? (a || b) : (a && b)){
             current = GPS_OUT_OF_RANGE;
             break;
           }
@@ -218,6 +218,14 @@ static void position_monitor(__xdata gps_pos_t *pos){
 }
 static void position_check(FIL *f){
   gps_position_monitor = position_monitor;
+  {
+    u8 i, j;
+    for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
+      if(config.position_upper.v[i] >= config.position_lower.v[i]){
+        position_polarity |= j;
+      }
+    }
+  }
 }
 
 void main() {
