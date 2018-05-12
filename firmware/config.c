@@ -78,7 +78,17 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
 };
 
 void config_renew(config_t *new_one){
-  if(memcmp(&config, new_one, sizeof(config_t)) != 0){
-    flash_renew_page((flash_address_t)(&config), (u8 *)new_one, sizeof(config_t));
+  __xdata u8 *buf = (__xdata u8 *)CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS;
+  if((u8 *)new_one == buf){
+    // perform renewal without update check
+  }else if(memcmp(&config, new_one, sizeof(config_t)) != 0){
+    // perform automatic clone of area located behind config
+    memcpy(buf, new_one, sizeof(config_t));
+    memcpy(buf + sizeof(config_t), (u8 *)&config + sizeof(config_t),
+        FLASH_PAGESIZE - sizeof(config_t));
+
+  }else{
+    return;
   }
+  flash_renew_page((flash_address_t)(&config), buf, FLASH_PAGESIZE);
 }
