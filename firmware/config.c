@@ -77,9 +77,6 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
   }},
 };
 
-static const __code __at(CONFIG_ADDRESS + sizeof(config_t))
-    u8 page_padding[FLASH_PAGESIZE - sizeof(config_t)] = {0x00};
-
 void config_renew(config_t *new_one){
   if(memcmp(&config, new_one, sizeof(config_t)) != 0){
     flash_renew_page((flash_address_t)(&config), (u8 *)new_one, sizeof(config_t));

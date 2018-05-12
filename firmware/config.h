@@ -62,7 +62,7 @@ typedef struct {
   gps_pos_t position_upper, position_lower;
 } config_t;
 
-#define CONFIG_ADDRESS 0xF000
+#define CONFIG_ADDRESS 0xF800
 
 extern volatile __code __at(CONFIG_ADDRESS) config_t config;
 void config_renew(config_t *new_one);
