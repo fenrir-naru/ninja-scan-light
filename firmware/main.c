@@ -34,6 +34,7 @@
 
 #include "main.h"
 #include "util.h"
+#include "config.h"
 
 #include "c8051f380.h"
 #include "f38x_usb.h"
@@ -157,6 +158,106 @@ static void power_on_delay(){
   software_reset();
 }
 
+#if defined(POSITION_MONITOR)
+static __xdata u8 position_polarity = 0;
+typedef struct {
+  gps_pos_t upper, lower;
+} position_range_t;
+static volatile __code __at(CONFIG_ADDRESS + sizeof(config_t))
+    position_range_t position_range = {
+  {{ // position upper
+    1800000000, 900000000, 100000000, // E180, N90, 100km
+  }},
+  {{ // position lower
+    -1800000000, -900000000, -100000000, // W180, S90, -100km
+  }},
+};
+static void position_monitor(__xdata gps_pos_t *pos){
+  typedef enum {
+    GPS_SAT_0 = 0,
+    GPS_SAT_1 = 1,
+    GPS_SAT_2 = 2,
+    GPS_SAT_3 = 3,
+    GPS_OUT_OF_RANGE,
+    GPS_IN_RANGE,
+  } gps_state_t;
+  static __xdata gps_state_t periodic = GPS_SAT_0;
+  static __xdata u16 periodic_count = 0;
+  gps_state_t current = GPS_OUT_OF_RANGE;
+  switch(gps_fix_type){
+    case GPS_FIX_3D:
+    case GPS_FIX_DEAD_RECKONING_COMBINED:
+      if(gps_pos_accuracy >= GPS_POS_ACC_100M){
+        u8 i, j;
+        current = GPS_IN_RANGE;
+        for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
+          u8
+              a = (position_range.upper.v[i] < pos->v[i]),
+              b = (position_range.lower.v[i] > pos->v[i]);
+          if((position_polarity & j) ? (a || b) : (a && b)){
+            current = GPS_OUT_OF_RANGE;
+            break;
+          }
+        }
+      }
+      break;
+    default:
+      if(gps_num_of_sat < 4){
+        current = (gps_state_t)gps_num_of_sat;
+      }
+  }
+  if(periodic < current){periodic = current;}
+  if(usb_mode != USB_INACTIVE){
+    periodic_count = 0;
+    return;
+  }
+  ++periodic_count;
+  if(periodic <= GPS_SAT_3){
+    if(periodic_count >= 0x800){ // Timeout 409.6 [s] @ 5Hz
+      software_reset_survive.delay_sec = 900; // Sleep 15 min.
+      software_reset();
+    }
+  }else if(periodic <= GPS_OUT_OF_RANGE){
+    if(periodic_count >= 0x100){ // Timeout 51.2 [s] @ 5Hz
+      software_reset_survive.delay_sec = 120; // Sleep 2 min.
+      software_reset();
+    }
+  }else{
+    if(periodic_count >= 0x100){
+      periodic = GPS_SAT_0;
+      periodic_count = 0;
+    }
+  }
+}
+static void position_check(FIL *f){
+  if(f_size(f)){ // check new configuration
+    // file format must be "lng_upper lng_lower lat_upper lat_lower alt_upper alt_lower"
+    DWORD f_pos = f_tell(f);
+    __xdata config_t *buf = config_clone();
+    __xdata position_range_t *buf_range = (__xdata position_range_t *)((u8 *)buf + sizeof(config_t));
+    u8 i;
+    for(i = 0; i < 3; ++i){
+      buf_range->upper.v[i] = data_hub_read_long(f);
+      buf_range->lower.v[i] = data_hub_read_long(f);
+      if(f_tell(f) == f_pos){break;}
+      f_pos = f_tell(f);
+    }
+    if((i == 3) && (memcmp(&position_range, buf_range, sizeof(position_range_t)) != 0)){
+      config_renew(buf);
+    }
+  }
+  {
+    u8 i, j;
+    for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
+      if(position_range.upper.v[i] >= position_range.lower.v[i]){
+        position_polarity |= j;
+      }
+    }
+  }
+  gps_position_monitor = position_monitor;
+}
+#endif
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -172,6 +273,9 @@ void main() {
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
       if(software_reset_survive.delay_sec > 0){software_reset();}
     }
+#if defined(POSITION_MONITOR)
+    data_hub_load_config("POSITION.CFG", position_check);
+#endif
   }
 
   timer_init();

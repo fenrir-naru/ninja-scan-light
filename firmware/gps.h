@@ -83,10 +83,13 @@ extern __xdata u8 gps_num_of_sat;
 extern __bit gps_utc_valid;
 extern __xdata struct tm gps_utc;
 
-typedef struct {
-  s32 lng; // 1E-7 [deg]; (-180, 180]
-  s32 lat; // 1E-7 [deg]; [-90, 90]
-  s32 alt; // 1E-3 [m];
+typedef union {
+  struct {
+    s32 lng; // 1E-7 [deg]; (-180, 180]
+    s32 lat; // 1E-7 [deg]; [-90, 90]
+    s32 alt; // 1E-3 [m];
+  } s;
+  s32 v[3];
 } gps_pos_t;
 extern __xdata void (*gps_position_monitor)(__xdata gps_pos_t *);
 
