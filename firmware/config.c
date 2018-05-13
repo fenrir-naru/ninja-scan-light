@@ -77,6 +77,15 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
   }},
 };
 
+// temporary buffer for renewal at the same address of USB FIFO
+#define CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS 0x0400
+
+__xdata config_t *config_clone(){
+  __xdata u8 *buf = (__xdata u8 *)CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS;
+  memcpy(buf, &config, FLASH_PAGESIZE);
+  return buf;
+}
+
 void config_renew(config_t *new_one){
   __xdata u8 *buf = (__xdata u8 *)CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS;
   if((u8 *)new_one == buf){

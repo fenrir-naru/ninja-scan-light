@@ -64,10 +64,8 @@ typedef struct {
 
 #define CONFIG_ADDRESS 0xF800
 
-// temporary buffer for renewal at the same address of USB FIFO
-#define CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS 0x0400
-
 extern volatile __code __at(CONFIG_ADDRESS) config_t config;
+__xdata config_t *config_clone();
 void config_renew(config_t *new_one);
 
 #endif /* __CONFIG_H__ */
