@@ -158,6 +158,7 @@ static void power_on_delay(){
   software_reset();
 }
 
+#if defined(POSITION_MONITOR)
 static __xdata u8 position_polarity = 0;
 typedef struct {
   gps_pos_t upper, lower;
@@ -255,6 +256,7 @@ static void position_check(FIL *f){
   }
   gps_position_monitor = position_monitor;
 }
+#endif
 
 void main() {
   sysclk_init(); // Initialize oscillator
@@ -271,7 +273,9 @@ void main() {
       data_hub_load_config("DELAY.CFG", power_on_delay_check);
       if(software_reset_survive.delay_sec > 0){software_reset();}
     }
+#if defined(POSITION_MONITOR)
     data_hub_load_config("POSITION.CFG", position_check);
+#endif
   }
 
   timer_init();
