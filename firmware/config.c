@@ -69,12 +69,6 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
       {0x01, 0x06, 5}, // NAV-SOL: approximately 1 Hz
     },},
   },
-  {{ // position upper
-    1800000000, 900000000, 100000000, // E180, N90, 100km
-  }},
-  {{ // position lower
-    -1800000000, -900000000, -100000000, // W180, S90, -100km
-  }},
 };
 
 // temporary buffer for renewal at the same address of USB FIFO

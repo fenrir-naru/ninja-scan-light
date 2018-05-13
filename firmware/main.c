@@ -159,6 +159,18 @@ static void power_on_delay(){
 }
 
 static __xdata u8 position_polarity = 0;
+typedef struct {
+  gps_pos_t upper, lower;
+} position_range_t;
+static volatile __code __at(CONFIG_ADDRESS + sizeof(config_t))
+    position_range_t position_range = {
+  {{ // position upper
+    1800000000, 900000000, 100000000, // E180, N90, 100km
+  }},
+  {{ // position lower
+    -1800000000, -900000000, -100000000, // W180, S90, -100km
+  }},
+};
 static void position_monitor(__xdata gps_pos_t *pos){
   typedef enum {
     GPS_SAT_0 = 0,
@@ -179,8 +191,8 @@ static void position_monitor(__xdata gps_pos_t *pos){
         current = GPS_IN_RANGE;
         for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
           u8
-              a = (config.position_upper.v[i] < pos->v[i]),
-              b = (config.position_lower.v[i] > pos->v[i]);
+              a = (position_range.upper.v[i] < pos->v[i]),
+              b = (position_range.lower.v[i] > pos->v[i]);
           if((position_polarity & j) ? (a || b) : (a && b)){
             current = GPS_OUT_OF_RANGE;
             break;
@@ -220,24 +232,23 @@ static void position_check(FIL *f){
   if(f_size(f)){ // check new configuration
     // file format must be "lng_upper lng_lower lat_upper lat_lower alt_upper alt_lower"
     DWORD f_pos = f_tell(f);
-    __xdata config_t *config_new
-        = (__xdata config_t *)0x400; // temporary buffer at the same address of USB FIFO
+    __xdata config_t *buf = config_clone();
+    __xdata position_range_t *buf_range = (__xdata position_range_t *)((u8 *)buf + sizeof(config_t));
     u8 i;
-    memcpy(config_new, &config, sizeof(config_t));
     for(i = 0; i < 3; ++i){
-      config_new->position_upper.v[i] = data_hub_read_long(f);
-      config_new->position_lower.v[i] = data_hub_read_long(f);
+      buf_range->upper.v[i] = data_hub_read_long(f);
+      buf_range->lower.v[i] = data_hub_read_long(f);
       if(f_tell(f) == f_pos){break;}
       f_pos = f_tell(f);
     }
-    if((i == 3) && (memcmp(&config, config_new, sizeof(config)) != 0)){
-      config_renew(config_new);
+    if((i == 3) && (memcmp(&position_range, buf_range, sizeof(position_range_t)) != 0)){
+      config_renew(buf);
     }
   }
   {
     u8 i, j;
     for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
-      if(config.position_upper.v[i] >= config.position_lower.v[i]){
+      if(position_range.upper.v[i] >= position_range.lower.v[i]){
         position_polarity |= j;
       }
     }

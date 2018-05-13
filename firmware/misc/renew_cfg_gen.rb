@@ -171,12 +171,15 @@ config = [:config, # The following is the default, please customize it!
       ]
     ]
   ],
+=begin
+  # For optional position monitor
   [:position_upper, GPS_POS,
     1800000000, 900000000, 100000000 # position upper bounds (longitude[E-7deg], latitude[E-7deg], altitude[mm])
   ],
   [:position_lower, GPS_POS,
     -1800000000, -900000000, -100000000, # position lower bounds (longitude[E-7deg], latitude[E-7deg], altitude[mm])
   ],
+=end
 ]
 
 $stderr.puts "Generate #{get_struct(config)} = #{get_value(config)};"
