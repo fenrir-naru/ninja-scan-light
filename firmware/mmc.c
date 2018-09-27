@@ -506,8 +506,9 @@ void mmc_init(){
   switch(buffer[0] & 0xC0){
     case (0x01 << 6):
       mmc_block_length = 512;
-      mmc_physical_sectors = ((unsigned long)(buffer[7] & 0x3F) << 16)
-          | (buffer[8] << 8) | buffer[9];
+      mmc_physical_sectors = buffer[7] & 0x3F;  mmc_physical_sectors <<= 8;
+      mmc_physical_sectors |= buffer[8];        mmc_physical_sectors <<= 8;
+      mmc_physical_sectors |= buffer[9];
       mmc_physical_sectors++;
       mmc_physical_sectors <<= 10;
       break;

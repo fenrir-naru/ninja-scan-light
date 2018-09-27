@@ -591,7 +591,7 @@ static unsigned int usb_tx(
         // Register data for transmission
         if(!(control_reg & (rbInSDSTL | rbInFLUSH | rbInINPRDY))){
 
-          // Clear underrun bit if it was set
+          // Clear under-run bit if it was set
           //if(control_reg & rbInUNDRUN){} // TODO
 
           // Put new data on FIFO

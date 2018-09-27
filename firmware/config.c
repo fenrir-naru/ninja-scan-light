@@ -71,11 +71,27 @@ volatile __code __at(CONFIG_ADDRESS) config_t config = {
   },
 };
 
-static const __code __at(CONFIG_ADDRESS + sizeof(config_t))
-    u8 page_padding[FLASH_PAGESIZE - sizeof(config_t)] = {0x00};
+// temporary buffer for renewal at the same address of USB FIFO EP3
+#define CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS 0x0440
+
+__xdata config_t *config_clone(){
+  __xdata u8 *buf = (__xdata u8 *)CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS;
+  memcpy(buf, &config, FLASH_PAGESIZE);
+  return buf;
+}
 
 void config_renew(config_t *new_one){
-  if(memcmp(&config, new_one, sizeof(config_t)) != 0){
-    flash_renew_page((flash_address_t)(&config), (u8 *)new_one, sizeof(config_t));
+  __xdata u8 *buf = (__xdata u8 *)CONFIG_RENEWAL_BUFFER_XDATA_ADDRESS;
+  if((u8 *)new_one == buf){
+    // perform renewal without update check
+  }else if(memcmp(&config, new_one, sizeof(config_t)) != 0){
+    // perform automatic clone of area located behind config
+    memcpy(buf, new_one, sizeof(config_t));
+    memcpy(buf + sizeof(config_t), (u8 *)&config + sizeof(config_t),
+        FLASH_PAGESIZE - sizeof(config_t));
+
+  }else{
+    return;
   }
+  flash_renew_page((flash_address_t)(&config), buf, FLASH_PAGESIZE);
 }

@@ -125,7 +125,7 @@ FIFO_SIZE_T uart1_write(char *buf, FIFO_SIZE_T size){
 }
 
 /**
- * Return the empty buffer size of data which will be transfered via UART1
+ * Return the empty buffer size of data which will be transferred via UART1
  * 
  * @return (FIFO_SIZE_T) the size
  */

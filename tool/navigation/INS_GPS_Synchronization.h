@@ -278,9 +278,9 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
             bar_delteT /= n;
             mat_t sum_A_GQGt(sum_A * sum_GQGt);
             R += H
-                * (sum_GQGt -= ((sum_A_GQGt + sum_A_GQGt.transpose()) *= (bar_delteT * (n + 1) / (2 * n))))
-                * H.transpose();
-            H *= (mat_t::getI(sum_A.rows()) - sum_A * bar_delteT);
+                * (sum_GQGt -= ((sum_A_GQGt + sum_A_GQGt.transpose()) *= (bar_delteT * (n - 1) / (2 * n))))
+                * H.transpose(); // Eq. (4.2.42) @see http://fenrir.naruoka.org/download/report/2010dt.pdf
+            H *= (mat_t::getI(sum_A.rows()) - sum_A * bar_delteT);  // Eq. (4.2.41)
           }
           break;
         case RT_NORMAL:
