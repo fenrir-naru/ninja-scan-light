@@ -32,6 +32,10 @@
 #ifndef __NULLSTREAM_H__
 #define __NULLSTREAM_H__
 
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
+
 #include <streambuf>
 #include <iostream>
 #include <string>
@@ -45,23 +49,23 @@ class basic_NullStreambuf : public std::basic_streambuf<_Elem, _Traits> {
     typedef std::streamsize streamsize;
     typedef typename super_t::int_type int_type;
   public:
-    basic_NullStreambuf() throw(std::ios_base::failure) : super_t() {}
-    virtual ~basic_NullStreambuf() {}
+    basic_NullStreambuf() : super_t() {}
+    virtual ~basic_NullStreambuf() noexcept {}
   protected:
-    int_type overflow(int_type c = _Traits::eof()){
+    int_type overflow(int_type c = _Traits::eof()) noexcept {
       return _Traits::not_eof(c);
     }
-    streamsize xsputn(const _Elem *s, streamsize n){
+    streamsize xsputn(const _Elem *s, streamsize n) noexcept {
       return (streamsize)n;
     }
     
-    streamsize xsgetn(_Elem *s, streamsize n){
+    streamsize xsgetn(_Elem *s, streamsize n) noexcept {
       return (streamsize)0;
     }
-    int_type underflow(){
+    int_type underflow() noexcept {
       return _Traits::eof();
     }
-    int_type uflow(){
+    int_type uflow() noexcept {
       return _Traits::eof();
     }
 };
@@ -75,8 +79,8 @@ class NullStream : public std::iostream{
     typedef std::iostream super_t;
     buf_t buf;
   public:
-    NullStream() throw(std::ios_base::failure) : buf(), super_t(&buf){}
-    ~NullStream(){}
+    NullStream() : buf(), super_t(&buf){}
+    ~NullStream() noexcept {}
 };
 
 #endif /* __NULLSTREAM_H__ */
