@@ -42,6 +42,10 @@
 #include <cstring>
 #include "param/matrix.h"
 
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
+
 template <class FloatT>
 struct Vector3DataProperty{
   /**
@@ -175,6 +179,11 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
     }
 };
 
+template <class FloatT>
+struct Vector3Data_TypeMapper {
+  typedef Vector3Data<FloatT> res_t;
+};
+
 /**
  * @brief 3次元ベクトル
  * 
@@ -189,10 +198,10 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
  * @param FloatT 演算精度、doubleなど
  */
 template <class FloatT>
-class Vector3 : public Vector3Data<FloatT> {
+class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
   protected:
     typedef Vector3<FloatT> self_t;
-    typedef Vector3Data<FloatT> super_t;
+    typedef typename Vector3Data_TypeMapper<FloatT>::res_t super_t;
   
     Vector3(const super_t &v) : super_t(v){}
     
@@ -219,7 +228,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * デストラクタ。
      * 
      */
-    ~Vector3(){}
+    ~Vector3() noexcept {}
     
     /**
      * コピーコンストラクタ
@@ -268,17 +277,17 @@ class Vector3 : public Vector3Data<FloatT> {
      * X要素を設定します。
      * @param x 設定する値
      */
-    void setX(const FloatT &x){set(X_INDEX, x);}
+    void setX(const FloatT &x) noexcept {set(X_INDEX, x);}
     /**
      * Y要素を設定します。
      * @param y 設定する値
      */
-    void setY(const FloatT &y){set(Y_INDEX, y);}
+    void setY(const FloatT &y) noexcept {set(Y_INDEX, y);}
     /**
      * Z要素を設定します。
      * @param z 設定する値
      */
-    void setZ(const FloatT &z){set(Z_INDEX, z);}
+    void setZ(const FloatT &z) noexcept {set(Z_INDEX, z);}
     
     /**
      * 要素を取得します。
@@ -293,17 +302,17 @@ class Vector3 : public Vector3Data<FloatT> {
      * X要素を取得します。
      * @return FloatT X要素
      */
-    const FloatT &getX() const {return get(X_INDEX);}
+    const FloatT &getX() const noexcept {return get(X_INDEX);}
     /**
      * Y要素を取得します。
      * @return FloatT Y要素
      */
-    const FloatT &getY() const {return get(Y_INDEX);}
+    const FloatT &getY() const noexcept {return get(Y_INDEX);}
     /**
      * Z要素を取得します。
      * @return FloatT Z要素
      */
-    const FloatT &getZ() const {return get(Z_INDEX);}
+    const FloatT &getZ() const noexcept {return get(Z_INDEX);}
 
 #ifndef pow2
 #define pow2(x) ((x) * (x))
@@ -322,7 +331,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * 
      * @return (T) 結果
      */
-    FloatT abs2() const{
+    FloatT abs2() const noexcept {
       FloatT result(0);
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){result += pow2((*this)[i]);}
       return result;
@@ -355,7 +364,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @param t スカラー
      * @return (Vector3<FloatT>) 結果
      */
-    self_t &operator*=(const FloatT &t){
+    self_t &operator*=(const FloatT &t) noexcept {
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] *= t;}
       return *this;
     }
@@ -390,7 +399,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @param v 3次元ベクトル
      * @return (Vector3<FloatT>) 結果
      */
-    self_t &operator+=(const self_t &v){
+    self_t &operator+=(const self_t &v) noexcept {
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] += v[i];}
       return *this;
     }
@@ -409,7 +418,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @param v 3次元ベクトル
      * @return (Vector3<FloatT>) 結果
      */
-    self_t &operator-=(const self_t &v){
+    self_t &operator-=(const self_t &v) noexcept {
      for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] -= v[i];}
       return *this;
     }
@@ -442,7 +451,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @param v 3次元ベクトル
      * @return (Vector3<FloatT>) 結果
      */
-    FloatT innerp(const self_t &v) const{
+    FloatT innerp(const self_t &v) const noexcept {
      FloatT result(0);
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){
        result += (*this)[i] * v[i];
@@ -487,8 +496,7 @@ class Vector3 : public Vector3Data<FloatT> {
      * @param matrix 行列
      * @throws MatrixException 行列のサイズが正しくないとき
      */
-    Vector3(const Matrix<FloatT> &matrix) throw(MatrixException)
-        : super_t() {
+    Vector3(const Matrix<FloatT> &matrix) : super_t() {
       if((matrix.rows() == OUT_OF_INDEX) && (matrix.columns() == 1)){
         for(unsigned int i = 0; i < OUT_OF_INDEX; i++){
           (*this)[i] = matrix(i, 0);
@@ -562,50 +570,53 @@ class Vector3 : public Vector3Data<FloatT> {
     }
 };
 
-#define VECTOR3_NO_FLY_WEIGHT(float_t) \
-template <> \
-class Vector3Data<float_t> : public Vector3DataProperty<float_t> { \
-  protected: \
-    typedef Vector3DataProperty<float_t> super_t; \
-    typedef Vector3Data<float_t> self_t; \
-    \
-  private: \
-    float_t values[super_t::OUT_OF_INDEX]; \
-    \
-  protected: \
-    Vector3Data(){} \
-    \
-    Vector3Data(const float_t &x, const float_t &y, const float_t &z){ \
-      values[super_t::X_INDEX] = x; \
-      values[super_t::Y_INDEX] = y; \
-      values[super_t::Z_INDEX] = z; \
-    } \
-    \
-    Vector3Data(const self_t &v){ \
-      std::memcpy(values, v.values, sizeof(values)); \
-    } \
-    \
-    self_t &operator=(const self_t &v){ \
-      std::memcpy(values, v.values, sizeof(values)); \
-      return *this; \
-    } \
-    \
-    self_t deep_copy() const { \
-      self_t copied; \
-      std::memcpy(copied.values, values, sizeof(values)); \
-      return copied; \
-    } \
-  public: \
-    ~Vector3Data(){} \
-    \
-    const float_t &operator[](const unsigned int &index) const { \
-      return values[index]; \
-    } \
-    float_t &operator[](const unsigned int &index){ \
-      return const_cast<float_t &>(static_cast<const self_t &>(*this)[index]); \
-    } \
-}
+/**
+ * Vector3 data type without fly weight design pattern for performance tuning
+ *
+ * To use this, the following example may be helpful:
+ * template <>
+ * struct Vector3Data_TypeMapper<double> {
+ *   typedef Vector3Data_NoFlyWeight<double> res_t;
+ * };
+ */
+template <class FloatT>
+class Vector3Data_NoFlyWeight : public Vector3DataProperty<FloatT> {
+  protected:
+    typedef Vector3DataProperty<FloatT> super_t;
+    typedef Vector3Data_NoFlyWeight<FloatT> self_t;
+  private:
+    FloatT values[super_t::OUT_OF_INDEX];
+  protected:
+    Vector3Data_NoFlyWeight() noexcept {}
+    Vector3Data_NoFlyWeight(const FloatT &x, const FloatT &y, const FloatT &z) noexcept {
+      values[super_t::X_INDEX] = x;
+      values[super_t::Y_INDEX] = y;
+      values[super_t::Z_INDEX] = z;
+    }
+    Vector3Data_NoFlyWeight(const self_t &v) noexcept {
+      std::memcpy(values, v.values, sizeof(values));
+    }
+    self_t &operator=(const self_t &v) noexcept {
+      std::memcpy(values, v.values, sizeof(values));
+      return *this;
+    }
+    self_t deep_copy() const {
+      self_t copied;
+      std::memcpy(copied.values, values, sizeof(values));
+      return copied;
+    }
+  public:
+    ~Vector3Data_NoFlyWeight() noexcept {}
+    const FloatT &operator[](const unsigned int &index) const {
+      return values[index];
+    }
+    FloatT &operator[](const unsigned int &index){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this)[index]);
+    }
+};
 
-//VECTOR3_NO_FLY_WEIGHT(double);
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
 
 #endif /* __VECTOR3_H */

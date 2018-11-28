@@ -70,7 +70,7 @@ class basic_ComportStreambuf : public std::basic_streambuf<_Elem, _Traits> {
     handle_t handle;
     int_type in_buf;
     bool in_buf_ready;
-    static handle_t spec2handle(const char *port_spec) throw(std::ios_base::failure) {
+    static handle_t spec2handle(const char *port_spec){
       std::string regular_name(port_spec);
 #ifdef _WIN32
       // When Windows COM port number is greater than 9, we must change name format.
@@ -402,7 +402,7 @@ class basic_ComportStreambuf : public std::basic_streambuf<_Elem, _Traits> {
     handle_t get_handle() const {
       return handle;
     }
-    basic_ComportStreambuf(const char *port_spec) throw(std::ios_base::failure)
+    basic_ComportStreambuf(const char *port_spec)
         : super_t(), handle(spec2handle(port_spec)), in_buf_ready(false) {
       config();
       clear_error();
@@ -669,7 +669,7 @@ class ComportStream : public std::iostream{
     typedef std::iostream super_t;
     buf_t buf;
   public:
-    ComportStream(const char *port_spec) throw(std::ios_base::failure)
+    ComportStream(const char *port_spec)
         : buf(port_spec), super_t(&buf){}
     ~ComportStream(){}
     buf_t &buffer(){return buf;}

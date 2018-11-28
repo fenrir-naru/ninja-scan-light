@@ -163,8 +163,15 @@ typedef double float_sylph_t;
 #include "param/vector3.h"
 #include "param/quaternion.h"
 #include "param/complex.h"
-VECTOR3_NO_FLY_WEIGHT(float_sylph_t);
-QUATERNION_NO_FLY_WEIGHT(float_sylph_t);
+
+template <>
+struct Vector3Data_TypeMapper<float_sylph_t> {
+  typedef Vector3Data_NoFlyWeight<float_sylph_t> res_t;
+};
+template <>
+struct QuaternionData_TypeMapper<float_sylph_t> {
+  typedef QuaternionData_NoFlyWeight<float_sylph_t> res_t;
+};
 
 #include "algorithm/kalman.h"
 
