@@ -53,6 +53,21 @@
 #include <string>
 #include <exception>
 
+#include <cstring>
+#include <cmath>
+#include <cfloat>
+#include <ostream>
+#include "param/complex.h"
+
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
+#if defined(DEBUG) && !defined(throws_when_debug)
+#define throws_when_debug
+#else
+#define throws_when_debug noexcept
+#endif
+
 /**
  * @brief Exception related to matrix
  *
@@ -69,9 +84,9 @@ class MatrixException: public std::exception{
      */
     MatrixException(const std::string &what_arg) : what_str(what_arg){}
 
-    ~MatrixException() throw(){}
+    ~MatrixException() noexcept {}
 
-    const char *what() const throw(){
+    const char *what() const noexcept {
       return what_str.c_str();
     }
 };
@@ -86,20 +101,8 @@ class StorageException: public MatrixException {
   public:
     StorageException(const std::string &what_arg)
         : MatrixException(what_arg) {}
-    ~StorageException() throw(){}
+    ~StorageException() noexcept {}
 };
-
-#if defined(DEBUG)
-#define throw_when_debug(e) throw(e)
-#else
-#define throw_when_debug(e) throw()
-#endif
-
-#include <cstring>
-#include <cmath>
-#include <cfloat>
-#include <ostream>
-#include "param/complex.h"
 
 /**
  * @brief 2D array abstract class
@@ -128,26 +131,26 @@ class Array2D{
      * @param rows Rows
      * @param columns Columns
      */
-    Array2D(const unsigned int &rows, const unsigned int &columns)
+    Array2D(const unsigned int &rows, const unsigned int &columns) noexcept
         : m_rows(rows), m_columns(columns){}
 
     /**
      * Destructor of Array2D
      */
-    virtual ~Array2D(){}
+    virtual ~Array2D() noexcept {}
 
     /**
      * Return rows
      *
      * @return (unsigned int) Rows
      */
-    const unsigned int &rows() const{return m_rows;}
+    const unsigned int &rows() const noexcept {return m_rows;}
     /**
      * Return columns
      *
      * @return (int) Columns
      */
-    const unsigned int &columns() const{return m_columns;}
+    const unsigned int &columns() const noexcept {return m_columns;}
 
     /**
      * Accessor for element
@@ -268,7 +271,7 @@ class Array2D_Dense : public Array2D<T> {
      * The reference counter will be decreased, and when the counter equals to zero,
      * allocated memory for elements will be deleted.
      */
-    ~Array2D_Dense(){
+    ~Array2D_Dense() noexcept {
       if(ref && ((--(*ref)) <= 0)){
         delete [] values;
         delete ref;
@@ -303,7 +306,7 @@ class Array2D_Dense : public Array2D<T> {
      */
     const T &operator()(
         const unsigned int &row,
-        const unsigned int &column) const throw_when_debug(StorageException) {
+        const unsigned int &column) const throws_when_debug {
 #if defined(DEBUG)
       if((row >= rows()) || (column >= columns())){
         throw StorageException("Index incorrect");
@@ -336,19 +339,19 @@ struct MatrixView {
   }
 
   inline const unsigned int rows(
-      const unsigned int &_rows, const unsigned int &_columns) const {
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return _rows;
   }
   inline const unsigned int columns(
-      const unsigned int &_rows, const unsigned int &_columns) const {
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return _columns;
   }
   inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const {
+      const unsigned int &i, const unsigned int &j) const noexcept {
     return i;
   }
   inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const {
+      const unsigned int &i, const unsigned int &j) const noexcept {
     return j;
   }
 };
@@ -572,19 +575,19 @@ struct MatrixViewTranspose : protected BaseView {
   }
 
   inline const unsigned int rows(
-      const unsigned int &_rows, const unsigned int &_columns) const {
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return BaseView::columns(_rows, _columns);
   }
   inline const unsigned int columns(
-      const unsigned int &_rows, const unsigned int &_columns) const {
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return BaseView::rows(_rows, _columns);
   }
   inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const {
+      const unsigned int &i, const unsigned int &j) const noexcept {
     return BaseView::i(j, i);
   }
   inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const {
+      const unsigned int &i, const unsigned int &j) const noexcept {
     return BaseView::j(j, i);
   }
 };
@@ -621,19 +624,19 @@ struct MatrixViewPartial : protected BaseView {
   }
 
   inline const unsigned int rows(
-      const unsigned int &_rows, const unsigned int &_columns) const {
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return partial_prop.rows;
   }
   inline const unsigned int columns(
-      const unsigned int &_rows, const unsigned int &_columns) const {
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return partial_prop.columns;
   }
   inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const {
+      const unsigned int &i, const unsigned int &j) const noexcept {
     return BaseView::i(i + partial_prop.row_offset, j + partial_prop.column_offset);
   }
   inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const {
+      const unsigned int &i, const unsigned int &j) const noexcept {
     return BaseView::j(i + partial_prop.row_offset, j + partial_prop.column_offset);
   }
 };
@@ -704,7 +707,7 @@ class Matrix{
      *
      * @return row number.
      */
-    const unsigned int rows() const{
+    const unsigned int rows() const noexcept {
       return view.rows(storage->rows(), storage->columns());
     }
 
@@ -713,7 +716,7 @@ class Matrix{
      *
      * @return column number.
      */
-    const unsigned int columns() const{
+    const unsigned int columns() const noexcept {
       return view.columns(storage->rows(), storage->columns());
     }
 
@@ -920,7 +923,7 @@ class Matrix{
     template <
         class T2, template <class> class Array2D_Type2,
         class ViewType2>
-    bool operator==(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
+    bool operator==(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       if(this == &matrix){return true;}
       if((rows() != matrix.rows())
           || columns() != matrix.columns()){
@@ -939,7 +942,7 @@ class Matrix{
     template <
         class T2, template <class> class Array2D_Type2,
         class ViewType2>
-    bool operator!=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
+    bool operator!=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       return !(operator==(matrix));
     }
 
@@ -971,7 +974,7 @@ class Matrix{
      *
      * @return Transpose matrix
      */
-    transpose_t transpose() const{
+    transpose_t transpose() const noexcept {
       return transpose_t(*this);
     }
 
@@ -991,7 +994,7 @@ class Matrix{
         const unsigned int &new_rows,
         const unsigned int &new_columns,
         const unsigned int &row_offset,
-        const unsigned int &column_offset) const throw(MatrixException) {
+        const unsigned int &column_offset) const {
       partial_t res(*this);
       if((new_rows + row_offset > rows())
           || (new_columns + column_offset > columns())){
@@ -1033,7 +1036,7 @@ class Matrix{
      * @throw MatrixException
      */
     self_t &exchangeRows(
-        const unsigned int &row1, const unsigned int &row2) throw(MatrixException){
+        const unsigned int &row1, const unsigned int &row2){
       if(row1 >= rows() || row2 >= rows()){throw MatrixException("Index incorrect");}
       T temp;
       for(unsigned int j(0); j < columns(); j++){
@@ -1069,14 +1072,14 @@ class Matrix{
      *
      * @return true when square, otherwise false.
      */
-    bool isSquare() const{return rows() == columns();}
+    bool isSquare() const noexcept {return rows() == columns();}
 
     /**
      * Test whether matrix is diagonal
      *
      * @return true when diagonal, otherwise false.
      */
-    bool isDiagonal() const{
+    bool isDiagonal() const noexcept {
       if(isSquare()){
         for(unsigned int i(0); i < rows(); i++){
           for(unsigned int j(i + 1); j < columns(); j++){
@@ -1094,7 +1097,7 @@ class Matrix{
      *
      * @return true when symmetric, otherwise false.
      */
-    bool isSymmetric() const{
+    bool isSymmetric() const noexcept {
       if(isSquare()){
         for(unsigned int i(0); i < rows(); i++){
           for(unsigned int j(i + 1); j < columns(); j++){
@@ -1112,7 +1115,7 @@ class Matrix{
      * @return true when size different, otherwise false.
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
+    bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       return (rows() != matrix.rows()) || (columns() != matrix.columns());
     }
 
@@ -1131,8 +1134,7 @@ class Matrix{
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &replace(
         const Matrix<T2, Array2D_Type2, ViewType2> &matrix,
-        const bool &do_check = true)
-        throw(MatrixException) {
+        const bool &do_check = true){
       if(do_check && isDifferentSize(matrix)){
         throw MatrixException("Incorrect size");
       }
@@ -1145,7 +1147,7 @@ class Matrix{
      * @param do_check Check matrix size property. The default is true
      * @return Trace
      */
-    T trace(const bool &do_check = true) const throw(MatrixException) {
+    T trace(const bool &do_check = true) const {
       if(do_check && !isSquare()){throw MatrixException("rows != columns");}
       T tr(0);
       for(unsigned i(0); i < rows(); i++){
@@ -1160,7 +1162,7 @@ class Matrix{
      * @param scalar
      * @return myself
      */
-    self_t &operator*=(const T &scalar){
+    self_t &operator*=(const T &scalar) noexcept {
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           (*this)(i, j) *= scalar;
@@ -1217,7 +1219,7 @@ class Matrix{
      * @return myself
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
+    self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
@@ -1245,7 +1247,7 @@ class Matrix{
      * @return myself
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) throw(MatrixException) {
+    self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
@@ -1274,7 +1276,7 @@ class Matrix{
      * @throw MatrixException
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const throw(MatrixException){
+    viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
       if(columns() != matrix.rows()){
         throw MatrixException("Incorrect size");
       }
@@ -1352,7 +1354,7 @@ class Matrix{
      * @return Determinant
      * @throw MatrixException
      */
-    T determinant_minor(const bool &do_check = true) const throw(MatrixException){
+    T determinant_minor(const bool &do_check = true) const {
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       if(rows() == 1){
         return (*this)(0, 0);
@@ -1377,7 +1379,7 @@ class Matrix{
      *
      * @return true when LU, otherwise false.
      */
-    bool isLU() const{
+    bool isLU() const noexcept {
       if(rows() * 2 != columns()){return false;}
       for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
         for(unsigned int j(i + 1); j < rows(); j++){
@@ -1400,7 +1402,7 @@ class Matrix{
     typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t
         solve_linear_eq_with_LU(
             const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
-            const throw(MatrixException) {
+            const {
       if(do_check && (!isLU())){
         throw MatrixException("Not LU decomposed matrix!!");
       }
@@ -1455,7 +1457,7 @@ class Matrix{
     viewless_t decomposeLUP(
         unsigned int &pivot_num,
         unsigned int *pivot = NULL,
-        const bool &do_check = true) const throw(MatrixException){
+        const bool &do_check = true) const {
       if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
@@ -1545,7 +1547,7 @@ class Matrix{
      * @return UD decomposed matrix
      * @throw MatrixException
      */
-    viewless_t decomposeUD(const bool &do_check = true) const throw(MatrixException){
+    viewless_t decomposeUD(const bool &do_check = true) const {
       if(do_check && !isSymmetric()){throw MatrixException("not symmetric");}
       viewless_t P(copy());
       viewless_t UD(rows(), columns() * 2);
@@ -1572,7 +1574,7 @@ class Matrix{
      * @return Inverse matrix
      * @throw MatrixException
      */
-    viewless_t inverse() const throw(MatrixException){
+    viewless_t inverse() const {
 
       if(!isSquare()){throw MatrixException("rows() != columns()");}
 
@@ -1699,7 +1701,7 @@ class Matrix{
      * @return Hessenberg matrix
      * @throw MatrixException
      */
-    viewless_t hessenberg(viewless_t *transform = NULL) const throw(MatrixException){
+    viewless_t hessenberg(viewless_t *transform = NULL) const {
       if(!isSquare()){throw MatrixException("rows() != columns()");}
 
       viewless_t result(copy());
@@ -1793,7 +1795,7 @@ class Matrix{
      */
     typename complex_t<T>::m_t eigen(
         const T &threshold_abs = 1E-10,
-        const T &threshold_rel = 1E-7) const throw(MatrixException){
+        const T &threshold_rel = 1E-7) const {
 
       typedef typename complex_t<T>::m_t res_t;
 
@@ -2122,6 +2124,9 @@ class Matrix{
     }
 };
 
-#undef throw_when_debug
+#undef throws_when_debug
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
 
 #endif /* __MATRIX_H */

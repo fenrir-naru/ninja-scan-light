@@ -43,6 +43,10 @@
 
 #include "param/vector3.h"
 
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
+
 template <class FloatT>
 struct QuaternionDataProperty{
   
@@ -159,8 +163,8 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
      * 
      * @return (T) スカラー要素
      */
-    const FloatT &scalar() const {return storage->scalar;}
-    FloatT &scalar(){
+    const FloatT &scalar() const noexcept {return storage->scalar;}
+    FloatT &scalar() noexcept {
       return const_cast<FloatT &>(static_cast<const self_t &>(*this).scalar());
     }
     /**
@@ -168,8 +172,8 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
      * 
      * @return (Vector<FloatT>) ベクトル要素
      */
-    const Vector3<FloatT> &vector() const {return storage->vector;}
-    Vector3<FloatT> &vector(){
+    const Vector3<FloatT> &vector() const noexcept {return storage->vector;}
+    Vector3<FloatT> &vector() noexcept {
       return const_cast<Vector3<FloatT> &>(static_cast<const self_t &>(*this).vector());
     }
     
@@ -264,7 +268,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * デストラクタ
      * 
      */
-    ~Quaternion(){}
+    ~Quaternion() noexcept {}
     
     /**
      * コピーコンストラクタ
@@ -343,7 +347,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * 
      * @return (FloatT) 結果
      */
-    FloatT abs2() const{
+    FloatT abs2() const noexcept {
       return pow2(scalar()) + vector().abs2();
     }
 #ifndef POW2_ALREADY_DEFINED
@@ -357,14 +361,14 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * @return (FloatT) 結果
      * @see abs2()
      */
-    FloatT abs() const{return std::sqrt(abs2());}
+    FloatT abs() const {return std::sqrt(abs2());}
 
     /**
      * スカラーとの積算を行います。破壊的です。
      * 
      * @return (Quaternion<FloatT>) 結果
      */
-    self_t &operator*=(const FloatT &t){
+    self_t &operator*=(const FloatT &t) noexcept {
       scalar() *= t;
       vector() *= t;
       return *this;
@@ -450,7 +454,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * 
      * @return (Quaternion<FloatT>) 結果
      */
-    self_t &operator+=(const self_t &q){
+    self_t &operator+=(const self_t &q) noexcept {
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] += q[i];}
       return *this;
     }
@@ -461,7 +465,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * @return (Quaternion<FloatT>) 結果
      * @see operator+=(const Quaternion<FloatT> &)
      */
-    self_t operator+(const self_t &q) const{return copy() += q;}
+    self_t operator+(const self_t &q) const {return copy() += q;}
     
     /**
      * クォータニオンとの減算を行います。破壊的です。
@@ -479,7 +483,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * 
      * @return (Quaternion<FloatT>) 結果
      */
-    self_t &operator-=(const self_t &q){
+    self_t &operator-=(const self_t &q) noexcept {
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){(*this)[i] -= q[i];}
       return *this;
     }
@@ -508,7 +512,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * 
      * @return (Quaternion<FloatT>) 結果
      */
-    self_t &operator*=(const Vector3<FloatT> &v){
+    self_t &operator*=(const Vector3<FloatT> &v) noexcept {
       FloatT temp_scalar(scalar());
       scalar() = -(vector().innerp(v));
       (vector() *= v) += v * temp_scalar;
@@ -611,8 +615,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * @param mat 行列
      * @throws MatrixException 行列のサイズが正しくないとき
      */
-    Quaternion(const Matrix<FloatT> &mat) throw(MatrixException)
-        : super_t() {
+    Quaternion(const Matrix<FloatT> &mat) : super_t() {
       
       if(mat.rows() == OUT_OF_INDEX && mat.columns() == 1){
         for(int i(0); i < OUT_OF_INDEX; i++){(*this)[i]= mat(i, 0);}
@@ -658,7 +661,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * 
      * @return (Matrix<FloatT>) 行列
      */
-    Matrix<FloatT> toMatrix() const{
+    Matrix<FloatT> toMatrix() const {
       Matrix<FloatT> matrix = Matrix<FloatT>(OUT_OF_INDEX, 1);
       for(int i(0); i < OUT_OF_INDEX; i++){matrix(i, 0) = (*this)[i];}
       return matrix;
@@ -687,12 +690,12 @@ class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
         : _scalar(q0), _vector(v){}
     QuaternionData_NoFlyWeight(
         const FloatT &q0, const FloatT &q1,
-        const FloatT &q2, const FloatT &q3)
+        const FloatT &q2, const FloatT &q3) noexcept
         : _scalar(q0), _vector(q1, q2, q3) {}
-    QuaternionData_NoFlyWeight(const self_t &q)
+    QuaternionData_NoFlyWeight(const self_t &q) noexcept
         : _scalar(q._scalar), _vector(q._vector){
     }
-    self_t &operator=(const self_t &q){
+    self_t &operator=(const self_t &q) noexcept {
       _scalar = q._scalar;
       _vector = q._vector;
       return *this;
@@ -701,13 +704,13 @@ class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
       return self_t(_scalar, _vector.copy());
     }
   public:
-    ~QuaternionData_NoFlyWeight(){}
-    const FloatT &scalar() const {return _scalar;}
-    FloatT &scalar(){
+    ~QuaternionData_NoFlyWeight() noexcept {}
+    const FloatT &scalar() const noexcept {return _scalar;}
+    FloatT &scalar() noexcept {
       return const_cast<FloatT &>(static_cast<const self_t &>(*this).scalar());
     }
-    const Vector3<FloatT> &vector() const {return _vector;}
-    Vector3<FloatT> &vector(){
+    const Vector3<FloatT> &vector() const noexcept {return _vector;}
+    Vector3<FloatT> &vector() noexcept {
       return const_cast<Vector3<FloatT> &>(static_cast<const self_t &>(*this).vector());
     }
     const FloatT &operator[](const unsigned &index) const {
@@ -719,4 +722,9 @@ class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
     }
 };
 
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
+
 #endif /* __QUATERNION_H */
+

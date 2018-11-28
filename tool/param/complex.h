@@ -32,6 +32,15 @@
 #ifndef __COMPLEX_H
 #define __COMPLEX_H
 
+#include <exception>
+#include <string>
+
+#include <cmath>
+
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
+
 /** @file
  * @brief 複素数ライブラリ
  *
@@ -55,23 +64,21 @@ class ComplexException: public std::exception{
      *
      * @param what_arg エラー内容
      */
-    ComplexException(const std::string &what_arg): what_str(what_arg){}
+    ComplexException(const std::string &what_arg) noexcept : what_str(what_arg){}
     /**
      * デストラクタ
      *
      */
-    ~ComplexException() throw() {}
+    ~ComplexException() noexcept {}
     /**
      * エラー内容を取得します。
      *
      * @return (chsr *) エラー内容
      */
-    const char *what() const throw(){
+    const char *what() const noexcept {
       return what_str.c_str();
     }
 };
-
-#include <cmath>
 
 /**
  * @brief 複素数
@@ -86,40 +93,43 @@ class Complex{
     FloatT m_Real; ///< 実部
     FloatT m_Imaginary; ///< 虚部
   public:
-  	/**
-  	 * コンストラクタ。
-  	 *
-  	 * @param real 実数部
-  	 * @param imaginary 虚数部
-  	 */
-    Complex(const FloatT &real, const FloatT &imaginary)
-       : m_Real(real), m_Imaginary(imaginary){}
+   /**
+    * コンストラクタ。
+    *
+    * @param real 実数部
+    * @param imaginary 虚数部
+    */
+    Complex(const FloatT &real, const FloatT &imaginary) noexcept
+         : m_Real(real), m_Imaginary(imaginary){}
+
     /**
      * コンストラクタ。
      * 虚数部は0で初期化されます。
      *
      * @param real 実数部
      */
-    Complex(const FloatT &real) : m_Real(real), m_Imaginary(0){}
+    Complex(const FloatT &real) noexcept : m_Real(real), m_Imaginary(0){}
+
     /**
      * コンストラクタ。
      * 実数部、虚数部ともに0に初期化されます。
      *
      */
-    Complex() : m_Real(0), m_Imaginary(0){}
+    Complex() noexcept : m_Real(0), m_Imaginary(0){}
+
     /**
      * デストラクタ。
      *
      */
-    ~Complex(){}
+    ~Complex() noexcept {}
 
     /**
      * 実数部を返します。
      *
      * @return (FloatT) 実数部
      */
-    const FloatT &real() const {return m_Real;}
-    FloatT &real(){
+    const FloatT &real() const noexcept {return m_Real;}
+    FloatT &real() noexcept {
       return const_cast<FloatT &>(static_cast<const Complex &>(*this).real());
     }
     /**
@@ -127,17 +137,17 @@ class Complex{
      *
      * @return (FloatT) 虚数部
      */
-    const FloatT &imaginary() const {return m_Imaginary;}
-    FloatT &imaginary(){
+    const FloatT &imaginary() const noexcept {return m_Imaginary;}
+    FloatT &imaginary() noexcept {
       return const_cast<FloatT &>(static_cast<const Complex &>(*this).imaginary());
     }
 
-    Complex<FloatT> &operator=(const Complex<FloatT> &another){
+    Complex<FloatT> &operator=(const Complex<FloatT> &another) noexcept {
       m_Real = another.m_Real;
       m_Imaginary = another.m_Imaginary;
       return *this;
     }
-    Complex<FloatT> &operator=(const FloatT &another){
+    Complex<FloatT> &operator=(const FloatT &another) noexcept {
       m_Real = another;
       m_Imaginary = 0;
       return *this;
@@ -150,7 +160,7 @@ class Complex{
      * @return (FloatT) 絶対値の二乗
      * @see pow(FloatT, FloatT)
      */
-    FloatT abs2() const {return pow(m_Real, 2) + pow(m_Imaginary, 2);}
+    FloatT abs2() const noexcept {return pow(m_Real, 2) + pow(m_Imaginary, 2);}
     /**
      * 絶対値を返します。
      * sqrt(abs2())をしています。
@@ -187,13 +197,13 @@ class Complex{
      * @return (Complex<FloatT>) 結果
      */
     Complex<FloatT> power(const FloatT &factor) const {
-    	if((m_Imaginary == FloatT(0)) && (m_Real >= FloatT(0))){
+      if((m_Imaginary == FloatT(0)) && (m_Real >= FloatT(0))){
         return Complex(pow(m_Real, factor));
-    	}else{
+      }else{
         FloatT _abs(pow(abs(), factor));
-    		double _arg(arg() * factor);
-    		return Complex(_abs * std::cos(_arg), _abs * std::sin(_arg));
-    	}
+        double _arg(arg() * factor);
+        return Complex(_abs * std::cos(_arg), _abs * std::sin(_arg));
+      }
     }
 
     /**
@@ -211,7 +221,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 共役複素数
      */
-    Complex<FloatT> conjugate() const {
+    Complex<FloatT> conjugate() const noexcept {
       Complex<FloatT> result = *this;
       result.imaginary() *= -1;
       return result;
@@ -222,7 +232,7 @@ class Complex{
      *
      * @return (bool) 等しい場合true
      */
-    bool operator==(const Complex<FloatT> &complex) const{
+    bool operator==(const Complex<FloatT> &complex) const noexcept {
       return m_Real == complex.real()
           ? m_Imaginary == complex.imaginary()
           : false;
@@ -232,7 +242,7 @@ class Complex{
      *
      * @return (bool) 等しくない場合true
      */
-    bool operator!=(const Complex<FloatT> &complex) const{
+    bool operator!=(const Complex<FloatT> &complex) const noexcept {
       return !(*this == complex);
     }
 
@@ -241,7 +251,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 加算結果
      */
-    Complex<FloatT> &operator+=(const FloatT &scalar){
+    Complex<FloatT> &operator+=(const FloatT &scalar) noexcept {
       m_Real += scalar;
       return *this;
     }
@@ -250,7 +260,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 加算結果
      */
-    Complex<FloatT> operator+(const FloatT &scalar) const{
+    Complex<FloatT> operator+(const FloatT &scalar) const noexcept {
       Complex<FloatT> result = *this;
       return (result += scalar);
     }
@@ -259,33 +269,33 @@ class Complex{
      *
      * @return (Complex<FloatT>) 加算結果
      */
-    friend Complex<FloatT> operator+(const FloatT &scalar, const Complex<FloatT> complex){return (complex + scalar);}
+    friend Complex<FloatT> operator+(const FloatT &scalar, const Complex<FloatT> complex) noexcept {return (complex + scalar);}
 
     /**
      * 減算を行います。破壊的です。
      *
      * @return (Complex<FloatT>) 減算結果
      */
-    Complex<FloatT> &operator-=(const FloatT &scalar){return (*this) += (-scalar);}
+    Complex<FloatT> &operator-=(const FloatT &scalar) noexcept {return (*this) += (-scalar);}
     /**
      * 減算を行います。
      *
      * @return (Complex<FloatT>) 減算結果
      */
-    Complex<FloatT> operator-(const FloatT &scalar) const{return (*this) + (-scalar);}
+    Complex<FloatT> operator-(const FloatT &scalar) const noexcept {return (*this) + (-scalar);}
     /**
      * 減算を行います。
      *
      * @return (Complex<FloatT>) 減算結果
      */
-    friend Complex<FloatT> operator-(const FloatT &scalar, const Complex<FloatT> complex){return (complex - scalar);}
+    friend Complex<FloatT> operator-(const FloatT &scalar, const Complex<FloatT> complex) noexcept {return (complex - scalar);}
 
     /**
      * 乗算を行います。破壊的です。
      *
      * @return (Complex<FloatT>) 乗算結果
      */
-    Complex<FloatT> &operator *=(const FloatT &scalar){
+    Complex<FloatT> &operator *=(const FloatT &scalar) noexcept {
       m_Real *= scalar;
       m_Imaginary *= scalar;
       return *this;
@@ -295,7 +305,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 乗算結果
      */
-    Complex<FloatT> operator*(const FloatT &scalar) const{
+    Complex<FloatT> operator*(const FloatT &scalar) const noexcept {
       Complex<FloatT> result(*this);
       return (result *= scalar);
     }
@@ -304,7 +314,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 乗算結果
      */
-    friend Complex<FloatT> operator*(const FloatT &scalar, const Complex<FloatT> complex){return (complex * scalar);}
+    friend Complex<FloatT> operator*(const FloatT &scalar, const Complex<FloatT> complex) noexcept {return (complex * scalar);}
 
     /**
      * 除算を行います。破壊的です。
@@ -324,14 +334,14 @@ class Complex{
      *
      * @return (Complex<FloatT>) 結果
      */
-    Complex<FloatT> operator -() const{return ((*this) * -1);}
+    Complex<FloatT> operator -() const noexcept {return ((*this) * -1);}
 
     /**
      * 加算を行います。破壊的です。
      *
      * @return (Complex<FloatT>) 加算結果
      */
-    Complex<FloatT> &operator+=(const Complex<FloatT> &complex){
+    Complex<FloatT> &operator+=(const Complex<FloatT> &complex) noexcept {
       m_Real += complex.real();
       m_Imaginary += complex.imaginary();
       return *this;
@@ -341,7 +351,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 加算結果
      */
-    Complex<FloatT> operator+(const Complex<FloatT> &complex) const{
+    Complex<FloatT> operator+(const Complex<FloatT> &complex) const noexcept {
       Complex<FloatT> result = *this;
       return (result += complex);
     }
@@ -351,7 +361,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 減算結果
      */
-    Complex<FloatT> &operator-=(const Complex<FloatT> &complex){
+    Complex<FloatT> &operator-=(const Complex<FloatT> &complex) noexcept {
       return ((*this) += (-complex));
     }
     /**
@@ -359,7 +369,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 減算結果
      */
-    Complex<FloatT> operator-(const Complex<FloatT> &complex) const{
+    Complex<FloatT> operator-(const Complex<FloatT> &complex) const noexcept {
       return ((-complex) += (*this));
     }
 
@@ -368,7 +378,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 乗算結果
      */
-    Complex<FloatT> operator*(const Complex<FloatT> &complex) const{
+    Complex<FloatT> operator*(const Complex<FloatT> &complex) const noexcept {
       return Complex<FloatT>(
           m_Real * complex.real()      - m_Imaginary * complex.imaginary(),
           m_Real * complex.imaginary() + m_Imaginary * complex.real());
@@ -378,7 +388,7 @@ class Complex{
      *
      * @return (Complex<FloatT>) 乗算結果
      */
-    Complex<FloatT> &operator*=(const Complex<FloatT> &complex){
+    Complex<FloatT> &operator*=(const Complex<FloatT> &complex) noexcept {
       Complex<FloatT> copy = *this;
       m_Real =
         copy.real() * complex.real()
@@ -434,7 +444,7 @@ class Complex{
      * @param imaginary 虚部
      * @return (Complex<FloatT>) 結果
      */
-    static Complex<FloatT> exp(const FloatT &imaginary){
+    static Complex<FloatT> exp(const FloatT &imaginary) noexcept {
       return Complex<FloatT>(std::cos(imaginary), std::sin(imaginary));
     }
 
@@ -445,7 +455,7 @@ class Complex{
      * @param imaginary 虚部
      * @return (Complex<FloatT>) 結果
      */
-    static Complex<FloatT> exp(const FloatT &real, const FloatT &imaginary){
+    static Complex<FloatT> exp(const FloatT &real, const FloatT &imaginary) noexcept {
       return Complex<FloatT>::exp(imaginary) *= std::exp(real);
     }
 
@@ -455,7 +465,7 @@ class Complex{
      * @param complex 複素数
      * @return (Complex<FloatT>) 結果
      */
-    static Complex<FloatT> exp(const Complex<FloatT> &complex){
+    static Complex<FloatT> exp(const Complex<FloatT> &complex) noexcept {
       return Complex<FloatT>::exp(
           complex.real(), complex.imaginary());
     }
@@ -470,7 +480,7 @@ class Complex{
  * @return (Complex<FloatT>) 結果
  */
 template <class FloatT>
-inline Complex<FloatT> iexp(const FloatT &real, const FloatT &imaginary){
+inline Complex<FloatT> iexp(const FloatT &real, const FloatT &imaginary) noexcept {
   return Complex<FloatT>::exp(real, imaginary);
 }
 
@@ -481,7 +491,7 @@ inline Complex<FloatT> iexp(const FloatT &real, const FloatT &imaginary){
  * @return (Complex<FloatT>) 結果
  */
 template <class FloatT>
-inline Complex<FloatT> iexp(const FloatT &imaginary){
+inline Complex<FloatT> iexp(const FloatT &imaginary) noexcept {
   return Complex<FloatT>::exp(imaginary);
 }
 
@@ -493,7 +503,7 @@ inline Complex<FloatT> iexp(const FloatT &imaginary){
  * @return (Complex<FloatT>) 結果
  */
 template <class FloatT>
-inline Complex<FloatT> exp(const Complex<FloatT> &complex){
+inline Complex<FloatT> exp(const Complex<FloatT> &complex) noexcept {
   return Complex<FloatT>::exp(complex);
 }
 
@@ -505,7 +515,7 @@ inline Complex<FloatT> exp(const Complex<FloatT> &complex){
  * @return (Complex<FloatT>) 結果
  */
 template <class FloatT>
-inline Complex<FloatT> pow(const Complex<FloatT> &complex, const FloatT &factor){
+inline Complex<FloatT> pow(const Complex<FloatT> &complex, const FloatT &factor) noexcept {
   return complex.power(factor);
 }
 
@@ -520,5 +530,9 @@ template <class FloatT>
 inline Complex<FloatT> sqrt(const Complex<FloatT> &complex){
   return complex.sqrt();
 }
+
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
 
 #endif /* __COMPLEX_H */
