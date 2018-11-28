@@ -32,12 +32,14 @@
 #ifndef __COMPLEX_H
 #define __COMPLEX_H
 
+#include <exception>
+#include <string>
+
+#include <cmath>
+
 #if (__cplusplus < 201103L) && !defined(noexcept)
 #define noexcept throw()
 #endif
-
-#include <exception>
-#include <string>
 
 /** @file
  * @brief •¡‘f”ƒ‰ƒCƒuƒ‰ƒŠ
@@ -77,8 +79,6 @@ class ComplexException: public std::exception{
       return what_str.c_str();
     }
 };
-
-#include <cmath>
 
 /**
  * @brief •¡‘f”
@@ -530,5 +530,9 @@ template <class FloatT>
 inline Complex<FloatT> sqrt(const Complex<FloatT> &complex){
   return complex.sqrt();
 }
+
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
 
 #endif /* __COMPLEX_H */

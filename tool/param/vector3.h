@@ -615,4 +615,8 @@ class Vector3Data_NoFlyWeight : public Vector3DataProperty<FloatT> {
     }
 };
 
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
+
 #endif /* __VECTOR3_H */

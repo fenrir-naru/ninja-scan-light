@@ -32,10 +32,6 @@
 #ifndef __QUATERNION_H
 #define __QUATERNION_H
 
-#if (__cplusplus < 201103L) && !defined(noexcept)
-#define noexcept throw()
-#endif
-
 /** @file
  * @brief クォータニオン(Quaternion、4元数)ライブラリ
  * 
@@ -46,6 +42,10 @@
 #include "param/matrix.h"
 
 #include "param/vector3.h"
+
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
 
 template <class FloatT>
 struct QuaternionDataProperty{
@@ -722,4 +722,9 @@ class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
     }
 };
 
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
+
 #endif /* __QUATERNION_H */
+

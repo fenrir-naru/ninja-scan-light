@@ -32,10 +32,6 @@
 #ifndef __MATRIX_H
 #define __MATRIX_H
 
-#if (__cplusplus < 201103L) && !defined(noexcept)
-#define noexcept throw()
-#endif
-
 /** @file
  * @brief Portable matrix library
  *
@@ -56,6 +52,21 @@
 
 #include <string>
 #include <exception>
+
+#include <cstring>
+#include <cmath>
+#include <cfloat>
+#include <ostream>
+#include "param/complex.h"
+
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
+#if defined(DEBUG) && !defined(throws_when_debug)
+#define throws_when_debug
+#else
+#define throws_when_debug noexcept
+#endif
 
 /**
  * @brief Exception related to matrix
@@ -92,18 +103,6 @@ class StorageException: public MatrixException {
         : MatrixException(what_arg) {}
     ~StorageException() noexcept {}
 };
-
-#if defined(DEBUG) && !defined(throws_when_debug)
-#define throws_when_debug
-#else
-#define throws_when_debug noexcept
-#endif
-
-#include <cstring>
-#include <cmath>
-#include <cfloat>
-#include <ostream>
-#include "param/complex.h"
 
 /**
  * @brief 2D array abstract class
@@ -2126,5 +2125,8 @@ class Matrix{
 };
 
 #undef throws_when_debug
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
 
 #endif /* __MATRIX_H */

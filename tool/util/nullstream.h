@@ -32,13 +32,13 @@
 #ifndef __NULLSTREAM_H__
 #define __NULLSTREAM_H__
 
-#if (__cplusplus < 201103L) && !defined(noexcept)
-#define noexcept throw()
-#endif
-
 #include <streambuf>
 #include <iostream>
 #include <string>
+
+#if (__cplusplus < 201103L) && !defined(noexcept)
+#define noexcept throw()
+#endif
 
 template<
     class _Elem, 
@@ -82,5 +82,9 @@ class NullStream : public std::iostream{
     NullStream() : buf(), super_t(&buf){}
     ~NullStream() noexcept {}
 };
+
+#if (__cplusplus < 201103L) && defined(noexcept)
+#undef noexcept
+#endif
 
 #endif /* __NULLSTREAM_H__ */
