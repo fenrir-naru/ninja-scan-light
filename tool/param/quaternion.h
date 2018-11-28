@@ -189,6 +189,11 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
     }
 };
 
+template <class FloatT>
+struct QuaternionData_TypeMapper {
+  typedef QuaternionData<FloatT> res_t;
+};
+
 /**
  * @brief クォータニオン
  * 
@@ -213,10 +218,10 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
  * @see Vector3<FloatT>
  */
 template <class FloatT>
-class Quaternion : public QuaternionData<FloatT> {
+class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
   protected:
     typedef Quaternion<FloatT> self_t;
-    typedef QuaternionData<FloatT> super_t;
+    typedef typename QuaternionData_TypeMapper<FloatT>::res_t super_t;
     
     Quaternion(const super_t &q) : super_t(q) {}
     
@@ -660,63 +665,58 @@ class Quaternion : public QuaternionData<FloatT> {
     }
 };
 
-#define QUATERNION_NO_FLY_WEIGHT(float_t) \
-template <> \
-class QuaternionData<float_t> : public QuaternionDataProperty<float_t> { \
-  protected: \
-    typedef QuaternionData<float_t> self_t; \
-  private: \
-    float_t _scalar; \
-    Vector3<float_t> _vector; \
-    \
-  protected: \
-    QuaternionData(){} \
-    \
-    QuaternionData(const float_t &q0, const Vector3<float_t> &v) \
-        : _scalar(q0), _vector(v){} \
-    \
-    QuaternionData( \
-        const float_t &q0, const float_t &q1, \
-        const float_t &q2, const float_t &q3) \
-        : _scalar(q0), _vector(q1, q2, q3) {} \
-    \
-    QuaternionData(const self_t &q) \
-        : _scalar(q._scalar), _vector(q._vector){ \
-      \
-    } \
-    \
-    self_t &operator=(const self_t &q){ \
-      _scalar = q._scalar; \
-      _vector = q._vector; \
-      return *this; \
-    } \
-    \
-    self_t deep_copy() const{ \
-      return self_t(_scalar, _vector.copy()); \
-    } \
-    \
-  public: \
-    ~QuaternionData(){} \
-    \
-    const float_t &scalar() const {return _scalar;} \
-    float_t &scalar(){ \
-      return const_cast<float_t &>(static_cast<const self_t &>(*this).scalar()); \
-    } \
-    \
-    const Vector3<float_t> &vector() const {return _vector;} \
-    Vector3<float_t> &vector(){ \
-      return const_cast<Vector3<float_t> &>(static_cast<const self_t &>(*this).vector()); \
-    } \
-    \
-    const float_t &operator[](const unsigned &index) const { \
-      if(index == 0){return _scalar;} \
-      else{return _vector[index - 1];} \
-    } \
-    float_t &operator[](const unsigned &index){ \
-      return const_cast<float_t &>(static_cast<const self_t &>(*this)[index]); \
-    } \
-}
-
-//QUATERNION_NO_FLY_WEIGHT(double);
+/**
+ * Quaternion data type without fly weight design pattern for performance tuning
+ *
+ * To use this, the following example may be helpful:
+ * template <>
+ * struct QuaternionData_TypeMapper<double> {
+ *   typedef QuaternionData_NoFlyWeight<double> res_t;
+ * };
+ */
+template <class FloatT>
+class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
+  protected:
+    typedef QuaternionData_NoFlyWeight<FloatT> self_t;
+  private:
+    FloatT _scalar;
+    Vector3<FloatT> _vector;
+  protected:
+    QuaternionData_NoFlyWeight(){}
+    QuaternionData_NoFlyWeight(const FloatT &q0, const Vector3<FloatT> &v)
+        : _scalar(q0), _vector(v){}
+    QuaternionData_NoFlyWeight(
+        const FloatT &q0, const FloatT &q1,
+        const FloatT &q2, const FloatT &q3)
+        : _scalar(q0), _vector(q1, q2, q3) {}
+    QuaternionData_NoFlyWeight(const self_t &q)
+        : _scalar(q._scalar), _vector(q._vector){
+    }
+    self_t &operator=(const self_t &q){
+      _scalar = q._scalar;
+      _vector = q._vector;
+      return *this;
+    }
+    self_t deep_copy() const{
+      return self_t(_scalar, _vector.copy());
+    }
+  public:
+    ~QuaternionData_NoFlyWeight(){}
+    const FloatT &scalar() const {return _scalar;}
+    FloatT &scalar(){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this).scalar());
+    }
+    const Vector3<FloatT> &vector() const {return _vector;}
+    Vector3<FloatT> &vector(){
+      return const_cast<Vector3<FloatT> &>(static_cast<const self_t &>(*this).vector());
+    }
+    const FloatT &operator[](const unsigned &index) const {
+      if(index == 0){return _scalar;}
+      else{return _vector[index - 1];}
+    }
+    FloatT &operator[](const unsigned &index){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this)[index]);
+    }
+};
 
 #endif /* __QUATERNION_H */

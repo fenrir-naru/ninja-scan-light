@@ -175,6 +175,11 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
     }
 };
 
+template <class FloatT>
+struct Vector3Data_TypeMapper {
+  typedef Vector3Data<FloatT> res_t;
+};
+
 /**
  * @brief 3次元ベクトル
  * 
@@ -189,10 +194,10 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
  * @param FloatT 演算精度、doubleなど
  */
 template <class FloatT>
-class Vector3 : public Vector3Data<FloatT> {
+class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
   protected:
     typedef Vector3<FloatT> self_t;
-    typedef Vector3Data<FloatT> super_t;
+    typedef typename Vector3Data_TypeMapper<FloatT>::res_t super_t;
   
     Vector3(const super_t &v) : super_t(v){}
     
@@ -562,50 +567,49 @@ class Vector3 : public Vector3Data<FloatT> {
     }
 };
 
-#define VECTOR3_NO_FLY_WEIGHT(float_t) \
-template <> \
-class Vector3Data<float_t> : public Vector3DataProperty<float_t> { \
-  protected: \
-    typedef Vector3DataProperty<float_t> super_t; \
-    typedef Vector3Data<float_t> self_t; \
-    \
-  private: \
-    float_t values[super_t::OUT_OF_INDEX]; \
-    \
-  protected: \
-    Vector3Data(){} \
-    \
-    Vector3Data(const float_t &x, const float_t &y, const float_t &z){ \
-      values[super_t::X_INDEX] = x; \
-      values[super_t::Y_INDEX] = y; \
-      values[super_t::Z_INDEX] = z; \
-    } \
-    \
-    Vector3Data(const self_t &v){ \
-      std::memcpy(values, v.values, sizeof(values)); \
-    } \
-    \
-    self_t &operator=(const self_t &v){ \
-      std::memcpy(values, v.values, sizeof(values)); \
-      return *this; \
-    } \
-    \
-    self_t deep_copy() const { \
-      self_t copied; \
-      std::memcpy(copied.values, values, sizeof(values)); \
-      return copied; \
-    } \
-  public: \
-    ~Vector3Data(){} \
-    \
-    const float_t &operator[](const unsigned int &index) const { \
-      return values[index]; \
-    } \
-    float_t &operator[](const unsigned int &index){ \
-      return const_cast<float_t &>(static_cast<const self_t &>(*this)[index]); \
-    } \
-}
-
-//VECTOR3_NO_FLY_WEIGHT(double);
+/**
+ * Vector3 data type without fly weight design pattern for performance tuning
+ *
+ * To use this, the following example may be helpful:
+ * template <>
+ * struct Vector3Data_TypeMapper<double> {
+ *   typedef Vector3Data_NoFlyWeight<double> res_t;
+ * };
+ */
+template <class FloatT>
+class Vector3Data_NoFlyWeight : public Vector3DataProperty<FloatT> {
+  protected:
+    typedef Vector3DataProperty<FloatT> super_t;
+    typedef Vector3Data_NoFlyWeight<FloatT> self_t;
+  private:
+    FloatT values[super_t::OUT_OF_INDEX];
+  protected:
+    Vector3Data_NoFlyWeight(){}
+    Vector3Data_NoFlyWeight(const FloatT &x, const FloatT &y, const FloatT &z){
+      values[super_t::X_INDEX] = x;
+      values[super_t::Y_INDEX] = y;
+      values[super_t::Z_INDEX] = z;
+    }
+    Vector3Data_NoFlyWeight(const self_t &v){
+      std::memcpy(values, v.values, sizeof(values));
+    }
+    self_t &operator=(const self_t &v){
+      std::memcpy(values, v.values, sizeof(values));
+      return *this;
+    }
+    self_t deep_copy() const {
+      self_t copied;
+      std::memcpy(copied.values, values, sizeof(values));
+      return copied;
+    }
+  public:
+    ~Vector3Data_NoFlyWeight(){}
+    const FloatT &operator[](const unsigned int &index) const {
+      return values[index];
+    }
+    FloatT &operator[](const unsigned int &index){
+      return const_cast<FloatT &>(static_cast<const self_t &>(*this)[index]);
+    }
+};
 
 #endif /* __VECTOR3_H */
