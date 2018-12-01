@@ -650,6 +650,20 @@ class G_Packet_Observer : public Packet_Observer<>{
       }
       subframe_t() : subframe_no(0), sv_or_page_id(0) {}
       
+      void update_properties(){
+        if(sv_number <= 32){
+          subframe_no = bits2u8_align(49, 3);
+          switch(subframe_no){
+            case 4:
+            case 5:
+              sv_or_page_id = bits2u8_align(62, 6);
+              // subframe.4 page.2-5,7-10 correspond to SV 25-32
+              // subframe.5 page.1-24 correspond to SV 1-24
+              break;
+          }
+        }
+      }
+
 #define bits2u8(index) (u8_t)(buffer[((index / 30) * 4) + (2 - ((index % 30) / 8))])
 #define bits2s8(index) (s8_t)(bits2u8(index))
 #define bits2u8_align(index, length) \
@@ -829,19 +843,8 @@ class G_Packet_Observer : public Packet_Observer<>{
         this->inspect(&buf, sizeof(buf), 6 + 1); // SVID
         subframe.sv_number = buf;
       }
-
       this->inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 2); // buffer
-      if(subframe.sv_number <= 32){
-        subframe.subframe_no = subframe.bits2u8_align(49, 3);
-        switch(subframe.subframe_no){
-          case 4:
-          case 5:
-            subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
-            // subframe.4 page.2-5,7-10 correspond to SV 25-32
-            // subframe.5 page.1-24 correspond to SV 1-24
-            break;
-        }
-      }
+      subframe.update_properties();
 
       return subframe;
     }
