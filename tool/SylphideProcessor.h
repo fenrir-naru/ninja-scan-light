@@ -834,10 +834,9 @@ class G_Packet_Observer : public Packet_Observer<>{
         ephemeris.i_0_dot = ephemeris_i_0_dot();
       }
     };
-    subframe_t fetch_subframe() const {
+    subframe_t &fetch_subframe(subframe_t &subframe) const {
       //if(!packet_type().equals(0x02, 0x11)){}
 
-      subframe_t subframe;
       {
         v8_t buf;
         this->inspect(&buf, sizeof(buf), 6 + 1); // SVID
@@ -846,6 +845,11 @@ class G_Packet_Observer : public Packet_Observer<>{
       this->inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 2); // buffer
       subframe.update_properties();
 
+      return subframe;
+    }
+    subframe_t fetch_subframe() const {
+      subframe_t subframe;
+      fetch_subframe(subframe);
       return subframe;
     }
 
