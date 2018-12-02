@@ -828,19 +828,8 @@ struct G_Packet_Ephemeris
   mutable space_node_t *space_node;
   typedef GPS_Data<float_sylph_t>::Loader::ephemeris_t ephemeris_t;
 
-  space_node_t::uint_t &sv_number; // sv_number is alias.
-  bool valid;
-
-  G_Packet_Ephemeris()
-      : GPS_Data<float_sylph_t>::Loader::ephemeris_t(),
-      sv_number(ephemeris_t::svid), valid(false) {
+  G_Packet_Ephemeris() : ephemeris_t() {
     Packet::itow = 0; // to invoke immediate update
-  }
-  G_Packet_Ephemeris &operator=(const G_Packet_Ephemeris &another){
-    valid = another.valid;
-    BasicPacket<G_Packet_Ephemeris>::operator=(another);
-    ephemeris_t::operator=(another);
-    return *this;
   }
 };
 void Updatable::update(const G_Packet_Ephemeris &packet){
@@ -1702,22 +1691,30 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
 
 using namespace std;
 
+struct G_Packet_Ephemeris_Extended : public G_Packet_Ephemeris {
+  space_node_t::uint_t &sv_number; // sv_number is alias.
+  bool valid;
+
+  G_Packet_Ephemeris_Extended()
+      : G_Packet_Ephemeris(),
+      sv_number(ephemeris_t::svid), valid(false) {}
+};
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
-    G_Packet_Ephemeris &ephemeris) const {
+    G_Packet_Ephemeris_Extended &ephemeris) const {
   GPS_Data<float_sylph_t>::Loader::fetch_as_subframe1(*this, ephemeris);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
-    G_Packet_Ephemeris &ephemeris) const {
+    G_Packet_Ephemeris_Extended &ephemeris) const {
   GPS_Data<float_sylph_t>::Loader::fetch_as_subframe2(*this, ephemeris);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
-    G_Packet_Ephemeris &ephemeris) const {
+    G_Packet_Ephemeris_Extended &ephemeris) const {
   GPS_Data<float_sylph_t>::Loader::fetch_as_subframe3(*this, ephemeris);
 }
 
@@ -2002,7 +1999,7 @@ class StreamProcessor
       }
 
       void check_ephemeris(const G_Observer_t &observer){
-        G_Packet_Ephemeris ephemeris;
+        G_Packet_Ephemeris_Extended ephemeris;
         observer.fetch_ephemeris(ephemeris);
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
