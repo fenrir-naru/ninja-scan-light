@@ -473,6 +473,7 @@ struct CalendarTimeStamp : public CalendarTime<FloatT> {
 struct A_Packet;
 struct G_Packet;
 struct G_Packet_Measurement;
+struct G_Packet_Data;
 struct G_Packet_Ephemeris;
 struct G_Packet_Iono_UTC;
 struct M_Packet;
@@ -483,6 +484,7 @@ struct Updatable {
   virtual void update(const A_Packet &){}
   virtual void update(const G_Packet &){}
   virtual void update(const G_Packet_Measurement &){}
+  virtual void update(const G_Packet_Data &);
   virtual void update(const G_Packet_Ephemeris &);
   virtual void update(const G_Packet_Iono_UTC &);
   virtual void update(const M_Packet &){}
@@ -809,6 +811,16 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
     return out;
   }
 };
+
+struct G_Packet_Data
+    : public BasicPacket<G_Packet_Data>, public GPS_Data<float_sylph_t> {
+  G_Packet_Data() : GPS_Data<float_sylph_t>() {
+    Packet::itow = 0; // to invoke immediate update
+  }
+};
+void Updatable::update(const G_Packet_Data &packet){
+  packet.loader->load(packet);
+}
 
 struct G_Packet_Ephemeris
     : public BasicPacket<G_Packet_Ephemeris>, public GPS_Data<float_sylph_t>::Loader::ephemeris_t {
@@ -1815,17 +1827,15 @@ class StreamProcessor
       space_node_t space_node;
       raw_data_t::solver_t::options_t solver_options;
       G_Packet_Measurement packet_raw_latest;
-      G_Packet_Ephemeris packet_eph[32];
       G_Packet_Iono_UTC packet_iono_utc;
+      GPS_Data<float_sylph_t>::Loader loader;
       struct tightly_associator_t {
         GHandler &handler;
         raw_data_t::solver_t solver;
         void associate() {
           handler.packet_raw_latest.raw_data.solver = &solver;
-          for(int i(0); i < sizeof(handler.packet_eph) / sizeof(handler.packet_eph[0]); ++i){
-            handler.packet_eph[i].space_node = &(handler.space_node);
-          }
           handler.packet_iono_utc.space_node = &(handler.space_node);
+          handler.loader.space_node = &(handler.space_node);
         }
         tightly_associator_t(GHandler &h)
             : handler(h),
@@ -1848,11 +1858,9 @@ class StreamProcessor
           space_node(),
           packet_raw_latest(),
           packet_iono_utc(),
+          loader(),
           tightly_associator(*this) {
         previous_seek_next = G_Observer_t::ready();
-        for(int i(0); i < sizeof(packet_eph) / sizeof(packet_eph[0]); ++i){
-          packet_eph[i].svid = (i + 1);
-        }
       }
       ~GHandler(){}
 
@@ -1968,86 +1976,26 @@ class StreamProcessor
         }
       }
 
-      static void get_iono_utc(
-          const G_Observer_t::subframe_t &subframe, space_node_t::Ionospheric_UTC_Parameters &params){
-
-        space_node_t::Ionospheric_UTC_Parameters::raw_t raw;
-#define get8(index) (subframe.bits2u8_align(index, 8))
-        { // IONO parameter
-          raw.alpha0 = (G_Observer_t::s8_t)get8( 68);
-          raw.alpha1 = (G_Observer_t::s8_t)get8( 76);
-          raw.alpha2 = (G_Observer_t::s8_t)get8( 90);
-          raw.alpha3 = (G_Observer_t::s8_t)get8( 98);
-          raw.beta0  = (G_Observer_t::s8_t)get8(106);
-          raw.beta1  = (G_Observer_t::s8_t)get8(120);
-          raw.beta2  = (G_Observer_t::s8_t)get8(128);
-          raw.beta3  = (G_Observer_t::s8_t)get8(136);
-        }
-        { // UTC parameter
-          {
-            G_Observer_t::u32_t buf(get8(150));
-            if(buf & 0x80){buf |= 0xFF00;}
-            buf <<= 8; buf |= get8(158);
-            buf <<= 8; buf |= get8(166);
-            raw.A1 = (G_Observer_t::s32_t)buf;
-          }
-          {
-            G_Observer_t::u32_t buf(get8(180));
-            buf <<= 8; buf |= get8(188);
-            buf <<= 8; buf |= get8(196);
-            buf <<= 8; buf |= get8(210);
-            raw.A0 = (G_Observer_t::s32_t)buf;
-          }
-          raw.t_ot = get8(218);
-          raw.WN_t = get8(226); // truncated
-          raw.delta_t_LS = (G_Observer_t::s8_t)get8(240);
-          raw.WN_LSF = get8(248); // truncated
-          raw.DN = get8(256);
-          raw.delta_t_LSF = (G_Observer_t::s8_t)get8(270);
-        }
-#undef get8
-        params = (space_node_t::Ionospheric_UTC_Parameters)raw;
-      }
-
-      void check_subframe(const G_Observer_t::subframe_t &subframe){
-        if((subframe.subframe_no <= 3) && (subframe.sv_number <= 32)){
-          G_Packet_Ephemeris &eph(packet_eph[subframe.sv_number - 1]);
-          switch(subframe.subframe_no){
-            case 1: subframe.fetch_as_subframe1(eph); eph.how = subframe.how(); break;
-            case 2: subframe.fetch_as_subframe2(eph); break;
-            case 3: subframe.fetch_as_subframe3(eph); break;
-          }
-          if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
-              && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
-              && (week_number >= 0)){
-            eph.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
-            Handler::outer.updatable->update(eph);
-          }
-        }else if((subframe.subframe_no == 4) && (subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-          get_iono_utc(subframe, packet_iono_utc);
-          if(week_number >= 0){ // taking account for truncation
-            int week_number_base(week_number - (week_number % 0x100));
-            packet_iono_utc.WN_t += week_number_base;
-            packet_iono_utc.WN_LSF += week_number_base;
-          }
-          Handler::outer.updatable->update(packet_iono_utc);
-        }
+      void check_subframe(G_Packet_Data &packet){
+        packet.loader = &loader;
+        packet.week_number = week_number;
+        Handler::outer.updatable->update(packet);
       }
 
       void check_subframeX(
           const unsigned int &gnssID,
           const unsigned int &svID,
-          G_Observer_t::subframe_t &subframe){
+          G_Packet_Data &packet){
 
         switch(gnssID){
           case 0: { // GPS
             // modify format to be equivalent to UBX-RXM-SFRB
-            subframe.sv_number = svID;
-            for(int i(0); i < sizeof(subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
-              *(G_Observer_t::u32_t *)(&subframe.buffer[i]) >>= 6; // remove parity
+            packet.subframe.sv_number = svID;
+            for(int i(0); i < sizeof(packet.subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
+              *(G_Observer_t::u32_t *)(&packet.subframe.buffer[i]) >>= 6; // remove parity
             }
-            subframe.update_properties();
-            check_subframe(subframe);
+            packet.subframe.update_properties();
+            check_subframe(packet);
             return;
           }
         }
@@ -2117,19 +2065,20 @@ class StreamProcessor
             return;
           }
           case 0x11: { // RXM-SFRB
-            G_Observer_t::subframe_t subframe(observer.fetch_subframe());
-            check_subframe(subframe);
+            G_Packet_Data packet;
+            observer.fetch_subframe(packet.subframe);
+            check_subframe(packet);
             return;
           }
           case 0x13: { // RXM-SFRBX
-            G_Observer_t::subframe_t subframe;
+            G_Packet_Data packet;
             unsigned int bytes((G_Observer_t::u8_t)observer[6 + 4] * 4); // numWords (1word = 32bits)
-            if(bytes > sizeof(subframe.buffer)){return;}
-            observer.inspect(subframe.buffer, bytes, 6 + 8);
+            if(bytes > sizeof(packet.subframe.buffer)){return;}
+            observer.inspect(packet.subframe.buffer, bytes, 6 + 8);
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 0],
                 (G_Observer_t::u8_t)observer[6 + 1],
-                subframe);
+                packet);
             return;
           }
           case 0x15: { // RXM-RAWX
@@ -2296,13 +2245,13 @@ class StreamProcessor
             return;
           }
           case 0x0F: { // TRK-SFRBX
-            G_Observer_t::subframe_t subframe;
+            G_Packet_Data packet;
             if(observer.current_packet_size() != 61){return;} // only GPS may be accepted
-            observer.inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 13);
+            observer.inspect(packet.subframe.buffer, sizeof(packet.subframe.buffer), 6 + 13);
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 1],
                 (G_Observer_t::u8_t)observer[6 + 2],
-                subframe);
+                packet);
             return;
           }
           default: return;
