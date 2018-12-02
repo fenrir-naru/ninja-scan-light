@@ -186,6 +186,8 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 
 #include "analyze_common.h"
 
+#include "INS_GPS/GPS_Data.h"
+
 struct Options : public GlobalOptions<float_sylph_t> {
   typedef GlobalOptions<float_sylph_t> super_t;
 
@@ -809,23 +811,21 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
 };
 
 struct G_Packet_Ephemeris
-    : public BasicPacket<G_Packet_Ephemeris>, public G_Packet_Measurement::space_node_t::Satellite::Ephemeris {
+    : public BasicPacket<G_Packet_Ephemeris>, public GPS_Data<float_sylph_t>::Loader::ephemeris_t {
   typedef G_Packet_Measurement::space_node_t space_node_t;
   mutable space_node_t *space_node;
-  typedef space_node_t::Satellite::Ephemeris ephemeris_t;
+  typedef GPS_Data<float_sylph_t>::Loader::ephemeris_t ephemeris_t;
 
-  space_node_t::uint_t &sv_number, how; // sv_number is alias.
+  space_node_t::uint_t &sv_number; // sv_number is alias.
   bool valid;
-  space_node_t::int_t iode2;
 
-  G_Packet_Ephemeris() : sv_number(ephemeris_t::svid), valid(false) {
+  G_Packet_Ephemeris()
+      : GPS_Data<float_sylph_t>::Loader::ephemeris_t(),
+      sv_number(ephemeris_t::svid), valid(false) {
     Packet::itow = 0; // to invoke immediate update
-    ephemeris_t::iodc = ephemeris_t::iode = iode2 = -1;
   }
   G_Packet_Ephemeris &operator=(const G_Packet_Ephemeris &another){
-    how = another.how;
     valid = another.valid;
-    iode2 = another.iode2;
     BasicPacket<G_Packet_Ephemeris>::operator=(another);
     ephemeris_t::operator=(another);
     return *this;
@@ -1694,46 +1694,19 @@ using namespace std;
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
     G_Packet_Ephemeris &ephemeris) const {
-  ephemeris.WN = ephemeris_wn();
-  ephemeris.URA = ephemeris_ura();
-  ephemeris.SV_health = ephemeris_sv_health();
-  ephemeris.iodc = ephemeris_iodc();
-  ephemeris.t_GD = ephemeris_t_gd();
-  ephemeris.t_oc = ephemeris_t_oc();
-  ephemeris.a_f2 = ephemeris_a_f2();
-  ephemeris.a_f1 = ephemeris_a_f1();
-  ephemeris.a_f0 = ephemeris_a_f0();
+  GPS_Data<float_sylph_t>::Loader::fetch_as_subframe1(*this, ephemeris);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
     G_Packet_Ephemeris &ephemeris) const {
-  ephemeris.iode = ephemeris_iode_subframe2();
-  ephemeris.c_rs = ephemeris_c_rs();
-  ephemeris.delta_n = ephemeris_delta_n();
-  ephemeris.m0 = ephemeris_m_0();
-  ephemeris.c_uc = ephemeris_c_uc();
-  ephemeris.e = ephemeris_e();
-  ephemeris.c_us = ephemeris_c_us();
-  ephemeris.sqrt_A = ephemeris_root_a();
-  ephemeris.t_oe = ephemeris_t_oe();
-  ephemeris.fit_interval
-      = G_Packet_Ephemeris::ephemeris_t::raw_t::fit_interval(
-          ephemeris_fit(), ephemeris.iodc);
+  GPS_Data<float_sylph_t>::Loader::fetch_as_subframe2(*this, ephemeris);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
     G_Packet_Ephemeris &ephemeris) const {
-  ephemeris.c_ic = ephemeris_c_ic();
-  ephemeris.Omega0 = ephemeris_omega_0();
-  ephemeris.c_is = ephemeris_c_is();
-  ephemeris.i0 = ephemeris_i_0();
-  ephemeris.c_rc = ephemeris_c_rc();
-  ephemeris.omega = ephemeris_omega();
-  ephemeris.dot_Omega0 = ephemeris_omega_0_dot();
-  ephemeris.iode2 = ephemeris_iode_subframe3();
-  ephemeris.dot_i0 = ephemeris_i_0_dot();
+  GPS_Data<float_sylph_t>::Loader::fetch_as_subframe3(*this, ephemeris);
 }
 
 class StreamProcessor
