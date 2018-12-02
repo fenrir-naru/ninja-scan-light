@@ -470,7 +470,7 @@ struct CalendarTimeStamp : public CalendarTime<FloatT> {
 
 struct A_Packet;
 struct G_Packet;
-struct G_Packet_Raw;
+struct G_Packet_Measurement;
 struct G_Packet_Ephemeris;
 struct G_Packet_Iono_UTC;
 struct M_Packet;
@@ -480,7 +480,7 @@ struct Updatable {
   virtual ~Updatable() {}
   virtual void update(const A_Packet &){}
   virtual void update(const G_Packet &){}
-  virtual void update(const G_Packet_Raw &){}
+  virtual void update(const G_Packet_Measurement &){}
   virtual void update(const G_Packet_Ephemeris &);
   virtual void update(const G_Packet_Iono_UTC &);
   virtual void update(const M_Packet &){}
@@ -625,7 +625,7 @@ virtual void update(const type &packet){ \
 }
     update_func(A_Packet);
     update_func(G_Packet);
-    update_func(G_Packet_Raw);
+    update_func(G_Packet_Measurement);
     update_func(M_Packet);
 #undef update_func
   };
@@ -701,7 +701,7 @@ struct G_Packet : public BasicPacket<G_Packet> {
   }
 };
 
-struct G_Packet_Raw : public BasicPacket<G_Packet_Raw> {
+struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
   typedef GPS_RawData<float_sylph_t> raw_data_t;
   raw_data_t raw_data;
   Vector3<float_sylph_t> *lever_arm;
@@ -767,11 +767,11 @@ struct G_Packet_Raw : public BasicPacket<G_Packet_Raw> {
     return res;
   }
 
-  G_Packet_Raw() : raw_data(), lever_arm(NULL) {}
+  G_Packet_Measurement() : raw_data(), lever_arm(NULL) {}
 };
 
-struct gps_pvt_t : public G_Packet_Raw::pvt_t {
-  gps_pvt_t() : G_Packet_Raw::pvt_t() {}
+struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
+  gps_pvt_t() : G_Packet_Measurement::pvt_t() {}
   static void label(std::ostream &out) {
     out << "week"
         << ',' << "itow"
@@ -792,7 +792,7 @@ struct gps_pvt_t : public G_Packet_Raw::pvt_t {
   friend std::ostream &operator<<(std::ostream &out, const gps_pvt_t &pvt){
     out << pvt.receiver_time.week
         << ',' << pvt.receiver_time.seconds
-        << ',' << pvt.receiver_error / G_Packet_Raw::space_node_t::light_speed
+        << ',' << pvt.receiver_error / G_Packet_Measurement::space_node_t::light_speed
         << ',' << rad2deg(pvt.user_position.llh.longitude())
         << ',' << rad2deg(pvt.user_position.llh.latitude())
         << ',' << pvt.user_position.llh.height()
@@ -809,8 +809,8 @@ struct gps_pvt_t : public G_Packet_Raw::pvt_t {
 };
 
 struct G_Packet_Ephemeris
-    : public BasicPacket<G_Packet_Ephemeris>, public G_Packet_Raw::space_node_t::Satellite::Ephemeris {
-  typedef G_Packet_Raw::space_node_t space_node_t;
+    : public BasicPacket<G_Packet_Ephemeris>, public G_Packet_Measurement::space_node_t::Satellite::Ephemeris {
+  typedef G_Packet_Measurement::space_node_t space_node_t;
   mutable space_node_t *space_node;
   typedef space_node_t::Satellite::Ephemeris ephemeris_t;
 
@@ -836,8 +836,8 @@ void Updatable::update(const G_Packet_Ephemeris &packet){
 }
 
 struct G_Packet_Iono_UTC
-    : public BasicPacket<G_Packet_Iono_UTC>, public G_Packet_Raw::space_node_t::Ionospheric_UTC_Parameters {
-  typedef G_Packet_Raw::space_node_t space_node_t;
+    : public BasicPacket<G_Packet_Iono_UTC>, public G_Packet_Measurement::space_node_t::Ionospheric_UTC_Parameters {
+  typedef G_Packet_Measurement::space_node_t space_node_t;
   mutable space_node_t *space_node;
   typedef space_node_t::Ionospheric_UTC_Parameters params_t;
 
@@ -1212,7 +1212,7 @@ class INS_GPS_NAV : public NAV {
       helper.before_any_update();
       helper.measurement_update(packet);
     }
-    void update(const G_Packet_Raw &packet){
+    void update(const G_Packet_Measurement &packet){
       helper.before_any_update();
       helper.measurement_update(packet);
     }
@@ -1837,11 +1837,11 @@ class StreamProcessor
       } status;
 
       // for tightly coupled
-      typedef G_Packet_Raw::space_node_t space_node_t;
-      typedef G_Packet_Raw::raw_data_t raw_data_t;
+      typedef G_Packet_Measurement::space_node_t space_node_t;
+      typedef G_Packet_Measurement::raw_data_t raw_data_t;
       space_node_t space_node;
       raw_data_t::solver_t::options_t solver_options;
-      G_Packet_Raw packet_raw_latest;
+      G_Packet_Measurement packet_raw_latest;
       G_Packet_Ephemeris packet_eph[32];
       G_Packet_Iono_UTC packet_iono_utc;
       struct tightly_associator_t {
@@ -2439,11 +2439,11 @@ class StreamProcessor
       return a_handler.calibration;
     }
 
-    const G_Packet_Raw::space_node_t &gps_space_node() const {
+    const G_Packet_Measurement::space_node_t &gps_space_node() const {
       return g_handler.space_node;
     }
-    G_Packet_Raw::space_node_t &gps_space_node() {
-      return const_cast<G_Packet_Raw::space_node_t &>(
+    G_Packet_Measurement::space_node_t &gps_space_node() {
+      return const_cast<G_Packet_Measurement::space_node_t &>(
           static_cast<const StreamProcessor &>(*this).gps_space_node());
     }
 
@@ -2576,7 +2576,7 @@ class StreamProcessor
         cerr << "F10.7: " << f_10_7 << endl;
         g_handler.solver_options.f_10_7 = f_10_7;
         g_handler.solver_options.ionospheric_models[
-            G_Packet_Raw::raw_data_t::solver_t::options_t::IONOSPHERIC_NTCM_GL] = true;
+            G_Packet_Measurement::raw_data_t::solver_t::options_t::IONOSPHERIC_NTCM_GL] = true;
         return true;
       }
 
@@ -2949,7 +2949,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       return;
     }
 
-    void measurement_update(const G_Packet_Raw &g_packet, void *){
+    void measurement_update(const G_Packet_Measurement &g_packet, void *){
       return;
     }
 
@@ -2959,7 +2959,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
      * @param g_packet observation data of GPS receiver
      */
     template <typename BaseFINS>
-    void measurement_update(const G_Packet_Raw &g_packet,
+    void measurement_update(const G_Packet_Measurement &g_packet,
         INS_GPS2_Tightly<BaseFINS> *ins_gps){
 
       g_packet.take_consistency();
@@ -3087,7 +3087,7 @@ virtual void update(const type &packet){ \
 }
     update_func(A_Packet);
     update_func(G_Packet);
-    update_func(G_Packet_Raw);
+    update_func(G_Packet_Measurement);
     update_func(G_Packet_Ephemeris);
     update_func(G_Packet_Iono_UTC);
     update_func(M_Packet);
