@@ -614,6 +614,80 @@ class G_Packet_Observer : public Packet_Observer<>{
       return utc;
     }
 
+    struct gnss_svid_t {
+      // @see UBX-13003221 Appendix.A Satellite Numbering
+      enum {
+        UNKNOWN = -1,
+        GPS = 0,
+        SBAS = 1,
+        Galileo = 2,
+        BeiDou = 3,
+        IMES = 4,
+        QZSS = 5,
+        GLONASS = 6,
+        GNSS_TYPES
+      } gnss;
+      unsigned int svid;
+      gnss_svid_t(const unsigned int &svid_legacy) : gnss(UNKNOWN), svid(0) {
+        if((svid_legacy == 0) || (svid_legacy > 255)){return;}
+        if(svid_legacy <= 32){
+          gnss = GPS;
+          svid = svid_legacy;
+        }else if(svid_legacy <= 64){
+          gnss = BeiDou;
+          svid = svid_legacy - (64 - 37); // ? TODO
+        }else if(svid_legacy <= 96){
+          gnss = GLONASS;
+          svid = svid_legacy - (65 - 1);
+        }else if(svid_legacy < 120){
+
+        }else if(svid_legacy <= 158){
+          gnss = SBAS;
+          svid = svid_legacy;
+        }else if(svid_legacy <= 163){
+          gnss = BeiDou;
+          svid = svid_legacy - (159 - 1); // ? TODO
+        }else if(svid_legacy < 173){
+
+        }else if(svid_legacy <= 182){
+          gnss = IMES;
+          svid = svid_legacy - (173 - 1);
+        }else if(svid_legacy < 193){
+
+        }else if(svid_legacy <= 197){
+          gnss = QZSS;
+          svid = svid_legacy - (193 - 1);
+        }else if(svid_legacy < 211){
+
+        }else if(svid_legacy <= 246){
+          gnss = Galileo;
+          svid = svid_legacy - (211 - 1);
+        }else if(svid_legacy == 255){
+          gnss = GLONASS;
+          svid = 255;
+        }
+      }
+      operator unsigned int () const { ///< cast to svid_legacy
+        switch(gnss){
+          case GPS:
+          case SBAS:
+            return svid;
+          case Galileo:
+            return svid + (211 - 1);
+          case BeiDou:
+            return (svid <= 5) ? (svid + (159 - 1)) : (svid + (64 - 37)); // ? TODO
+          case IMES:
+            return svid + (173 - 1);
+          case QZSS:
+            return svid + (193 - 1);
+          case GLONASS:
+            return (svid == 255) ? svid : (svid + (65 - 1));
+          default: return 0;
+        }
+      }
+    };
+
+
     struct raw_measurement_t {
       FloatType carrier_phase, pseudo_range, doppler;
       unsigned int sv_number;
@@ -650,6 +724,20 @@ class G_Packet_Observer : public Packet_Observer<>{
       }
       subframe_t() : subframe_no(0), sv_or_page_id(0) {}
       
+      void update_properties(){
+        if(sv_number <= 32){
+          subframe_no = bits2u8_align(49, 3);
+          switch(subframe_no){
+            case 4:
+            case 5:
+              sv_or_page_id = bits2u8_align(62, 6);
+              // subframe.4 page.2-5,7-10 correspond to SV 25-32
+              // subframe.5 page.1-24 correspond to SV 1-24
+              break;
+          }
+        }
+      }
+
 #define bits2u8(index) (u8_t)(buffer[((index / 30) * 4) + (2 - ((index % 30) / 8))])
 #define bits2s8(index) (s8_t)(bits2u8(index))
 #define bits2u8_align(index, length) \
@@ -820,29 +908,22 @@ class G_Packet_Observer : public Packet_Observer<>{
         ephemeris.i_0_dot = ephemeris_i_0_dot();
       }
     };
-    subframe_t fetch_subframe() const {
+    subframe_t &fetch_subframe(subframe_t &subframe) const {
       //if(!packet_type().equals(0x02, 0x11)){}
 
-      subframe_t subframe;
       {
         v8_t buf;
         this->inspect(&buf, sizeof(buf), 6 + 1); // SVID
         subframe.sv_number = buf;
       }
-
       this->inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 2); // buffer
-      if(subframe.sv_number <= 32){
-        subframe.subframe_no = subframe.bits2u8_align(49, 3);
-        switch(subframe.subframe_no){
-          case 4:
-          case 5:
-            subframe.sv_or_page_id = subframe.bits2u8_align(62, 6);
-            // subframe.4 page.2-5,7-10 correspond to SV 25-32
-            // subframe.5 page.1-24 correspond to SV 1-24
-            break;
-        }
-      }
+      subframe.update_properties();
 
+      return subframe;
+    }
+    subframe_t fetch_subframe() const {
+      subframe_t subframe;
+      fetch_subframe(subframe);
       return subframe;
     }
 
