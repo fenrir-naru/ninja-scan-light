@@ -614,6 +614,80 @@ class G_Packet_Observer : public Packet_Observer<>{
       return utc;
     }
 
+    struct gnss_svid_t {
+      // @see UBX-13003221 Appendix.A Satellite Numbering
+      enum {
+        UNKNOWN = -1,
+        GPS = 0,
+        SBAS = 1,
+        Galileo = 2,
+        BeiDou = 3,
+        IMES = 4,
+        QZSS = 5,
+        GLONASS = 6,
+        GNSS_TYPES
+      } gnss;
+      unsigned int svid;
+      gnss_svid_t(const unsigned int &svid_legacy) : gnss(UNKNOWN), svid(0) {
+        if((svid_legacy == 0) || (svid_legacy > 255)){return;}
+        if(svid_legacy <= 32){
+          gnss = GPS;
+          svid = svid_legacy;
+        }else if(svid_legacy <= 64){
+          gnss = BeiDou;
+          svid = svid_legacy - (64 - 37); // ? TODO
+        }else if(svid_legacy <= 96){
+          gnss = GLONASS;
+          svid = svid_legacy - (65 - 1);
+        }else if(svid_legacy < 120){
+
+        }else if(svid_legacy <= 158){
+          gnss = SBAS;
+          svid = svid_legacy;
+        }else if(svid_legacy <= 163){
+          gnss = BeiDou;
+          svid = svid_legacy - (159 - 1); // ? TODO
+        }else if(svid_legacy < 173){
+
+        }else if(svid_legacy <= 182){
+          gnss = IMES;
+          svid = svid_legacy - (173 - 1);
+        }else if(svid_legacy < 193){
+
+        }else if(svid_legacy <= 197){
+          gnss = QZSS;
+          svid = svid_legacy - (193 - 1);
+        }else if(svid_legacy < 211){
+
+        }else if(svid_legacy <= 246){
+          gnss = Galileo;
+          svid = svid_legacy - (211 - 1);
+        }else if(svid_legacy == 255){
+          gnss = GLONASS;
+          svid = 255;
+        }
+      }
+      operator unsigned int () const { ///< cast to svid_legacy
+        switch(gnss){
+          case GPS:
+          case SBAS:
+            return svid;
+          case Galileo:
+            return svid + (211 - 1);
+          case BeiDou:
+            return (svid <= 5) ? (svid + (159 - 1)) : (svid + (64 - 37)); // ? TODO
+          case IMES:
+            return svid + (173 - 1);
+          case QZSS:
+            return svid + (193 - 1);
+          case GLONASS:
+            return (svid == 255) ? svid : (svid + (65 - 1));
+          default: return 0;
+        }
+      }
+    };
+
+
     struct raw_measurement_t {
       FloatType carrier_phase, pseudo_range, doppler;
       unsigned int sv_number;
