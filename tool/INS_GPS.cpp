@@ -1985,16 +1985,24 @@ class StreamProcessor
           G_Packet_Data &packet){
 
         switch(gnssID){
-          case 0: { // GPS
-            // modify format to be equivalent to UBX-RXM-SFRB
+          case G_Observer_t::gnss_svid_t::GPS: {
             packet.subframe.sv_number = svID;
+            // change format to UBX-RXM-SFRB by removing parity
             for(int i(0); i < sizeof(packet.subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
-              *(G_Observer_t::u32_t *)(&packet.subframe.buffer[i]) >>= 6; // remove parity
+              *(G_Observer_t::u32_t *)(&packet.subframe.buffer[i]) >>= 6;
             }
             packet.subframe.update_properties();
             check_subframe(packet);
             return;
           }
+          case G_Observer_t::gnss_svid_t::SBAS: {
+            packet.subframe.sv_number = svID; // svID (120-158)
+            // change format to UBX-RXM-SFRB by removing padding on the last word
+            *(G_Observer_t::u32_t *)(&packet.subframe.buffer[sizeof(G_Observer_t::u32_t) * 7]) >>= 6;
+            check_subframe(packet);
+            return;
+          }
+          // TODO GNSS
         }
       }
 
@@ -2097,7 +2105,9 @@ class StreamProcessor
 
             typedef dst_t::mapped_type::value_type v_t;
             for(int i(0); i < num_of_measurement; i++){
-              if(observer[6 + 36 + (32 * i)] != 0){continue;} // gnssID (GPS:0)
+              unsigned int gnssID(observer[6 + 36 + (32 * i)]);
+              if((gnssID != G_Observer_t::gnss_svid_t::GPS)
+                  && (gnssID != G_Observer_t::gnss_svid_t::SBAS)){continue;} // TODO GNSS
               int prn(observer[6 + 37 + (32 * i)]); // svID
 
               G_Observer_t::v8_t buf[24];
@@ -2173,19 +2183,17 @@ class StreamProcessor
                 //int freq((G_Observer_t::u8_t)observer[offset + 59] - 7);
                 prn = (G_Observer_t::u8_t)observer[offset + 57];
                 switch((G_Observer_t::u8_t)observer[offset + 56]){
-                  case 5: // QZSS(5)
-                    prn += 192;
+                  case 5: // TODO QZSS(5)
+                    prn += 192; continue;
+                  case 0: case 1: // GPS(0), SBAS(1)
                     break;
-                  case 0: case 1: case 2: case 3: case 6:
-                    // GPS(0), SBAS(1), GALILEO(2), BEIDO(3), GLONASS(6)
-                    break;
-                  default:
+                  case 2: case 3: case 6: default: // TODO GALILEO(2), BEIDO(3), GLONASS(6)
                     continue;
                 }
               }else{
                 prn = (G_Observer_t::u8_t)observer[offset + 34];
+                if((prn > 32) && ((prn < 120) && (prn > 158))){continue;} // GPS or SBAS, TODO GNSS
               }
-              if(prn > 32){continue;} // GPS only
 
               // check phase lock
               unsigned int flag((G_Observer_t::u8_t)observer[offset + 54]);
