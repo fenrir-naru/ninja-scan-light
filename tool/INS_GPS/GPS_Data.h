@@ -49,7 +49,8 @@ struct GPS_Data {
   typedef typename observer_t::subframe_t subframe_t;
   subframe_t subframe;
 
-  int week_number;
+  typedef GPS_Time<FloatT> gps_time_t;
+  gps_time_t time_of_reception;
 
   struct Loader {
     typedef GPS_SpaceNode<FloatT> space_node_t;
@@ -158,6 +159,11 @@ struct GPS_Data {
     bool load(const GPS_Data &data){
       if(data.subframe.sv_number > 32){return false;}
 
+      int week_number(data.time_of_reception.week);
+      // If invalid week number, estimate it based on current time
+      // This is acceptable because it will be used to compensate truncated upper significant bits.
+      if(week_number < 0){week_number = gps_time_t::now().week;}
+
       if(data.subframe.subframe_no <= 3){
         ephemeris_t &eph(ephemeris[data.subframe.sv_number - 1]);
         switch(data.subframe.subframe_no){
@@ -166,19 +172,18 @@ struct GPS_Data {
           case 3: fetch_as_subframe3(data.subframe, eph); break;
         }
         if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
-            && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)
-            && (data.week_number >= 0)){
-          eph.WN += (data.week_number - (data.week_number % 0x400)); // Original WN is truncated to 10 bits.
+            && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)){
+          // Original WN is truncated to 10 bits.
+          eph.WN = (week_number - (week_number % 0x400)) + (eph.WN % 0x400);
           space_node->satellite(eph.svid).register_ephemeris(eph);
           return true;
         }
       }else if((data.subframe.subframe_no == 4) && (data.subframe.sv_or_page_id == 56)){ // IONO UTC parameters
         iono_utc_t iono_utc(fetch_iono_utc(data.subframe));
-        if(data.week_number >= 0){ // taking account for truncation
-          int week_number_base(data.week_number - (data.week_number % 0x100));
-          iono_utc.WN_t += week_number_base;
-          iono_utc.WN_LSF += week_number_base;
-        }
+        // taking truncation into account
+        int week_number_base(week_number - (week_number % 0x100));
+        iono_utc.WN_t = week_number_base + (iono_utc.WN_t % 0x100);
+        iono_utc.WN_LSF = week_number_base + (iono_utc.WN_LSF % 0x100);
         space_node->update_iono_utc(iono_utc);
         return true;
       }

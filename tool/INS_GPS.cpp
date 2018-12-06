@@ -1975,7 +1975,9 @@ class StreamProcessor
 
       void check_subframe(G_Packet_Data &packet){
         packet.loader = &loader;
-        packet.week_number = week_number;
+        packet.time_of_reception.week
+            = (status.time_stamp == status_t::TIME_STAMP_INVALID) ? -1 : week_number; // -1 means invalid
+        packet.time_of_reception.seconds = packet_latest.itow;
         Handler::outer.updatable->update(packet);
       }
 
