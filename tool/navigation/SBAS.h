@@ -1247,9 +1247,9 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
       };
     };
 
-    class Satellite {
+    class SatelliteProperties {
       public:
-        typedef typename gps_space_node_t::constellation_t constellation_t;
+        typedef typename gps_space_node_t::SatelliteProperties::constellation_t constellation_t;
 
         /**
          * SBAS Ephemeris
@@ -1271,7 +1271,7 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
            * Adjust time of ephemeris with time of current
            */
           void adjust_time(const gps_time_t &t_current){
-            WN = t_current.WN;
+            WN = t_current.week;
             float_t sec_of_a_day(std::fmod(t_current.seconds, gps_time_t::seconds_day)), t_0_orig(t_0);
             t_0 += (t_current.seconds - sec_of_a_day);
 
@@ -1289,6 +1289,14 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
                 t_0 += gps_time_t::seconds_week;
               }
             }
+          }
+
+          bool is_valid(const gps_time_t &t) const {
+            return false; // TODO @see A.4.5.1.3.3.
+          }
+
+          bool maybe_better_one_avilable(const gps_time_t &t) const {
+            return false; // TODO @see A.4.5.1.3.3.
           }
 
           constellation_t constellation(
@@ -1416,6 +1424,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
             }while(false);
             return false;
           }
+
+          gps_time_t base_time() const {
+            return gps_time_t(WN, t_0);
+          }
         };
 
         /**
@@ -1493,6 +1505,21 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           };
         };
     };
+
+    class Satellite : public SatelliteProperties {
+      public:
+        typedef typename SatelliteProperties::Ephemeris eph_t;
+        typedef typename gps_space_node_t::template PropertyHistory<eph_t> eph_list_t;
+      protected:
+        eph_list_t eph_history;
+      public:
+        Satellite() : eph_history() {
+          // setup first ephemeris as invalid one
+          eph_t &eph_current(const_cast<eph_t &>(eph_history.current()));
+          eph_current.WN = 0;
+          eph_current.t_0 = 0;
+        }
+    };
 };
 
 template <class FloatT>
@@ -1547,7 +1574,7 @@ SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_t::operator typename SBA
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
 
 template <class FloatT>
-const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::Satellite::Ephemeris::raw_t::sf[] = {
+const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t::sf[] = {
   16,           // SF_t_0
   0.08,         // SF_xy
   0.4,          // SF_z
@@ -1560,7 +1587,7 @@ const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::Satellite
 };
 
 template <class FloatT>
-const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::Satellite::Almanac::raw_t::sf[] = {
+const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::SatelliteProperties::Almanac::raw_t::sf[] = {
   2600,   // SF_xy
   26000,  // SF_z
   10,     // SF_dxy
