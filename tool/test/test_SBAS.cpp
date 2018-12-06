@@ -5,6 +5,7 @@
 
 #include "navigation/SBAS.h"
 
+#include <boost/cstdint.hpp>
 #include <boost/format.hpp>
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
@@ -473,23 +474,29 @@ BOOST_AUTO_TEST_CASE(igp_interpolate_near_grid){
 BOOST_AUTO_TEST_CASE(data_block_decorder){
   for(unsigned int i(0); i < 0x100; i++){
     for(unsigned int j(0); j < 0x100; j++){
-      char buf[] = {(char)(unsigned char)i, (char)(unsigned char)j};
-      bitset<16> b((unsigned long long)((i << 8) + j));
+      BOOST_TEST_MESSAGE( "Calling (i,j)=(" << i << "," << j << ")");
+      unsigned char buf[] = {(unsigned char)i, (unsigned char)j, (unsigned char)i};
+      boost::uint16_t buf2[] = {(boost::uint16_t)((i << 8) + j)};
+      bitset<24> b((unsigned long long)((i << 16) + (j << 8) + i));
       for(unsigned int offset(0); offset <= 8; offset++){
-        unsigned char buf2(space_node_t::DataBlock::bits2num<unsigned char>(buf, offset));
-        bitset<16> b2(b >> (8 - offset));
-        BOOST_REQUIRE_EQUAL((b2.to_ulong() & 0xFF), buf2);
+        unsigned char res(space_node_t::DataBlock::bits2num<unsigned char>(buf, offset)); // in == out
+        unsigned char res2(space_node_t::DataBlock::bits2num<unsigned char>(buf2, offset)); // in > out
+        boost::uint16_t res3(space_node_t::DataBlock::bits2num<boost::uint16_t>(buf, offset)); // in < out
+        unsigned long b2((b << offset).to_ulong());
+        BOOST_REQUIRE_EQUAL(((b2 & 0xFF0000) >> 16), res);
+        BOOST_REQUIRE_EQUAL(((b2 & 0xFF0000) >> 16), res2);
+        BOOST_REQUIRE_EQUAL(((b2 & 0xFFFF00) >> 8), res3);
       }
     }
   }
 }
 
 BOOST_AUTO_TEST_CASE(data_block_type18){
-  char buf[(250 + 7) / 8] = {0};
   static const int mask_max(16); // check for [0,15] mask
   for(int i(0); i < (1 << mask_max); ++i){
-    *(unsigned char *)(&buf[3]) = (unsigned char)(i & 0xFF);
-    *(unsigned char *)(&buf[4]) = (unsigned char)((i >> 8) & 0xFF);
+    unsigned char buf[(250 + 7) / 8] = {0};
+    buf[3] = (unsigned char)(i & 0xFF);
+    buf[4] = (unsigned char)((i >> 8) & 0xFF);
 
     space_node_t::DataBlock::Type18::mask_t res(space_node_t::DataBlock::Type18::mask(buf));
 

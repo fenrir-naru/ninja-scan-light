@@ -123,40 +123,64 @@ typedef typename gps_space_node_t::type type
     }; ///< @see Table A-3
 
     struct DataBlock {
-      template <class T>
-      static T bits2num(const char *buf, const uint_t &index){
-        std::div_t aligned(std::div(index, 8));
-        T res((u8_t)buf[aligned.quot++]);
-        for(int i(0); i < sizeof(T) - 1; ++i){
-          res <<= 8;
-          res |= (u8_t)buf[aligned.quot++];
+      template <class OutputT, class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index){
+        std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
+        if(sizeof(InputT) >= sizeof(OutputT)){
+          // ex.1) I_8 0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5
+          //       O_8         0*1*2*3* *4*5*6*7
+          // ex.2) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
+          //       O_8        0*1*2*3*4*5*6*7
+          // ex.3) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
+          //       O_8                          0*1*2*3* *4*5*6*7
+          OutputT res((buf[aligned.quot] << aligned.rem) >> ((sizeof(InputT) - sizeof(OutputT)) * 8));
+          if(aligned.rem > (sizeof(InputT) - sizeof(OutputT)) * 8){
+            res |= (OutputT)(buf[++aligned.quot] >> (sizeof(InputT) * 8 - aligned.rem));
+          }
+          return res;
+        }else{
+          // When sizeof(OutputT) > sizeof(InputT)
+          // ex.4) I_8  0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
+          //       O_16         0*1*2*3* *4*5*6*7*8*9*0*1* *2*3*4*5
+          OutputT res(buf[aligned.quot]);
+          for(int i(sizeof(OutputT) / sizeof(InputT)); i > 1; --i){
+            res <<= (sizeof(InputT) * 8);
+            res |= buf[++aligned.quot];
+          }
+          if(aligned.rem > 0){
+            res <<= aligned.rem;
+            res |= (buf[++aligned.quot] >> (sizeof(InputT) * 8 - aligned.rem));
+          }
+          return res;
         }
-        if(aligned.rem > 0){
-          res = ((res << aligned.rem) | (((u8_t)buf[aligned.quot]) >> (8 - aligned.rem)));
-        }
-        return res;
       }
-      template <class T>
-      static T bits2num(const char *buf, const uint_t &index, const uint_t &length){
-        return (bits2num<T>(buf, index) >> ((sizeof(T) * 8) - length));
+      template <class OutputT, class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
+        return (bits2num<OutputT, InputT>(buf, index) >> ((sizeof(OutputT) * 8) - length));
       }
 
 #define convert_u(bits, offset_bits, length, name) \
-static u ## bits ## _t name(const char *buf){ \
-  return bits2num<u ## bits ## _t>(buf, offset_bits, length); \
+template <class InputT> \
+static u ## bits ## _t name(const InputT *buf){ \
+  return bits2num<u ## bits ## _t, InputT>(buf, offset_bits, length); \
 }
 #define convert_s(bits, offset_bits, length, name) \
-static s ## bits ## _t name(const char *buf){ \
-  return ((s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits, length)) \
+template <class InputT> \
+static s ## bits ## _t name(const InputT *buf){ \
+  return (s ## bits ## _t)(bits2num<u ## bits ## _t, InputT>(buf, offset_bits) \
+        << (bits - length)) \
       >> (bits - length); \
 }
 #define convert_u_ch(bits, offset_bits, length, ch_offset_bits, name) \
-static u ## bits ## _t name(const char *buf, const uint_t &ch){ \
+template <class InputT> \
+static u ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
   return bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length); \
 }
 #define convert_s_ch(bits, offset_bits, length, ch_offset_bits, name) \
-static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
-  return ((s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length)) \
+template <class InputT> \
+static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
+  return (s ## bits ## _t)(bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch)) \
+        << (bits - length)) \
       >> (bits - length); \
 }
       convert_u(8, 0, 8, preamble);
@@ -189,23 +213,26 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
               return 201;
           }
         }
-        static mask_t mask(const char *buf, const u8_t &band){
+        template <class InputT>
+        static mask_t mask(const InputT *buf, const u8_t &band){
           mask_t res = {0};
-          buf = &buf[2]; // 24 bits shift
+          std::div_t aligned(std::div(24, (int)sizeof(InputT) * 8)); // 24 bits shift
+          buf += aligned.quot;
+          InputT compared((InputT)0x1 << (sizeof(InputT) * 8 - aligned.rem - 1));
           // [mask7, mask6, .., mask0], [mask15, mask14, .., mask8], ...
-          u8_t compared(0);
           for(u8_t i(0); i < mask_bits(band); ++i, compared >>= 1){
             if(compared == 0){ // rotate
-              compared = 0x80;
+              compared = ((InputT)0x1 << (sizeof(InputT) * 8 - 1));
               buf++;
             }
-            if((u8_t)(*buf) & compared){
+            if(*buf & compared){
               res.linear[res.valid++] = i;
             }
           }
           return res;
         }
-        static mask_t mask(const char *buf){
+        template <class InputT>
+        static mask_t mask(const InputT *buf){
           return mask(buf, band(buf));
         }
       };
@@ -277,7 +304,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             u16_t delay;
             u8_t error_indicator;
 
-            static raw_t fetch(const char *buf, const uint_t &ch){
+            template <class InputT>
+            static raw_t fetch(const InputT *buf, const uint_t &ch){
               typedef typename DataBlock::Type26 msg_t;
               raw_t res = {
                 msg_t::delay(buf, ch), // delay
@@ -1015,7 +1043,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
          * @param type18 Type 18 message
          * @return True if mask is updated and changed, otherwise false.
          */
-        bool update_mask(const char *type18){
+        template <class Input>
+        bool update_mask(const Input *type18){
           typedef typename DataBlock::Type18 msg_t;
           u8_t band(msg_t::band(type18));
           return update_mask(band, msg_t::iodi(type18), msg_t::mask(type18, band));
@@ -1037,7 +1066,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
          * @param type26 Type 26 message
          * @return True if IGPs are registered, otherwise false
          */
-        bool register_igp(const char *type26){
+        template <class InputT>
+        bool register_igp(const InputT *type26){
           typedef typename DataBlock::Type26 msg_t;
           u8_t band(msg_t::band(type26));
           if(masks[band].iodi != msg_t::iodi(type26)){return false;}
@@ -1206,7 +1236,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
         u8_t  DN;           ///< Last leap second update day (days)
         s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
 
-        static raw_t fetch(const char *buf){
+        template <class InputT>
+        static raw_t fetch(const InputT *buf){
           typedef typename DataBlock::Type12 msg_t;
           raw_t res = {
             msg_t::A1_SNT(buf),
@@ -1337,7 +1368,8 @@ static s ## bits ## _t name(const char *buf, const uint_t &ch){ \
             s16_t a_Gf0;          ///< Clock correction parameter (2^-31, s)
             s8_t a_Gf1;           ///< Clock correction parameter (2^-40, s/s)
 
-            static raw_t fetch(const char *buf){
+            template <class InputT>
+            static raw_t fetch(const InputT *buf){
               typedef typename DataBlock::Type9 msg_t;
               raw_t res = {
                 0, // svid
@@ -1465,7 +1497,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
             s8_t dx, dy, dz;  ///< ECEF velocity (10(xy), 60(z), m/s)
             u16_t t_0;        ///< Time of applicability (64, s)
 
-            static raw_t fetch(const char *buf, const uint_t &ch){
+            template <class InputT>
+            static raw_t fetch(const InputT *buf, const uint_t &ch){
               typedef typename DataBlock::Type17 msg_t;
               raw_t res = {
                 msg_t::id(buf, ch), // data_id
