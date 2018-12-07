@@ -123,25 +123,32 @@ typedef typename gps_space_node_t::type type
     }; ///< @see Table A-3
 
     struct DataBlock {
-      template <class OutputT, class InputT>
-      static OutputT bits2num(const InputT *buf, const uint_t &index){
-        std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
-        if(sizeof(InputT) >= sizeof(OutputT)){
+      template <
+          class OutputT, class InputT,
+          bool output_is_smaller_than_input = (sizeof(InputT) >= sizeof(OutputT))>
+      struct bits2num_t {
+        static OutputT run(const InputT *buf, const uint_t &index){
           // ex.1) I_8 0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5
           //       O_8         0*1*2*3* *4*5*6*7
           // ex.2) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
           //       O_8        0*1*2*3*4*5*6*7
           // ex.3) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
           //       O_8                          0*1*2*3* *4*5*6*7
+          std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
           OutputT res((buf[aligned.quot] << aligned.rem) >> ((sizeof(InputT) - sizeof(OutputT)) * 8));
           if(aligned.rem > (sizeof(InputT) - sizeof(OutputT)) * 8){
             res |= (OutputT)(buf[++aligned.quot] >> (sizeof(InputT) * 8 - aligned.rem));
           }
           return res;
-        }else{
+        }
+      };
+      template <class OutputT, class InputT>
+      struct bits2num_t<OutputT, InputT, false> {
+        static OutputT run(const InputT *buf, const uint_t &index){
           // When sizeof(OutputT) > sizeof(InputT)
           // ex.4) I_8  0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
           //       O_16         0*1*2*3* *4*5*6*7*8*9*0*1* *2*3*4*5
+          std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
           OutputT res(buf[aligned.quot]);
           for(int i(sizeof(OutputT) / sizeof(InputT)); i > 1; --i){
             res <<= (sizeof(InputT) * 8);
@@ -153,6 +160,11 @@ typedef typename gps_space_node_t::type type
           }
           return res;
         }
+      };
+
+      template <class OutputT, class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index){
+        return bits2num_t<OutputT, InputT>::run(buf, index);
       }
       template <class OutputT, class InputT>
       static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
