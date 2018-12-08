@@ -273,6 +273,25 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
         convert_s( 8, 218,  8, a_Gf1);
       };
 
+      struct Type10 { ///< @see Table A-9 Degradation factors
+        convert_u(16,  14, 10, B_rcc);
+        convert_u(16,  24, 10, C_ltc_lsb);
+        convert_u(16,  34, 10, C_ltc_v1);
+        convert_u(16,  44,  9, I_ltc_v1);
+        convert_u(16,  53, 10, C_ltc_v0);
+        convert_u(16,  63,  9, I_ltc_v0);
+        convert_u(16,  72, 10, C_geo_lsb);
+        convert_u(16,  82, 10, C_geo_v);
+        convert_u(16,  92,  9, I_geo);
+        convert_u( 8, 101,  6, C_er);
+        convert_u(16, 107, 10, C_iono_step);
+        convert_u(16, 117,  9, I_iono);
+        convert_u(16, 126, 10, C_iono_ramp);
+        convert_u( 8, 136,  1, RSS_UDRE);
+        convert_u( 8, 137,  1, RSS_iono);
+        convert_u( 8, 138,  7, C_covariance); // 138 + 7 + 81(spare) + 24(parity) = 250
+      };
+
       struct Type17 { ///< @see Table A-17 GEO_SAT_ALNAMACS
         convert_u_ch( 8, 14,  2, 67, id);
         convert_u_ch( 8, 16,  8, 67, prn);
@@ -303,6 +322,71 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
 #undef convert_u_ch
 #undef convert_s
 #undef convert_u
+    };
+
+    struct DegradationFactors {
+      float_t B_rcc;
+      float_t C_ltc_lsb;
+      float_t C_ltc_v1;
+      int I_ltc_v1;
+      float_t C_ltc_v0;
+      int I_ltc_v0;
+      float_t C_geo_lsb;
+      float_t C_geo_v;
+      int I_geo;
+      float_t C_er;
+      float_t C_iono_step;
+      int I_iono;
+      float_t C_iono_ramp;
+      bool RSS_UDRE;
+      bool RSS_iono;
+      float_t C_covariance;
+
+      struct raw_t {
+
+        enum {
+          SF_B_rcc,
+          SF_C_ltc_lsb,
+          SF_C_ltc_v1,
+          SF_C_ltc_v0,
+          SF_C_geo_lsb,
+          SF_C_geo_v,
+          SF_C_er,
+          SF_C_iono_step,
+          SF_C_iono_ramp,
+          SF_C_covariance,
+
+          SF_NUM,
+        };
+        static const float_t sf[SF_NUM];
+
+        template <class InputT>
+        static DegradationFactors fetch(const InputT *buf){
+          typedef typename DataBlock::Type10 msg_t;
+          DegradationFactors res = {
+#define CONVERT(TARGET) \
+sf[SF_ ## TARGET] * msg_t::TARGET(buf)
+            CONVERT(B_rcc),
+            CONVERT(C_ltc_lsb),
+            CONVERT(C_ltc_v1),
+            msg_t::I_ltc_v1(buf),
+            CONVERT(C_ltc_v0),
+            msg_t::I_ltc_v0(buf),
+            CONVERT(C_geo_lsb),
+            CONVERT(C_geo_v),
+            msg_t::I_geo(buf),
+            CONVERT(C_er),
+            CONVERT(C_iono_step),
+            msg_t::I_iono(buf),
+            CONVERT(C_iono_ramp),
+            (msg_t::RSS_UDRE(buf) == 1),
+            (msg_t::RSS_iono(buf) == 1),
+            CONVERT(C_covariance),
+#undef CONVERT
+          };
+          return res;
+        }
+      };
     };
 
     class IonosphericGridPoints {
@@ -1617,6 +1701,20 @@ SBAS_SpaceNode<FloatT>::IonosphericGridPoints::position_t::operator typename SBA
   ? (float_t)(1 << (n >= 0 ? n : 0)) \
   : (((float_t)1) / (1 << (-(n) >= 30 ? 30 : -(n > 0 ? 0 : n))) \
     / (1 << (-(n) >= 30 ? (-(n) - 30) : 0))))
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::DegradationFactors::raw_t::sf[] = {
+  0.002,    // SF_B_rcc
+  0.002,    // SF_C_ltc_lsb
+  0.00005,  // SF_C_ltc_v1
+  0.002,    // SF_C_ltc_v0
+  0.0005,   // SF_C_geo_lsb
+  0.00005,  // SF_C_geo_v
+  0.5,      // SF_C_er
+  0.001,    // SF_C_iono_step
+  0.000005, // SF_C_iono_ramp
+  0.1,      // SF_C_covariance
+};
 
 template <class FloatT>
 const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t::sf[] = {
