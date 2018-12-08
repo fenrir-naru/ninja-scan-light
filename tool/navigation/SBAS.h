@@ -137,7 +137,7 @@ typedef typename gps_space_node_t::type type
           std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
           OutputT res((buf[aligned.quot] << aligned.rem) >> ((sizeof(InputT) - sizeof(OutputT)) * 8));
           if(aligned.rem > (sizeof(InputT) - sizeof(OutputT)) * 8){
-            res |= (OutputT)(buf[++aligned.quot] >> (sizeof(InputT) * 8 - aligned.rem));
+            res |= (OutputT)(buf[++aligned.quot] >> ((sizeof(InputT) * 2 - sizeof(OutputT)) * 8 - aligned.rem));
           }
           return res;
         }
@@ -179,8 +179,7 @@ static u ## bits ## _t name(const InputT *buf){ \
 #define convert_s(bits, offset_bits, length, name) \
 template <class InputT> \
 static s ## bits ## _t name(const InputT *buf){ \
-  return (s ## bits ## _t)(bits2num<u ## bits ## _t, InputT>(buf, offset_bits) \
-        << (bits - length)) \
+  return (s ## bits ## _t)bits2num<u ## bits ## _t, InputT>(buf, offset_bits) \
       >> (bits - length); \
 }
 #define convert_u_ch(bits, offset_bits, length, ch_offset_bits, name) \
@@ -191,8 +190,7 @@ static u ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
 #define convert_s_ch(bits, offset_bits, length, ch_offset_bits, name) \
 template <class InputT> \
 static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
-  return (s ## bits ## _t)(bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch)) \
-        << (bits - length)) \
+  return (s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch)) \
       >> (bits - length); \
 }
       convert_u(8, 0, 8, preamble);
@@ -254,7 +252,7 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
         convert_u(8, 18, 4, block_id);
         convert_u_ch(16, 22, 9, 13, delay);
         convert_u_ch( 8, 31, 4, 13, error_indicator);
-        convert_u(8, 22 + (13 * 15), 4, iodi);
+        convert_u(8, 22 + (13 * 15), 2, iodi); // 22 + (13 * 15) + 2 + 7(spare) + 24(parity) = 250
       };
 
       struct Type9 { ///< @see Table A-18 GEO_NAVIGATION
@@ -1127,7 +1125,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             }
             if(still_use){continue;}
             position_index_t index(position(band, mask_old.linear[i]));
-            properties[index.lat_index][index.lng_index] = PointProperty::raw_t::DELAY_DONT_USE;
+            properties[index.lat_index][index.lng_index] = PointProperty::raw_t::unavailable;
           }
 
           masks[band].iodi = iodi_new;
@@ -1158,15 +1156,15 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           return true;
         }
         /**
-         * Register new properties of ionospheric grind points (IGPs) with broadcasted data
+         * Register new properties of ionospheric grid points (IGPs) with broadcasted data
          * @param type26 Type 26 message
          * @return True if IGPs are registered, otherwise false
          */
         template <class InputT>
         bool register_igp(const InputT *type26){
           typedef typename DataBlock::Type26 msg_t;
-          u8_t band(msg_t::band(type26));
-          if(masks[band].iodi != msg_t::iodi(type26)){return false;}
+          u8_t band(msg_t::band(type26)), iodi(msg_t::iodi(type26));
+          if(masks[band].iodi != iodi){return false;}
           u8_t *mask_pos(masks[band].mask.block[msg_t::block_id(type26)]);
           int i_max(masks[band].mask.valid - (mask_pos - masks[band].mask.linear));
           if(i_max > DataBlock::Type18::mask_t::each_block){
@@ -1403,13 +1401,14 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             t_0 += (t_current.seconds - sec_of_a_day);
 
             // roll over check
-            if(sec_of_a_day - t_0_orig > gps_time_t::seconds_day / 4 * 3){
+            float_t delta(sec_of_a_day - t_0_orig);
+            if(delta > (gps_time_t::seconds_day / 4 * 3)){
               t_0 += gps_time_t::seconds_day;
               if(t_0 >= gps_time_t::seconds_week){
                 WN++;
                 t_0 -= gps_time_t::seconds_week;
               }
-            }else if(sec_of_a_day - t_0_orig < -gps_time_t::seconds_day / 4 * 3){
+            }else if(-delta > (gps_time_t::seconds_day / 4 * 3)){
               t_0 -= gps_time_t::seconds_day;
               if(t_0 < 0){
                 WN--;
