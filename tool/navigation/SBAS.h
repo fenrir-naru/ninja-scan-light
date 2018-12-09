@@ -37,6 +37,7 @@
 #ifndef __SBAS_H__
 #define __SBAS_H__
 
+#include <iostream>
 #include <cmath>
 
 #include "GPS.h"
@@ -1188,6 +1189,35 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           }
         }
         ~IonosphericGridPoints(){}
+
+        /**
+         * Print delay map with ASCII characters
+         */
+        friend std::ostream &operator<<(std::ostream &out, const IonosphericGridPoints &igp){
+          static const char base32_chr[] = "0123456789ABCdEFGHiJKLMNoPQRSTUV"; // base 32
+
+          // the first line
+          out << "     ";
+          for(int j(0); j < sizeof(igp.properties[0]) / sizeof(igp.properties[0][0]); ++j){
+            int lng(position_index_t::idx2lng(j));
+            out << (lng == 0 ? '0' : (lng % 90 == 0 ? '|' : (lng % 30 == 0 ? '+' : ' ')));
+          }
+          out << std::endl;
+
+          for(int i(0); i < sizeof(igp.properties) / sizeof(igp.properties[0]); ++i){
+            out.width(4);
+            out << position_index_t::idx2lat(i) << ' ';
+            for(int j(0); j < sizeof(igp.properties[0]) / sizeof(igp.properties[0][0]); ++j){
+              if(!igp.properties[i][j].is_available()){
+                out << ' ';
+              }else{
+                out << base32_chr[igp.properties[i][j].delay >> 4]; // 0-510 => 0-31
+              }
+            }
+            out << std::endl;
+          }
+          return out;
+        }
     };
 
     /**
