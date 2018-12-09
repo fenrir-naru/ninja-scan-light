@@ -32,6 +32,8 @@
 #ifndef __GNSS_DATA_H__
 #define __GNSS_DATA_H__
 
+#include <iostream>
+
 #ifndef IS_LITTLE_ENDIAN
 #define IS_LITTLE_ENDIAN 1
 #endif
@@ -180,7 +182,11 @@ struct GNSS_Data {
           igp.update_mask(buf);
           break;
         case sbas_t::IONO_DELAY_CORRECTION: // 26
-          igp.register_igp(buf);
+          if(igp.register_igp(buf)){
+            std::cerr
+                << "Ionospheric delay grid map (S" << data.subframe.sv_number << "):" << std::endl
+                << igp << std::endl;
+          }
           break;
       }
       return false;
