@@ -123,6 +123,29 @@ typedef typename gps_space_node_t::type type
       NULL_MESSAGES = 63,
     }; ///< @see Table A-3
 
+    struct Timing {
+      enum {
+        DONT_USE_FOR_SAFETY_APPLICATIONS,
+        PRN_MASK,
+        UDREI,
+        FAST_CORRECTIONS,
+        LONG_TERM_CORRECTIONS,
+        GEO_NAVIGATION_DATA,
+        FAST_CORRECTION_DEGRADATION,
+        DEGRADATION_PARAMETERS,
+        IONOSPHERIC_GRID_MASK,
+        IONOSPHERIC_CORRECTIONS,
+        UTC_TIMING_DATA,
+        ALNAMAC_DATA,
+        SERVICE_LEVEL,
+        CLOCK_EPHEMERIS_COVARIANCE_MATRIX,
+        NUM_OF_TIMING_ITEMS,
+      };
+      static const struct values_t {
+        int interval, timeout_EN_Route_Terminal_LNAV, timeout_LNAV_VNAV_LP_LPV_approach;
+      } values[NUM_OF_TIMING_ITEMS];
+    }; ///< @see Table A-25;
+
     struct DataBlock {
       template <
           class OutputT, class InputT,
@@ -1702,6 +1725,24 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
   {137,   68, 01007, "MTSAT-2 (or MTSAT-1R)"},
   {138,  386, 00450, "LM RPS-2"},
 }; ///< @see Table A-1
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::Timing::values_t SBAS_SpaceNode<FloatT>::Timing::values[] = {
+  {  6},                // DONT_USE_FOR_SAFETY_APPLICATIONS (0)
+  {120,   600,   600},  // PRN_MASK (1)
+  {  6,    18,    12},  // UDREI (2-6, 24)
+  {},                   // FAST_CORRECTIONS (2-5, 24)
+  {120,   360,   240},  // LONG_TERM_CORRECTIONS (24, 25)
+  {120,   360,   240},  // GEO_NAVIGATION_DATA (9)
+  {120,   360,   240},  // FAST_CORRECTION_DEGRADATION (7)
+  {120,   360,   240},  // DEGRADATION_PARAMETERS (10)
+  {300,  1200,  1200},  // IONOSPHERIC_GRID_MASK (18)
+  {300,   600,   600},  // IONOSPHERIC_CORRECTIONS (26)
+  {300, 86400, 86400},  // UTC_TIMING_DATA (12)
+  {300},                // ALNAMAC_DATA (17)
+  {300, 86400, 86400},  // SERVICE_LEVEL (27)
+  {120,   360,   240},  // CLOCK_EPHEMERIS_COVARIANCE_MATRIX (28)
+}; ///< @see Table A-25
 
 template <class FloatT>
 const typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty::raw_t
