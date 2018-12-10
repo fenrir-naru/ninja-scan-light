@@ -178,6 +178,11 @@ struct GNSS_Data {
           eph.adjust_time(data.time_of_reception);
           break;
         }
+        case sbas_t::DEGRADATION_PARAMS: { // 10
+          typedef typename sbas_t::DegradationFactors dfactors_t;
+          dfactors_t dfactor(dfactors_t::raw_t::fetch(buf));
+          break;
+        }
         case sbas_t::IONO_GRID_POINT_MASKS: // 18
           igp.update_mask(buf);
           break;
