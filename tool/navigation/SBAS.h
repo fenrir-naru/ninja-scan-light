@@ -416,7 +416,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
       public:
         struct PointProperty {
           float_t delay; // [m]
-          float_t sigma; // [m^2], negative value means "not monitored"
+          float_t sigma2; // [m^2], negative value means "not monitored"
 
           struct raw_t {
             u16_t delay;
@@ -443,7 +443,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
               return 0.125 * v;
             }
 
-            static float_t raw2sigma(const u8_t &v){
+            static float_t raw2sigma2(const u8_t &v){
               switch(v){ ///< @see Table A-17
                 case 0:   return 0.0084;
                 case 1:   return 0.0333;
@@ -466,7 +466,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             operator PointProperty() const {
               PointProperty res = {
                 raw2delay(delay),
-                raw2sigma(error_indicator),
+                raw2sigma2(error_indicator),
               };
               return res;
             }
@@ -811,7 +811,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           }
 
           PointProperty compute_property(const typename PointProperty::raw_t *(&selected)[4]){
-            float_t delay_raw(0), sigma(0);
+            float_t delay_raw(0), sigma2(0);
             bool use_sigma(true);
             for(int i(0); i <= 3; i++){
               if(!checked[i]){continue;}
@@ -819,14 +819,14 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
               if(selected[i]->error_indicator == PointProperty::raw_t::ERROR_INDICATOR_NOT_MONITORED){
                 use_sigma = false;
               }else{
-                sigma += weight[i] * PointProperty::raw_t::raw2sigma(selected[i]->error_indicator);
+                sigma2 += weight[i] * PointProperty::raw_t::raw2sigma2(selected[i]->error_indicator);
               }
             }
             PointProperty res = {
               PointProperty::raw_t::raw2delay(delay_raw),
               use_sigma
-                  ? sigma
-                  : PointProperty::raw_t::raw2sigma(PointProperty::raw_t::ERROR_INDICATOR_NOT_MONITORED),
+                  ? sigma2
+                  : PointProperty::raw_t::raw2sigma2(PointProperty::raw_t::ERROR_INDICATOR_NOT_MONITORED),
             };
             return res;
           }
@@ -924,6 +924,14 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           return check_availability_hook(target, res);
         }
 
+        /**
+         * Select appropriate grids and perform interpolcation with the selected grids
+         *
+         * @param latitude_deg Latitude in degrees
+         * @param longitude_deg Longitude in degrees
+         * @return Interpolated result; if interpolation fails, PointProperty::unavailable will be returned.
+         * @see A.4.4.10.2, A.4.4.10.3
+         */
         PointProperty interpolate(const float_t &latitude_deg, const float_t &longitude_deg) const {
           pivot_t pivot(get_pivot(latitude_deg, longitude_deg));
           const typename PointProperty::raw_t *selected[4];
@@ -1241,6 +1249,34 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           }
           return out;
         }
+
+        /**
+         * Calculate correction value in accordance with ionospheric model
+         *
+         * @param relative_pos satellite position (relative position, NEU)
+         * @param usrllh user position (absolute position, LLH)
+         * @return correction in meters
+         * @see A.4.4.10
+         */
+        PointProperty iono_correction(
+            const enu_t &relative_pos,
+            const llh_t &usrllh) const {
+
+          // A.4.4.10.1 Pierce point calculation
+          typename gps_space_node_t::pierce_point_res_t pp(gps_space_node_t::pierce_point(relative_pos, usrllh));
+
+          // A.4.4.10.2 IGP selection, and A.4.4.10.3 Interpolation
+          PointProperty prop(interpolate(pp.latitude / M_PI * 180, pp.longitude / M_PI * 180));
+          if(prop != PointProperty::unavailable){
+
+            // A.4.4.10.4 Compute slant delay
+            float_t fpp(gps_space_node_t::slant_factor(relative_pos));
+            prop.delay *= fpp; // (A-41)
+            prop.sigma2 *= (fpp * fpp); // (A-43)
+          }
+
+          return prop;
+        }
     };
 
     /**
@@ -1267,6 +1303,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
      * @param year_utc UTC floating-point year
      * @param relative_pos satellite position (relative position, NEU)
      * @param usrllh user position (absolute position, LLH)
+     * @see A.4.2.4
      * @return correction in meters
      */
     float_t tropo_correction(
@@ -1291,7 +1328,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         {D2R(45), {1015.75, 283.15, 11.66, 5.58E-3, 2.57}, {-2.25, 11.00, 7.24, 0.32E-3, 0.46}},
         {D2R(60), {1011.75, 272.15,  6.78, 5.39E-3, 1.81}, {-1.75, 15.00, 5.36, 0.81E-3, 0.74}},
         {D2R(75), {1013.00, 263.65,  4.11, 4.53E-3, 1.55}, {-0.50, 14.50, 3.39, 0.62E-3, 0.30}},
-      };
+      }; // Table A-2
 #undef D2R
 
       float_t phi_abs(std::abs(usrllh.latitude()));
@@ -1755,7 +1792,7 @@ template <class FloatT>
 const typename SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty
     SBAS_SpaceNode<FloatT>::IonosphericGridPoints::PointProperty::unavailable = {
   0,
-  raw_t::raw2sigma(raw_t::ERROR_INDICATOR_NOT_MONITORED),
+  raw_t::raw2sigma2(raw_t::ERROR_INDICATOR_NOT_MONITORED),
 };
 
 template <class FloatT>
