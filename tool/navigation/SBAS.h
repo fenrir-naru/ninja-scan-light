@@ -925,7 +925,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         }
 
         /**
-         * Select appropriate grids and perform interpolcation with the selected grids
+         * Select appropriate grids and perform interpolation with the selected grids
          *
          * @param latitude_deg Latitude in degrees
          * @param longitude_deg Longitude in degrees
@@ -1123,26 +1123,25 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         }
 
       protected:
+        static const u8_t IODI_INVALID = 4; // valid value ranges from 0 to 3.
         struct {
           u8_t iodi;
           typename DataBlock::Type18::mask_t mask;
-        } masks[11];
+          void clear() {
+            iodi = IODI_INVALID;
+            mask.valid = 0;
+          }
+        } masks[11], masks_new[11]; // "masks" for normal use, "masks_new" for temporal use for iodi transition
 
-      public:
         /**
-         * Update mask
-         * @param band IGP band
-         * @param iodi_new Issue of data, ionospheric
-         * @param mask_new New mask
-         * @return True if mask is updated and changed, otherwise false.
+         * Update mask and IGPs based on new mask having new IODI
+         * @param band band number
+         * @see 2.1.4.9.3 "The equipment shall be able to store and use two IGP masks ..."
          */
-        bool update_mask(const u8_t &band,
-            const u8_t &iodi_new,
-            const typename DataBlock::Type18::mask_t &mask_new){
-          if(masks[band].iodi == iodi_new){return false;} // lazy decline of update
-
+        void transit_to_new_mask(const u8_t &band) {
           // remove points which is not activated in the new mask
-          typename DataBlock::Type18::mask_t &mask_old(masks[band].mask);
+          typename DataBlock::Type18::mask_t
+              &mask_old(masks[band].mask), &mask_new(masks_new[band].mask);
           for(u8_t i(0), j(0); i < mask_old.valid; ++i){
             bool still_use(false);
             for(; j < mask_new.valid; ++j){
@@ -1159,10 +1158,36 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             position_index_t index(position(band, mask_old.linear[i]));
             properties[index.lat_index][index.lng_index] = PointProperty::raw_t::unavailable;
           }
+          masks[band] = masks_new[band];
+          masks_new[band].clear();
+        }
 
-          masks[band].iodi = iodi_new;
-          mask_old = mask_new;
-          return true;
+      public:
+        /**
+         * Update mask
+         * @param band IGP band
+         * @param iodi_new Issue of data, ionospheric
+         * @param mask_new New mask
+         * @return True if mask is up to date, otherwise false.
+         */
+        bool update_mask(const u8_t &band,
+            const u8_t &iodi_new,
+            const typename DataBlock::Type18::mask_t &mask_new){
+          if((masks[band].iodi == iodi_new) || (masks_new[band].iodi == iodi_new)){
+            // lazy decline, because the same iodi means up to date
+            return true;
+          }
+          if(masks[band].iodi == IODI_INVALID){
+            masks[band].iodi = iodi_new;
+            masks[band].mask = mask_new;
+            return true;
+          }
+          if(masks_new[band].iodi == IODI_INVALID){
+            masks_new[band].iodi = iodi_new;
+            masks_new[band].mask = mask_new;
+            return true;
+          }
+          return false;
         }
         /**
          * Update mask with broadcasted data
@@ -1196,7 +1221,13 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         bool register_igp(const InputT *type26){
           typedef typename DataBlock::Type26 msg_t;
           u8_t band(msg_t::band(type26)), iodi(msg_t::iodi(type26));
-          if(masks[band].iodi != iodi){return false;}
+          if(masks[band].iodi != iodi){
+            if(masks_new[band].iodi != iodi){
+              return false;
+            }
+            // Change mask due to new arrival of IODI
+            transit_to_new_mask(band);
+          }
           u8_t *mask_pos(masks[band].mask.block[msg_t::block_id(type26)]);
           int i_max(masks[band].mask.valid - (mask_pos - masks[band].mask.linear));
           if(i_max > DataBlock::Type18::mask_t::each_block){
@@ -1215,8 +1246,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             }
           }
           for(int i(0); i < sizeof(masks) / sizeof(masks[0]); ++i){
-            masks[i].iodi = 4; // out of valid range
-            masks[i].mask.valid = 0;
+            masks[i].clear();
+          }
+          for(int i(0); i < sizeof(masks_new) / sizeof(masks_new[0]); ++i){
+            masks_new[i].clear();
           }
         }
         ~IonosphericGridPoints(){}
