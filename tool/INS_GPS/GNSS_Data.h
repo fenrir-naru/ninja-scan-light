@@ -184,10 +184,10 @@ struct GNSS_Data {
           break;
         }
         case sbas_t::IONO_GRID_POINT_MASKS: // 18
-          igp.update_mask(buf);
+          igp.update_mask(buf, data.time_of_reception);
           break;
         case sbas_t::IONO_DELAY_CORRECTION: // 26
-          if(igp.register_igp(buf)){
+          if(igp.register_igp(buf, data.time_of_reception)){
             std::cerr
                 << "Ionospheric delay grid map (S" << data.subframe.sv_number << "):" << std::endl
                 << igp << std::endl;

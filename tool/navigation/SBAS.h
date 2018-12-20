@@ -1162,6 +1162,22 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           masks_new[band].clear();
         }
 
+        void clear_igp() {
+          for(int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
+            for(int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
+              properties[i][j] = PointProperty::raw_t::unavailable;
+            }
+          }
+        }
+
+        void clear_mask(){
+          for(int i(0); i < sizeof(masks) / sizeof(masks[0]); ++i){
+            masks[i].clear();
+          }
+          for(int i(0); i < sizeof(masks_new) / sizeof(masks_new[0]); ++i){
+            masks_new[i].clear();
+          }
+        }
       public:
         /**
          * Update mask
@@ -1240,19 +1256,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         }
 
         IonosphericGridPoints(){
-          for(int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
-            for(int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
-              properties[i][j] = PointProperty::raw_t::unavailable;
-            }
-          }
-          for(int i(0); i < sizeof(masks) / sizeof(masks[0]); ++i){
-            masks[i].clear();
-          }
-          for(int i(0); i < sizeof(masks_new) / sizeof(masks_new[0]); ++i){
-            masks_new[i].clear();
-          }
+          clear_igp();
+          clear_mask();
         }
-        ~IonosphericGridPoints(){}
+        virtual ~IonosphericGridPoints(){}
 
         /**
          * Print delay map with ASCII characters
@@ -1309,6 +1316,78 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           }
 
           return prop;
+        }
+    };
+
+    class IonosphericGridPoints_with_Timeout : public IonosphericGridPoints {
+      protected:
+        gps_time_t t_last_mask;
+        gps_time_t t_last_correction;
+
+        bool is_mask_timeout(const gps_time_t &t_reception, const bool &LNAV_VNAV_LP_LPV_approach){
+          float_t delta_t(t_last_mask.interval(t_reception));
+          return LNAV_VNAV_LP_LPV_approach
+              ? (delta_t >= Timing::values[Timing::IONOSPHERIC_GRID_MASK].timeout_LNAV_VNAV_LP_LPV_approach)
+              : (delta_t >= Timing::values[Timing::IONOSPHERIC_GRID_MASK].timeout_EN_Route_Terminal_LNAV);
+        }
+        bool is_correction_timeout(const gps_time_t &t_reception, const bool &LNAV_VNAV_LP_LPV_approach){
+          float_t delta_t(t_last_correction.interval(t_reception));
+          return LNAV_VNAV_LP_LPV_approach
+              ? (delta_t >= Timing::values[Timing::IONOSPHERIC_CORRECTIONS].timeout_LNAV_VNAV_LP_LPV_approach)
+              : (delta_t >= Timing::values[Timing::IONOSPHERIC_CORRECTIONS].timeout_EN_Route_Terminal_LNAV);
+        }
+
+      public:
+        IonosphericGridPoints_with_Timeout()
+            : IonosphericGridPoints(),
+            t_last_mask(0, 0), t_last_correction(0, 0) {}
+
+        using IonosphericGridPoints::update_mask;
+        using IonosphericGridPoints::register_igp;
+        using IonosphericGridPoints::iono_correction;
+
+        template <class Input>
+        bool update_mask(
+            const Input *type18,
+            const gps_time_t &t_reception, const bool &LNAV_VNAV_LP_LPV_approach = false){
+
+          if(is_mask_timeout(t_reception, LNAV_VNAV_LP_LPV_approach)){
+            IonosphericGridPoints::clear_mask();
+          }
+          bool res(update_mask(type18));
+          if(res){
+            t_last_mask = t_reception;
+          }
+          return res;
+        }
+
+        template <class InputT>
+        bool register_igp(
+            const InputT *type26,
+            const gps_time_t &t_reception, const bool &LNAV_VNAV_LP_LPV_approach = false){
+
+          if(is_mask_timeout(t_reception, LNAV_VNAV_LP_LPV_approach)){
+            IonosphericGridPoints::clear_mask();
+            return false;
+          }
+          if(is_correction_timeout(t_reception, LNAV_VNAV_LP_LPV_approach)){
+            IonosphericGridPoints::clear_igp();
+          }
+          bool res(register_igp(type26));
+          if(res){
+            t_last_correction = t_reception;
+          }
+          return res;
+        }
+
+        typename IonosphericGridPoints::PointProperty iono_correction(
+            const enu_t &relative_pos, const llh_t &usrllh,
+            const gps_time_t &t, const bool &LNAV_VNAV_LP_LPV_approach = false) const {
+
+          if(is_correction_timeout(t, LNAV_VNAV_LP_LPV_approach)){
+            return IonosphericGridPoints::PointProperty::unavailable;
+          }
+          return iono_correction(relative_pos, usrllh);
         }
     };
 
