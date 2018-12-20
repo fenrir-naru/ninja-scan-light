@@ -1619,12 +1619,27 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             }
           }
 
+          /**
+           * Check availability
+           * @param t target time
+           * @return always true, because timeout, which is based on the reception time,
+           * is the only way to make this ephemeris unavailable.
+           * This class does not take the reception time into account.
+           * @see 2.1.1.4.9, A.4.5.1.3.3
+           */
           bool is_valid(const gps_time_t &t) const {
-            return false; // TODO @see A.4.5.1.3.3.
+            return true;
           }
 
+          /**
+           * Check fitness based on time of applicability (t_0) of ephemeris
+           * @param t target time
+           * @return true when best fit, otherwise, false
+           * @see A.4.5.1.3.3 (A-56)
+           */
           bool maybe_better_one_avilable(const gps_time_t &t) const {
-            return false; // TODO @see A.4.5.1.3.3.
+            float_t delta_t(-t.interval(WN, t_0));
+            return (delta_t < 0) || (delta_t > Timing::values[Timing::GEO_NAVIGATION_DATA].interval);
           }
 
           constellation_t constellation(
