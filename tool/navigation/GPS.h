@@ -1173,8 +1173,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     class PropertyHistory {
       protected:
         struct item_t : public PropertyT {
-          unsigned int priority;
-          int_t t_tag;
+          int priority;
+          int_t t_tag; ///< time tag calculated with base_time()
 
           static int calc_t_tag(const float_t &t, const int &threshold = 10){
             float_t res(std::floor((t + (0.5 * threshold)) / threshold));
@@ -1189,7 +1189,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           item_t() : priority(0), t_tag(0) {}
           item_t(const PropertyT &prop)
               : PropertyT(prop), priority(0), t_tag(calc_t_tag(prop)) {}
-          item_t(const PropertyT &prop, const unsigned int &priority_init)
+          item_t(const PropertyT &prop, const int &priority_init)
               : PropertyT(prop), priority(priority_init), t_tag(calc_t_tag(prop)) {}
           item_t &operator=(const PropertyT &prop){
             PropertyT::operator=(prop);
@@ -1202,7 +1202,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           }
         };
         typedef std::vector<item_t> history_t;
-        history_t history; // list in chronological and higher priority order
+        history_t history; // listed in chronological and higher priority order
         typename history_t::size_type selected_index;
 
         typename history_t::iterator selected_iterator() {
@@ -1276,8 +1276,11 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          * Add new item
          *
          * @param item new item, assuming the latest one
+         * @param priority_delta If the new item is already registered,
+         * its priority will be increased by priority_delta.
+         * If priority_delta == 0, the previous item is replaced to the new item.
          */
-        void add(const PropertyT &item, const unsigned int &priority_delta = 1){
+        void add(const PropertyT &item, const int &priority_delta = 1){
           int t_tag_new(item_t::calc_t_tag(item));
           typename history_t::iterator it_insert(history.begin());
 
@@ -1292,6 +1295,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             if(delta_t_tag == 0){ // same time stamp(s)
               do{
                 if(it->is_equivalent(item)){
+                  if(priority_delta == 0){
+                    *it = item;
+                    return;
+                  }
                   int rel_pos(selected_index - (std::distance(history.begin(), it.base()) - 1));
                   int shift(0);
                   (it->priority) += priority_delta; // increase priority
@@ -1453,7 +1460,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           eph_history.each(functor, mode);
         }
 
-        void register_ephemeris(const eph_t &eph, const unsigned int &priority_delta = 1){
+        void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
           eph_history.add(eph, priority_delta);
         }
 
