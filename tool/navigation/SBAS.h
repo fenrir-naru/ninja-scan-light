@@ -1774,6 +1774,54 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           }
         };
 
+        struct Ephemeris_with_Timeout : public Ephemeris {
+          gps_time_t t_reception;
+
+          Ephemeris_with_Timeout() : Ephemeris() {}
+
+          /**
+           * Constructor to convert Ephemeris
+           * reception time is interpreted to be equivalent to time of applicability (t_0)
+           */
+          Ephemeris_with_Timeout(const Ephemeris &eph)
+              : Ephemeris(eph), t_reception(eph.WN, eph.t_0) {}
+
+          /**
+           * Check availability on EN_Route, Terminal, or LNAV
+           * @param t target time
+           * @return true when interval between message reception time
+           * and current time is within timeout threshold, otherwise false.
+           * @see 2.1.1.4.9, A.4.5.1.3.3
+           */
+          bool is_valid_EN_Route_Terminal_LNAV(const gps_time_t &t) const {
+            float_t delta_t(t_reception.interval(t));
+            return delta_t < Timing::values[
+                Timing::GEO_NAVIGATION_DATA].timeout_EN_Route_Terminal_LNAV;
+          }
+
+          /**
+           * Check availability on LNAV, VNAV, LP, or LPV approach
+           * @param t target time
+           * @return true when interval between message reception time
+           * and current time is within timeout threshold, otherwise false.
+           * @see 2.1.1.4.9, A.4.5.1.3.3
+           */
+          bool is_valid_LNAV_VNAV_LP_LPV_approach(const gps_time_t &t) const {
+            float_t delta_t(t_reception.interval(t));
+            return delta_t < Timing::values[
+                Timing::GEO_NAVIGATION_DATA].timeout_LNAV_VNAV_LP_LPV_approach;
+          }
+
+          /**
+           * Return reception time as base time, which is different from non-timeout version for time of applicability.
+           * This function will be used to sort multiple ephemeris in order of reception time.
+           * @see Ephemeris::base_time()
+           */
+          gps_time_t base_time() const {
+            return t_reception;
+          }
+        };
+
         /**
          * SBAS almanac
          * @see Table A-19
@@ -1853,7 +1901,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
 
     class Satellite : public SatelliteProperties {
       public:
-        typedef typename SatelliteProperties::Ephemeris eph_t;
+        typedef typename SatelliteProperties::Ephemeris_with_Timeout eph_t;
         typedef typename gps_space_node_t::template PropertyHistory<eph_t> eph_list_t;
       protected:
         eph_list_t eph_history;
