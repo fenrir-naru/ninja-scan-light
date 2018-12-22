@@ -1289,43 +1289,66 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               ++it){
 
             int delta_t_tag(t_tag_new - it->t_tag);
-            if(delta_t_tag < 0){continue;} // input item is older.
+            if(delta_t_tag < 0){continue;} // adding item is older.
 
             it_insert = it.base();
-            if(delta_t_tag == 0){ // same time stamp(s)
-              do{
-                if(it->is_equivalent(item)){
-                  if(priority_delta == 0){
-                    *it = item;
-                    return;
-                  }
-                  int rel_pos(selected_index - (std::distance(history.begin(), it.base()) - 1));
-                  int shift(0);
-                  (it->priority) += priority_delta; // increase priority
-                  for(typename history_t::reverse_iterator it_previous(it + 1);
-                      it_previous != history.rend()
-                        && (it_previous->t_tag == t_tag_new)
-                        && (it_previous->priority <= it->priority); // if priority is same or higher, then swap.
-                      ++it, ++it_previous, --shift){
-                    item_t tmp(*it);
-                    *it = *it_previous;
-                    *it_previous = tmp;
-                  }
-                  if(rel_pos == 0){ // when selected as appropriate item
-                    selected_index += shift;
-                  }else if((rel_pos < 0) && (rel_pos >= shift)){
-                    // when selected item has same time stamp and different content, and its priority is lower.
-                    selected_index++;
-                  }
-                  return;
+            if(delta_t_tag > 0){break;} // adding item is newer.
+
+            while(true){ // Loop for items having the same time stamp; delta_t_tag == 0
+              if(!(it->is_equivalent(item))){
+                if(it->priority <= priority_delta){
+                  it_insert = it.base() - 1;
                 }
                 if(((++it) == history.rend()) || (it->t_tag < t_tag_new)){break;}
-                if(it->priority <= priority_delta){
-                  it_insert = it.base();
+                continue;
+              }
+
+              // When the content is equivalent
+              if(priority_delta == 0){ // replace to newer one
+                *it = item;
+                return;
+              }
+
+              int rel_pos(selected_index - (std::distance(history.begin(), it.base()) - 1));
+              int shift(0);
+              (it->priority) += priority_delta;
+              item_t copy(*it);
+
+              if(priority_delta > 0){ // priority increased, thus move backward
+                for(typename history_t::reverse_iterator it_previous(it + 1);
+                    it_previous != history.rend()
+                      && (it_previous->t_tag == t_tag_new)
+                      && (it_previous->priority <= copy.priority); // if priority is same or higher, then swap.
+                    ++it, ++it_previous, --shift){
+                  *it = *it_previous;
                 }
-              }while(true);
+                if(shift != 0){*it = copy;} // moved
+              }else{ // priority decreased, thus move forward
+                typename history_t::iterator it2(it.base() - 1);
+                for(typename history_t::iterator it2_next(it2 + 1);
+                    it2_next != history.end()
+                      && (it2_next->t_tag == t_tag_new)
+                      && (it2_next->priority > copy.priority); // if priority is lower, then swap.
+                    ++it2, ++it2_next, ++shift){
+                  *it2 = *it2_next;
+                }
+                if(shift != 0){*it2 = copy;} // moved
+              }
+
+              if(rel_pos == 0){ // When the added item is selected
+                selected_index += shift;
+              }else if((rel_pos < 0) && (shift <= rel_pos)){
+                // When selected item has same time stamp and different content, and its priority is higher.
+                selected_index++;
+              }else if((rel_pos > 0) && (shift >= rel_pos)){
+                // When selected item has same time stamp and different content, and its priority is higher.
+                selected_index--;
+              }
+
+              return;
             }
-            break;
+
+            break; // Reach only when having the same time stamp, but different content
           }
 
           // insert new one.
