@@ -1681,10 +1681,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             s8_t a_Gf1;           ///< Clock correction parameter (2^-40, s/s)
 
             template <class InputT>
-            static raw_t fetch(const InputT *buf){
+            static raw_t fetch(const InputT *buf, const u8_t &sv_number = 0){
               typedef typename DataBlock::Type9 msg_t;
               raw_t res = {
-                0, // svid
+                sv_number, // svid
                 msg_t::t0(buf), // t_0
                 msg_t::ura(buf), // URA
                 msg_t::x(buf), msg_t::y(buf), msg_t::z(buf), // x, y, z
@@ -1777,14 +1777,28 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
         struct Ephemeris_with_Timeout : public Ephemeris {
           gps_time_t t_reception;
 
-          Ephemeris_with_Timeout() : Ephemeris() {}
+          Ephemeris_with_Timeout() : Ephemeris(), t_reception(0, 0) {}
 
           /**
            * Constructor to convert Ephemeris
-           * reception time is interpreted to be equivalent to time of applicability (t_0)
+           * reception time is interpreted to be equivalent to time of applicability (t_0) of eph,
+           * therefore, eph is assumed that its t_0, i.e., week number and time of week,
+           * has already been adjusted.
+           * @param eph Epehemris
            */
           Ephemeris_with_Timeout(const Ephemeris &eph)
               : Ephemeris(eph), t_reception(eph.WN, eph.t_0) {}
+
+          /**
+           * Constructor to convert Ephemeris with reception time
+           * reception time will be adjusted with time of reception.
+           * @param eph Ephemeris
+           * @param t_rx Reception time
+           */
+          Ephemeris_with_Timeout(const Ephemeris &eph, const gps_time_t &t_rx)
+              : Ephemeris(eph), t_reception(t_rx) {
+            Ephemeris::adjust_time(t_rx);
+          }
 
           /**
            * Check availability on EN_Route, Terminal, or LNAV
@@ -1903,10 +1917,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
       public:
         typedef typename SatelliteProperties::Ephemeris_with_Timeout eph_t;
         typedef typename gps_space_node_t::template PropertyHistory<eph_t> eph_list_t;
+        typedef IonosphericGridPoints_with_Timeout igp_t;
       protected:
         eph_list_t eph_history;
+        igp_t igp;
       public:
-        Satellite() : eph_history() {
+        Satellite() : eph_history(), igp() {
           // setup first ephemeris as invalid one
           eph_t &eph_current(const_cast<eph_t &>(eph_history.current()));
           eph_current.WN = 0;
