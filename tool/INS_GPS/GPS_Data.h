@@ -176,6 +176,7 @@ struct GPS_Data {
           // Original WN is truncated to 10 bits.
           eph.WN = (week_number - (week_number % 0x400)) + (eph.WN % 0x400);
           space_node->satellite(eph.svid).register_ephemeris(eph);
+          eph.iodc = eph.iode = eph.iode2 = -1; // invalidate
           return true;
         }
       }else if((data.subframe.subframe_no == 4) && (data.subframe.sv_or_page_id == 56)){ // IONO UTC parameters
