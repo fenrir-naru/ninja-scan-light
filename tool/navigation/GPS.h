@@ -1047,8 +1047,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return false;
           }
 
-          float_t base_time() const {
-            return gps_time_t(WN, t_oc).serialize();
+          gps_time_t base_time() const {
+            return gps_time_t(WN, t_oc);
           }
         };
 
@@ -1185,6 +1185,9 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             if(res >= INT_MAX){return INT_MAX;}
             if(res <= INT_MIN){return INT_MIN;}
             return (int)res;
+          }
+          static int calc_t_tag(const gps_time_t &t){
+            return calc_t_tag(t.serialize());
           }
           static int calc_t_tag(const PropertyT &prop){
             return calc_t_tag(prop.base_time());
@@ -1367,19 +1370,23 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          *
          * @param target_time time at measurement
          * @param is_valid function to check validity subject to specific time
-         * @param get_delta_t function to get time difference (delta_t)
+         * @param get_delta_t function to get time difference (delta_t).
+         * When NULL (default), time tag is used to calculate delta_t.
          * @return if true, a better valid item is newly selected; otherwise false.
          */
         bool select(
             const gps_time_t &target_time,
             bool (PropertyT::*is_valid)(const gps_time_t &) const,
-            float_t (PropertyT::*get_delta_t)(const gps_time_t &) const){
+            float_t (PropertyT::*get_delta_t)(const gps_time_t &) const = NULL){
           typename history_t::iterator it_selected(selected_iterator());
 
           bool changed(false);
 
           int t_tag(it_selected->t_tag);
-          float_t delta_t(((*it_selected).*get_delta_t)(target_time));
+          int t_tag_target(item_t::calc_t_tag(target_time));
+          float_t delta_t(get_delta_t
+              ? ((*it_selected).*get_delta_t)(target_time)
+              : (t_tag_target - t_tag));
 
           typename history_t::iterator it, it_last;
           if(delta_t >= 0){
@@ -1401,7 +1408,9 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           for( ; it != it_last; ++it){
             if(changed && (t_tag == it->t_tag)){continue;} // skip one having same time tag, because highest priority one is selected.
             if(!(((*it).*is_valid)(target_time))){continue;}
-            float_t delta_t2(((*it).*get_delta_t)(target_time));
+            float_t delta_t2(get_delta_t
+                ? ((*it).*get_delta_t)(target_time)
+                : (t_tag_target - it->t_tag));
             if(delta_t2 < 0){delta_t2 *= -1;}
             if(delta_t > delta_t2){ // update
               changed = true;
