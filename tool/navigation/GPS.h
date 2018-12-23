@@ -617,7 +617,9 @@ class GPS_SpaceNode {
           }
           
           /**
-           * @return (float_t) if valid ephemeris, the return value is always positive.
+           * @return (float_t) if valid ephemeris, the return value is always positive,
+           * because (t - t_oc), and (t - t_oe) in equations are normally negative.
+           * @see 20.3.4.5, Table 20-XIII
            */
           inline float_t period_from_first_valid_transmittion(const gps_time_t &t) const {
             return period_from_time_of_clock(t) + (fit_interval / 2);
@@ -1361,12 +1363,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         }
 
         /**
-         * Select appropriate item within registered ones.
+         * Select best valid item among registered ones.
          *
          * @param target_time time at measurement
          * @param is_valid function to check validity subject to specific time
          * @param get_delta_t function to get time difference (delta_t)
-         * @return if true, more appropriate item is newly selected; otherwise false.
+         * @return if true, a better valid item is newly selected; otherwise false.
          */
         bool select(
             const gps_time_t &target_time,
@@ -1385,16 +1387,23 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             it = it_selected + 1;
             it_last = history.end();
           }else{
-            // find older (rare case)
+            // find older (rare case, slow)
             it = history.begin();
             it_last = it_selected;
+            delta_t *= -1;
           }
 
+          /* Selection priority:
+           * Valid item having higher priority and less abs(delta_t),
+           * which means when an item has been selected,
+           * the others having same time tag will be skipped.
+           */
           for( ; it != it_last; ++it){
-            if(changed && (t_tag == it->t_tag)){continue;} // skip one having same time tag, because highest priority one is head.
+            if(changed && (t_tag == it->t_tag)){continue;} // skip one having same time tag, because highest priority one is selected.
             if(!(((*it).*is_valid)(target_time))){continue;}
             float_t delta_t2(((*it).*get_delta_t)(target_time));
-            if((!changed) || (delta_t > delta_t2)){ // update
+            if(delta_t2 < 0){delta_t2 *= -1;}
+            if(delta_t > delta_t2){ // update
               changed = true;
               t_tag = it->t_tag;
               delta_t = delta_t2;
