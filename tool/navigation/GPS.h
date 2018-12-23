@@ -1169,21 +1169,23 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         };
     };
 
-    template <class PropertyT = typename SatelliteProperties::Ephemeris>
+    template <
+        class PropertyT = typename SatelliteProperties::Ephemeris,
+        int TimeQuantization = 10>
     class PropertyHistory {
       protected:
         struct item_t : public PropertyT {
           int priority;
           int_t t_tag; ///< time tag calculated with base_time()
 
-          static int calc_t_tag(const float_t &t, const int &threshold = 10){
-            float_t res(std::floor((t + (0.5 * threshold)) / threshold));
+          static int calc_t_tag(const float_t &t){
+            float_t res(std::floor((t + (0.5 * TimeQuantization)) / TimeQuantization));
             if(res >= INT_MAX){return INT_MAX;}
             if(res <= INT_MIN){return INT_MIN;}
             return (int)res;
           }
-          static int calc_t_tag(const PropertyT &prop, const int &threshold = 10){
-            return calc_t_tag(prop.base_time(), threshold);
+          static int calc_t_tag(const PropertyT &prop){
+            return calc_t_tag(prop.base_time());
           }
 
           item_t() : priority(0), t_tag(0) {}
