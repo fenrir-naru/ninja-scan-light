@@ -559,9 +559,9 @@ class GPS_SpaceNode {
       };
     };
   public:
-    class Satellite {
-      public:
 
+    class SatelliteProperties {
+      public:
         struct constellation_t {
           xyz_t position;
           xyz_t velocity;
@@ -617,7 +617,9 @@ class GPS_SpaceNode {
           }
           
           /**
-           * @return (float_t) if valid ephemeris, the return value is always positive.
+           * @return (float_t) if valid ephemeris, the return value is always positive,
+           * because (t - t_oc), and (t - t_oe) in equations are normally negative.
+           * @see 20.3.4.5, Table 20-XIII
            */
           inline float_t period_from_first_valid_transmittion(const gps_time_t &t) const {
             return period_from_time_of_clock(t) + (fit_interval / 2);
@@ -1044,9 +1046,11 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             }while(false);
             return false;
           }
-        };
-        
 
+          gps_time_t base_time() const {
+            return gps_time_t(WN, t_oc);
+          }
+        };
 
         /**
          * GPS almanac
@@ -1165,85 +1169,87 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             }
           };
         };
-      protected:
-        struct eph_list_item_t : public Ephemeris {
-          unsigned int priority;
-          int_t t_tag;
+    };
 
-          static int calc_t_tag(const float_t &t, const int &threshold = 10){
-            float_t res(std::floor((t + (0.5 * threshold)) / threshold));
+    template <
+        class PropertyT = typename SatelliteProperties::Ephemeris,
+        int TimeQuantization = 10>
+    class PropertyHistory {
+      protected:
+        struct item_t : public PropertyT {
+          int priority;
+          int_t t_tag; ///< time tag calculated with base_time()
+
+          static int calc_t_tag(const float_t &t){
+            float_t res(std::floor((t + (0.5 * TimeQuantization)) / TimeQuantization));
             if(res >= INT_MAX){return INT_MAX;}
             if(res <= INT_MIN){return INT_MIN;}
             return (int)res;
           }
-          static int calc_t_tag(const Ephemeris &eph, const int &threshold = 10){
-            return calc_t_tag(gps_time_t(eph.WN, eph.t_oc).serialize());
+          static int calc_t_tag(const gps_time_t &t){
+            return calc_t_tag(t.serialize());
+          }
+          static int calc_t_tag(const PropertyT &prop){
+            return calc_t_tag(prop.base_time());
           }
 
-          eph_list_item_t() : priority(0), t_tag(0) {}
-          eph_list_item_t(const Ephemeris &eph)
-              : Ephemeris(eph), priority(0), t_tag(calc_t_tag(eph)) {}
-          eph_list_item_t(const Ephemeris &eph, const unsigned int &priority_init)
-              : Ephemeris(eph), priority(priority_init), t_tag(calc_t_tag(eph)) {}
-          eph_list_item_t &operator=(const Ephemeris &eph){
-            Ephemeris::operator=(eph);
-            t_tag = calc_t_tag(eph);
+          item_t() : priority(0), t_tag(0) {}
+          item_t(const PropertyT &prop)
+              : PropertyT(prop), priority(0), t_tag(calc_t_tag(prop)) {}
+          item_t(const PropertyT &prop, const int &priority_init)
+              : PropertyT(prop), priority(priority_init), t_tag(calc_t_tag(prop)) {}
+          item_t &operator=(const PropertyT &prop){
+            PropertyT::operator=(prop);
+            t_tag = calc_t_tag(prop);
             return *this;
           }
 
-          bool operator==(const Ephemeris &eph){
-            return Ephemeris::is_equivalent(eph);
+          bool operator==(const PropertyT &prop){
+            return PropertyT::is_equivalent(prop);
           }
         };
-        typedef std::vector<eph_list_item_t> eph_list_t;
-        eph_list_t eph_list; // ephemeris list in chronological and higher priority order
-        typename eph_list_t::size_type eph_current_index;
+        typedef std::vector<item_t> history_t;
+        history_t history; // listed in chronological and higher priority order
+        typename history_t::size_type selected_index;
 
-        typename eph_list_t::iterator current_ephemeris_iterator() {
-          typename eph_list_t::iterator it(eph_list.begin());
-          std::advance(it, eph_current_index);
+        typename history_t::iterator selected_iterator() {
+          typename history_t::iterator it(history.begin());
+          std::advance(it, selected_index);
           return it;
         }
 
       public:
-        Satellite() : eph_list(1), eph_current_index(0) {
-          // setup first ephemeris as invalid one
-          Ephemeris &eph_current(eph_list[eph_current_index]);
-          eph_current.WN = 0;
-          eph_current.t_oc = 0;
-          eph_current.t_oe = 0;
-          eph_current.fit_interval = -1;
-        }
+        PropertyHistory() : history(1), selected_index(0) {}
 
-        enum each_ephemeris_mode_t {
-          EACH_EPHEMERIS_ALL,
-          EACH_EPHEMERIS_ALL_INVERTED,
-          EACH_EPHEMERIS_NO_REDUNDANT,
+        enum each_mode_t {
+          EACH_ALL,
+          EACH_ALL_INVERTED,
+          EACH_NO_REDUNDANT,
         };
 
         /**
-         * Iterate each ephemeris.
+         * Iterate each item.
          *
-         * @param mode If EACH_EPHEMERIS_ALL, all ephemeris will be passed, and when multiple ephemeris have same t_tag,
+         * @param mode If EACH_ALL, all items will be passed, and when multiple items have same t_tag,
          * their order will be unchanged (highest to lowest priorities).
-         * If EACH_EPHEMERIS_ALL_INVERTED, all ephemeris will be passed, and when multiple ephemeris have same t_tag,
+         * If EACH_ALL_INVERTED, all items will be passed, and when multiple items have same t_tag,
          * their order will be inverted (lowest to highest priorities).
-         * If EACH_EPHEMERIS_NO_REDUNDANT, when multiple ephemeris have same t_tag,
-         * then, only ephemeris which has highest priority will be passed.
+         * If EACH_NO_REDUNDANT, when multiple items have same t_tag,
+         * then, only item which has highest priority will be passed.
          */
         template <class Functor>
-        void each_ephemeris(
+        void each(
             Functor &functor,
-            const each_ephemeris_mode_t &mode = EACH_EPHEMERIS_ALL) const {
+            const each_mode_t &mode = EACH_ALL) const {
           switch(mode){
-            case EACH_EPHEMERIS_ALL_INVERTED: {
-              typename eph_list_t::const_iterator it(eph_list.begin() + 1);
-              while(it != eph_list.end()){
-                typename eph_list_t::const_iterator it2(it + 1);
-                while((it2 != eph_list.end()) && (it->t_tag == it2->t_tag)){
+            case EACH_ALL_INVERTED: {
+              typename history_t::const_iterator it(history.begin() + 1);
+              while(it != history.end()){
+                typename history_t::const_iterator it2(it + 1);
+                while((it2 != history.end()) && (it->t_tag == it2->t_tag)){
                   ++it2;
                 }
-                typename eph_list_t::const_iterator it_next(it2);
+                typename history_t::const_iterator it_next(it2);
                 do{
                   functor(*(--it2));
                 }while(it2 != it);
@@ -1251,10 +1257,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               }
               break;
             }
-            case EACH_EPHEMERIS_NO_REDUNDANT: {
+            case EACH_NO_REDUNDANT: {
               int_t t_tag(0);
-              for(typename eph_list_t::const_iterator it(eph_list.begin() + 1);
-                  it != eph_list.end();
+              for(typename history_t::const_iterator it(history.begin() + 1);
+                  it != history.end();
                   ++it){
                 if(t_tag == it->t_tag){continue;}
                 functor(*it);
@@ -1262,10 +1268,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               }
               break;
             }
-            case EACH_EPHEMERIS_ALL:
+            case EACH_ALL:
             default:
-              for(typename eph_list_t::const_iterator it(eph_list.begin() + 1);
-                  it != eph_list.end();
+              for(typename history_t::const_iterator it(history.begin() + 1);
+                  it != history.end();
                   ++it){
                 functor(*it);
               }
@@ -1274,123 +1280,167 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         }
 
         /**
-         * Add new ephemeris
+         * Add new item
          *
-         * @param eph ephemeris, assuming the latest one
+         * @param item new item, assuming the latest one
+         * @param priority_delta If the new item is already registered,
+         * its priority will be increased by priority_delta.
+         * If priority_delta == 0, the previous item is replaced to the new item.
          */
-        void register_ephemeris(const Ephemeris &eph, const unsigned int &priority_delta = 1){
-          int t_tag_new(eph_list_item_t::calc_t_tag(eph));
-          typename eph_list_t::iterator it_insert(eph_list.begin());
+        void add(const PropertyT &item, const int &priority_delta = 1){
+          int t_tag_new(item_t::calc_t_tag(item));
+          typename history_t::iterator it_insert(history.begin());
 
-          for(typename eph_list_t::reverse_iterator it(eph_list.rbegin());
-              it != eph_list.rend();
+          for(typename history_t::reverse_iterator it(history.rbegin());
+              it != history.rend();
               ++it){
 
             int delta_t_tag(t_tag_new - it->t_tag);
-            if(delta_t_tag < 0){continue;} // input ephemeris is older.
+            if(delta_t_tag < 0){continue;} // adding item is older.
 
             it_insert = it.base();
-            if(delta_t_tag == 0){ // same time stamp(s)
-              do{
-                if(it->is_equivalent(eph)){
-                  int rel_pos(eph_current_index - (std::distance(eph_list.begin(), it.base()) - 1));
-                  int shift(0);
-                  (it->priority) += priority_delta; // increase priority
-                  for(typename eph_list_t::reverse_iterator it_previous(it + 1);
-                      it_previous != eph_list.rend()
-                        && (it_previous->t_tag == t_tag_new)
-                        && (it_previous->priority <= it->priority); // if priority is same or higher, then swap.
-                      ++it, ++it_previous, --shift){
-                    eph_list_item_t tmp(*it);
-                    *it = *it_previous;
-                    *it_previous = tmp;
-                  }
-                  if(rel_pos == 0){ // when selected as current ephemeris
-                    eph_current_index += shift;
-                  }else if((rel_pos < 0) && (rel_pos >= shift)){
-                    // when current ephemeris has same time stamp and different content, and its priority is lower.
-                    eph_current_index++;
-                  }
-                  return;
-                }
-                if(((++it) == eph_list.rend()) || (it->t_tag < t_tag_new)){break;}
+            if(delta_t_tag > 0){break;} // adding item is newer.
+
+            while(true){ // Loop for items having the same time stamp; delta_t_tag == 0
+              if(!(it->is_equivalent(item))){
                 if(it->priority <= priority_delta){
-                  it_insert = it.base();
+                  it_insert = it.base() - 1;
                 }
-              }while(true);
+                if(((++it) == history.rend()) || (it->t_tag < t_tag_new)){break;}
+                continue;
+              }
+
+              // When the content is equivalent
+              if(priority_delta == 0){ // replace to newer one
+                *it = item;
+                return;
+              }
+
+              int rel_pos(selected_index - (std::distance(history.begin(), it.base()) - 1));
+              int shift(0);
+              (it->priority) += priority_delta;
+              item_t copy(*it);
+
+              if(priority_delta > 0){ // priority increased, thus move backward
+                for(typename history_t::reverse_iterator it_previous(it + 1);
+                    it_previous != history.rend()
+                      && (it_previous->t_tag == t_tag_new)
+                      && (it_previous->priority <= copy.priority); // if priority is same or higher, then swap.
+                    ++it, ++it_previous, --shift){
+                  *it = *it_previous;
+                }
+                if(shift != 0){*it = copy;} // moved
+              }else{ // priority decreased, thus move forward
+                typename history_t::iterator it2(it.base() - 1);
+                for(typename history_t::iterator it2_next(it2 + 1);
+                    it2_next != history.end()
+                      && (it2_next->t_tag == t_tag_new)
+                      && (it2_next->priority > copy.priority); // if priority is lower, then swap.
+                    ++it2, ++it2_next, ++shift){
+                  *it2 = *it2_next;
+                }
+                if(shift != 0){*it2 = copy;} // moved
+              }
+
+              if(rel_pos == 0){ // When the added item is selected
+                selected_index += shift;
+              }else if((rel_pos < 0) && (shift <= rel_pos)){
+                // When selected item has same time stamp and different content, and its priority is higher.
+                selected_index++;
+              }else if((rel_pos > 0) && (shift >= rel_pos)){
+                // When selected item has same time stamp and different content, and its priority is higher.
+                selected_index--;
+              }
+
+              return;
             }
-            break;
+
+            break; // Reach only when having the same time stamp, but different content
           }
 
           // insert new one.
-          if(std::distance(eph_list.begin(), it_insert) < eph_current_index){
-            eph_current_index++;
+          if(std::distance(history.begin(), it_insert) < selected_index){
+            selected_index++;
           }
-          eph_list.insert(it_insert, eph_list_item_t(eph, priority_delta));
+          history.insert(it_insert, item_t(item, priority_delta));
         }
 
         /**
-         * Select appropriate ephemeris within registered ones.
+         * Select best valid item among registered ones.
          *
          * @param target_time time at measurement
-         * @return if true, appropriate ephemeris is selected, otherwise, not selected.
+         * @param is_valid function to check validity subject to specific time
+         * @param get_delta_t function to get time difference (delta_t).
+         * When NULL (default), time tag is used to calculate delta_t.
+         * @return if true, a better valid item is newly selected; otherwise false.
          */
-        bool select_ephemeris(const gps_time_t &target_time){
+        bool select(
+            const gps_time_t &target_time,
+            bool (PropertyT::*is_valid)(const gps_time_t &) const,
+            float_t (PropertyT::*get_delta_t)(const gps_time_t &) const = NULL){
+          typename history_t::iterator it_selected(selected_iterator());
 
-          typename eph_list_t::iterator eph_current(current_ephemeris_iterator());
+          bool changed(false);
 
-          bool is_valid(eph_current->is_valid(target_time));
-          if(is_valid && (!eph_current->maybe_better_one_avilable(target_time))){
-            return true; // conservative
-          }
+          int t_tag(it_selected->t_tag);
+          int t_tag_target(item_t::calc_t_tag(target_time));
+          float_t delta_t(get_delta_t
+              ? ((*it_selected).*get_delta_t)(target_time)
+              : (t_tag_target - t_tag));
 
-          int t_tag(eph_current->t_tag);
-          float_t delta_t(eph_current->period_from_first_valid_transmittion(target_time));
-
-          typename eph_list_t::iterator it, it_last;
+          typename history_t::iterator it, it_last;
           if(delta_t >= 0){
             // find newer
-            it = eph_current + 1;
-            it_last = eph_list.end();
+            it = it_selected + 1;
+            it_last = history.end();
           }else{
-            // find older (rare case)
-            it = eph_list.begin();
-            it_last = eph_current;
+            // find older (rare case, slow)
+            it = history.begin();
+            it_last = it_selected;
+            delta_t *= -1;
           }
 
+          /* Selection priority:
+           * Valid item having higher priority and less abs(delta_t),
+           * which means when an item has been selected,
+           * the others having same time tag will be skipped.
+           */
           for( ; it != it_last; ++it){
-            if(is_valid && (t_tag == it->t_tag)){continue;} // skip one having same time tag, because highest priority one is head.
-            if(!it->is_valid(target_time)){continue;}
-            float_t delta_t2(it->period_from_first_valid_transmittion(target_time));
-            if((!is_valid) || (delta_t > delta_t2)){ // update
-              is_valid = true;
+            if(changed && (t_tag == it->t_tag)){continue;} // skip one having same time tag, because highest priority one is selected.
+            if(!(((*it).*is_valid)(target_time))){continue;}
+            float_t delta_t2(get_delta_t
+                ? ((*it).*get_delta_t)(target_time)
+                : (t_tag_target - it->t_tag));
+            if(delta_t2 < 0){delta_t2 *= -1;}
+            if(delta_t > delta_t2){ // update
+              changed = true;
               t_tag = it->t_tag;
               delta_t = delta_t2;
-              eph_current_index = std::distance(eph_list.begin(), it);
+              selected_index = std::distance(history.begin(), it);
             }
           }
 
-          return is_valid;
+          return changed;
         }
 
         /**
          * Merge information
          */
-        void merge(const Satellite &another, const bool &keep_original = true){
-          eph_list_t list_new;
-          list_new.push_back(eph_list[0]);
-          typename eph_list_t::const_iterator
-              it1(eph_list.begin() + 1), it2(another.eph_list.begin() + 1);
-          typename eph_list_t::size_type current_index_new(eph_current_index);
-          int shift_count(eph_current_index - 1);
+        void merge(const PropertyHistory &another, const bool &keep_original = true){
+          history_t list_new;
+          list_new.push_back(history[0]);
+          typename history_t::const_iterator
+              it1(history.begin() + 1), it2(another.history.begin() + 1);
+          typename history_t::size_type current_index_new(selected_index);
+          int shift_count(selected_index - 1);
           while(true){
-            if(it1 == eph_list.end()){
-              while(it2 != another.eph_list.end()){
+            if(it1 == history.end()){
+              while(it2 != another.history.end()){
                 list_new.push_back(*it2);
               }
               break;
-            }else if(it2 == another.eph_list.end()){
-              while(it1 != eph_list.end()){
+            }else if(it2 == another.history.end()){
+              while(it1 != history.end()){
                 list_new.push_back(*it1);
               }
               break;
@@ -1421,14 +1471,67 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               if(shift_count >= 0){++current_index_new;}
             }
           }
-          eph_list = list_new;
-          eph_current_index = current_index_new;
+          history = list_new;
+          selected_index = current_index_new;
         }
 
-        const Ephemeris &ephemeris() const {
-          return eph_list[eph_current_index];
+        const PropertyT &current() const {
+          return history[selected_index];
         }
-        
+    };
+
+    class Satellite : public SatelliteProperties {
+      public:
+        typedef typename SatelliteProperties::Ephemeris eph_t;
+        typedef PropertyHistory<eph_t> eph_list_t;
+      protected:
+        eph_list_t eph_history;
+      public:
+        Satellite() : eph_history() {
+          // setup first ephemeris as invalid one
+          eph_t &eph_current(const_cast<eph_t &>(eph_history.current()));
+          eph_current.WN = 0;
+          eph_current.t_oc = 0;
+          eph_current.t_oe = 0;
+          eph_current.fit_interval = -1;
+        }
+
+        template <class Functor>
+        void each_ephemeris(
+            Functor &functor,
+            const typename eph_list_t::each_mode_t &mode = eph_list_t::EACH_ALL) const {
+          eph_history.each(functor, mode);
+        }
+
+        void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
+          eph_history.add(eph, priority_delta);
+        }
+
+        void merge(const Satellite &another, const bool &keep_original = true){
+          eph_history.merge(another, keep_original);
+        }
+
+        const eph_t &ephemeris() const {
+          return eph_history.current();
+        }
+
+        /**
+         * Select appropriate ephemeris within registered ones.
+         *
+         * @param target_time time at measurement
+         * @return if true, appropriate ephemeris is selected, otherwise, not selected.
+         */
+        bool select_ephemeris(const gps_time_t &target_time){
+          bool is_valid(ephemeris().is_valid(target_time));
+          if(is_valid && (!ephemeris().maybe_better_one_avilable(target_time))){
+            return true; // conservative
+          }
+          return eph_history.select(
+              target_time,
+              &eph_t::is_valid,
+              &eph_t::period_from_first_valid_transmittion) || is_valid;
+        }
+
         float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const{
           return ephemeris().clock_error(t, pseudo_range);
         }
@@ -1437,7 +1540,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           return ephemeris().clock_error_dot(t, pseudo_range);
         }
 
-        constellation_t constellation(
+        typename SatelliteProperties::constellation_t constellation(
             const gps_time_t &t, const float_t &pseudo_range = 0,
             const bool &with_velocity = true) const {
           return ephemeris().constellation(t, pseudo_range, with_velocity);
@@ -1764,7 +1867,7 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Ionospheric
 };
 
 template <class FloatT>
-const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::Ephemeris::raw_t::sf[] = {
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t::sf[] = {
   POWER_2(-31), // t_GD
   1,            // t_oc
   POWER_2(-55), // a_f0
@@ -1791,7 +1894,7 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::
 };
 
 template <class FloatT>
-const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::Almanac::raw_t::sf[] = {
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac::raw_t::sf[] = {
   POWER_2(-21),               // e
   POWER_2(12),                // t_oa
   GPS_SC2RAD * POWER_2(-19),  // delta_i
@@ -1807,7 +1910,7 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::
 #undef GPS_SC2RAD
 
 template <class FloatT>
-const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::Ephemeris::URA_limits[] = {
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::URA_limits[] = {
   2.40,
   3.40,
   4.85,
@@ -1826,7 +1929,7 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Satellite::
 };
 
 template <class FloatT>
-const int GPS_SpaceNode<FloatT>::Satellite::Ephemeris::URA_MAX_INDEX
+const int GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::URA_MAX_INDEX
     = sizeof(URA_limits) / sizeof(URA_limits[0]);
 
 #ifdef POW2_ALREADY_DEFINED

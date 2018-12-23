@@ -791,7 +791,7 @@ class RINEX_NAV_Writer : public RINEX_Writer {
           it != it_end; ++it){
         it->second.each_ephemeris(
             functor,
-            space_node_t::Satellite::EACH_EPHEMERIS_ALL_INVERTED);
+            space_node_t::Satellite::eph_list_t::EACH_ALL_INVERTED);
       }
       return res;
     }
