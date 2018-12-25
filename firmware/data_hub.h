@@ -48,8 +48,29 @@ typedef struct{
 
 extern const u8 sylphide_protocol_header[2];
 
-/* 1 is to use function of incremental log file name
- * such as log.NNN (N is number) when "log.inc" file exists.
+/* Maximum log size in bytes per a file
+ * For example, 0x40000000 means log increases up to 1GB
+ */
+#define MAXIMUM_LOG_DAT_FILE_SIZE 0x40000000
+
+/* Incremental log file name policy
+ * The "incremental" means log.NNN (N is digit).
+ * '1' uses "log.inc" file to assign NNN with "log.inc" file size.
+ * '0' ignores "log.inc".
+ * ('1' without "log.inc" equals to '0'.)
+ * In both settings, when current log file reaches maximum size,
+ * a new incremental file name is automatically assigned to continue to record.
+ * For example,
+ * '1': (power up, and log.inc is 3 bytes) => log.003 (at the same time, log.inc increases to 4 bytes)
+ *      =(Event A or B) => log.004 (at the same time, log.inc increases to 5 bytes)
+ *      =(Event A or B) => log.005 ...
+ * '0': (power up) => log.dat
+ *      =(Event B)=> log.000
+ *      =(Event B)=> log.001 ...
+ * Event A) power down then up, or USB connect to PC then disconnect
+ * Event B) exceed maximum file size
+ *
+ * Note: log.999 is maximum, whose next is log.000 (roll over).
  */
 #define CHECK_INCREMENT_LOG_DAT 1
 
