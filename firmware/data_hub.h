@@ -49,9 +49,9 @@ typedef struct{
 extern const u8 sylphide_protocol_header[2];
 
 /* Maximum log size in bytes per a file
- * For example, 0x40000000 means log increases up to 1GB
+ * For example, (1UL << 30) means log increases up to 1GB
  */
-#define MAXIMUM_LOG_DAT_FILE_SIZE 0x40000000
+#define MAXIMUM_LOG_DAT_FILE_SIZE (1UL << 30)
 
 /* Incremental log file name policy
  * The "incremental" means log.NNN (N is digit).

@@ -232,6 +232,10 @@ void data_hub_init(){
 #endif
 }
 
+static __xdata s16 log_file_suffix = -1;
+
+static u8 open_file();
+
 static u16 log_to_file(){
   u16 accepted_bytes;
   
@@ -243,10 +247,14 @@ static u16 log_to_file(){
     if((++loop) == 64){
       loop = 0;
       f_sync(&file);
+
       if(file.fsize >= MAXIMUM_LOG_DAT_FILE_SIZE){
-        // close current log file when its size exceeds predefined bytes; try to open another file
+        // close current log file when its size exceeds predefined bytes
         f_close(&file);
-        log_file_opened = FALSE;
+        log_file_suffix++;
+        if(!open_file()){ // try to open another file
+          log_file_opened = FALSE;
+        }
       }
     }
   }
@@ -271,23 +279,22 @@ static u16 log_to_host(){
 
 static u8 open_file(){
   char fname[] = "log.dat";
-  if(f_mount(0, &fs) != FR_OK){return FALSE;}
 
   while(1){
     u16 num;
-    static __xdata s16 suffix = -1;
+
 #if CHECK_INCREMENT_LOG_DAT
     if(f_open(&file, "LOG.INC", (FA_OPEN_EXISTING | FA_WRITE)) == FR_OK){
-      suffix = (file.fsize % 1000);
+      log_file_suffix = (file.fsize % 1000);
       f_lseek(&file, file.fsize);
       f_write(&file, "*", 1, &num); // Add 1 byte to log.inc
       f_close(&file);
     }
 #endif
 
-    if(suffix >= 0){
+    if(log_file_suffix >= 0){
       u8 i;
-      num = suffix;
+      num = log_file_suffix;
       for(i = 6; i >= 4; i--){
         fname[i] = '0' + (num % 10);
         num /= 10;
@@ -301,7 +308,7 @@ static u8 open_file(){
     // file size check; up to bytes defined by MAXIMUM_LOG_DAT_FILE_SIZE
     if(file.fsize < MAXIMUM_LOG_DAT_FILE_SIZE){break;}
     f_close(&file);
-    suffix++;
+    log_file_suffix++;
   }
 
   f_lseek(&file, file.fsize);
@@ -316,6 +323,7 @@ void data_hub_polling() {
     case USB_INACTIVE:
     case USB_CABLE_CONNECTED:
       if(!log_file_opened){
+        if(f_mount(0, &fs) != FR_OK){break;}
         if(!open_file()){break;}
         log_file_opened = TRUE;
         log_block_size = BUFFER_SIZE / 2;
