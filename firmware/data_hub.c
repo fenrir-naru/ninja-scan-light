@@ -246,11 +246,12 @@ static u16 log_to_file(){
     static __xdata u8 loop = 0;
     if((++loop) == 64){
       loop = 0;
-      f_sync(&file);
 
-      if(file.fsize >= MAXIMUM_LOG_DAT_FILE_SIZE){
+      if(file.fsize < MAXIMUM_LOG_DAT_FILE_SIZE){
+        f_sync(&file);
+      }else{
         // close current log file when its size exceeds predefined bytes
-        f_close(&file);
+        f_close(&file); // internally f_sync(&file) is invoked
         log_file_suffix++;
         if(!open_file()){ // try to open another file
           log_file_opened = FALSE;
