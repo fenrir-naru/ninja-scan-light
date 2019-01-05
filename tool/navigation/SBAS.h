@@ -122,6 +122,7 @@ typedef typename gps_space_node_t::type type
       CLOCK_EPHEMERIS_COV_MAT = 28,
       INTERNAL_TEST_MESSAGE = 62,
       NULL_MESSAGES = 63,
+      UNSUPPORTED_MESSAGE = 64,
     }; ///< @see Table A-3
 
     struct Timing {
@@ -1915,11 +1916,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
     };
 
     class Satellite : public SatelliteProperties {
+      friend class SBAS_SpaceNode;
       public:
         typedef typename SatelliteProperties::Ephemeris_with_Timeout eph_t;
         typedef typename gps_space_node_t::template PropertyHistory<eph_t> eph_list_t;
         typedef IonosphericGridPoints_with_Timeout igp_t;
-      //protected: // TODO
+      protected:
         eph_list_t eph_history;
         igp_t igp;
       public:
@@ -1955,6 +1957,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           return (ephemeris().*is_valid_func)(target_time) // conservative
               || eph_history.select(target_time, is_valid_func);
         }
+
+        const igp_t &ionospheric_grid_points() const {
+          return igp;
+        }
     };
 
   public:
@@ -1976,6 +1982,42 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
     }
     bool has_satellite(const int &prn) const {
       return _satellites.find(prn) !=  _satellites.end();
+    }
+
+    template <class InputT>
+    MessageType decode_message(
+        const InputT *buf, const int &prn, const gps_time_t &t_reception,
+        const bool &LNAV_VNAV_LP_LPV_approach = false){
+
+      MessageType message_type((MessageType)DataBlock::message_type(buf));
+      Satellite &sat(_satellites[prn]);
+
+      switch(message_type){
+        case GEO_NAVIGATION: { // 9
+          typename Satellite::eph_t eph(
+              Satellite::eph_t::raw_t::fetch(buf, prn), t_reception);
+          sat.eph_history.add(eph);
+          break;
+        }
+        case DEGRADATION_PARAMS: { // 10
+          DegradationFactors dfactor(DegradationFactors::raw_t::fetch(buf));
+          break;
+        }
+        case IONO_GRID_POINT_MASKS: // 18
+          sat.igp.update_mask(buf, t_reception, LNAV_VNAV_LP_LPV_approach);
+          break;
+        case IONO_DELAY_CORRECTION: // 26
+          if(!sat.igp.register_igp(buf, t_reception, LNAV_VNAV_LP_LPV_approach)){
+            message_type = UNSUPPORTED_MESSAGE;
+          }
+          break;
+        case NULL_MESSAGES: // 63
+          break;
+        default:
+          message_type = UNSUPPORTED_MESSAGE;
+      }
+
+      return message_type;
     }
 };
 
