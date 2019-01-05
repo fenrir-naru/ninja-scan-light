@@ -168,34 +168,18 @@ struct GNSS_Data {
       bool valid_time_of_reception(data.time_of_reception.week >= 0);
       if(!valid_time_of_reception){return false;}
 
-      typename sbas_t::Satellite &sat(sbas.satellite(data.subframe.sv_number));
-
-      typename observer_t::u32_t *buf((typename observer_t::u32_t *)data.subframe.buffer);
-      int message_type(sbas_t::DataBlock::message_type(buf));
-      switch(message_type){
-        case sbas_t::GEO_NAVIGATION: { // 9
-          typedef typename sbas_t::Satellite::eph_t eph_t;
-          eph_t eph(eph_t::raw_t::fetch(buf, data.subframe.sv_number), data.time_of_reception);
-          sat.register_ephemeris(eph);
-          break;
-        }
-        case sbas_t::DEGRADATION_PARAMS: { // 10
-          typedef typename sbas_t::DegradationFactors dfactors_t;
-          dfactors_t dfactor(dfactors_t::raw_t::fetch(buf));
-          break;
-        }
-        case sbas_t::IONO_GRID_POINT_MASKS: // 18
-          sat.igp.update_mask(buf, data.time_of_reception);
-          break;
+      switch(sbas.decode_message(
+          (typename observer_t::u32_t *)data.subframe.buffer,
+          data.subframe.sv_number, data.time_of_reception)){
         case sbas_t::IONO_DELAY_CORRECTION: // 26
-          if(sat.igp.register_igp(buf, data.time_of_reception)){
-            std::cerr
-                << "Ionospheric delay grid map (S" << data.subframe.sv_number << "):" << std::endl
-                << sat.igp << std::endl;
-          }
+          std::cerr
+              << "Ionospheric delay grid map (S" << data.subframe.sv_number << "):" << std::endl
+              << sbas.satellite(data.subframe.sv_number).ionospheric_grid_points() << std::endl;
           break;
+        case sbas_t::UNSUPPORTED_MESSAGE:
+          return false;
       }
-      return false;
+      return true;
     }
 
     bool load(const GNSS_Data &data){
