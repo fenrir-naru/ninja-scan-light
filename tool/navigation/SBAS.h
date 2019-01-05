@@ -39,6 +39,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <map>
 
 #include "GPS.h"
 
@@ -1918,7 +1919,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
         typedef typename SatelliteProperties::Ephemeris_with_Timeout eph_t;
         typedef typename gps_space_node_t::template PropertyHistory<eph_t> eph_list_t;
         typedef IonosphericGridPoints_with_Timeout igp_t;
-      protected:
+      //protected: // TODO
         eph_list_t eph_history;
         igp_t igp;
       public:
@@ -1928,7 +1929,54 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           eph_current.WN = 0;
           eph_current.t_0 = 0;
         }
+
+        void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
+          eph_history.add(eph, priority_delta);
+        }
+
+        const eph_t &ephemeris() const {
+          return eph_history.current();
+        }
+
+        /**
+         * Select appropriate ephemeris within registered ones.
+         *
+         * @param target_time time at measurement
+         * @param LNAV_VNAV_LP_LPV_approach
+         * @return if true, appropriate ephemeris is selected, otherwise, not selected.
+         */
+        bool select_ephemeris(
+            const gps_time_t &target_time,
+            const bool &LNAV_VNAV_LP_LPV_approach = false){
+          bool (eph_t::*is_valid_func)(const gps_time_t &) const (
+              LNAV_VNAV_LP_LPV_approach
+                ? &eph_t::is_valid_LNAV_VNAV_LP_LPV_approach
+                : &eph_t::is_valid_EN_Route_Terminal_LNAV);
+          return (ephemeris().*is_valid_func)(target_time) // conservative
+              || eph_history.select(target_time, is_valid_func);
+        }
     };
+
+  public:
+    typedef std::map<int, Satellite> satellites_t;
+  protected:
+    satellites_t _satellites;
+  public:
+    SBAS_SpaceNode() : _satellites() {
+
+    }
+    ~SBAS_SpaceNode(){
+      _satellites.clear();
+    }
+    const satellites_t &satellites() const {
+      return _satellites;
+    }
+    Satellite &satellite(const int &prn) {
+      return _satellites[prn];
+    }
+    bool has_satellite(const int &prn) const {
+      return _satellites.find(prn) !=  _satellites.end();
+    }
 };
 
 template <class FloatT>
