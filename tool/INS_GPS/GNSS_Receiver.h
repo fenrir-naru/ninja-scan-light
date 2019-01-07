@@ -37,6 +37,7 @@
 #include <cstring>
 
 #include "navigation/GPS.h"
+#include "navigation/SBAS.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/RINEX.h"
 
@@ -79,6 +80,8 @@ struct GNSS_Receiver {
   typedef GPS_SinglePositioning<FloatT, solver_base_t> gps_solver_t;
 #endif
 
+  typedef SBAS_SpaceNode<FloatT> sbas_space_node_t;
+
   struct system_t;
 
   struct data_t {
@@ -86,8 +89,11 @@ struct GNSS_Receiver {
       gps_space_node_t space_node;
       typename gps_solver_t::options_t solver_options;
     } gps;
+    struct {
+      sbas_space_node_t space_node;
+    } sbas;
     std::ostream *out_rinex_nav;
-    data_t() : gps(), out_rinex_nav(NULL) {}
+    data_t() : gps(), sbas(), out_rinex_nav(NULL) {}
     ~data_t(){
       if(out_rinex_nav){
         RINEX_NAV_Writer<FloatT>::write_all(*out_rinex_nav, gps.space_node);
@@ -125,6 +131,7 @@ struct GNSS_Receiver {
 
   void setup(typename GNSS_Data<FloatT>::Loader &loader) const {
     loader.gps = &const_cast<gps_space_node_t &>(data.gps.space_node);
+    loader.sbas = &const_cast<sbas_space_node_t &>(data.sbas.space_node);
   }
 
   const solver_base_t &solver() const {
