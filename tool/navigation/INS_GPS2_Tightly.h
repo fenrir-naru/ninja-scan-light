@@ -26,7 +26,7 @@
 #include "INS.h"
 #include "Filtered_INS2.h"
 #include "INS_GPS2.h"
-#include "GPS_SP.h"
+#include "GPS_Solver.h"
 #include "coordinate.h"
 
 template <typename BaseINS, unsigned int Clocks>

@@ -179,7 +179,7 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 #include "navigation/INS_GPS_Synchronization.h"
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/GPS.h"
-#include "navigation/GPS_SP.h"
+#include "navigation/GPS_Solver.h"
 #include "navigation/RINEX.h"
 
 #include "navigation/MagneticField.h"

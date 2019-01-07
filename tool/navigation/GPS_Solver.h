@@ -1,5 +1,6 @@
 /**
- * @file GPS single positioning solver
+ * @file GPS solver
+ * - Mainly, single positioning
  *
  */
 
@@ -34,8 +35,8 @@
  *
  */
 
-#ifndef __GPS_SP_H__
-#define __GPS_SP_H__
+#ifndef __GPS_SOLVER_H__
+#define __GPS_SOLVER_H__
 
 #include <utility>
 #include <vector>
@@ -577,4 +578,4 @@ class GPS_SinglePositioning {
     }
 };
 
-#endif /* __GPS_SP_H__ */
+#endif /* __GPS_SOLVER_H__ */
