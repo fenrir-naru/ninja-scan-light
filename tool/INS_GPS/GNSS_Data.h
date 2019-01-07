@@ -29,8 +29,8 @@
  *
  */
 
-#ifndef __GPS_DATA_H__
-#define __GPS_DATA_H__
+#ifndef __GNSS_DATA_H__
+#define __GNSS_DATA_H__
 
 #ifndef IS_LITTLE_ENDIAN
 #define IS_LITTLE_ENDIAN 1
@@ -40,7 +40,7 @@
 #include "navigation/GPS.h"
 
 template <class FloatT>
-struct GPS_Data {
+struct GNSS_Data {
 
   struct Loader;
   mutable Loader *loader;
@@ -53,29 +53,29 @@ struct GPS_Data {
   gps_time_t time_of_reception;
 
   struct Loader {
-    typedef GPS_SpaceNode<FloatT> space_node_t;
-    space_node_t *space_node;
+    typedef GPS_SpaceNode<FloatT> gps_t;
+    gps_t *gps;
 
-    struct ephemeris_t : public space_node_t::Satellite::Ephemeris {
-      typename space_node_t::uint_t how;
-      typename space_node_t::int_t iode2;
-      typedef typename space_node_t::Satellite::Ephemeris super_t;
-      ephemeris_t(){
+    struct gps_ephemeris_t : public gps_t::Satellite::Ephemeris {
+      typename gps_t::uint_t how;
+      typename gps_t::int_t iode2;
+      typedef typename gps_t::Satellite::Ephemeris super_t;
+      gps_ephemeris_t(){
         super_t::iodc = super_t::iode = iode2 = -1;
       }
-    } ephemeris[32];
+    } gps_ephemeris[32];
 
-    typedef typename space_node_t::Ionospheric_UTC_Parameters iono_utc_t;
+    typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
 
-    Loader() : space_node(NULL) {
-      for(unsigned int i(0); i < sizeof(ephemeris) / sizeof(ephemeris[0]); ++i){
-        ephemeris[i].svid = i + 1;
+    Loader() : gps(NULL) {
+      for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
+        gps_ephemeris[i].svid = i + 1;
       }
     }
 
-    static iono_utc_t fetch_iono_utc(const subframe_t &subframe){
+    static gps_iono_utc_t fetch_as_GPS_iono_utc(const subframe_t &subframe){
 
-      typename iono_utc_t::raw_t raw;
+      typename gps_iono_utc_t::raw_t raw;
       typedef typename observer_t::s8_t s8_t;
       typedef typename observer_t::s32_t s32_t;
       typedef typename observer_t::u32_t u32_t;
@@ -113,10 +113,10 @@ struct GPS_Data {
         raw.delta_t_LSF = (s8_t)get8(270);
       }
 #undef get8
-      return (iono_utc_t)raw;
+      return (gps_iono_utc_t)raw;
     }
 
-    static void fetch_as_subframe1(const subframe_t &in, ephemeris_t &out){
+    static void fetch_as_GPS_subframe1(const subframe_t &in, gps_ephemeris_t &out){
       out.WN        = in.ephemeris_wn();
       out.URA       = in.ephemeris_ura();
       out.SV_health = in.ephemeris_sv_health();
@@ -129,7 +129,7 @@ struct GPS_Data {
       out.how       = in.how();
     }
 
-    static void fetch_as_subframe2(const subframe_t &in, ephemeris_t &out){
+    static void fetch_as_GPS_subframe2(const subframe_t &in, gps_ephemeris_t &out){
       out.iode    = in.ephemeris_iode_subframe2();
       out.c_rs    = in.ephemeris_c_rs();
       out.delta_n = in.ephemeris_delta_n();
@@ -140,11 +140,11 @@ struct GPS_Data {
       out.sqrt_A  = in.ephemeris_root_a();
       out.t_oe    = in.ephemeris_t_oe();
       out.fit_interval
-          = ephemeris_t::super_t::raw_t::fit_interval(
+          = gps_ephemeris_t::super_t::raw_t::fit_interval(
               in.ephemeris_fit(), out.iodc);
     }
 
-    static void fetch_as_subframe3(const subframe_t &in, ephemeris_t &out){
+    static void fetch_as_GPS_subframe3(const subframe_t &in, gps_ephemeris_t &out){
       out.c_ic        = in.ephemeris_c_ic();
       out.Omega0      = in.ephemeris_omega_0();
       out.c_is        = in.ephemeris_c_is();
@@ -156,7 +156,7 @@ struct GPS_Data {
       out.dot_i0      = in.ephemeris_i_0_dot();
     }
 
-    bool load(const GPS_Data &data){
+    bool load(const GNSS_Data &data){
       if(data.subframe.sv_number > 32){return false;}
 
       int week_number(data.time_of_reception.week);
@@ -165,27 +165,27 @@ struct GPS_Data {
       if(week_number < 0){week_number = gps_time_t::now().week;}
 
       if(data.subframe.subframe_no <= 3){
-        ephemeris_t &eph(ephemeris[data.subframe.sv_number - 1]);
+        gps_ephemeris_t &eph(gps_ephemeris[data.subframe.sv_number - 1]);
         switch(data.subframe.subframe_no){
-          case 1: fetch_as_subframe1(data.subframe, eph); break;
-          case 2: fetch_as_subframe2(data.subframe, eph); break;
-          case 3: fetch_as_subframe3(data.subframe, eph); break;
+          case 1: fetch_as_GPS_subframe1(data.subframe, eph); break;
+          case 2: fetch_as_GPS_subframe2(data.subframe, eph); break;
+          case 3: fetch_as_GPS_subframe3(data.subframe, eph); break;
         }
         if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
             && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)){
           // Original WN is truncated to 10 bits.
           eph.WN = (week_number - (week_number % 0x400)) + (eph.WN % 0x400);
-          space_node->satellite(eph.svid).register_ephemeris(eph);
+          gps->satellite(eph.svid).register_ephemeris(eph);
           eph.iodc = eph.iode = eph.iode2 = -1; // invalidate
           return true;
         }
       }else if((data.subframe.subframe_no == 4) && (data.subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-        iono_utc_t iono_utc(fetch_iono_utc(data.subframe));
+        gps_iono_utc_t iono_utc(fetch_as_GPS_iono_utc(data.subframe));
         // taking truncation into account
         int week_number_base(week_number - (week_number % 0x100));
         iono_utc.WN_t = week_number_base + (iono_utc.WN_t % 0x100);
         iono_utc.WN_LSF = week_number_base + (iono_utc.WN_LSF % 0x100);
-        space_node->update_iono_utc(iono_utc);
+        gps->update_iono_utc(iono_utc);
         return true;
       }
 
@@ -194,4 +194,4 @@ struct GPS_Data {
   };
 };
 
-#endif /* __GPS_DATA_H__ */
+#endif /* __GNSS_DATA_H__ */

@@ -186,7 +186,7 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 
 #include "analyze_common.h"
 
-#include "INS_GPS/GPS_Data.h"
+#include "INS_GPS/GNSS_Data.h"
 
 struct Options : public GlobalOptions<float_sylph_t> {
   typedef GlobalOptions<float_sylph_t> super_t;
@@ -474,8 +474,7 @@ struct A_Packet;
 struct G_Packet;
 struct G_Packet_Measurement;
 struct G_Packet_Data;
-struct G_Packet_Ephemeris;
-struct G_Packet_Iono_UTC;
+struct G_Packet_GPS_Ephemeris;
 struct M_Packet;
 struct TimePacket;
 
@@ -485,8 +484,7 @@ struct Updatable {
   virtual void update(const G_Packet &){}
   virtual void update(const G_Packet_Measurement &){}
   virtual void update(const G_Packet_Data &);
-  virtual void update(const G_Packet_Ephemeris &);
-  virtual void update(const G_Packet_Iono_UTC &);
+  virtual void update(const G_Packet_GPS_Ephemeris &);
   virtual void update(const M_Packet &){}
   virtual void update(const TimePacket &){}
 } updatable_blackhole;
@@ -813,8 +811,8 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
 };
 
 struct G_Packet_Data
-    : public BasicPacket<G_Packet_Data>, public GPS_Data<float_sylph_t> {
-  G_Packet_Data() : GPS_Data<float_sylph_t>() {
+    : public BasicPacket<G_Packet_Data>, public GNSS_Data<float_sylph_t> {
+  G_Packet_Data() : GNSS_Data<float_sylph_t>() {
     Packet::itow = 0; // to invoke immediate update
   }
 };
@@ -822,32 +820,18 @@ void Updatable::update(const G_Packet_Data &packet){
   packet.loader->load(packet);
 }
 
-struct G_Packet_Ephemeris
-    : public BasicPacket<G_Packet_Ephemeris>, public GPS_Data<float_sylph_t>::Loader::ephemeris_t {
-  typedef G_Packet_Measurement::space_node_t space_node_t;
+struct G_Packet_GPS_Ephemeris
+    : public BasicPacket<G_Packet_GPS_Ephemeris>, public GNSS_Data<float_sylph_t>::Loader::gps_ephemeris_t {
+  typedef GNSS_Data<float_sylph_t>::Loader::gps_t space_node_t;
   mutable space_node_t *space_node;
-  typedef GPS_Data<float_sylph_t>::Loader::ephemeris_t ephemeris_t;
+  typedef GNSS_Data<float_sylph_t>::Loader::gps_ephemeris_t ephemeris_t;
 
-  G_Packet_Ephemeris() : ephemeris_t() {
+  G_Packet_GPS_Ephemeris() : ephemeris_t() {
     Packet::itow = 0; // to invoke immediate update
   }
 };
-void Updatable::update(const G_Packet_Ephemeris &packet){
+void Updatable::update(const G_Packet_GPS_Ephemeris &packet){
   packet.space_node->satellite(packet.svid).register_ephemeris(packet);
-}
-
-struct G_Packet_Iono_UTC
-    : public BasicPacket<G_Packet_Iono_UTC>, public G_Packet_Measurement::space_node_t::Ionospheric_UTC_Parameters {
-  typedef G_Packet_Measurement::space_node_t space_node_t;
-  mutable space_node_t *space_node;
-  typedef space_node_t::Ionospheric_UTC_Parameters params_t;
-
-  G_Packet_Iono_UTC(){
-    Packet::itow = 0; // to invoke immediate update
-  }
-};
-void Updatable::update(const G_Packet_Iono_UTC &packet){
-  packet.space_node->update_iono_utc(packet);
 }
 
 /**
@@ -1691,31 +1675,31 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
 
 using namespace std;
 
-struct G_Packet_Ephemeris_Extended : public G_Packet_Ephemeris {
+struct G_Packet_GPS_Ephemeris_Extended : public G_Packet_GPS_Ephemeris {
   space_node_t::uint_t &sv_number; // sv_number is alias.
   bool valid;
 
-  G_Packet_Ephemeris_Extended()
-      : G_Packet_Ephemeris(),
+  G_Packet_GPS_Ephemeris_Extended()
+      : G_Packet_GPS_Ephemeris(),
       sv_number(ephemeris_t::svid), valid(false) {}
 };
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
-    G_Packet_Ephemeris_Extended &ephemeris) const {
-  GPS_Data<float_sylph_t>::Loader::fetch_as_subframe1(*this, ephemeris);
+    G_Packet_GPS_Ephemeris_Extended &ephemeris) const {
+  GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe1(*this, ephemeris);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
-    G_Packet_Ephemeris_Extended &ephemeris) const {
-  GPS_Data<float_sylph_t>::Loader::fetch_as_subframe2(*this, ephemeris);
+    G_Packet_GPS_Ephemeris_Extended &ephemeris) const {
+  GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe2(*this, ephemeris);
 }
 
 template <> template <>
 void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
-    G_Packet_Ephemeris_Extended &ephemeris) const {
-  GPS_Data<float_sylph_t>::Loader::fetch_as_subframe3(*this, ephemeris);
+    G_Packet_GPS_Ephemeris_Extended &ephemeris) const {
+  GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe3(*this, ephemeris);
 }
 
 class StreamProcessor
@@ -1824,15 +1808,13 @@ class StreamProcessor
       space_node_t space_node;
       raw_data_t::solver_t::options_t solver_options;
       G_Packet_Measurement packet_raw_latest;
-      G_Packet_Iono_UTC packet_iono_utc;
-      GPS_Data<float_sylph_t>::Loader loader;
+      GNSS_Data<float_sylph_t>::Loader loader;
       struct tightly_associator_t {
         GHandler &handler;
         raw_data_t::solver_t solver;
         void associate() {
           handler.packet_raw_latest.raw_data.solver = &solver;
-          handler.packet_iono_utc.space_node = &(handler.space_node);
-          handler.loader.space_node = &(handler.space_node);
+          handler.loader.gps = &(handler.space_node);
         }
         tightly_associator_t(GHandler &h)
             : handler(h),
@@ -1854,7 +1836,6 @@ class StreamProcessor
           week_number(Options::gps_time_t::WN_INVALID), status(),
           space_node(),
           packet_raw_latest(),
-          packet_iono_utc(),
           loader(),
           tightly_associator(*this) {
         previous_seek_next = G_Observer_t::ready();
@@ -2009,7 +1990,7 @@ class StreamProcessor
       }
 
       void check_ephemeris(const G_Observer_t &observer){
-        G_Packet_Ephemeris_Extended ephemeris;
+        G_Packet_GPS_Ephemeris_Extended ephemeris;
         observer.fetch_ephemeris(ephemeris);
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
@@ -3017,8 +2998,7 @@ virtual void update(const type &packet){ \
     update_func(A_Packet);
     update_func(G_Packet);
     update_func(G_Packet_Measurement);
-    update_func(G_Packet_Ephemeris);
-    update_func(G_Packet_Iono_UTC);
+    update_func(G_Packet_GPS_Ephemeris);
     update_func(M_Packet);
     update_func(TimePacket);
 #undef update_func
