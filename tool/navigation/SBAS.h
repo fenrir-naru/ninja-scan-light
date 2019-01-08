@@ -219,8 +219,58 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
   return (s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch)) \
       >> (bits - length); \
 }
+
+      /**
+       * Convert bit pattern to indices array having '1'
+       * Ex) 0b00100100 => [2, 5]
+       * @param buf bit pattern
+       * @param indices array to which results are stored
+       * @param length length of bits to be inspected
+       * @param offset starting offset of bits
+       * @return number of '1'
+       */
+      template <class InputT>
+      static u8_t bits2linear(
+          const InputT *buf, u8_t *indices,
+          const u8_t &length, const u8_t &offset = 0){
+        u8_t *hits(indices);
+        std::div_t aligned(std::div(offset, (int)sizeof(InputT) * 8));
+        buf += aligned.quot;
+        InputT compared((InputT)0x1 << (sizeof(InputT) * 8 - aligned.rem - 1));
+        // [mask7, mask6, .., mask0], [mask15, mask14, .., mask8], ...
+        for(u8_t i(0); i < length; ++i, compared >>= 1){
+          if(compared == 0){ // rotate
+            compared = ((InputT)0x1 << (sizeof(InputT) * 8 - 1));
+            buf++;
+          }
+          if(*buf & compared){
+            *(hits++) = i;
+          }
+        }
+        return hits - indices;
+      }
+
       convert_u(8, 0, 8, preamble);
       convert_u(8, 8, 6, message_type);
+
+      struct Type1 { ///< @see Fig. A-6 PRN_MASK
+        struct mask_t {
+          u8_t valid;
+          static const int each_block = 13;
+          union {
+            u8_t prn_minus_one[210];
+            u8_t block[4][each_block];
+          };
+        };
+        template <class InputT>
+        static mask_t mask(const InputT *buf, const u8_t &band){
+          mask_t res;
+          res.valid = bits2linear(buf, res.prn_minus_one, 210, 14); // 14 bit shift
+          if(res.valid > 51){res.valid = 0;} // invalid, because up to 51 masks
+          return res;
+        }
+        convert_u(8, 224, 2, iodp);
+      };
 
       struct Type18 { ///< @see Table A-15 IONO_GRID_POINT_MASKS
         convert_u(8, 14, 4, broadcasted_bands);
@@ -251,20 +301,8 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
         }
         template <class InputT>
         static mask_t mask(const InputT *buf, const u8_t &band){
-          mask_t res = {0};
-          std::div_t aligned(std::div(24, (int)sizeof(InputT) * 8)); // 24 bits shift
-          buf += aligned.quot;
-          InputT compared((InputT)0x1 << (sizeof(InputT) * 8 - aligned.rem - 1));
-          // [mask7, mask6, .., mask0], [mask15, mask14, .., mask8], ...
-          for(u8_t i(0); i < mask_bits(band); ++i, compared >>= 1){
-            if(compared == 0){ // rotate
-              compared = ((InputT)0x1 << (sizeof(InputT) * 8 - 1));
-              buf++;
-            }
-            if(*buf & compared){
-              res.linear[res.valid++] = i;
-            }
-          }
+          mask_t res;
+          res.valid = bits2linear(buf, res.linear, mask_bits(band), 24); // 24 bit shift
           return res;
         }
         template <class InputT>
