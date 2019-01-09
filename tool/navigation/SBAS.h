@@ -272,6 +272,24 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
         convert_u(8, 224, 2, iodp);
       };
 
+      struct Type2_5 { ///< @see Fig. A-7 FAST_CORRECTION_2-5
+        convert_u( 8, 14, 2, iodf);
+        convert_u( 8, 16, 2, iodp);
+        convert_s_ch(16,  18, 12, 12, prc_f); // pseudo range correction (fast)
+        convert_u_ch( 8, 174,  4,  4, udrei);
+      };
+
+      struct Type6 { ///< @see Fig. A-8, Table A-5 INTEGRITY_INFORMATION
+        convert_u_ch( 8, 14, 2, 2, iodf); // iodf2-5
+        convert_u_ch( 8, 22, 4, 4, udrei);
+      };
+
+      struct Type7 { ///< @see Fig. A-9, Table A-7 FAST_CORRECTION_DEGRADATION
+        convert_u( 8, 14, 4, t_lat);
+        convert_u( 8, 18, 2, iodp);
+        convert_u_ch( 8, 22, 4, 4, ai_i);
+      };
+
       struct Type18 { ///< @see Table A-15 IONO_GRID_POINT_MASKS
         convert_u(8, 14, 4, broadcasted_bands);
         convert_u(8, 18, 4, band);
