@@ -290,6 +290,46 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
         convert_u_ch( 8, 22, 4, 4, ai_i);
       };
 
+      struct Type25 { ///< @see Fig. A-10,11, Table A-10,11 LONG_TERM_CORRECTION
+        convert_u_ch( 8, 14, 1, 106, vel_code);
+        convert_u_ch( 8, 15, 6, 106, prn_mask);
+        convert_u_ch( 8, 21, 8, 106, iod);
+        struct V0 {
+          convert_s_ch(16,  29,  9, 106, dx);
+          convert_s_ch(16,  38,  9, 106, dy);
+          convert_s_ch(16,  47,  9, 106, dz);
+          convert_s_ch(16,  56, 10, 106, da_f0);
+          convert_u_ch( 8,  66,  6, 106, prn_mask_2);
+          convert_u_ch( 8,  72,  8, 106, iod_2);
+          convert_s_ch(16,  80,  9, 106, dx_2);
+          convert_s_ch(16,  89,  9, 106, dy_2);
+          convert_s_ch(16,  98,  9, 106, dz_2);
+          convert_s_ch(16, 107, 10, 106, da_f0_2);
+          convert_u_ch( 8, 117,  2, 106, iodp);
+        };
+        struct V1 {
+          convert_s_ch(16,  29, 11, 106, dx);
+          convert_s_ch(16,  40, 11, 106, dy);
+          convert_s_ch(16,  51, 11, 106, dz);
+          convert_s_ch(16,  62, 11, 106, da_f0);
+          convert_s_ch( 8,  73,  8, 106, dx_dot);
+          convert_s_ch( 8,  81,  8, 106, dy_dot);
+          convert_s_ch( 8,  89,  8, 106, dz_dot);
+          convert_s_ch( 8,  97,  8, 106, da_f1);
+          convert_u_ch(16, 105, 13, 106, t_0);
+          convert_u_ch( 8, 118,  2, 106, iodp);
+        };
+      };
+
+      struct Type24 : public Type25 { ///< @see Fig. A-12 MIXED_CORRECTION_FAST_AND_LONG_TERM
+        convert_s_ch(16,  14, 12, 12, prc_f); // pseudo range correction (fast)
+        convert_u_ch( 8,  86,  4,  4, udrei);
+        convert_u( 8, 110, 2, iodp);
+        convert_u( 8, 112, 2, block_id); // 1-6(Type2), 14-19(Type3), 27-32(Type4), 40-45(Type5)
+        convert_u( 8, 114, 2, iodf);
+        // Second half of 106 bits are same as Type25(ch1)
+      };
+
       struct Type18 { ///< @see Table A-15 IONO_GRID_POINT_MASKS
         convert_u(8, 14, 4, broadcasted_bands);
         convert_u(8, 18, 4, band);
