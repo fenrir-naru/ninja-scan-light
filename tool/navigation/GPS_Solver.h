@@ -317,9 +317,11 @@ class GPS_SinglePositioning {
         return res;
       }
 
+      // 1. Check satellite availability for range
+
       typedef std::vector<std::pair<
           typename space_node_t::satellites_t::const_iterator, float_t> > sat_obs_t;
-      sat_obs_t available_sat_range;
+      sat_obs_t available_sat_range; // [[available_prn, available_sat], corresponding_range]
 
       const typename space_node_t::satellites_t &sats(_space_node.satellites());
       for(typename prn_obs_t::const_iterator it(prn_range.begin());
@@ -340,6 +342,8 @@ class GPS_SinglePositioning {
         return res;
       }
 
+      // 2. Position calculation
+
       res.user_position = user_position_init;
       res.receiver_error = receiver_error_init;
 
@@ -349,7 +353,6 @@ class GPS_SinglePositioning {
       geometric_matrices_t geomat(available_sat_range.size());
       sat_obs_t available_sat_pseudorange;
 
-      // Position calculation
       // If initialization is not appropriate, more iteration will be performed.
       bool converged(false);
       for(int i(good_init ? 0 : -2); i < 10; i++){
@@ -436,11 +439,12 @@ class GPS_SinglePositioning {
         return res;
       }
 
-      if((!prn_range.empty()) && with_velocity){ // Calculate velocity
-        typedef std::vector<std::pair<int, int> > index_table_t;
-        index_table_t index_table;
+      if(with_velocity){
+        // 3. Check consistency between range and rate for velocity calculation
 
-        // check correspondence between range and rate.
+        typedef std::vector<std::pair<int, int> > index_table_t;
+        index_table_t index_table; // [index_of_range_used_for_position, index_of_rate]
+
         int i(0);
         for(typename sat_obs_t::const_iterator it(available_sat_pseudorange.begin());
             it != available_sat_pseudorange.end();
@@ -455,6 +459,8 @@ class GPS_SinglePositioning {
             }
           }
         }
+
+        // 4. Calculate velocity
 
         i = 0;
         geometric_matrices_t geomat2(index_table.size());
