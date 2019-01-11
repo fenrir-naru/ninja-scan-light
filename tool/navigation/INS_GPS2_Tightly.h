@@ -405,7 +405,6 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       typedef typename raw_data_t::measurement_t::const_iterator it_t;
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
-      typedef typename raw_data_t::space_node_t::satellites_t::const_iterator it_sat_t;
 
       typename raw_data_t::gps_time_t time_arrival(
           gps.gpstime - clock_error / space_node_t::light_speed);
@@ -415,8 +414,6 @@ class INS_GPS2_Tightly : public BaseFINS{
         typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
       };
       typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
-
-      const space_node_t &space_node(gps.solver->space_node());
 
       it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
       if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
@@ -428,11 +425,9 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
         int prn(it2_range->first);
-        it_sat_t it_sat(space_node.satellites().find(prn));
-        if(it_sat == space_node.satellites().end()){continue;} // registered satellite?
+        const typename solver_t::satellite_t *sat(gps.solver->is_available(prn, gps.gpstime));
 
-        const typename solver_t::satellite_t &sat(it_sat->second);
-        if(!sat.ephemeris().is_valid(gps.gpstime)){continue;} // has valid ephemeris?
+        if(!sat){continue;}
 
         // range residual
         float_t los_neg[3], weight;
@@ -444,7 +439,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         float_t range(it2_range->second);
         range = gps.solver->range_residual(
-            sat, range, time_arrival,
+            *sat, range, time_arrival,
             pos, clock_error,
             residual);
 
@@ -505,12 +500,12 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         // rate residual
         float_t rate(it2_rate->second);
-        typename solver_t::xyz_t rel_vel(sat.velocity(time_arrival, range) - vel_xyz);
+        typename solver_t::xyz_t rel_vel(sat->velocity(time_arrival, range) - vel_xyz);
         z_serialized[z_index] = rate - clock_error_rate
             + los_neg[0] * rel_vel.x()
             + los_neg[1] * rel_vel.y()
             + los_neg[2] * rel_vel.z()
-            + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed;
+            + sat->clock_error_dot(time_arrival, range) * space_node_t::light_speed;
 
         { // setup H matrix
           { // velocity

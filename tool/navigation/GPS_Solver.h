@@ -259,6 +259,28 @@ class GPS_SinglePositioning {
           is_coarse_mode);
     }
 
+    /**
+     * Check availability of a satellite with which observation is associated
+     *
+     * @param prn satellite number
+     * @param receiver_time receiver time
+     * @return (const satellite_t *) If available, const pointer to satellite is returned,
+     * otherwise NULL.
+     */
+    const satellite_t *is_available(
+        const typename space_node_t::satellites_t::key_type &prn,
+        const gps_time_t &receiver_time) const {
+
+      const typename space_node_t::satellites_t &sats(_space_node.satellites());
+      const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
+      if((it_sat == sats.end()) // has ephemeris?
+          || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
+        return NULL;
+      }
+
+      return &(it_sat->second);
+    }
+
     struct user_pvt_t {
       enum {
         ERROR_NO = 0,
@@ -320,21 +342,21 @@ class GPS_SinglePositioning {
       // 1. Check satellite availability for range
 
       typedef std::vector<std::pair<
-          typename space_node_t::satellites_t::const_iterator, float_t> > sat_obs_t;
+          std::pair<typename prn_obs_t::value_type::first_type, const satellite_t *>,
+          typename prn_obs_t::value_type::second_type> > sat_obs_t;
       sat_obs_t available_sat_range; // [[available_prn, available_sat], corresponding_range]
 
-      const typename space_node_t::satellites_t &sats(_space_node.satellites());
       for(typename prn_obs_t::const_iterator it(prn_range.begin());
           it != prn_range.end();
           ++it){
 
         int prn(it->first);
-        const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
-        if(it_sat == sats.end()){continue;}
-        if(!it_sat->second.ephemeris().is_valid(receiver_time)){continue;}
+        const satellite_t *sat(is_available(it->first, receiver_time));
+        if(!sat){continue;}
 
-        // Select satellite only when its ephemeris is available and valid.
-        available_sat_range.push_back(typename sat_obs_t::value_type(it_sat, it->second));
+        available_sat_range.push_back(typename sat_obs_t::value_type(
+            typename sat_obs_t::value_type::first_type(it->first, sat),
+            it->second));
       }
 
       if(available_sat_range.size() < 4){
@@ -369,10 +391,10 @@ class GPS_SinglePositioning {
             geomat.W(j, j)
           };
 
-          const satellite_t &sat(it->first->second);
+          const satellite_t *sat(it->first.second);
           float_t range(it->second);
 
-          range = range_residual(sat, range, time_arrival,
+          range = range_residual(*sat, range, time_arrival,
               res.user_position, res.receiver_error,
               residual,
               calc_opt,
@@ -386,12 +408,12 @@ class GPS_SinglePositioning {
           for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
               it != available_sat_range.end();
               ++it){
-            std::cerr << "PRN:" << it->first->first << " => "
+            std::cerr << "PRN:" << it->first.first << " => "
                 << it->second
                 << " @ Ephemeris: t_oc => "
-                << it->first->second.ephemeris().WN << "w "
-                << it->first->second.ephemeris().t_oc << " +/- "
-                << (it->first->second.ephemeris().fit_interval / 2) << std::endl;
+                << it->first.second->ephemeris().WN << "w "
+                << it->first.second->ephemeris().t_oc << " +/- "
+                << (it->first.second->ephemeris().fit_interval / 2) << std::endl;
           }
           std::cerr << "G:" << geomat.G << std::endl;
           std::cerr << "W:" << geomat.W << std::endl;
@@ -453,7 +475,7 @@ class GPS_SinglePositioning {
           for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
               it2 != prn_rate.end();
               ++it2, ++j){
-            if(it->first->first == it2->first){
+            if(it->first.first == it2->first){
               index_table.push_back(index_table_t::value_type(i, j));
               break;
             }
@@ -470,11 +492,11 @@ class GPS_SinglePositioning {
 
           int i_range(it->first), i_rate(it->second);
 
-          const satellite_t &sat(available_sat_pseudorange[i_range].first->second);
+          const satellite_t *sat(available_sat_pseudorange[i_range].first.second);
           float_t pseudo_range(available_sat_pseudorange[i_range].second);
 
           // Calculate satellite velocity
-          xyz_t sat_vel(sat.velocity(time_arrival, pseudo_range));
+          xyz_t sat_vel(sat->velocity(time_arrival, pseudo_range));
 
           // copy design matrix
           geomat2.copy_G_W_row(geomat, i);
@@ -484,7 +506,7 @@ class GPS_SinglePositioning {
               + geomat2.G(i, 0) * sat_vel.x()
               + geomat2.G(i, 1) * sat_vel.y()
               + geomat2.G(i, 2) * sat_vel.z()
-              + (sat.clock_error_dot(time_arrival, pseudo_range) * space_node_t::light_speed);
+              + (sat->clock_error_dot(time_arrival, pseudo_range) * space_node_t::light_speed);
         }
 
         try{
