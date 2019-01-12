@@ -390,6 +390,32 @@ class INS_GPS2_Tightly : public BaseFINS{
     using BaseFINS::P_SIZE;
     using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
 
+  protected:
+    struct receiver_state_t {
+      typename raw_data_t::gps_time_t t;
+      float_t t_dot;
+      unsigned int clock_index;
+      typename solver_t::pos_t pos;
+      typename solver_t::xyz_t vel;
+    };
+    receiver_state_t receiver_state(
+        const typename raw_data_t::gps_time_t &t,
+        const unsigned int &clock_index,
+        const float_t &clock_error, const float_t &clock_error_rate) const {
+      receiver_state_t res = {
+        t - clock_error / space_node_t::light_speed,
+        clock_error_rate,
+        clock_index,
+        {
+          BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
+          typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
+        },
+        BaseFINS::template velocity_xyz<typename solver_t::xyz_t>(),
+      };
+      return res;
+    }
+
+  public:
     CorrectInfo<float_t> correct_info(
         const raw_data_t &gps,
         const float_t &clock_error, const float_t &clock_error_rate) const {
@@ -406,19 +432,13 @@ class INS_GPS2_Tightly : public BaseFINS{
       typedef typename raw_data_t::measurement_t::const_iterator it_t;
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
 
-      typename raw_data_t::gps_time_t time_arrival(
-          gps.gpstime - clock_error / space_node_t::light_speed);
-
-      typename solver_t::pos_t pos = {
-        BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
-        typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
-      };
-      typename solver_t::xyz_t vel_xyz(BaseFINS::template velocity_xyz<typename solver_t::xyz_t>());
+      receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error, clock_error_rate));
 
       it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
       if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
 
       it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
+      bool has_rates(it_rate != gps.measurement.end());
 
       // count up valid measurement, and make observation matrices
       int z_index(0);
@@ -428,6 +448,21 @@ class INS_GPS2_Tightly : public BaseFINS{
         const typename solver_t::satellite_t *sat(gps.solver->is_available(prn, gps.gpstime));
 
         if(!sat){continue;}
+
+        // check rate availability
+        bool use_rate(has_rates);
+        float_t rate;
+        if(use_rate){
+          for(it2_t it2_rate(it_rate->second.begin());
+              it2_rate != it_rate->second.end(); ++it2_rate){
+            int prn_rate(it2_rate->first);
+            if(prn == prn_rate){
+              use_rate = true;
+              rate = it2_rate->second;
+              break;
+            }
+          }
+        }
 
         // range residual
         float_t los_neg[3], weight;
@@ -439,8 +474,8 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         float_t range(it2_range->second);
         range = gps.solver->range_residual(
-            *sat, range, time_arrival,
-            pos, clock_error,
+            *sat, range, x.t,
+            x.pos, clock_error,
             residual);
 
         { // setup H matrix
@@ -451,7 +486,7 @@ class INS_GPS2_Tightly : public BaseFINS{
               q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
               q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
               q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
-          const float_t &e(BaseFINS::Earth::epsilon_Earth);
+          static const float_t &e(BaseFINS::Earth::epsilon_Earth);
           const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
           const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
           const float_t n_h((n + BaseFINS::h) * 2);
@@ -480,7 +515,7 @@ class INS_GPS2_Tightly : public BaseFINS{
               H_serialized[z_index][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
             }
           }
-          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2)] = -1; // polarity checked.
+          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
         }
 
         if(weight < 1E-1){weight = 1E-1;}
@@ -488,24 +523,15 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         ++z_index;
 
-        // continue; // activate when range is unsupported.
-
-        if(it_rate == gps.measurement.end()){continue;}
-        it2_t it2_rate(it_rate->second.begin());
-        for(; it2_rate != it_rate->second.end(); ++it2_rate){
-          int prn_rate(it2_rate->first);
-          if(prn == prn_rate){break;}
-        }
-        if(it2_rate == it_rate->second.end()){continue;}
+        if(!use_rate){continue;}
 
         // rate residual
-        float_t rate(it2_rate->second);
-        typename solver_t::xyz_t rel_vel(sat->velocity(time_arrival, range) - vel_xyz);
-        z_serialized[z_index] = rate - clock_error_rate
+        typename solver_t::xyz_t rel_vel(sat->velocity(x.t, range) - x.vel);
+        z_serialized[z_index] = rate - x.t_dot
             + los_neg[0] * rel_vel.x()
             + los_neg[1] * rel_vel.y()
             + los_neg[2] * rel_vel.z()
-            + sat->clock_error_dot(time_arrival, range) * space_node_t::light_speed;
+            + sat->clock_error_dot(x.t, range) * space_node_t::light_speed;
 
         { // setup H matrix
           { // velocity
@@ -517,13 +543,13 @@ class INS_GPS2_Tightly : public BaseFINS{
             }
           }
           { // position
-            const float_t &x(vel_xyz.x()), &y(vel_xyz.y()), &z(vel_xyz.z());
-            H_serialized[z_index][3] -= (                  los_neg[1] * -z + los_neg[2] *  y) * 2;  // polarity checked.
-            H_serialized[z_index][4] -= (los_neg[0] *  z                   + los_neg[2] * -x) * 2;
-            H_serialized[z_index][5] -= (los_neg[0] * -y + los_neg[1] *  x                  ) * 2;
+            const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
+            H_serialized[z_index][3] -= (                   los_neg[1] * -vz + los_neg[2] *  vy) * 2;  // polarity checked.
+            H_serialized[z_index][4] -= (los_neg[0] *  vz                    + los_neg[2] * -vx) * 2;
+            H_serialized[z_index][5] -= (los_neg[0] * -vy + los_neg[1] *  vx                   ) * 2;
           }
           // error rate
-          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (gps.clock_index * 2) + 1] = -1; // polarity checked.
+          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
         }
 
         R_diag[z_index] = R_diag[z_index - 1] * 1E-3; // TODO rate error variance
