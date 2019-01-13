@@ -415,6 +415,101 @@ class INS_GPS2_Tightly : public BaseFINS{
       return res;
     }
 
+    void assign_z_H_R(
+        const solver_t &solver,
+        const typename solver_t::satellite_t &sat,
+        const receiver_state_t &x,
+        float_t range, const float_t &rate, const bool &use_rate,
+        float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
+
+      // range residual
+      float_t los_neg[3], weight;
+      typename solver_t::residual_t residual = {
+        z[0],
+        los_neg[0], los_neg[1], los_neg[2],
+        weight,
+      };
+
+      range = solver.range_residual(
+          sat, range, x.t,
+          x.pos,
+          residual);
+
+      { // setup H matrix
+#define pow2(x) ((x) * (x))
+#define q_e2n(i) BaseFINS::q_e2n.get(i)
+        float_t H_uh[3][4] = {{0}};
+        const float_t
+            q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
+            q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
+            q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
+        static const float_t &e(BaseFINS::Earth::epsilon_Earth);
+        const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
+        const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
+        const float_t n_h((n + BaseFINS::h) * 2);
+#undef q_e2n
+        H_uh[0][0] = -q_gamma * q_beta * sf;
+        H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
+        H_uh[0][2] = -n_h * q_beta;
+        H_uh[0][3] = -q_gamma;
+
+        H_uh[1][0] = pow2(q_beta) * sf + n_h * q_alpha;
+        H_uh[1][1] = q_beta * q_gamma * sf;
+        H_uh[1][2] = -n_h * q_gamma;
+        H_uh[1][3] = q_beta;
+
+        {
+          const float_t sf2(sf * -(1.0 - pow2(e)));
+          const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
+          H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
+          H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
+          H_uh[2][3] = -q_alpha;
+        }
+#undef pow2
+
+        for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
+          for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
+            H[0][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
+          }
+        }
+        H[0][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
+      }
+
+      if(weight < 1E-1){weight = 1E-1;}
+      R_diag[0] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
+
+      if(!use_rate){return;}
+
+      // rate residual
+      typename solver_t::xyz_t rel_vel(sat.velocity(x.t, range) - x.vel);
+      z[1] = rate - x.t_dot
+          + los_neg[0] * rel_vel.x()
+          + los_neg[1] * rel_vel.y()
+          + los_neg[2] * rel_vel.z()
+          + sat.clock_error_dot(x.t, range) * space_node_t::light_speed;
+
+      { // setup H matrix
+        { // velocity
+          mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
+          for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
+            for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
+              H[1][j] -= los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
+            }
+          }
+        }
+        { // position
+          const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
+          H[1][3] -= (                   los_neg[1] * -vz + los_neg[2] *  vy) * 2;  // polarity checked.
+          H[1][4] -= (los_neg[0] *  vz                    + los_neg[2] * -vx) * 2;
+          H[1][5] -= (los_neg[0] * -vy + los_neg[1] *  vx                   ) * 2;
+        }
+        // error rate
+        H[1][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
+      }
+
+      R_diag[1] = R_diag[0] * 1E-3; // TODO rate error variance
+    }
+
   public:
     CorrectInfo<float_t> correct_info(
         const raw_data_t &gps,
@@ -464,97 +559,11 @@ class INS_GPS2_Tightly : public BaseFINS{
           }
         }
 
-        // range residual
-        float_t los_neg[3], weight;
-        typename solver_t::residual_t residual = {
-          z_serialized[z_index],
-          los_neg[0], los_neg[1], los_neg[2],
-          weight,
-        };
+        assign_z_H_R(*gps.solver, *sat, x,
+            it2_range->second - clock_error, rate, use_rate,
+            &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index]);
 
-        float_t range(it2_range->second);
-        range = gps.solver->range_residual(
-            *sat, range - clock_error, x.t,
-            x.pos,
-            residual);
-
-        { // setup H matrix
-#define pow2(x) ((x) * (x))
-#define q_e2n(i) BaseFINS::q_e2n.get(i)
-          float_t H_uh[3][4] = {{0}};
-          const float_t
-              q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
-              q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
-              q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
-          static const float_t &e(BaseFINS::Earth::epsilon_Earth);
-          const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
-          const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
-          const float_t n_h((n + BaseFINS::h) * 2);
-#undef q_e2n
-          H_uh[0][0] = -q_gamma * q_beta * sf;
-          H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
-          H_uh[0][2] = -n_h * q_beta;
-          H_uh[0][3] = -q_gamma;
-
-          H_uh[1][0] = pow2(q_beta) * sf + n_h * q_alpha;
-          H_uh[1][1] = q_beta * q_gamma * sf;
-          H_uh[1][2] = -n_h * q_gamma;
-          H_uh[1][3] = q_beta;
-
-          {
-            const float_t sf2(sf * -(1.0 - pow2(e)));
-            const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
-            H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
-            H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
-            H_uh[2][3] = -q_alpha;
-          }
-#undef pow2
-
-          for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
-            for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-              H_serialized[z_index][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
-            }
-          }
-          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
-        }
-
-        if(weight < 1E-1){weight = 1E-1;}
-        R_diag[z_index] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
-
-        ++z_index;
-
-        if(!use_rate){continue;}
-
-        // rate residual
-        typename solver_t::xyz_t rel_vel(sat->velocity(x.t, range) - x.vel);
-        z_serialized[z_index] = rate - x.t_dot
-            + los_neg[0] * rel_vel.x()
-            + los_neg[1] * rel_vel.y()
-            + los_neg[2] * rel_vel.z()
-            + sat->clock_error_dot(x.t, range) * space_node_t::light_speed;
-
-        { // setup H matrix
-          { // velocity
-            mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
-            for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
-              for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-                H_serialized[z_index][j] -= los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
-              }
-            }
-          }
-          { // position
-            const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
-            H_serialized[z_index][3] -= (                   los_neg[1] * -vz + los_neg[2] *  vy) * 2;  // polarity checked.
-            H_serialized[z_index][4] -= (los_neg[0] *  vz                    + los_neg[2] * -vx) * 2;
-            H_serialized[z_index][5] -= (los_neg[0] * -vy + los_neg[1] *  vx                   ) * 2;
-          }
-          // error rate
-          H_serialized[z_index][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
-        }
-
-        R_diag[z_index] = R_diag[z_index - 1] * 1E-3; // TODO rate error variance
-
-        ++z_index;
+        z_index += (use_rate ? 2 : 1);
       }
 
       mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
