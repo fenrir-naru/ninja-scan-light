@@ -474,8 +474,8 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         float_t range(it2_range->second);
         range = gps.solver->range_residual(
-            *sat, range, x.t,
-            x.pos, clock_error,
+            *sat, range - clock_error, x.t,
+            x.pos,
             residual);
 
         { // setup H matrix

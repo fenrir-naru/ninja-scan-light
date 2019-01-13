@@ -162,38 +162,32 @@ class GPS_SinglePositioning {
      * Get range residual in accordance with current status
      *
      * @param sat satellite
-     * @param range pseudo-range
+     * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
      * @param time_arrival time when signal arrive at receiver
-     * @param usr_pos (temporal solution of) user position in meters
-     * @param usr_pos_llh (temporal solution of) user position in latitude, longitude, and altitude format
-     * @param receiver_error (temporal solution of) receiver clock error in meters
-     * @param mat matrices to be stored, already initialized with appropriate size
+     * @param usr_pos (temporal solution of) user position
+     * @param residual caluclated residual with line of site vector, and weight
      * @param calc_opt range residual calculation options represented by applied ionospheric model
      * @param is_coarse_mode if true, precise correction will be skipped.
-     * @return (float_t) pseudo range, which includes delay, and exclude receiver/satellite error.
+     * @return (float_t) corrected range just including delay, and excluding receiver/satellite error.
      */
     float_t range_residual(
         const satellite_t &sat,
-        const float_t &range,
+        float_t range,
         const gps_time_t &time_arrival,
         const pos_t &usr_pos,
-        const float_t &receiver_error,
         residual_t &residual,
         const range_residual_options_t &calc_opt,
         const bool &is_coarse_mode = false) const {
 
-      // Temporal geometry range
-      float_t pseudo_range(range - receiver_error);
-
       // Clock error correction
-      pseudo_range += sat.clock_error(time_arrival, pseudo_range) * space_node_t::light_speed;
+      range += sat.clock_error(time_arrival, range) * space_node_t::light_speed;
 
       // Calculate satellite position
-      xyz_t sat_pos(sat.position(time_arrival, pseudo_range));
+      xyz_t sat_pos(sat.position(time_arrival, range));
       float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
       // Calculate residual
-      residual.residual = pseudo_range - geometric_range;
+      residual.residual = range - geometric_range;
 
       // Setup design matrix
       residual.los_neg_x = -(sat_pos.x() - usr_pos.xyz.x()) / geometric_range;
@@ -237,7 +231,7 @@ class GPS_SinglePositioning {
         }
       }
 
-      return pseudo_range;
+      return range;
     }
 
     float_t range_residual(
@@ -245,15 +239,14 @@ class GPS_SinglePositioning {
         const float_t &range,
         const gps_time_t &time_arrival,
         const pos_t &usr_pos,
-        const float_t &receiver_error,
         residual_t &residual,
         const bool &is_coarse_mode = false) const {
       range_residual_options_t calc_opt = {
         ionospheric_model_preferred(),
       };
-      return range_residual(
-          sat, range, time_arrival,
-          usr_pos, receiver_error,
+      return range_residual(sat,
+          range, time_arrival,
+          usr_pos,
           residual,
           calc_opt,
           is_coarse_mode);
@@ -394,8 +387,9 @@ class GPS_SinglePositioning {
           const satellite_t *sat(it->first.second);
           float_t range(it->second);
 
-          range = range_residual(*sat, range, time_arrival,
-              res.user_position, res.receiver_error,
+          range = range_residual(*sat,
+              range - res.receiver_error, time_arrival,
+              res.user_position,
               residual,
               calc_opt,
               i <= 0);
@@ -428,7 +422,7 @@ class GPS_SinglePositioning {
           res.user_position.xyz += delta_user_position;
           res.user_position.llh = res.user_position.xyz.llh();
 
-          float_t delta_receiver_error(delta_x(3, 0));
+          const float_t &delta_receiver_error(delta_x(3, 0));
           res.receiver_error += delta_receiver_error;
           time_arrival -= (delta_receiver_error / space_node_t::light_speed);
 
