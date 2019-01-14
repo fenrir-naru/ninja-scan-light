@@ -322,15 +322,11 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
       float_t delta_ms(this->range_residual_mean_ms(gps.clock_index, info));
       if((delta_ms >= 0.9) || (delta_ms <= -0.9)){ // 0.9 ms
         std::cerr << "Detect receiver clock jump: " << delta_ms << " [ms] => ";
-        float_t clock_error_delta(
+        float_t clock_error_shift(
             GPS_RawData<float_t>::space_node_t::light_speed * 1E-3 * std::floor(delta_ms + 0.5));
-        float_t clock_error_mod(
-            snapshots[0].ins_gps.clock_error(gps.clock_index)
-              + clock_error_delta);
         info = generator(
             snapshots[0].ins_gps, gps,
-            clock_error_mod,
-            snapshots[0].ins_gps.clock_error_rate(gps.clock_index));
+            clock_error_shift);
         delta_ms = this->range_residual_mean_ms(gps.clock_index, info);
         if((delta_ms < 0.9) && (delta_ms > -0.9)){
           std::cerr << "Fixed." << std::endl;
@@ -338,9 +334,9 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
           for(typename snapshots_t::iterator it(snapshots.begin());
               it != snapshots.end();
               ++it){
-            it->ins_gps.clock_error(gps.clock_index) += clock_error_delta;
+            it->ins_gps.clock_error(gps.clock_index) += clock_error_shift;
           }
-          this->clock_error(gps.clock_index) += clock_error_delta;
+          this->clock_error(gps.clock_index) += clock_error_shift;
         }else{
           std::cerr << "Skipped." << std::endl;
           return; // unknown error!

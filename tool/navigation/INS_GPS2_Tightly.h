@@ -511,9 +511,22 @@ class INS_GPS2_Tightly : public BaseFINS{
     }
 
   public:
+    /**
+     * Calculate information required for measurement update
+     *
+     * @param gps GPS observation mainly consisting of range (and rate, if available)
+     * @param clock_error_shift forcefully shifting value of clock error in meter,
+     * which will be used when receiver clock error exceeds predefined threshold
+     * of allowable delta from true GPS time. Normally it is +/- (1 ms * speed of light).
+     */
     CorrectInfo<float_t> correct_info(
         const raw_data_t &gps,
-        const float_t &clock_error, const float_t &clock_error_rate) const {
+        const float_t &clock_error_shift = 0) const {
+
+      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
+
+      const float_t clock_error(BaseFINS::m_clock_error[gps.clock_index] + clock_error_shift);
+      const float_t &clock_error_rate(BaseFINS::m_clock_error_rate[gps.clock_index]);
 
       // check space_node is configured
       if(!gps.solver){return CorrectInfo<float_t>::no_info();}
@@ -579,25 +592,9 @@ class INS_GPS2_Tightly : public BaseFINS{
     CorrectInfo<float_t> correct_info(
         const raw_data_t &gps,
         const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b,
-        const float_t &clock_error, const float_t &clock_error_rate) const {
+        const float_t &clock_error_shift = 0) const {
       // TODO
-      return correct_info(gps, clock_error, clock_error_rate);
-    }
-
-    CorrectInfo<float_t> correct_info(const raw_data_t &gps) const {
-      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
-      return correct_info(gps,
-          BaseFINS::m_clock_error[gps.clock_index],
-          BaseFINS::m_clock_error_rate[gps.clock_index]);
-    }
-
-    CorrectInfo<float_t> correct_info(const raw_data_t &gps,
-        const vec3_t &lever_arm_b,
-        const vec3_t &omega_b2i_4b) const {
-      if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
-      return correct_info(gps, lever_arm_b, omega_b2i_4b,
-          BaseFINS::m_clock_error[gps.clock_index],
-          BaseFINS::m_clock_error_rate[gps.clock_index]);
+      return correct_info(gps, clock_error_shift);
     }
 
   protected:
@@ -618,13 +615,10 @@ class INS_GPS2_Tightly : public BaseFINS{
     }
 
     struct CorrectInfoGenerator1 {
-      CorrectInfo<float_t> operator()(const self_t &self, const raw_data_t &gps) const {
-        return self.correct_info(gps);
-      }
       CorrectInfo<float_t> operator()(
           const self_t &self, const raw_data_t &gps,
-          const float_t &clock_error, const float_t &clock_error_rate) const {
-        return self.correct_info(gps, clock_error, clock_error_rate);
+          const float_t &clock_error_shift = 0) const {
+        return self.correct_info(gps, clock_error_shift);
       }
     };
 
@@ -633,13 +627,10 @@ class INS_GPS2_Tightly : public BaseFINS{
       const vec3_t &omega_b2i_4b;
       CorrectInfoGenerator2(const vec3_t &lever, const vec3_t &omega)
           : lever_arm_b(lever), omega_b2i_4b(omega) {}
-      CorrectInfo<float_t> operator()(const self_t &self, const raw_data_t &gps) const {
-        return self.correct_info(gps, lever_arm_b, omega_b2i_4b);
-      }
       CorrectInfo<float_t> operator()(
           const self_t &self, const raw_data_t &gps,
-          const float_t &clock_error, const float_t &clock_error_rate) const {
-        return self.correct_info(gps, lever_arm_b, omega_b2i_4b, clock_error, clock_error_rate);
+          const float_t &clock_error_shift = 0) const {
+        return self.correct_info(gps, lever_arm_b, omega_b2i_4b, clock_error_shift);
       }
     };
 
@@ -655,15 +646,14 @@ class INS_GPS2_Tightly : public BaseFINS{
       float_t delta_ms(range_residual_mean_ms(gps.clock_index, info));
       if((delta_ms >= 0.9) || (delta_ms <= -0.9)){ // 0.9 ms
         std::cerr << "Detect receiver clock jump: " << delta_ms << " [ms] => ";
-        float_t clock_error_mod(BaseFINS::m_clock_error[gps.clock_index] + (space_node_t::light_speed * 1E-3 * std::floor(delta_ms + 0.5)));
-        info = generator(
-            *this, gps,
-            clock_error_mod, BaseFINS::m_clock_error_rate[gps.clock_index]);
+        float_t clock_error_shift(
+            space_node_t::light_speed * 1E-3 * std::floor(delta_ms + 0.5));
+        info = generator(*this, gps, clock_error_shift);
         delta_ms = range_residual_mean_ms(gps.clock_index, info);
         if((delta_ms < 0.9) && (delta_ms > -0.9)){
           std::cerr << "Fixed." << std::endl;
           // correct internal clock error
-          BaseFINS::m_clock_error[gps.clock_index] = clock_error_mod;
+          BaseFINS::m_clock_error[gps.clock_index] += clock_error_shift;
         }else{
           std::cerr << "Skipped." << std::endl;
           return; // unknown error!
