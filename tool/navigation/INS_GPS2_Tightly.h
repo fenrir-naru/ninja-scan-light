@@ -577,6 +577,11 @@ class INS_GPS2_Tightly : public BaseFINS{
             &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index]);
 
         z_index += (use_rate ? 2 : 1);
+
+        if(z_index > (sizeof(z_serialized) / sizeof(z_serialized[0])) - 2){
+          // At least 2 rows margin is required for next observation of range and rate
+          break;
+        }
       }
 
       mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
