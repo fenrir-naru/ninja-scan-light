@@ -421,7 +421,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         const solver_t &solver,
         const typename solver_t::satellite_t &sat,
         const receiver_state_t &x,
-        float_t range, const float_t &rate, const bool &use_rate,
+        float_t range, const float_t *rate,
         float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
 
       // range residual
@@ -480,11 +480,11 @@ class INS_GPS2_Tightly : public BaseFINS{
       if(weight < 1E-1){weight = 1E-1;}
       R_diag[0] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
 
-      if(!use_rate){return;}
+      if(!rate){return;}
 
       // rate residual
       typename solver_t::xyz_t rel_vel(sat.velocity(x.t, range) - x.vel);
-      z[1] = rate - BaseFINS::m_clock_error_rate[x.clock_index]
+      z[1] = *rate - BaseFINS::m_clock_error_rate[x.clock_index]
           + los_neg[0] * rel_vel.x()
           + los_neg[1] * rel_vel.y()
           + los_neg[2] * rel_vel.z()
@@ -557,25 +557,23 @@ class INS_GPS2_Tightly : public BaseFINS{
         if(!sat){continue;}
 
         // check rate availability
-        bool use_rate(has_rates);
-        float_t rate;
-        if(use_rate){
+        const float_t *rate(NULL);
+        if(has_rates){
           for(it2_t it2_rate(it_rate->second.begin());
               it2_rate != it_rate->second.end(); ++it2_rate){
             int prn_rate(it2_rate->first);
             if(prn == prn_rate){
-              use_rate = true;
-              rate = it2_rate->second;
+              rate = &(it2_rate->second);
               break;
             }
           }
         }
 
         assign_z_H_R(*gps.solver, *sat, x,
-            it2_range->second, rate, use_rate,
+            it2_range->second, rate,
             &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index]);
 
-        z_index += (use_rate ? 2 : 1);
+        z_index += (rate ? 2 : 1);
 
         if(z_index > (sizeof(z_serialized) / sizeof(z_serialized[0])) - 2){
           // At least 2 rows margin is required for next observation of range and rate
