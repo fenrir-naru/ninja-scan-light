@@ -393,19 +393,21 @@ class INS_GPS2_Tightly : public BaseFINS{
   protected:
     struct receiver_state_t {
       typename raw_data_t::gps_time_t t;
-      float_t t_dot;
       unsigned int clock_index;
+      float_t clock_error;
       typename solver_t::pos_t pos;
       typename solver_t::xyz_t vel;
     };
     receiver_state_t receiver_state(
         const typename raw_data_t::gps_time_t &t,
         const unsigned int &clock_index,
-        const float_t &clock_error, const float_t &clock_error_rate) const {
+        const float_t &clock_error_shift = 0) const {
+      float_t clock_error(
+          BaseFINS::m_clock_error[clock_index] + clock_error_shift);
       receiver_state_t res = {
         t - clock_error / space_node_t::light_speed,
-        clock_error_rate,
         clock_index,
+        clock_error,
         {
           BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
           typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
@@ -431,7 +433,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       };
 
       range = solver.range_residual(
-          sat, range, x.t,
+          sat, range - x.clock_error, x.t,
           x.pos,
           residual);
 
@@ -482,7 +484,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       // rate residual
       typename solver_t::xyz_t rel_vel(sat.velocity(x.t, range) - x.vel);
-      z[1] = rate - x.t_dot
+      z[1] = rate - BaseFINS::m_clock_error_rate[x.clock_index]
           + los_neg[0] * rel_vel.x()
           + los_neg[1] * rel_vel.y()
           + los_neg[2] * rel_vel.z()
@@ -525,9 +527,6 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
 
-      const float_t clock_error(BaseFINS::m_clock_error[gps.clock_index] + clock_error_shift);
-      const float_t &clock_error_rate(BaseFINS::m_clock_error_rate[gps.clock_index]);
-
       // check space_node is configured
       if(!gps.solver){return CorrectInfo<float_t>::no_info();}
 
@@ -540,7 +539,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       typedef typename raw_data_t::measurement_t::const_iterator it_t;
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
 
-      receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error, clock_error_rate));
+      receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error_shift));
 
       it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
       if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
@@ -573,7 +572,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         }
 
         assign_z_H_R(*gps.solver, *sat, x,
-            it2_range->second - clock_error, rate, use_rate,
+            it2_range->second, rate, use_rate,
             &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index]);
 
         z_index += (use_rate ? 2 : 1);
