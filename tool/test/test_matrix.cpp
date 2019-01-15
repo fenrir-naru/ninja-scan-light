@@ -262,6 +262,13 @@ BOOST_AUTO_TEST_CASE(copy){
   matrix_compare(*A, _A);
 }
 
+BOOST_AUTO_TEST_CASE(assign_null_matrix){
+  matrix_t _A(A->copy()), __A = *A;
+  __A = matrix_t();
+  __A = matrix_t();
+  matrix_compare(*A, _A);
+}
+
 BOOST_AUTO_TEST_CASE(properties){
   dbg_print();
   dbg("rows:" << A->rows() << endl, false);
