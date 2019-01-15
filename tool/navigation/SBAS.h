@@ -569,7 +569,8 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
               return res;
             }
             bool is_available() const {
-              return (delay < DELAY_DONT_USE);
+              return (delay < DELAY_DONT_USE)
+                  && (error_indicator < ERROR_INDICATOR_NOT_MONITORED);
             }
           };
 
