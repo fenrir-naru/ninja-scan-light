@@ -712,11 +712,10 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
     return raw_data;
   }
 
-  typedef raw_data_t::space_node_t space_node_t;
-
   void take_consistency() const {
     // Select most preferable ephemeris
-    const_cast<space_node_t &>(raw_data.solver->space_node()).update_all_ephemeris(raw_data.gpstime);
+    const_cast<raw_data_t::space_node_t &>(raw_data.solver->space_node())
+        .update_all_ephemeris(raw_data.gpstime);
   }
 
   typedef raw_data_t::solver_t::user_pvt_t pvt_t;
@@ -777,7 +776,7 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
   static void label(std::ostream &out) {
     out << "week"
         << ',' << "itow"
-        << ',' << "receiver_error"
+        << ',' << "receiver_clock_error_meter"
         << ',' << "longitude"
         << ',' << "latitude"
         << ',' << "height"
@@ -794,7 +793,7 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
   friend std::ostream &operator<<(std::ostream &out, const gps_pvt_t &pvt){
     out << pvt.receiver_time.week
         << ',' << pvt.receiver_time.seconds
-        << ',' << pvt.receiver_error / G_Packet_Measurement::space_node_t::light_speed
+        << ',' << pvt.receiver_error
         << ',' << rad2deg(pvt.user_position.llh.longitude())
         << ',' << rad2deg(pvt.user_position.llh.latitude())
         << ',' << pvt.user_position.llh.height()
@@ -1803,22 +1802,22 @@ class StreamProcessor
       } status;
 
       // for tightly coupled
-      typedef G_Packet_Measurement::space_node_t space_node_t;
-      typedef G_Packet_Measurement::raw_data_t raw_data_t;
-      space_node_t space_node;
-      raw_data_t::solver_t::options_t solver_options;
+      typedef GPS_SpaceNode<float_sylph_t> gps_space_node_t;
+      gps_space_node_t gps_space_node;
       G_Packet_Measurement packet_raw_latest;
+      typedef G_Packet_Measurement::raw_data_t raw_data_t;
+      raw_data_t::solver_t::options_t solver_options;
       GNSS_Data<float_sylph_t>::Loader loader;
       struct tightly_associator_t {
         GHandler &handler;
         raw_data_t::solver_t solver;
         void associate() {
           handler.packet_raw_latest.raw_data.solver = &solver;
-          handler.loader.gps = &(handler.space_node);
+          handler.loader.gps = &(handler.gps_space_node);
         }
         tightly_associator_t(GHandler &h)
             : handler(h),
-            solver(handler.space_node, handler.solver_options){
+            solver(handler.gps_space_node, handler.solver_options){
           associate();
         }
         tightly_associator_t &operator=(const tightly_associator_t &another){
@@ -1834,8 +1833,8 @@ class StreamProcessor
           packet_latest(),
           itow_ms_0x0102(-1), itow_ms_0x0112(-1),
           week_number(Options::gps_time_t::WN_INVALID), status(),
-          space_node(),
-          packet_raw_latest(),
+          gps_space_node(),
+          packet_raw_latest(), solver_options(),
           loader(),
           tightly_associator(*this) {
         previous_seek_next = G_Observer_t::ready();
@@ -1994,7 +1993,7 @@ class StreamProcessor
         observer.fetch_ephemeris(ephemeris);
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
-          ephemeris.space_node = &space_node;
+          ephemeris.space_node = &gps_space_node;
           Handler::outer.updatable->update(ephemeris);
         }
       }
@@ -2038,7 +2037,7 @@ class StreamProcessor
               // calculate range rate derived from doppler
               dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
                   prn,
-                  -src.doppler * space_node_t::L1_WaveLength()));
+                  -src.doppler * gps_space_node_t::L1_WaveLength()));
             }
 
 #ifdef USE_GPS_SINGLE_DIFFERENCE_AS_RATE
@@ -2103,7 +2102,7 @@ class StreamProcessor
 
               // calculate range rate derived from doppler
               dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
-                  prn, -doppler * space_node_t::L1_WaveLength()));
+                  prn, -doppler * gps_space_node_t::L1_WaveLength()));
             }
 
             update(packet_raw_latest);
@@ -2204,7 +2203,7 @@ class StreamProcessor
 
               // calculate range rate derived from doppler
               dst[raw_data_t::L1_RANGE_RATE].push_back(v_t(
-                  prn, -doppler * space_node_t::L1_WaveLength()));
+                  prn, -doppler * gps_space_node_t::L1_WaveLength()));
             }
 
             if(ranges_valid == 0){return;}
@@ -2226,7 +2225,7 @@ class StreamProcessor
                 it != dst[TIME_OF_TRANSMISSION].end(); ++it){
               float_sylph_t delta_t(est_time_of_reception - it->second);
               if(delta_t > 100E-3){continue;} // Remove abnormal time lag (normally, from 67 to 86 ms);
-              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(it->first, space_node_t::light_speed * delta_t));
+              dst[raw_data_t::L1_PSEUDORANGE].push_back(v_t(it->first, gps_space_node_t::light_speed * delta_t));
             }
 
             update(packet_raw_latest);
@@ -2336,7 +2335,7 @@ class StreamProcessor
     ~StreamProcessor(){
       if(invoked > 0){
         if(out_rinex_nav){
-          RINEX_NAV_Writer<float_sylph_t>::write_all(*out_rinex_nav, g_handler.space_node);
+          RINEX_NAV_Writer<float_sylph_t>::write_all(*out_rinex_nav, g_handler.gps_space_node);
         }
       }
     }
@@ -2349,11 +2348,11 @@ class StreamProcessor
       return a_handler.calibration;
     }
 
-    const G_Packet_Measurement::space_node_t &gps_space_node() const {
-      return g_handler.space_node;
+    const GHandler::gps_space_node_t &gps_space_node() const {
+      return g_handler.gps_space_node;
     }
-    G_Packet_Measurement::space_node_t &gps_space_node() {
-      return const_cast<G_Packet_Measurement::space_node_t &>(
+    GHandler::gps_space_node_t &gps_space_node() {
+      return const_cast<GHandler::gps_space_node_t &>(
           static_cast<const StreamProcessor &>(*this).gps_space_node());
     }
 
@@ -2460,7 +2459,7 @@ class StreamProcessor
         cerr << "RINEX Navigation file (" << value << ") reading..." << endl;
         istream &in(options.spec2istream(value));
         int ephemeris(RINEX_NAV_Reader<float_sylph_t>::read_all(
-            in, g_handler.space_node));
+            in, g_handler.gps_space_node));
         if(ephemeris < 0){
           cerr << "(error!) Invalid format!" << endl;
           return false;
