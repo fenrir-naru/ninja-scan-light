@@ -855,9 +855,7 @@ class Matrix{
     self_t &operator=(const self_t &matrix){
       if(this != &matrix){
         delete storage;
-        if(matrix.storage){
-          storage = matrix.array2d()->storage_t::copy(false);
-        }
+        storage = matrix.storage ? matrix.array2d()->storage_t::copy(false) : NULL;
         view = matrix.view;
       }
       return *this;
@@ -865,7 +863,7 @@ class Matrix{
     template <class T2, template <class> class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
       delete storage;
-      storage = new storage_t(*matrix.storage);
+      storage = matrix.storage ? new storage_t(*matrix.storage) : NULL;
       view = matrix.view;
       return *this;
     }
