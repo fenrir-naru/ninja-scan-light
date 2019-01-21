@@ -2484,8 +2484,8 @@ class StreamProcessor
         }
         cerr << "F10.7: " << f_10_7 << endl;
         g_handler.solver_options.f_10_7 = f_10_7;
-        g_handler.solver_options.ionospheric_models[
-            G_Packet_Measurement::raw_data_t::solver_t::options_t::IONOSPHERIC_NTCM_GL] = true;
+        g_handler.solver_options.insert_ionospheric_model(
+            G_Packet_Measurement::raw_data_t::solver_t::options_t::IONOSPHERIC_NTCM_GL);
         return true;
       }
 
