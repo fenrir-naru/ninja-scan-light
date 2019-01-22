@@ -418,7 +418,7 @@ class INS_GPS2_Tightly : public BaseFINS{
     }
 
     void assign_z_H_R(
-        const solver_t &solver,
+        const solver_t &solver, const typename solver_t::options_t &solver_opt,
         const typename solver_t::satellite_t &sat,
         const receiver_state_t &x,
         float_t range, const float_t *rate,
@@ -435,7 +435,8 @@ class INS_GPS2_Tightly : public BaseFINS{
       range = solver.range_residual(
           sat, range - x.clock_error, x.t,
           x.pos,
-          residual);
+          residual,
+          solver_opt);
 
       { // setup H matrix
 #define pow2(x) ((x) * (x))
@@ -530,6 +531,8 @@ class INS_GPS2_Tightly : public BaseFINS{
       // check space_node is configured
       if(!gps.solver){return CorrectInfo<float_t>::no_info();}
 
+      typename solver_t::options_t solver_opt(gps.solver->available_options());
+
       float_t z_serialized[64]; // maximum 64 observation values
 #define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
       float_t H_serialized[z_size][P_SIZE] = {{0}};
@@ -569,8 +572,8 @@ class INS_GPS2_Tightly : public BaseFINS{
           }
         }
 
-        assign_z_H_R(*gps.solver, *sat, x,
-            it2_range->second, rate,
+        assign_z_H_R(*gps.solver, solver_opt,
+            *sat, x, it2_range->second, rate,
             &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index]);
 
         z_index += (rate ? 2 : 1);
