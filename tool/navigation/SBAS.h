@@ -94,6 +94,7 @@ typedef typename gps_space_node_t::type type
       int prn;
       int g2_delay_chips;
       int initial_g2;
+      FloatT lng_deg;
       const char *name;
       typename SBAS_Signal<float_t>::G2 get_G2() const {
         return typename SBAS_Signal<float_t>::G2(initial_g2);
@@ -2120,26 +2121,32 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
 
 template <class FloatT>
 const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::ranging_codes[] = {
-  {120,  145, 01106, "INMARSAT 3F2 AOR-E"},
-  {121,  175, 01241, "INMARSAT 4F2"},
-  {122,   52, 00267, "INMARSAT 3F4 AOR-W"},
-  {123,   21, 00232, "LM RPS-1, RPS-2"},
-  {124,  237, 01617, "Artemis"},
-  {125,  235, 01076, "LM RPS-1, RPS-2"},
-  {126,  886, 01764, "INMARSAT 3F5 IND-W"},
-  {127,  657, 00717, "INSATNAV"},
-  {128,  634, 01532, "INSATNAV"},
-  {129,  762, 01250, "MTSAT-1R (or MTSAT-2)"},
-  {130,  355, 00341, "INMARSAT 4F1"},
-  {131, 1012, 00551, "INMARSAT 3F1 IOR"},
-  {132,  176, 00520, "Unallocated"},
-  {133,  603, 01731, "INMARSAT 4F3"},
-  {134,  130, 00706, "INMARSAT 3F3 POR"},
-  {135,  359, 01216, "LM RPS-1"},
-  {136,  595, 00740, "INMARSAT Reserved"},
-  {137,   68, 01007, "MTSAT-2 (or MTSAT-1R)"},
-  {138,  386, 00450, "LM RPS-2"},
-}; ///< @see Table A-1
+  {120,  145, 01106,  -15.5, "EGNOS (INMARSAT 3F2)"},
+  {121,  175, 01241,   25,   "EGNOS (INMARSAT 3F5)"},
+  {122,   52, 00267,  143.5, "AUS-NZ (INMARSAT 4F1)"},
+  {123,   21, 00232,   31.5, "EGNOS (ASTRA 5B)"},
+  {124,  237, 01617,    0,   "EGNOS (Reserved)"},
+  {125,  235, 01076,  -16,   "SDCM (Luch-5A)"},
+  {126,  886, 01764,   25,   "EGNOS (INMARSAT 4F2)"},
+  {127,  657, 00717,   55,   "GAGAN (GSAT-8)"},
+  {128,  634, 01532,   83,   "GAGAN (GSAT-10)"},
+  {129,  762, 01250,  145,   "MSAS (MTSAT-2)"},
+  {130,  355, 00341,   80,   "BDSBAS (G6)"},
+  {131, 1012, 00551, -117,   "WAAS (Eutelsat 117WB)"},
+  {132,  176, 00520,   93.5, "GAGAN (GSAT-15)"},
+  {133,  603, 01731,  -98,   "WAAS (INMARSAT 4F3)"},
+  {134,  130, 00706,  178,   "KAAS (INMARSAT 5F3)"},
+  {135,  359, 01216, -133,   "WAAS (Intelsat Galaxy 15)"},
+  {136,  595, 00740,    5,   "EGNOS (ASTRA 4B)"},
+  {137,   68, 01007,  145,   "MSAS (MTSAT-2)"},
+  {138,  386, 00450,  107.3, "WAAS (ANIK-F1R)"},
+  {140,  456, 01653,   95,   "SDCM (Luch-5B)"},
+  {141,  499, 01411,  167,   "SDCM (Luch-4)"},
+  {143,  307, 01312,  110.5, "BDSBAS (G3)"},
+  {144,  127, 01060,  140,   "BDSBAS (G1)"},
+  {147,  118, 00355,   42.5, "NSAS (NIGCOMSAT-1R)"},
+  {148,  163, 00335,  -24.8, "ALCOMSAT-1"},
+}; ///< @see https://media.defense.gov/2018/Aug/07/2001951699/-1/-1/1/L1%20CA%20PRN%20CODE%20ASSIGNMENTS%20JULY%202018.PDF
 
 template <class FloatT>
 const typename SBAS_SpaceNode<FloatT>::Timing::values_t SBAS_SpaceNode<FloatT>::Timing::values[] = {
