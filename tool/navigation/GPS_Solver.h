@@ -50,6 +50,8 @@
 
 template <class FloatT>
 struct GPS_SinglePositioning_Options {
+  FloatT elevation_mask;
+
   enum ionospheric_model_t {
     IONOSPHERIC_KLOBUCHAR,
     IONOSPHERIC_NTCM_GL,
@@ -62,7 +64,7 @@ struct GPS_SinglePositioning_Options {
   FloatT f_10_7;
 
   GPS_SinglePositioning_Options()
-      : f_10_7(-1) {
+      : elevation_mask(0), f_10_7(-1) {
     for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
       ionospheric_models[i] = IONOSPHERIC_SKIP;
     }
@@ -206,7 +208,8 @@ class GPS_SinglePositioning {
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
      * @param time_arrival time when signal arrive at receiver
      * @param usr_pos (temporal solution of) user position
-     * @param residual caluclated residual with line of site vector, and weight
+     * @param residual caluclated residual with line of site vector, and weight;
+     * When weight is equal to or less than zero, the calculated results should not be used.
      * @param opt range residual calculation options represented by applied ionospheric model
      * @param is_coarse_mode if true, precise correction will be skipped.
      * @return (float_t) corrected range just including delay, and excluding receiver/satellite error.
@@ -273,12 +276,18 @@ class GPS_SinglePositioning {
 
         // Setup weight
         if(std::abs(residual.residual) > 30.0){
-          // If residual is too big, exclude it by decreasing its weight.
+          // If residual is too big, gently exclude it by decreasing its weight.
           residual.weight = 1E-8;
         }else{
-          // elevation weight based on "GPS実用プログラミング"
-          residual.weight = std::pow(sin(relative_pos.elevation())/0.8, 2);
-          if(residual.weight < 1E-3){residual.weight = 1E-3;}
+
+          float_t elv(relative_pos.elevation());
+          if(elv < opt.elevation_mask){
+            residual.weight = 0; // exclude it when elevation is less than threshold
+          }else{
+            // elevation weight based on "GPS実用プログラミング"
+            residual.weight = std::pow(sin(elv)/0.8, 2);
+            if(residual.weight < 1E-3){residual.weight = 1E-3;}
+          }
         }
       }
 
@@ -339,6 +348,7 @@ class GPS_SinglePositioning {
       enu_t user_velocity_enu;
       float_t receiver_error_rate;
       float_t gdop, pdop, hdop, vdop, tdop;
+      int used_satellites;
 
       user_pvt_t()
           : error_code(ERROR_UNSOLVED),
@@ -398,11 +408,6 @@ class GPS_SinglePositioning {
             it->second));
       }
 
-      if(available_sat_range.size() < 4){
-        res.error_code = user_pvt_t::ERROR_INSUFFICIENT_SATELLITES;
-        return res;
-      }
-
       // 2. Position calculation
 
       res.user_position = user_position_init;
@@ -418,6 +423,7 @@ class GPS_SinglePositioning {
       bool converged(false);
       for(int i(good_init ? 0 : -2); i < 10; i++){
 
+        res.used_satellites = 0;
         available_sat_range_corrected.clear();
         unsigned j(0);
         const bool coarse_estimation(i <= 0);
@@ -441,6 +447,12 @@ class GPS_SinglePositioning {
               opt,
               coarse_estimation);
 
+          if(residual.weight <= 0){
+            residual.weight = 0; // intentionally excluded satellite
+          }else{
+            ++res.used_satellites;
+          }
+
           if(!coarse_estimation){
             available_sat_range_corrected.push_back(std::make_pair(it->first, range));
           }
@@ -460,6 +472,11 @@ class GPS_SinglePositioning {
           std::cerr << "G:" << geomat.G << std::endl;
           std::cerr << "W:" << geomat.W << std::endl;
           std::cerr << "delta_r:" << geomat.delta_r << std::endl;
+        }
+
+        if(res.used_satellites < 4){
+          res.error_code = user_pvt_t::ERROR_INSUFFICIENT_SATELLITES;
+          return res;
         }
 
         try{

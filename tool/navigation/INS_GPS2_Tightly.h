@@ -417,7 +417,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       return res;
     }
 
-    void assign_z_H_R(
+    bool assign_z_H_R(
         const solver_t &solver, const typename solver_t::options_t &solver_opt,
         const typename solver_t::satellite_t &sat,
         const receiver_state_t &x,
@@ -437,6 +437,7 @@ class INS_GPS2_Tightly : public BaseFINS{
           x.pos,
           residual,
           solver_opt);
+      if(weight <= 0){return false;} // Intentional exclusion
 
       { // setup H matrix
 #define pow2(x) ((x) * (x))
@@ -481,7 +482,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       if(weight < 1E-1){weight = 1E-1;}
       R_diag[0] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
 
-      if(!rate){return;}
+      if(!rate){return true;}
 
       // rate residual
       typename solver_t::xyz_t rel_vel(sat.velocity(x.t, range) - x.vel);
@@ -511,6 +512,8 @@ class INS_GPS2_Tightly : public BaseFINS{
       }
 
       R_diag[1] = R_diag[0] * 1E-3; // TODO rate error variance
+
+      return true;
     }
 
   public:
@@ -572,9 +575,12 @@ class INS_GPS2_Tightly : public BaseFINS{
           }
         }
 
-        assign_z_H_R(*gps.solver, solver_opt,
+        if(!assign_z_H_R(*gps.solver, solver_opt,
             *sat, x, it2_range->second, rate,
-            &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index]);
+            &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index])){
+          // Intentional exclusion is occurred during residual calculation such as elevation mask.
+          continue;
+        }
 
         z_index += (rate ? 2 : 1);
 
@@ -583,6 +589,8 @@ class INS_GPS2_Tightly : public BaseFINS{
           break;
         }
       }
+
+      if(z_index <= 0){return CorrectInfo<float_t>::no_info();}
 
       mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
       mat_t z(z_index, 1, (float_t *)z_serialized);

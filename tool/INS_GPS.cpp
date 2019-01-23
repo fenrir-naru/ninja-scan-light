@@ -787,7 +787,8 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
         << ',' << "tdop"
         << ',' << "v_north"
         << ',' << "v_east"
-        << ',' << "v_down";
+        << ',' << "v_down"
+        << ',' << "used_satellites";
   }
 
   friend std::ostream &operator<<(std::ostream &out, const gps_pvt_t &pvt){
@@ -804,7 +805,8 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
         << ',' << pvt.tdop
         << ',' << pvt.user_velocity_enu.north()
         << ',' << pvt.user_velocity_enu.east()
-        << ',' << -pvt.user_velocity_enu.up();
+        << ',' << -pvt.user_velocity_enu.up()
+        << ',' << pvt.used_satellites;
     return out;
   }
 };
