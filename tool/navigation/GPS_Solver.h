@@ -412,14 +412,15 @@ class GPS_SinglePositioning {
           receiver_time - (res.receiver_error / space_node_t::light_speed));
 
       geometric_matrices_t geomat(available_sat_range.size());
-      sat_obs_t available_sat_pseudorange;
+      sat_obs_t available_sat_range_corrected;
 
       // If initialization is not appropriate, more iteration will be performed.
       bool converged(false);
       for(int i(good_init ? 0 : -2); i < 10; i++){
 
-        available_sat_pseudorange.clear();
+        available_sat_range_corrected.clear();
         unsigned j(0);
+        const bool coarse_estimation(i <= 0);
         for(typename sat_obs_t::const_iterator it(available_sat_range.begin());
             it != available_sat_range.end();
             ++it, ++j){
@@ -438,10 +439,11 @@ class GPS_SinglePositioning {
               res.user_position,
               residual,
               opt,
-              i <= 0);
+              coarse_estimation);
 
-          if(i <= 0){continue;}
-          available_sat_pseudorange.push_back(typename sat_obs_t::value_type(it->first, range));
+          if(!coarse_estimation){
+            available_sat_range_corrected.push_back(std::make_pair(it->first, range));
+          }
         }
 
         if(false){ // debug
@@ -508,15 +510,15 @@ class GPS_SinglePositioning {
         index_table_t index_table; // [index_of_range_used_for_position, index_of_rate]
 
         int i(0);
-        for(typename sat_obs_t::const_iterator it(available_sat_pseudorange.begin());
-            it != available_sat_pseudorange.end();
+        for(typename sat_obs_t::const_iterator it(available_sat_range_corrected.begin());
+            it != available_sat_range_corrected.end();
             ++it, ++i){
           int j(0);
           for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
               it2 != prn_rate.end();
               ++it2, ++j){
             if(it->first.first == it2->first){
-              index_table.push_back(index_table_t::value_type(i, j));
+              index_table.push_back(std::make_pair(i, j));
               break;
             }
           }
@@ -532,11 +534,11 @@ class GPS_SinglePositioning {
 
           int i_range(it->first), i_rate(it->second);
 
-          const satellite_t *sat(available_sat_pseudorange[i_range].first.second);
-          float_t pseudo_range(available_sat_pseudorange[i_range].second);
+          const satellite_t *sat(available_sat_range_corrected[i_range].first.second);
+          float_t range(available_sat_range_corrected[i_range].second);
 
           // Calculate satellite velocity
-          xyz_t sat_vel(sat->velocity(time_arrival, pseudo_range));
+          xyz_t sat_vel(sat->velocity(time_arrival, range));
 
           // copy design matrix
           geomat2.copy_G_W_row(geomat, i);
@@ -546,7 +548,7 @@ class GPS_SinglePositioning {
               + geomat2.G(i, 0) * sat_vel.x()
               + geomat2.G(i, 1) * sat_vel.y()
               + geomat2.G(i, 2) * sat_vel.z()
-              + (sat->clock_error_dot(time_arrival, pseudo_range) * space_node_t::light_speed);
+              + (sat->clock_error_dot(time_arrival, range) * space_node_t::light_speed);
         }
 
         try{
