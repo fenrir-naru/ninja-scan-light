@@ -474,7 +474,7 @@ class GPS_SinglePositioning {
           res.receiver_error += delta_receiver_error;
           time_arrival -= (delta_receiver_error / space_node_t::light_speed);
 
-          if(delta_user_position.dist() <= 1E-6){
+          if((!coarse_estimation) && (delta_user_position.dist() <= 1E-6)){
             converged = true;
             break;
           }
