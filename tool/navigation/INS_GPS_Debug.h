@@ -111,14 +111,15 @@ class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
   protected:
     enum {ACTION_LAST_NOP, ACTION_LAST_UPDATE, ACTION_LAST_CORRECT} last_action;
     struct snapshot_t {
-      mat_t A, B, H, R, K;
-      snapshot_t() : A(), B(), H(), R(), K() {}
+      mat_t A, B, H, R, K, v;
+      snapshot_t() : A(), B(), H(), R(), K(), v() {}
       snapshot_t(const snapshot_t &orig, const bool &deepcopy = false)
           : A(deepcopy ? orig.A.copy() : orig.A),
             B(deepcopy ? orig.B.copy() : orig.B),
             H(deepcopy ? orig.H.copy() : orig.H),
             R(deepcopy ? orig.R.copy() : orig.R),
-            K(deepcopy ? orig.K.copy() : orig.K) {}
+            K(deepcopy ? orig.K.copy() : orig.K),
+            v(deepcopy ? orig.v.copy() : orig.v) {}
     } snapshot;
   public:
     INS_GPS_Debug_Covariance()
@@ -135,6 +136,7 @@ class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
       snapshot.H = another.snapshot.H;
       snapshot.R = another.snapshot.R;
       snapshot.K = another.snapshot.K;
+      snapshot.v = another.snapshot.v;
       return *this;
     }
     virtual ~INS_GPS_Debug_Covariance(){}
@@ -170,6 +172,7 @@ class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
               inspect_matrix2(out, snapshot.H, "H");
               inspect_matrix2(out, snapshot.R, "R");
               inspect_matrix2(out, snapshot.K, "K");
+              inspect_matrix2(out, snapshot.v, "v");
               break;
           }
           inspect_matrix2(out, const_cast<self_t *>(this)->getFilter().getP(), "P");
@@ -197,6 +200,7 @@ class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
       snapshot.H = H;
       snapshot.R = R;
       snapshot.K = K;
+      snapshot.v = v;
       super_t::before_correct_INS(H, R, K, v, x_hat);
     }
 };
