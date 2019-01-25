@@ -50,9 +50,10 @@ struct CorrectInfo {
     R = another.R;
     return *this;
   }
-  static CorrectInfo<FloatT> no_info() {
-    return CorrectInfo<FloatT>(
-        Matrix<FloatT>(0, 0), Matrix<FloatT>(0, 0), Matrix<FloatT>(0, 0));
+  static const CorrectInfo<FloatT> &no_info() {
+    static const Matrix<FloatT> zero(0, 0);
+    static const CorrectInfo<FloatT> res(zero, zero, zero);
+    return res;
   }
 };
 
