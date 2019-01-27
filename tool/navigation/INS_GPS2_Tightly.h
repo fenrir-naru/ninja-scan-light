@@ -536,12 +536,6 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       typename solver_t::options_t solver_opt(gps.solver->available_options());
 
-      float_t z_serialized[64]; // maximum 64 observation values
-#define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
-      float_t H_serialized[z_size][P_SIZE] = {{0}};
-      float_t R_diag[z_size] = {0};
-#undef z_size
-
       typedef typename raw_data_t::measurement_t::const_iterator it_t;
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
 
@@ -552,6 +546,22 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
       bool has_rates(it_rate != gps.measurement.end());
+
+      struct buf_t {
+        float_t *z;
+        float_t (*H)[P_SIZE];
+        float_t *R_diag;
+        buf_t(const unsigned int &size)
+            : z(new float_t [size * (P_SIZE + 2)]/*()*/), // () invokes built-in type default constructor
+            R_diag(&z[size]), H((float_t (*)[P_SIZE])&z[size * 2]) {
+          for(int i(0); i < size * (P_SIZE + 2); ++i){
+            z[i] = 0; // conservative, because equivalent to new[]()
+          }
+        }
+        ~buf_t(){
+          delete [] z;
+        }
+      } buf(it_range->second.size() + (has_rates ? it_rate->second.size() : 0));
 
       // count up valid measurement, and make observation matrices
       int z_index(0);
@@ -577,26 +587,21 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         if(!assign_z_H_R(*gps.solver, solver_opt,
             *sat, x, it2_range->second, rate,
-            &z_serialized[z_index], &H_serialized[z_index], &R_diag[z_index])){
+            &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index])){
           // Intentional exclusion is occurred during residual calculation such as elevation mask.
           continue;
         }
 
         z_index += (rate ? 2 : 1);
-
-        if(z_index > (sizeof(z_serialized) / sizeof(z_serialized[0])) - 2){
-          // At least 2 rows margin is required for next observation of range and rate
-          break;
-        }
       }
 
       if(z_index <= 0){return CorrectInfo<float_t>::no_info();}
 
-      mat_t H(z_index, P_SIZE, (float_t *)H_serialized);
-      mat_t z(z_index, 1, (float_t *)z_serialized);
+      mat_t H(z_index, P_SIZE, (float_t *)buf.H);
+      mat_t z(z_index, 1, buf.z);
       mat_t R(z_index, z_index);
       for(int i(0); i < z_index; ++i){
-        R(i, i) = R_diag[i];
+        R(i, i) = buf.R_diag[i];
       }
 
       return CorrectInfo<float_t>(H, z, R);
