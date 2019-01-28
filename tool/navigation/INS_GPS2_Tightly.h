@@ -417,7 +417,21 @@ class INS_GPS2_Tightly : public BaseFINS{
       return res;
     }
 
-    bool assign_z_H_R(
+    /**
+     * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
+     *
+     * @param solver residual calculrator
+     * @param solver_opt residual calculrator option such as applied ionospheric models
+     * @param sat GPS satellite used as target
+     * @param x receiver state represented by current position and clock properties
+     * @param range Measured range including all error inclusing user and satellite clock errors
+     * @param rate pointer of measured rate, if unavailable, NULL can be specified
+     * @param z (output) pointer to be stored with residual
+     * @param H (output) pointer to be stored with correlation of state
+     * @param R_diag (output) pointer to be stored with estimated resudual variance
+     * @return (int) number of used rows
+     */
+    int assign_z_H_R(
         const solver_t &solver, const typename solver_t::options_t &solver_opt,
         const typename solver_t::satellite_t &sat,
         const receiver_state_t &x,
@@ -437,7 +451,13 @@ class INS_GPS2_Tightly : public BaseFINS{
           x.pos,
           residual,
           solver_opt);
-      if(weight <= 0){return false;} // Intentional exclusion
+      if(weight <= 0){return 0;} // Intentional exclusion
+
+      for(int i(0); i < (rate ? 2 : 1); ++i){ // zero clear
+        for(int j(0); j < P_SIZE; ++j){
+          H[i][j] = 0;
+        }
+      }
 
       { // setup H matrix
 #define pow2(x) ((x) * (x))
@@ -482,7 +502,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       if(weight < 1E-1){weight = 1E-1;}
       R_diag[0] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
 
-      if(!rate){return true;}
+      if(!rate){return 1;}
 
       // rate residual
       typename solver_t::xyz_t rel_vel(sat.velocity(x.t, range) - x.vel);
@@ -513,7 +533,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       R_diag[1] = R_diag[0] * 1E-3; // TODO rate error variance
 
-      return true;
+      return 2;
     }
 
   public:
@@ -552,12 +572,8 @@ class INS_GPS2_Tightly : public BaseFINS{
         float_t (*H)[P_SIZE];
         float_t *R_diag;
         buf_t(const unsigned int &size)
-            : z(new float_t [size * (P_SIZE + 2)]/*()*/), // () invokes built-in type default constructor
-            R_diag(&z[size]), H((float_t (*)[P_SIZE])&z[size * 2]) {
-          for(int i(0); i < size * (P_SIZE + 2); ++i){
-            z[i] = 0; // conservative, because equivalent to new[]()
-          }
-        }
+            : z(new float_t [size * (P_SIZE + 2)]),
+            R_diag(&z[size]), H((float_t (*)[P_SIZE])&z[size * 2]) {}
         ~buf_t(){
           delete [] z;
         }
@@ -585,14 +601,12 @@ class INS_GPS2_Tightly : public BaseFINS{
           }
         }
 
-        if(!assign_z_H_R(*gps.solver, solver_opt,
+        /* Intentional exclusion, in which zero will be returned,
+         * may be occurred during residual calculation such as elevation mask.
+         */
+        z_index += assign_z_H_R(*gps.solver, solver_opt,
             *sat, x, it2_range->second, rate,
-            &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index])){
-          // Intentional exclusion is occurred during residual calculation such as elevation mask.
-          continue;
-        }
-
-        z_index += (rate ? 2 : 1);
+            &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);
       }
 
       if(z_index <= 0){return CorrectInfo<float_t>::no_info();}
