@@ -144,9 +144,10 @@ typedef typename gps_space_node_t::type type
         CLOCK_EPHEMERIS_COVARIANCE_MATRIX,
         NUM_OF_TIMING_ITEMS,
       };
-      static const struct values_t {
+      struct values_t {
         int interval, timeout_EN_Route_Terminal_LNAV, timeout_LNAV_VNAV_LP_LPV_approach;
-      } values[NUM_OF_TIMING_ITEMS];
+      };
+      static const values_t values[NUM_OF_TIMING_ITEMS];
     }; ///< @see Table A-25;
 
     struct DataBlock {
@@ -2149,7 +2150,8 @@ const typename SBAS_SpaceNode<FloatT>::RangingCode SBAS_SpaceNode<FloatT>::rangi
 }; ///< @see https://media.defense.gov/2018/Aug/07/2001951699/-1/-1/1/L1%20CA%20PRN%20CODE%20ASSIGNMENTS%20JULY%202018.PDF
 
 template <class FloatT>
-const typename SBAS_SpaceNode<FloatT>::Timing::values_t SBAS_SpaceNode<FloatT>::Timing::values[] = {
+const typename SBAS_SpaceNode<FloatT>::Timing::values_t
+    SBAS_SpaceNode<FloatT>::Timing::values[SBAS_SpaceNode<FloatT>::Timing::NUM_OF_TIMING_ITEMS] = {
   {  6},                // DONT_USE_FOR_SAFETY_APPLICATIONS (0)
   {120,   600,   600},  // PRN_MASK (1)
   {  6,    18,    12},  // UDREI (2-6, 24)
