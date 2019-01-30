@@ -110,6 +110,19 @@ typedef typename gps_space_node_t::type type
           return (left->lng_deg < right->lng_deg);
         }
       };
+      struct lng_sorter2_t {
+        float_t base_lng_deg;
+        lng_sorter2_t(const float_t &lng_deg) : base_lng_deg(lng_deg) {}
+        bool operator()(const RangingCode *left, const RangingCode *right) const {
+          float_t delta_l(left->lng_deg - base_lng_deg);
+          if(delta_l < 0){delta_l *= -1;}
+          if(delta_l >= 180){delta_l = -delta_l + 360;}
+          float_t delta_r(right->lng_deg - base_lng_deg);
+          if(delta_r < 0){delta_r *= -1;}
+          if(delta_r >= 180){delta_r = -delta_r + 360;}
+          return (delta_l < delta_r);
+        }
+      };
     };
 
     struct KnownSatellites {
@@ -118,6 +131,9 @@ typedef typename gps_space_node_t::type type
       static res_t sort(T sorter);
       static const res_t prn_ordered;
       static const res_t longitude_ordered;
+      static res_t nearest_ordered(const float_t &lng_deg){
+        return sort(typename RangingCode::lng_sorter2_t(lng_deg));
+      }
     };
 
     enum MessageType {
