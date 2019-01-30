@@ -515,4 +515,29 @@ BOOST_AUTO_TEST_CASE(data_block_type18){
   }
 }
 
+BOOST_AUTO_TEST_CASE(known_satellites){
+  {
+    int prn(0);
+    for(space_node_t::KnownSatellites::res_t::const_iterator it(
+          space_node_t::KnownSatellites::prn_ordered.begin());
+        it != space_node_t::KnownSatellites::prn_ordered.end();
+        ++it){
+      BOOST_TEST_MESSAGE("prn: " << (*it)->prn);
+      BOOST_REQUIRE(prn <= (*it)->prn);
+      prn = (*it)->prn;
+    }
+  }
+  {
+    double lng_deg(-180);
+    for(space_node_t::KnownSatellites::res_t::const_iterator it(
+          space_node_t::KnownSatellites::longitude_ordered.begin());
+        it != space_node_t::KnownSatellites::longitude_ordered.end();
+        ++it){
+      BOOST_TEST_MESSAGE("lng: " << (*it)->lng_deg);
+      BOOST_REQUIRE(lng_deg <= (*it)->lng_deg);
+      lng_deg = (*it)->lng_deg;
+    }
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
