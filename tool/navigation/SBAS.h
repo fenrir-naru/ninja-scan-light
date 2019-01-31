@@ -2117,6 +2117,25 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
       return _satellites.find(prn) !=  _satellites.end();
     }
 
+    typedef std::vector<std::pair<int, const Satellite *> > available_satellites_t;
+    /**
+     * Return available satellites
+     * @param lng_deg longitude of user position
+     * @return (available_satellites_t) available satellites, nearer is faster
+     */
+    available_satellites_t available_satellites(const float_t &lng_deg) const {
+      available_satellites_t res;
+      typename KnownSatellites::res_t nearest(KnownSatellites::nearest_ordered(lng_deg));
+      for(typename KnownSatellites::res_t::const_iterator it(nearest.begin());
+          it != nearest.end();
+          ++it){
+        int prn((*it)->prn);
+        if(!has_satellite(prn)){continue;}
+        res.push_back(std::make_pair(prn, &_satellites[prn]));
+      }
+      return res;
+    }
+
     template <class InputT>
     MessageType decode_message(
         const InputT *buf, const int &prn, const gps_time_t &t_reception,
