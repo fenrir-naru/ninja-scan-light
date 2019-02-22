@@ -76,6 +76,8 @@ struct StandardCalibration {
   typedef calibration_info_t<3> dof3_t;
   dof3_t accel, gyro;
 
+  static const dof3_t pass_through;
+
   bool check_spec(const char *line, const char *(*get_value)(const char *in, const char *header)){
     const char *value;
     if(value = get_value(line, "index_base")){
@@ -159,7 +161,8 @@ if(value = get_value(line, TO_STRING(name))){ \
     }
   }
 
-  StandardCalibration() {}
+  StandardCalibration()
+      : index_base(0), index_temp_ch(0), accel(pass_through), gyro(pass_through) {}
   ~StandardCalibration() {}
 
   struct result_t {
@@ -203,6 +206,15 @@ if(value = get_value(line, TO_STRING(name))){ \
     result_t res = {{gyro.sigma[0], gyro.sigma[1], gyro.sigma[2]}};
     return res;
   }
+};
+
+template <class FloatT>
+const typename StandardCalibration<FloatT>::dof3_t StandardCalibration<FloatT>::pass_through = {
+  {0, 0, 0}, // bias_tc
+  {0, 0, 0}, // bias_base
+  {1, 1, 1}, // sf
+  {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}, // alignment
+  {1, 1, 1}, // sigma
 };
 
 #endif /* __CALIBRATION_H__ */
