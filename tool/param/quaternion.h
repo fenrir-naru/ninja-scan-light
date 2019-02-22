@@ -66,6 +66,7 @@ const unsigned int QuaternionDataProperty<FloatT>::OUT_OF_INDEX
 template <class FloatT>
 class QuaternionData : public QuaternionDataProperty<FloatT> {
   protected:
+    typedef QuaternionDataProperty<FloatT> property_t;
     typedef QuaternionData<FloatT> self_t;
   private:
     struct storage_t{
@@ -109,6 +110,17 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
         const FloatT &q2, const FloatT &q3)
         : storage(new storage_t(q0, q1, q2, q3)) {}
     
+    /**
+     * コンストラクタ。
+     * 指定した値で初期化されます。
+     *
+     * @param values 要素の値
+     */
+    QuaternionData(const FloatT (&values)[property_t::OUT_OF_INDEX])
+        : storage(new storage_t(values[0], values[1], values[2], values[3])){
+
+    }
+
     /**
      * コピーコンストラクタ
      * 
@@ -265,6 +277,14 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
         : super_t(q0, q1, q2, q3) {}
     
     /**
+     * コンストラクタ。
+     * 指定した値で初期化されます。
+     *
+     * @param values 要素の値
+     */
+    Quaternion(const FloatT (&values)[OUT_OF_INDEX]) : super_t(values){}
+
+    /**
      * デストラクタ
      * 
      */
@@ -307,6 +327,17 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * @see operator[](unsigned int)
      */
     void set(const unsigned int &index, const FloatT &value){(*this)[index] = value;}
+
+    /**
+     * 代入演算子
+     *
+     * @param values 要素の値
+     */
+    self_t &operator=(const FloatT (&values)[OUT_OF_INDEX]) noexcept {
+      for(int i(0); i < OUT_OF_INDEX; ++i){set(i, values[i]);}
+      return *this;
+    }
+
     /**
      * 要素を取得します。
      * 要素番号の定義はoperator[](unsigned int) constによって定義されています。
@@ -680,6 +711,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
 template <class FloatT>
 class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
   protected:
+    typedef QuaternionDataProperty<FloatT> property_t;
     typedef QuaternionData_NoFlyWeight<FloatT> self_t;
   private:
     FloatT _scalar;
@@ -692,6 +724,8 @@ class QuaternionData_NoFlyWeight : public QuaternionDataProperty<FloatT> {
         const FloatT &q0, const FloatT &q1,
         const FloatT &q2, const FloatT &q3) noexcept
         : _scalar(q0), _vector(q1, q2, q3) {}
+    QuaternionData_NoFlyWeight(const FloatT (&v)[property_t::OUT_OF_INDEX]) noexcept
+        : _scalar(v[0]), _vector((const FloatT (&)[property_t::OUT_OF_INDEX - 1])*(&v[1])) {}
     QuaternionData_NoFlyWeight(const self_t &q) noexcept
         : _scalar(q._scalar), _vector(q._vector){
     }

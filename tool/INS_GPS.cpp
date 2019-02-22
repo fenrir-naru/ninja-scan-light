@@ -1400,7 +1400,7 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
     calibrate(
         &raw_data[index_base], raw_data[index_temp_ch],
         accel, res);
-    return Vector3<float_sylph_t>(res[0], res[1], res[2]);
+    return Vector3<float_sylph_t>(res);
   }
 
   /**
@@ -1411,21 +1411,21 @@ if(value = Options::get_value2(line, TO_STRING(name))){ \
     calibrate(
         &raw_data[index_base + 3], raw_data[index_temp_ch],
         gyro, res);
-    return Vector3<float_sylph_t>(res[0], res[1], res[2]);
+    return Vector3<float_sylph_t>(res);
   }
 
   /**
    * Accelerometer output variance in [m/s^2]^2
    */
   Vector3<float_sylph_t> sigma_accel() const{
-    return Vector3<float_sylph_t>(accel.sigma[0], accel.sigma[1], accel.sigma[2]);
+    return Vector3<float_sylph_t>(accel.sigma);
   }
 
   /**
    * Angular speed output variance in X, Y, Z axes, [rad/s]^2
    */
   Vector3<float_sylph_t> sigma_gyro() const{
-    return Vector3<float_sylph_t>(gyro.sigma[0], gyro.sigma[1], gyro.sigma[2]);
+    return Vector3<float_sylph_t>(gyro.sigma);
   }
 };
 
