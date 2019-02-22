@@ -43,6 +43,7 @@
 #include <climits>
 #include <cfloat>
 #include <ctime>
+#include <cctype>
 #if defined(_MSC_VER) || defined(__CYGWIN__)
 #include <io.h>
 #include <fcntl.h>
