@@ -47,6 +47,7 @@ typedef __int64 int64_t;
 
 typedef double float_sylph_t;
 #include "analyze_common.h"
+#include "calibration.h"
 
 using namespace std;
 
@@ -65,12 +66,11 @@ struct Options : public GlobalOptions<float_sylph_t> {
   calendar_time_t::Converter time_gps2local;
   bool use_calendar_time;
 
+  typedef StandardCalibration<float_sylph_t> inertial_conv_t;
+
   struct {
     bool is_active;
-    struct {
-      float_sylph_t sf; // physical = (ADC_value - zero) * sf
-      float_sylph_t zero;
-    } accel, gyro; // accel=[m/s^2], gyro=[dps]
+    inertial_conv_t inertial_conv;
   } physical_converter;
 
   Options() 
@@ -86,10 +86,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       use_calendar_time(false) {
 
     physical_converter.is_active = false;
-    physical_converter.accel.sf = 8.0 *  9.80665 / (1 << 15);
-    physical_converter.accel.zero = (1 << 15);
-    physical_converter.gyro.sf = 2000.0 / (1 << 15);
-    physical_converter.gyro.zero = (1 << 15);
+    super_t::set_typical_calibration_specs(physical_converter.inertial_conv);
   }
   ~Options(){}
   
@@ -245,11 +242,21 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void dump_physical(const float_sylph_t &current, const A_Observer_t::values_t &values) const {
         options.out() << options.format_time(current);
 
-        for(int i(0); i < 3; i++){ // accelerometer
-          options.out() << ", " << (values.values[i] - options.physical_converter.accel.zero) * options.physical_converter.accel.sf;
+        int ch[9];
+        for(int i = 0; i < 8; i++){
+          ch[i] = values.values[i];
         }
-        for(int i(3); i < 6; i++){ // gyro
-          options.out() << ", " << (values.values[i] - options.physical_converter.gyro.zero) * options.physical_converter.gyro.sf;
+        ch[8] = values.temperature;
+
+        Options::inertial_conv_t::result_t
+            accel(options.physical_converter.inertial_conv.raw2accel(ch)),
+            omega(options.physical_converter.inertial_conv.raw2omega(ch));
+
+        for(int i(0); i < 3; i++){ // accelerometer[m/s^2]
+          options.out() << ", " << accel.values[i];
+        }
+        for(int i(0); i < 3; i++){ // gyro[deg/sec]
+          options.out() << ", " << rad2deg(omega.values[i]);
         }
         options.out() << endl;
       }
