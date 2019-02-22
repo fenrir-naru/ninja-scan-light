@@ -305,6 +305,16 @@ class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
     void setZ(const FloatT &z) noexcept {set(Z_INDEX, z);}
     
     /**
+     * 代入演算子
+     *
+     * @param values 要素の値
+     */
+    self_t &operator=(const FloatT (&values)[OUT_OF_INDEX]) noexcept {
+      for(int i(0); i < OUT_OF_INDEX; ++i){set(i, values[i]);}
+      return *this;
+    }
+
+    /**
      * 要素を取得します。
      * 要素番号の定義はoperator[](const unsigned int &) constによって定義されています。
      * 

@@ -327,6 +327,17 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * @see operator[](unsigned int)
      */
     void set(const unsigned int &index, const FloatT &value){(*this)[index] = value;}
+
+    /**
+     * 代入演算子
+     *
+     * @param values 要素の値
+     */
+    self_t &operator=(const FloatT (&values)[OUT_OF_INDEX]) noexcept {
+      for(int i(0); i < OUT_OF_INDEX; ++i){set(i, values[i]);}
+      return *this;
+    }
+
     /**
      * 要素を取得します。
      * 要素番号の定義はoperator[](unsigned int) constによって定義されています。
