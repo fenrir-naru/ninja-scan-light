@@ -110,6 +110,14 @@ if(value = get_value(line, TO_STRING(name))){ \
     return false;
   }
 
+  template <std::size_t N>
+  bool check_specs(const char *(&lines)[N], const char *(*get_value)(const char *, const char *)){
+    for(int i(0); i < N; ++i){
+      if(!check_spec(lines[i], get_value)){return false;}
+    }
+    return true;
+  }
+
   friend std::ostream &operator<<(
       std::ostream &out, const StandardCalibration &calib){
     out << "index_base " << calib.index_base << std::endl;

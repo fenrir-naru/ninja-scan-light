@@ -427,6 +427,25 @@ if(key_checked){ \
 #undef CHECK_OPTION
     return false;
   }
+
+  template <class CalibrationT>
+  static bool set_typical_calibration_specs(CalibrationT &target){
+    static const char *specs[] = { // NinjaScan default calibration parameters
+      "index_base 0",
+      "index_temp_ch 8",
+      "acc_bias 32768 32768 32768",
+      "acc_bias_tc 0 0 0",  // No temperature compensation
+      "acc_sf 4.1767576e+2 4.1767576e+2 4.1767576e+2",  // MPU-6000/9250 8[G] full scale; (1<<15)/(8*9.80665) [1/(m/s^2)]
+      "acc_mis 1 0 0 0 1 0 0 0 1",  // No misalignment compensation
+      "gyro_bias 32768 32768 32768",
+      "gyro_bias_tc 0 0 0",  // No temperature compensation
+      "gyro_sf 9.3873405e+2 9.3873405e+2 9.3873405e+2",  // MPU-6000/9250 2000[dps] full scale; (1<<15)/(2000/180*PI) [1/(rad/s)]
+      "gyro_mis 1 0 0 0 1 0 0 0 1",  // No misalignment compensation
+      "sigma_accel 0.05 0.05 0.05",  // approx. 150[mG] ? standard deviation
+      "sigma_gyro 5e-3 5e-3 5e-3",  // approx. 0.3[dps] standard deviation
+    };
+    return target.check_specs(specs, get_value2);
+  }
 };
 
 template <class FloatT>

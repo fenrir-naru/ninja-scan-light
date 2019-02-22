@@ -1306,22 +1306,7 @@ class StreamProcessor
 
         previous_seek_next = A_Observer_t::ready();
 
-        { // NinjaScan default calibration parameters
-#define config(spec) calibration.check_spec(spec, Options::get_value2);
-          config("index_base 0");
-          config("index_temp_ch 8");
-          config("acc_bias 32768 32768 32768");
-          config("acc_bias_tc 0 0 0"); // No temperature compensation
-          config("acc_sf 4.1767576e+2 4.1767576e+2 4.1767576e+2"); // MPU-6000/9250 8[G] full scale; (1<<15)/(8*9.80665) [1/(m/s^2)]
-          config("acc_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
-          config("gyro_bias 32768 32768 32768");
-          config("gyro_bias_tc 0 0 0"); // No temperature compensation
-          config("gyro_sf 9.3873405e+2 9.3873405e+2 9.3873405e+2"); // MPU-6000/9250 2000[dps] full scale; (1<<15)/(2000/180*PI) [1/(rad/s)]
-          config("gyro_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
-          config("sigma_accel 0.05 0.05 0.05"); // approx. 150[mG] ? standard deviation
-          config("sigma_gyro 5e-3 5e-3 5e-3"); // approx. 0.3[dps] standard deviation
-#undef config
-        }
+        options.set_typical_calibration_specs(calibration);
       }
       ~AHandler(){}
       void operator()(const A_Observer_t &observer){
