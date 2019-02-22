@@ -72,19 +72,19 @@ const unsigned int Vector3DataProperty<FloatT>::OUT_OF_INDEX
 template <class FloatT>
 class Vector3Data : public Vector3DataProperty<FloatT> {
   protected:
-    typedef Vector3DataProperty<FloatT> super_t;
+    typedef Vector3DataProperty<FloatT> property_t;
     typedef Vector3Data<FloatT> self_t;
     
   private:
     struct storage_t{
-      FloatT values[super_t::OUT_OF_INDEX];  ///<要素保存用
+      FloatT values[property_t::OUT_OF_INDEX];  ///<要素保存用
       int ref;                      ///<参照カウンタ
       storage_t() : ref(1) {}
       storage_t(const FloatT &x, const FloatT &y, const FloatT &z)
           : ref(1) {
-        values[super_t::X_INDEX] = x;
-        values[super_t::Y_INDEX] = y;
-        values[super_t::Z_INDEX] = z;
+        values[property_t::X_INDEX] = x;
+        values[property_t::Y_INDEX] = y;
+        values[property_t::Z_INDEX] = z;
       }
     } *storage;  ///< ストレージ
     
@@ -113,6 +113,17 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
       
     }
     
+    /**
+     * コンストラクタ。
+     * 指定した値で初期化されます。
+     *
+     * @param values 要素の値
+     */
+    Vector3Data(const FloatT (&values)[property_t::OUT_OF_INDEX])
+        : storage(new storage_t(values[0], values[1], values[2])){
+
+    }
+
     /**
      * コピーコンストラクタ
      * 
@@ -144,11 +155,7 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
      * @return コピー
      */
     self_t deep_copy() const {
-      storage_t *copied(new storage_t());
-      std::memcpy(
-          copied->values, storage->values, 
-          sizeof(FloatT[super_t::OUT_OF_INDEX]));
-      return self_t(copied);
+      return self_t(storage->values[0], storage->values[1], storage->values[2]);
     }
   public:
     /**
@@ -265,6 +272,14 @@ class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
     using super_t::operator[];
     
     /**
+     * コンストラクタ。
+     * 指定した値で初期化されます。
+     *
+     * @param values 要素の値
+     */
+    Vector3(const FloatT (&values)[OUT_OF_INDEX]) : super_t(values){}
+
+    /**
      * 要素を設定します。
      * 要素番号の定義はoperator[](const unsigned int &)によって定義されています。
      * 
@@ -289,6 +304,16 @@ class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
      */
     void setZ(const FloatT &z) noexcept {set(Z_INDEX, z);}
     
+    /**
+     * 代入演算子
+     *
+     * @param values 要素の値
+     */
+    self_t &operator=(const FloatT (&values)[OUT_OF_INDEX]) noexcept {
+      for(int i(0); i < OUT_OF_INDEX; ++i){set(i, values[i]);}
+      return *this;
+    }
+
     /**
      * 要素を取得します。
      * 要素番号の定義はoperator[](const unsigned int &) constによって定義されています。
@@ -582,16 +607,19 @@ class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
 template <class FloatT>
 class Vector3Data_NoFlyWeight : public Vector3DataProperty<FloatT> {
   protected:
-    typedef Vector3DataProperty<FloatT> super_t;
+    typedef Vector3DataProperty<FloatT> property_t;
     typedef Vector3Data_NoFlyWeight<FloatT> self_t;
   private:
-    FloatT values[super_t::OUT_OF_INDEX];
+    FloatT values[property_t::OUT_OF_INDEX];
   protected:
     Vector3Data_NoFlyWeight() noexcept {}
     Vector3Data_NoFlyWeight(const FloatT &x, const FloatT &y, const FloatT &z) noexcept {
-      values[super_t::X_INDEX] = x;
-      values[super_t::Y_INDEX] = y;
-      values[super_t::Z_INDEX] = z;
+      values[property_t::X_INDEX] = x;
+      values[property_t::Y_INDEX] = y;
+      values[property_t::Z_INDEX] = z;
+    }
+    Vector3Data_NoFlyWeight(const FloatT (&v)[property_t::OUT_OF_INDEX]) noexcept {
+      std::memcpy(values, &v, sizeof(values));
     }
     Vector3Data_NoFlyWeight(const self_t &v) noexcept {
       std::memcpy(values, v.values, sizeof(values));

@@ -185,6 +185,7 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 #include "navigation/MagneticField.h"
 
 #include "analyze_common.h"
+#include "calibration.h"
 
 #include "INS_GPS/GNSS_Data.h"
 
@@ -1218,7 +1219,7 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   static NAV *generate(const Calibration &calibration){
     typedef INS_GPS_NAV_Factory<INS_GPS_NAV<INS_GPS> > nav_t;
     typename nav_t::disp_t *res(new typename nav_t::disp_t());
-    res->setup_filter(calibration.sigma_accel(), calibration.sigma_gyro());
+    res->setup_filter(calibration.sigma_accel().values, calibration.sigma_gyro().values);
     return res;
   }
 
@@ -1511,169 +1512,6 @@ class INS_GPS_NAVData : public INS_GPS {
     }
 };
 
-struct StandardCalibration {
-
-  int index_base, index_temp_ch;
-  template <std::size_t N>
-  struct calibration_info_t {
-    float_sylph_t bias_tc[N];
-    float_sylph_t bias_base[N];
-    float_sylph_t sf[N];
-    float_sylph_t alignment[N][N];
-    float_sylph_t sigma[N];
-    static void set(char *spec, float_sylph_t target[N]){
-      for(int i(0); i < N; i++){
-        target[i] = std::strtod(spec, &spec);
-      }
-    }
-    static void set(char *spec, float_sylph_t target[N][N]){
-      for(int i(0); i < N; i++){
-        for(int j(0); j < N; j++){
-          target[i][j] = std::strtod(spec, &spec);
-        }
-      }
-    }
-    static std::ostream &dump(std::ostream &out, const float_sylph_t target[N]){
-      for(int i(0); i < N; i++){
-        out << " " << target[i];
-      }
-      return out;
-    }
-    static std::ostream &dump(std::ostream &out, const float_sylph_t target[N][N]){
-      for(int i(0); i < N; i++){
-        for(int j(0); j < N; j++){
-          out << " " << target[i][j];
-        }
-      }
-      return out;
-    }
-  };
-  typedef calibration_info_t<3> dof3_t;
-  dof3_t accel, gyro;
-
-  bool check_spec(const char *line){
-    const char *value;
-    if(value = Options::get_value2(line, "index_base")){
-      index_base = std::atoi(value);
-      return true;
-    }
-    if(value = Options::get_value2(line, "index_temp_ch")){
-      index_temp_ch = std::atoi(value);
-      return true;
-    }
-#define TO_STRING(name) # name
-#define check_proc(name, sensor, item) \
-if(value = Options::get_value2(line, TO_STRING(name))){ \
-  dof3_t::set(const_cast<char *>(value), sensor.item); \
-  return true; \
-}
-    check_proc(acc_bias_tc, accel, bias_tc);
-    check_proc(acc_bias, accel, bias_base);
-    check_proc(acc_sf, accel, sf);
-    check_proc(acc_mis, accel, alignment);
-    check_proc(gyro_bias_tc, gyro, bias_tc);
-    check_proc(gyro_bias, gyro, bias_base);
-    check_proc(gyro_sf, gyro, sf);
-    check_proc(gyro_mis, gyro, alignment);
-    check_proc(sigma_accel, accel, sigma);
-    check_proc(sigma_gyro, gyro, sigma);
-#undef check_proc
-#undef TO_STRING
-
-    return false;
-  }
-
-  friend std::ostream &operator<<(
-      std::ostream &out, const StandardCalibration &calib){
-    out << "index_base " << calib.index_base << std::endl;
-    out << "index_temp_ch " << calib.index_temp_ch << std::endl;
-#define TO_STRING(name) # name
-#define dump_proc(name, sensor, item) \
-  out << TO_STRING(name); \
-  dof3_t::dump(out, calib.sensor.item)
-    dump_proc(acc_bias_tc, accel, bias_tc) << std::endl;
-    dump_proc(acc_bias, accel, bias_base) << std::endl;
-    dump_proc(acc_sf, accel, sf) << std::endl;
-    dump_proc(acc_mis, accel, alignment) << std::endl;
-    dump_proc(gyro_bias_tc, gyro, bias_tc) << std::endl;
-    dump_proc(gyro_bias, gyro, bias_base) << std::endl;
-    dump_proc(gyro_sf, gyro, sf) << std::endl;
-    dump_proc(gyro_mis, gyro, alignment) << std::endl;
-    dump_proc(sigma_accel, accel, sigma) << std::endl;
-    dump_proc(sigma_gyro, gyro, sigma);
-#undef dump_proc
-#undef TO_STRING
-    return out;
-  }
-
-  template <class NumType, std::size_t N>
-  static void calibrate(
-      const NumType raw[],
-      const NumType &bias_mod,
-      const calibration_info_t<N> &info,
-      float_sylph_t (&res)[N]) {
-
-    // Temperature compensation
-    float_sylph_t bias[N];
-    for(int i(0); i < N; i++){
-      bias[i] = info.bias_base[i] + (info.bias_tc[i] * bias_mod);
-    }
-
-    // Convert raw values to physical quantity by using scale factor
-    float_sylph_t tmp[N];
-    for(int i(0); i < N; i++){
-      tmp[i] = (((float_sylph_t)raw[i] - bias[i]) / info.sf[i]);
-    }
-
-    // Misalignment compensation
-    for(int i(0); i < N; i++){
-      res[i] = 0;
-      for(int j(0); j < N; j++){
-        res[i] += info.alignment[i][j] * tmp[j];
-      }
-    }
-  }
-
-  StandardCalibration() {}
-  ~StandardCalibration() {}
-
-  /**
-   * Get acceleration in m/s^2
-   */
-  Vector3<float_sylph_t> raw2accel(const int *raw_data) const{
-    float_sylph_t res[3];
-    calibrate(
-        &raw_data[index_base], raw_data[index_temp_ch],
-        accel, res);
-    return Vector3<float_sylph_t>(res[0], res[1], res[2]);
-  }
-
-  /**
-   * Get angular speed in rad/sec
-   */
-  Vector3<float_sylph_t> raw2omega(const int *raw_data) const{
-    float_sylph_t res[3];
-    calibrate(
-        &raw_data[index_base + 3], raw_data[index_temp_ch],
-        gyro, res);
-    return Vector3<float_sylph_t>(res[0], res[1], res[2]);
-  }
-
-  /**
-   * Accelerometer output variance in [m/s^2]^2
-   */
-  Vector3<float_sylph_t> sigma_accel() const{
-    return Vector3<float_sylph_t>(accel.sigma[0], accel.sigma[1], accel.sigma[2]);
-  }
-
-  /**
-   * Angular speed output variance in X, Y, Z axes, [rad/s]^2
-   */
-  Vector3<float_sylph_t> sigma_gyro() const{
-    return Vector3<float_sylph_t>(gyro.sigma[0], gyro.sigma[1], gyro.sigma[2]);
-  }
-};
-
 using namespace std;
 
 struct G_Packet_GPS_Ephemeris_Extended : public G_Packet_GPS_Ephemeris {
@@ -1731,7 +1569,7 @@ class StreamProcessor
     struct AHandler : public A_Observer_t, public Handler {
       bool previous_seek_next;
       A_Packet packet_latest;
-      StandardCalibration calibration;
+      StandardCalibration<float_sylph_t> calibration;
 
       AHandler(StreamProcessor &invoker) : A_Observer_t(buffer_size),
           Handler(invoker),
@@ -1740,22 +1578,7 @@ class StreamProcessor
 
         previous_seek_next = A_Observer_t::ready();
 
-        { // NinjaScan default calibration parameters
-#define config(spec) calibration.check_spec(spec);
-          config("index_base 0");
-          config("index_temp_ch 8");
-          config("acc_bias 32768 32768 32768");
-          config("acc_bias_tc 0 0 0"); // No temperature compensation
-          config("acc_sf 4.1767576e+2 4.1767576e+2 4.1767576e+2"); // MPU-6000/9250 8[G] full scale; (1<<15)/(8*9.80665) [1/(m/s^2)]
-          config("acc_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
-          config("gyro_bias 32768 32768 32768");
-          config("gyro_bias_tc 0 0 0"); // No temperature compensation
-          config("gyro_sf 9.3873405e+2 9.3873405e+2 9.3873405e+2"); // MPU-6000/9250 2000[dps] full scale; (1<<15)/(2000/180*PI) [1/(rad/s)]
-          config("gyro_mis 1 0 0 0 1 0 0 0 1"); // No misalignment compensation
-          config("sigma_accel 0.05 0.05 0.05"); // approx. 150[mG] ? standard deviation
-          config("sigma_gyro 5e-3 5e-3 5e-3"); // approx. 0.3[dps] standard deviation
-#undef config
-        }
+        options.set_typical_calibration_specs(calibration);
       }
       ~AHandler(){}
       void operator()(const A_Observer_t &observer){
@@ -1774,8 +1597,8 @@ class StreamProcessor
           ch[i] = values.values[i];
         }
         ch[8] = values.temperature;
-        packet_latest.accel = calibration.raw2accel(ch);
-        packet_latest.omega = calibration.raw2omega(ch);
+        packet_latest.accel = calibration.raw2accel(ch).values;
+        packet_latest.omega = calibration.raw2omega(ch).values;
 
         Handler::outer.updatable->update(packet_latest);
       }
@@ -2346,7 +2169,7 @@ class StreamProcessor
       return updatable;
     }
 
-    const StandardCalibration &calibration() const{
+    const StandardCalibration<float_sylph_t> &calibration() const{
       return a_handler.calibration;
     }
 
@@ -2425,18 +2248,7 @@ class StreamProcessor
       const char *value;
       if(value = Options::get_value(spec, "calib_file", false)){ // calibration file
         if(dry_run){return true;}
-        cerr << "IMU Calibration file (" << value << ") reading..." << endl;
-        istream &in(options.spec2istream(value));
-        char buf[1024];
-        while(!in.eof()){
-          in.getline(buf, sizeof(buf));
-          if(!buf[0]){continue;}
-          if(!a_handler.calibration.check_spec(buf)){
-            cerr << "unknown_calib_param! : " << buf << endl;
-            return false;
-          }
-        }
-        return true;
+        return options.load_calibration_file(a_handler.calibration, value);
       }
 
       if(value = Options::get_value(spec, "lever_arm", false)){ // Lever Arm
