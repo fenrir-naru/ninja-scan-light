@@ -114,7 +114,7 @@ class System_3D {
     }
 
     operator Vector3<FloatT>() const {
-      return Vector3<FloatT>(v[0], v[1], v[2]);
+      return Vector3<FloatT>(v);
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
