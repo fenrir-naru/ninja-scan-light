@@ -165,7 +165,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
     }while(false);
 
     do{
-      const char *value(GlobalOptions::get_value(spec, "page", false));
+      const char *value(get_value(spec, "page", false));
       if(!value){break;}
       switch(*value){
         case 'A': page_A = true; break;
@@ -186,6 +186,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(physical, true,
         physical_converter.is_active = is_true(value),
         (physical_converter.is_active ? "on" : "off"));
+    CHECK_OPTION(calib_file, false,
+        if(!load_calibration_file(physical_converter.inertial_conv, value)){
+          return false;
+        }, value << " (loaded)" << std::endl << physical_converter.inertial_conv);
 #undef CHECK_OPTION
     return super_t::check_spec(spec);
   }

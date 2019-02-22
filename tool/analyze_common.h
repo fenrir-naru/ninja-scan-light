@@ -447,6 +447,22 @@ if(key_checked){ \
     };
     return target.check_specs(specs, get_value2);
   }
+
+  template <class CalibrationT>
+  bool load_calibration_file(CalibrationT &target, const char *fname){
+    std::cerr << "IMU Calibration file (" << fname << ") reading..." << std::endl;
+    std::istream &in(spec2istream(fname));
+    char buf[1024];
+    while(!in.eof()){
+      in.getline(buf, sizeof(buf));
+      if(!buf[0]){continue;}
+      if(!target.check_spec(buf, get_value2)){
+        std::cerr << "unknown_calib_param! : " << buf << std::endl;
+        return false;
+      }
+    }
+    return true;
+  }
 };
 
 template <class FloatT>

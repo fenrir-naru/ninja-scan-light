@@ -1651,18 +1651,7 @@ class StreamProcessor
       const char *value;
       if(value = Options::get_value(spec, "calib_file", false)){ // calibration file
         if(dry_run){return true;}
-        cerr << "IMU Calibration file (" << value << ") reading..." << endl;
-        istream &in(options.spec2istream(value));
-        char buf[1024];
-        while(!in.eof()){
-          in.getline(buf, sizeof(buf));
-          if(!buf[0]){continue;}
-          if(!a_handler.calibration.check_spec(buf, Options::get_value2)){
-            cerr << "unknown_calib_param! : " << buf << endl;
-            return false;
-          }
-        }
-        return true;
+        return options.load_calibration_file(a_handler.calibration, value);
       }
 
       if(value = Options::get_value(spec, "lever_arm", false)){ // Lever Arm
