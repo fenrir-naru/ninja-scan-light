@@ -51,7 +51,7 @@
  */
 
 #include <string>
-#include <exception>
+#include <stdexcept>
 
 #include <cstring>
 #include <cmath>
@@ -67,42 +67,6 @@
 #else
 #define throws_when_debug noexcept
 #endif
-
-/**
- * @brief Exception related to matrix
- *
- * This exception will be thrown when matrix operation is incorrect.
- */
-class MatrixException: public std::exception{
-  private:
-    std::string what_str;
-  public:
-    /**
-     * Constructor
-     *
-     * @param what_arg error
-     */
-    MatrixException(const std::string &what_arg) : what_str(what_arg){}
-
-    ~MatrixException() noexcept {}
-
-    const char *what() const noexcept {
-      return what_str.c_str();
-    }
-};
-
-/**
- * @brief Exception related to storage
- *
- * This exception will be thrown when access to storage for matrix elements is invalid.
- *
- */
-class StorageException: public MatrixException {
-  public:
-    StorageException(const std::string &what_arg)
-        : MatrixException(what_arg) {}
-    ~StorageException() noexcept {}
-};
 
 /**
  * @brief 2D array abstract class
@@ -302,14 +266,16 @@ class Array2D_Dense : public Array2D<T> {
      * @param row Row index
      * @param column Column Index
      * @return (const T &) Element
-     * @throw StorageException It will be thrown when the indices are incorrect.
+     * @throw std::out_of_range When the indices are out of range
      */
     const T &operator()(
         const unsigned int &row,
         const unsigned int &column) const throws_when_debug {
 #if defined(DEBUG)
-      if((row >= rows()) || (column >= columns())){
-        throw StorageException("Index incorrect");
+      if(row >= rows()){
+        throw std::out_of_range("Row index incorrect");
+      }else if(column >= columns()){
+        throw std::out_of_range("Column index incorrect");
       }
 #endif
       return values[(row * columns()) + column];
@@ -985,6 +951,7 @@ class Matrix{
      * @param columnSize Column number
      * @param rowOffset Upper row index of original matrix for partial matrix
      * @param columnOffset Left column index of original matrix for partial matrix
+     * @throw std::out_of_range When either row or column size exceeds original one
      * @return partial matrix
      *
      */
@@ -994,9 +961,10 @@ class Matrix{
         const unsigned int &row_offset,
         const unsigned int &column_offset) const {
       partial_t res(*this);
-      if((new_rows + row_offset > rows())
-          || (new_columns + column_offset > columns())){
-        throw MatrixException("size exceeding");
+      if(new_rows + row_offset > rows()){
+        throw std::out_of_range("Row size exceeding");
+      }else if(new_columns + column_offset > columns()){
+        throw std::out_of_range("Column size exceeding");
       }
       partial_t::view_builder_t::set_partial(
           res.view,
@@ -1031,11 +999,13 @@ class Matrix{
      * @param row1 Target row (1)
      * @param row2 Target row (2)
      * @return myself
-     * @throw MatrixException
+     * @throw std::out_of_range When row1 or row2 exceeds bound
      */
     self_t &exchangeRows(
         const unsigned int &row1, const unsigned int &row2){
-      if(row1 >= rows() || row2 >= rows()){throw MatrixException("Index incorrect");}
+      if(row1 >= rows() || row2 >= rows()){
+        throw std::out_of_range("Row index incorrect");
+      }
       T temp;
       for(unsigned int j(0); j < columns(); j++){
         temp = (*this)(row1, j);
@@ -1051,11 +1021,13 @@ class Matrix{
      * @param column1 Target column (1)
      * @param column2 Target column (2)
      * @return myself
-     * @throw MatrixException
+     * @throw std::out_of_range When column1 or column2 exceeds bound
      */
     self_t &exchangeColumns(
         const unsigned int &column1, const unsigned int &column2){
-      if(column1 >= columns() || column2 >= columns()){throw MatrixException("Index incorrect");}
+      if(column1 >= columns() || column2 >= columns()){
+        throw std::out_of_range("Column index incorrect");
+      }
       T temp;
       for(unsigned int i(0); i < rows(); i++){
         temp = (*this)(i, column1);
@@ -1129,12 +1101,19 @@ class Matrix{
     }
 
   public:
+    /**
+     * Replace content
+     *
+     * @param matrix matrix to be replaced to
+     * @param do_check Check matrix size property. The default is true
+     * @return matrix with new content
+     */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &replace(
         const Matrix<T2, Array2D_Type2, ViewType2> &matrix,
         const bool &do_check = true){
       if(do_check && isDifferentSize(matrix)){
-        throw MatrixException("Incorrect size");
+        throw std::invalid_argument("Incorrect size");
       }
       return replace_internal(matrix);
     }
@@ -1144,9 +1123,10 @@ class Matrix{
      *
      * @param do_check Check matrix size property. The default is true
      * @return Trace
+     * @throw std::logic_error When matrix is not square
      */
     T trace(const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw MatrixException("rows != columns");}
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
       T tr(0);
       for(unsigned i(0); i < rows(); i++){
         tr += (*this)(i, i);
@@ -1215,10 +1195,11 @@ class Matrix{
      *
      * @param matrix Matrix to add
      * @return myself
+     * @throw std::invalid_argument When matrix sizes are not identical
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
+      if(isDifferentSize(matrix)){throw std::invalid_argument("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           (*this)(i, j) += matrix(i, j);
@@ -1243,10 +1224,11 @@ class Matrix{
      *
      * @param matrix Matrix to subtract
      * @return myself
+     * @throw std::invalid_argument When matrix sizes are not identical
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
+      if(isDifferentSize(matrix)){throw std::invalid_argument("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           (*this)(i, j) -= matrix(i, j);
@@ -1271,12 +1253,12 @@ class Matrix{
      *
      * @param matrix matrix to multiply
      * @return multiplied (deep) copy
-     * @throw MatrixException
+     * @throw std::invalid_argument When operation is undefined
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
       if(columns() != matrix.rows()){
-        throw MatrixException("Incorrect size");
+        throw std::invalid_argument("Incorrect size");
       }
       viewless_t result(blank(rows(), matrix.columns()));
       for(unsigned int i(0); i < result.rows(); i++){
@@ -1295,7 +1277,6 @@ class Matrix{
      *
      * @param matrix Matrix to multiply
      * @return myself
-     * @throw MatrixException
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
     self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
@@ -1350,10 +1331,10 @@ class Matrix{
      *
      * @param do_check Whether check size property. The default is true.
      * @return Determinant
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
      */
     T determinant_minor(const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
       if(rows() == 1){
         return (*this)(0, 0);
       }else{
@@ -1394,6 +1375,8 @@ class Matrix{
      * @param y Right hand term
      * @param do_check Check whether already LU decomposed
      * @return Left hand second term
+     * @throw std::logic_error When operation is undefined
+     * @throw std::invalid_argument When input is incorrect
      * @see decomposeLU(const bool &)
      */
     template <class T2, template <class> class Array2D_Type2, class ViewType2>
@@ -1402,11 +1385,11 @@ class Matrix{
             const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
             const {
       if(do_check && (!isLU())){
-        throw MatrixException("Not LU decomposed matrix!!");
+        throw std::logic_error("Not LU decomposed matrix!!");
       }
       if((y.columns() != 1)
           || (y.rows() != rows())){
-        throw MatrixException("Incorrect y size");
+        throw std::invalid_argument("Incorrect y size");
       }
 
       partial_t
@@ -1450,13 +1433,14 @@ class Matrix{
      * [[1,0,0], [0,0,1], [0,1,0]].
      * @param do_check Check size, the default is true.
      * @return LU decomposed matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
      */
     viewless_t decomposeLUP(
         unsigned int &pivot_num,
         unsigned int *pivot = NULL,
         const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
@@ -1481,7 +1465,7 @@ class Matrix{
           unsigned int j(i);
           do{
             if(++j == rows()){
-              throw MatrixException("LU decomposition cannot be performed");
+              throw std::runtime_error("LU decomposition cannot be performed");
             }
           }while(U(i, j) == T(0));
           for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
@@ -1543,10 +1527,10 @@ class Matrix{
      *
      * @param do_check Check size, the default is true.
      * @return UD decomposed matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
      */
     viewless_t decomposeUD(const bool &do_check = true) const {
-      if(do_check && !isSymmetric()){throw MatrixException("not symmetric");}
+      if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
       viewless_t P(copy());
       viewless_t UD(rows(), columns() * 2);
 #define U(i, j) UD(i, j)
@@ -1570,17 +1554,18 @@ class Matrix{
      * Calculate inverse matrix
      *
      * @return Inverse matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
      */
     viewless_t inverse() const {
 
-      if(!isSquare()){throw MatrixException("rows() != columns()");}
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       //クラメール(遅い)
       /*
       viewless_t result(rows(), columns());
       T det;
-      if((det = determinant()) == 0){throw MatrixException("Operation void!!");}
+      if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           result(i, j) = coMatrix(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
@@ -1597,7 +1582,7 @@ class Matrix{
           unsigned int i2(i);
           do{
             if(++i2 == rows()){
-              throw MatrixException("invert matrix not exist");
+              throw std::runtime_error("invert matrix not exist");
             }
           }while(left(i2, i) == T(0));
           // exchange i-th and i2-th rows
@@ -1697,10 +1682,10 @@ class Matrix{
      * @param transform Pointer to store multiplication of matrices used for the conversion.
      * If NULL is specified, the store will not be performed, The default is NULL.
      * @return Hessenberg matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
      */
     viewless_t hessenberg(viewless_t *transform = NULL) const {
-      if(!isSquare()){throw MatrixException("rows() != columns()");}
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       viewless_t result(copy());
       for(unsigned int j(0); j < columns() - 2; j++){
@@ -1790,6 +1775,8 @@ class Matrix{
      * @param threshold_abs Absolute error to be used for convergence determination
      * @param threshold_rel Relative error to be used for convergence determination
      * @return Eigenvalues and eigenvectors
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
      */
     typename complex_t<T>::m_t eigen(
         const T &threshold_abs = 1E-10,
@@ -1797,7 +1784,7 @@ class Matrix{
 
       typedef typename complex_t<T>::m_t res_t;
 
-      if(!isSquare()){throw MatrixException("rows() != columns()");}
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       //パワー法(べき乗法)
       /*viewless_t result(rows(), rows() + 1);
@@ -1919,7 +1906,7 @@ class Matrix{
 #else
         if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
 #endif
-          throw MatrixException("eigen values calculation failed");
+          throw std::runtime_error("eigen values calculation failed");
         }
 
         //収束判定
@@ -2009,7 +1996,7 @@ class Matrix{
             break;
           }
           if(loop > 100){
-            throw MatrixException("eigen vectors calculation failed");
+            throw std::runtime_error("eigen vectors calculation failed");
           }
         }
       }

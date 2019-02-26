@@ -39,6 +39,7 @@
  */
 
 #include <cmath>
+#include <stdexcept>
 #include "param/matrix.h"
 
 #include "param/vector3.h"
@@ -644,7 +645,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
      * Quaternion型に変換します。
      * 
      * @param mat 行列
-     * @throws MatrixException 行列のサイズが正しくないとき
+     * @throws std::logic_error 行列のサイズが正しくないとき
      */
     Quaternion(const Matrix<FloatT> &mat) : super_t() {
       
@@ -683,7 +684,7 @@ class Quaternion : public QuaternionData_TypeMapper<FloatT>::res_t {
           }
         } 
       }else{
-        throw MatrixException("Operatiorn void!! ; Need Matrix(4, 1) or Matrix(1, 4) or DCM_Matrix(3, 3)");
+        throw std::logic_error("Operatiorn void!! ; Need Matrix(4, 1) or Matrix(1, 4) or DCM_Matrix(3, 3)");
       }
     }
     

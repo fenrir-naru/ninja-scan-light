@@ -3,7 +3,7 @@
 #include <cmath>
 #include <ctime>
 #include <iostream>
-#include <exception>
+#include <stdexcept>
 #include <set>
 #include <deque>
 
@@ -379,7 +379,7 @@ void check_inv(const matrix_t &mat){
     matrix_t inv(mat.inverse());
     dbg("inv:" << inv << endl, false);
     matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
-  }catch(MatrixException &e){
+  }catch(std::runtime_error &e){
     dbg("inv_error:" << e.what() << endl, true);
   }
 }
@@ -435,23 +435,23 @@ BOOST_AUTO_TEST_CASE(partial){
   dbg_print();
   direct_t a(*A);
 
-  BOOST_CHECK_THROW(A->partial(A->rows() + 1, 0, 0, 0), MatrixException);
-  BOOST_CHECK_THROW(A->partial(0, A->columns() + 1, 0, 0), MatrixException);
-  BOOST_CHECK_THROW(A->partial(A->rows(), 0, 1, 0), MatrixException);
-  BOOST_CHECK_THROW(A->partial(0, A->columns(), 0, 1), MatrixException);
+  BOOST_CHECK_THROW(A->partial(A->rows() + 1, 0, 0, 0), std::logic_error);
+  BOOST_CHECK_THROW(A->partial(0, A->columns() + 1, 0, 0), std::logic_error);
+  BOOST_CHECK_THROW(A->partial(A->rows(), 0, 1, 0), std::logic_error);
+  BOOST_CHECK_THROW(A->partial(0, A->columns(), 0, 1), std::logic_error);
 
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2 + 1, A->columns() / 2, 0, 0), MatrixException);
+        .partial(A->rows() / 2 + 1, A->columns() / 2, 0, 0), std::logic_error);
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2, A->columns() / 2 + 1, 0, 0), MatrixException);
+        .partial(A->rows() / 2, A->columns() / 2 + 1, 0, 0), std::logic_error);
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2, A->columns() / 2, 1, 0), MatrixException);
+        .partial(A->rows() / 2, A->columns() / 2, 1, 0), std::logic_error);
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2, A->columns() / 2, 0, 1), MatrixException);
+        .partial(A->rows() / 2, A->columns() / 2, 0, 1), std::logic_error);
 
   a.i_offset = a.j_offset = 1;
   matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
@@ -577,7 +577,7 @@ BOOST_AUTO_TEST_CASE(eigen){
       matrix_compare_delta(A_copy * _A.partial(A->rows(), 1, 0, i),
           _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), 1E-4);
     }
-  }catch(MatrixException &e){
+  }catch(std::runtime_error &e){
     dbg("eigen_error:" << e.what() << endl, true);
   }
 }
@@ -588,7 +588,7 @@ BOOST_AUTO_TEST_CASE(sqrt){
     cmatrix_t _A(A->sqrt());
     dbg("sqrt:" << _A << endl, false);
     matrix_compare_delta(*A, _A * _A, 1E-4);
-  }catch(MatrixException &e){
+  }catch(std::runtime_error &e){
     dbg("sqrt_error:" << e.what() << endl, true);
   }
 }
