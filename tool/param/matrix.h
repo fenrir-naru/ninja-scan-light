@@ -160,6 +160,11 @@ class Array2D_Dense : public Array2D<T> {
     typedef Array2D<T> super_t;
     typedef Array2D<T> root_t;
     
+    template <class T2>
+    struct family_t {
+      typedef Array2D_Dense<T2> res_t;
+    };
+
     using root_t::rows;
     using root_t::columns;
 
@@ -1724,18 +1729,24 @@ class Matrix{
       return result;
     }
 
-    template <class T2>
+
     struct complex_t {
-      static const bool is_complex = false;
-      typedef Complex<T2> v_t;
-      typedef typename Matrix<Complex<T2>, Array2D_Dense<Complex<T2> >, ViewType>::viewless_t m_t;
-      // TODO add flexibility to Array2D
-    };
-    template <class T2>
-    struct complex_t<Complex<T2> > {
-        static const bool is_complex = true;
-      typedef Complex<T2> v_t;
-      typedef typename Matrix<Complex<T2>, Array2D_Dense<Complex<T2> >, ViewType>::viewless_t m_t;
+      template <class T2>
+      struct check_t {
+        static const bool hit = false;
+        typedef Complex<T2> res_t;
+      };
+      template <class T2>
+      struct check_t<Complex<T2> > {
+        static const bool hit = true;
+        typedef Complex<T2> res_t;
+      };
+      static const bool is_complex = check_t<T>::hit;
+      typedef typename check_t<T>::res_t v_t;
+      typedef typename Matrix<
+          v_t,
+          typename Array2D_Type::template family_t<v_t>::res_t,
+          ViewType>::viewless_t m_t;
     };
 
     /**
@@ -1748,20 +1759,20 @@ class Matrix{
      */
     void eigen22(
         const unsigned int &row, const unsigned int &column,
-        typename complex_t<T>::v_t &upper, typename complex_t<T>::v_t &lower) const {
+        typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
       T a((*this)(row, column)),
         b((*this)(row, column + 1)),
         c((*this)(row + 1, column)),
         d((*this)(row + 1, column + 1));
       T root2(pow((a - d), 2) + b * c * 4);
-      if(complex_t<T>::is_complex || (root2 > 0)){
+      if(complex_t::is_complex || (root2 > 0)){
         T root(::sqrt(root2));
         upper = ((a + d + root) / 2);
         lower = ((a + d - root) / 2);
       }else{
         T root(::sqrt(root2 * -1));
-        upper = typename complex_t<T>::v_t((a + d) / 2, root / 2);
-        lower = typename complex_t<T>::v_t((a + d) / 2, root / 2 * -1);
+        upper = typename complex_t::v_t((a + d) / 2, root / 2);
+        lower = typename complex_t::v_t((a + d) / 2, root / 2 * -1);
       }
     }
 
@@ -1777,11 +1788,11 @@ class Matrix{
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename complex_t<T>::m_t eigen(
+    typename complex_t::m_t eigen(
         const T &threshold_abs = 1E-10,
         const T &threshold_rel = 1E-7) const {
 
-      typedef typename complex_t<T>::m_t res_t;
+      typedef typename complex_t::m_t res_t;
 
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
@@ -1823,7 +1834,7 @@ class Matrix{
 #define lambda(i) result(i, _rows)
 
       T mu_sum(0), mu_multi(0);
-      typename complex_t<T>::v_t p1, p2;
+      typename complex_t::v_t p1, p2;
       int m = _rows;
       bool first = true;
 
@@ -1844,7 +1855,7 @@ class Matrix{
 
         //μ、μ*の更新(4.143)
         {
-          typename complex_t<T>::v_t p1_new, p2_new;
+          typename complex_t::v_t p1_new, p2_new;
           A.eigen22(m-2, m-2, p1_new, p2_new);
           if(first ? (first = false) : true){
             if((p1_new - p1).abs() > p1_new.abs() / 2){
@@ -1964,7 +1975,7 @@ class Matrix{
         // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
         // を参考に、値を振ってみることにした
         res_t A_C_lambda(A_C.copy());
-        typename complex_t<T>::v_t approx_lambda(lambda(j));
+        typename complex_t::v_t approx_lambda(lambda(j));
         if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
           approx_lambda += 2E-3;
         }
@@ -2019,7 +2030,7 @@ class Matrix{
         }
 
         //正規化
-        typename complex_t<T>::v_t _norm;
+        typename complex_t::v_t _norm;
         for(unsigned int i(0); i < _rows; i++){
           _norm += result(i, j).abs2();
         }
@@ -2052,11 +2063,11 @@ class Matrix{
      * @return square root
      * @see eiegn(const T &, const T &)
      */
-    static typename complex_t<T>::m_t sqrt(
-        const typename complex_t<T>::m_t &eigen_mat){
+    static typename complex_t::m_t sqrt(
+        const typename complex_t::m_t &eigen_mat){
       unsigned int n(eigen_mat.rows());
-      typename complex_t<T>::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
-      typename complex_t<T>::m_t nV(VsD.inverse());
+      typename complex_t::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename complex_t::m_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
         VsD.partial(n, 1, 0, i) *= (eigen_mat(i, n).sqrt());
       }
@@ -2073,7 +2084,7 @@ class Matrix{
      * @return square root
      * @see eigen(const T &, const T &)
      */
-    typename complex_t<T>::m_t sqrt(
+    typename complex_t::m_t sqrt(
         const T &threshold_abs,
         const T &threshold_rel) const {
       return sqrt(eigen(threshold_abs, threshold_rel));
@@ -2084,7 +2095,7 @@ class Matrix{
      *
      * @return square root
      */
-    typename complex_t<T>::m_t sqrt() const {
+    typename complex_t::m_t sqrt() const {
       return sqrt(eigen());
     }
 

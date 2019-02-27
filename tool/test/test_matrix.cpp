@@ -169,7 +169,7 @@ template<
 void matrix_compare_delta(
     U u,
     const Matrix<T2, Array2D_Type2, ViewType2> &m,
-    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
+    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
       element_compare_delta(u(i, j), m(i, j), delta);
@@ -184,13 +184,14 @@ template<
 void matrix_compare_delta(
     const Matrix<T1, Array2D_Type1, ViewType1> &m1,
     const Matrix<T2, Array2D_Type2, ViewType2> &m2,
-    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
+    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   BOOST_REQUIRE_EQUAL(m1.rows(), m2.rows());
   BOOST_REQUIRE_EQUAL(m1.columns(), m2.columns());
-  matrix_compare_delta<
-      Matrix<T1, Array2D_Type1, ViewType1>,
-      T2, Array2D_Type2, ViewType2,
-      T3>(m1, m2, delta);
+  for(unsigned i(0); i < m1.rows(); i++){
+    for(unsigned j(0); j < m1.columns(); j++){
+      element_compare_delta(m1(i, j), m2(i, j), delta);
+    }
+  }
 }
 
 template<
@@ -200,7 +201,7 @@ template<
 void matrix_compare_delta(
     T1 *t,
     const Matrix<T1, Array2D_Type2, ViewType2> &m,
-    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
+    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
       element_compare_delta(*(t++), m(i, j), delta);
@@ -796,8 +797,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array);
     matrix_t AB((*A) * (*B));
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   {
     // normal * transpose
@@ -805,8 +805,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array, false, true);
     matrix_t AB((*A) * B->transpose());
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   {
     // transpose * normal
@@ -814,8 +813,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array, true, false);
     matrix_t AB(A->transpose() * (*B));
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   {
     // transpose * transpose
@@ -823,8 +821,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array, true, true);
     matrix_t AB(A->transpose() * B->transpose());
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   delete [] AB_array;
 }
