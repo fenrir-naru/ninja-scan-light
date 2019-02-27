@@ -627,11 +627,11 @@ struct MatrixViewPartial : protected BaseView {
  */
 template <
     class T,
-    template <class> class Array2D_Type = Array2D_Dense,
+    class Array2D_Type = Array2D_Dense<T>,
     class ViewType = MatrixViewBase<> >
 class Matrix{
   public:
-    typedef Array2D_Type<T> storage_t;
+    typedef Array2D_Type storage_t;
     typedef Matrix<T, Array2D_Type, ViewType> self_t;
 
     typedef MatrixViewProperty<ViewType> view_property_t;
@@ -644,10 +644,7 @@ class Matrix{
     typedef Matrix<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
 
-    template <
-        class T2,
-        template <class> class Array2D_Type2,
-        class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
 
   protected:
@@ -770,7 +767,7 @@ class Matrix{
             : NULL),
         view(matrix.view){}
 
-    template <class T2, template <class> class Array2D_Type2>
+    template <class T2, class Array2D_Type2>
     Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
         : storage(matrix.storage
             ? new storage_t(matrix.storage)
@@ -827,7 +824,7 @@ class Matrix{
       }
       return *this;
     }
-    template <class T2, template <class> class Array2D_Type2>
+    template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
       delete storage;
       storage = matrix.storage ? new storage_t(*matrix.storage) : NULL;
@@ -886,7 +883,7 @@ class Matrix{
      * @return true when elements of two matrices are identical, otherwise false.
      */
     template <
-        class T2, template <class> class Array2D_Type2,
+        class T2, class Array2D_Type2,
         class ViewType2>
     bool operator==(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       if(this == &matrix){return true;}
@@ -905,7 +902,7 @@ class Matrix{
     }
     
     template <
-        class T2, template <class> class Array2D_Type2,
+        class T2, class Array2D_Type2,
         class ViewType2>
     bool operator!=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       return !(operator==(matrix));
@@ -1085,13 +1082,13 @@ class Matrix{
      * @param matrix Matrix to be compared
      * @return true when size different, otherwise false.
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       return (rows() != matrix.rows()) || (columns() != matrix.columns());
     }
 
   protected:
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &replace_internal(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       for(unsigned int i(0); i < rows(); ++i){
         for(unsigned int j(0); j < columns(); ++j){
@@ -1109,7 +1106,7 @@ class Matrix{
      * @param do_check Check matrix size property. The default is true
      * @return matrix with new content
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &replace(
         const Matrix<T2, Array2D_Type2, ViewType2> &matrix,
         const bool &do_check = true){
@@ -1198,7 +1195,7 @@ class Matrix{
      * @return myself
      * @throw std::invalid_argument When matrix sizes are not identical
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       if(isDifferentSize(matrix)){throw std::invalid_argument("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
@@ -1215,7 +1212,7 @@ class Matrix{
      * @param matrix Matrix to add
      * @return added (deep) copy
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     viewless_t operator+(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
       return (copy() += matrix);
     }
@@ -1227,7 +1224,7 @@ class Matrix{
      * @return myself
      * @throw std::invalid_argument When matrix sizes are not identical
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       if(isDifferentSize(matrix)){throw std::invalid_argument("Incorrect size");}
       for(unsigned int i(0); i < rows(); i++){
@@ -1244,8 +1241,8 @@ class Matrix{
      * @param matrix Matrix to subtract
      * @return subtracted (deep) copy
      */
-    template <class T2, template <class> class Array2D_Type2>
-    viewless_t operator-(const Matrix<T2, Array2D_Type2> &matrix) const{
+    template <class T2, class Array2D_Type2, class ViewType2>
+    viewless_t operator-(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
       return (copy() -= matrix);
     }
 
@@ -1256,7 +1253,7 @@ class Matrix{
      * @return multiplied (deep) copy
      * @throw std::invalid_argument When operation is undefined
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
       if(columns() != matrix.rows()){
         throw std::invalid_argument("Incorrect size");
@@ -1279,7 +1276,7 @@ class Matrix{
      * @param matrix Matrix to multiply
      * @return myself
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       return replace_internal(*this * matrix);
     }
@@ -1380,7 +1377,7 @@ class Matrix{
      * @throw std::invalid_argument When input is incorrect
      * @see decomposeLU(const bool &)
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t
         solve_linear_eq_with_LU(
             const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
@@ -1623,7 +1620,7 @@ class Matrix{
      * @param matrix Matrix to divide
      * @return myself
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
         return (*this) *= matrix.inverse();
     }
@@ -1633,7 +1630,7 @@ class Matrix{
      * @param matrix Matrix to divide
      * @return divided (deep) copy
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     viewless_t operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
       return (copy() /= matrix);
     }
@@ -1646,7 +1643,7 @@ class Matrix{
      * @param matrix Matrix to add
      * @return myself
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &pivotMerge(
         const unsigned int &row, const unsigned int &column,
         const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
@@ -1670,7 +1667,7 @@ class Matrix{
      * @param matrix Matrix to add
      * @return added (deep) copy
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     viewless_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
         const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
@@ -1731,13 +1728,14 @@ class Matrix{
     struct complex_t {
       static const bool is_complex = false;
       typedef Complex<T2> v_t;
-      typedef typename Matrix<Complex<T2>, Array2D_Type, ViewType>::viewless_t m_t;
+      typedef typename Matrix<Complex<T2>, Array2D_Dense<Complex<T2> >, ViewType>::viewless_t m_t;
+      // TODO add flexibility to Array2D
     };
     template <class T2>
     struct complex_t<Complex<T2> > {
         static const bool is_complex = true;
       typedef Complex<T2> v_t;
-      typedef typename Matrix<Complex<T2>, Array2D_Type, ViewType>::viewless_t m_t;
+      typedef typename Matrix<Complex<T2>, Array2D_Dense<Complex<T2> >, ViewType>::viewless_t m_t;
     };
 
     /**

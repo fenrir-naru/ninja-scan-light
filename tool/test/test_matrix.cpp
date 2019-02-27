@@ -164,7 +164,7 @@ void element_compare_delta(
 
 template<
     class U,
-    class T2, template <class> class Array2D_Type2, class ViewType2,
+    class T2, class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
     U u,
@@ -178,8 +178,8 @@ void matrix_compare_delta(
 }
 
 template<
-    class T1, template <class> class Array2D_Type1, class ViewType1,
-    class T2, template <class> class Array2D_Type2, class ViewType2,
+    class T1, class Array2D_Type1, class ViewType1,
+    class T2, class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
     const Matrix<T1, Array2D_Type1, ViewType1> &m1,
@@ -195,7 +195,7 @@ void matrix_compare_delta(
 
 template<
     class T1,
-    template <class> class Array2D_Type2, class ViewType2,
+    class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
     T1 *t,
