@@ -297,8 +297,9 @@ class Array2D_Dense : public Array2D<T> {
 };
 
 
-struct MatrixView {
-  typedef MatrixView self_t;
+template <class BaseView = void>
+struct MatrixViewBase {
+  typedef MatrixViewBase self_t;
 
   friend std::ostream &operator<<(std::ostream &out, const self_t &view){
     return out << " [V]";
@@ -627,7 +628,7 @@ struct MatrixViewPartial : protected BaseView {
 template <
     class T,
     template <class> class Array2D_Type = Array2D_Dense,
-    class ViewType = MatrixView>
+    class ViewType = MatrixViewBase<> >
 class Matrix{
   public:
     typedef Array2D_Type<T> storage_t;

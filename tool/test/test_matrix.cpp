@@ -394,28 +394,28 @@ BOOST_AUTO_TEST_CASE(inv){
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::view_t,
-      MatrixViewTranspose<MatrixView> >::value));
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::transpose_t::view_t,
-      MatrixView>::value));
+      MatrixViewBase<> >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixView> > >::value));
+      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::partial_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixView> > >::value));
+      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
   dbg_print();
