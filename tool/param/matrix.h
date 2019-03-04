@@ -121,7 +121,7 @@ class Array2D{
      *
      * @param row Row index (the first row is zero)
      * @param column Column index (the first column is zero)
-     * @return (T) ¬•ª
+     * @return (T) content
      */
     virtual const T &operator()(
         const unsigned int &row,
@@ -653,7 +653,7 @@ class Matrix{
     friend class Matrix;
 
   protected:
-    Array2D<T> *storage; ///< “à•”“I‚É—˜—p‚·‚é2ŸŒ³”z—ñ‚Ìƒƒ‚ƒŠ
+    Array2D<T> *storage; ///< 2D storage
     view_t view;
 
     /**
