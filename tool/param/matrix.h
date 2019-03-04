@@ -69,7 +69,7 @@
 #endif
 
 /**
- * @brief 2D array abstract class
+ * @brief 2D array abstract class for fixed content
  *
  * This class provides basic interface of 2D array, such as row and column numbers,
  * accessor for element.
@@ -77,10 +77,9 @@
  * @param T precision, for example, double
  */
 template<class T>
-class Array2D{
+class Array2D_Frozen{
   public:
-    typedef Array2D<T> self_t;
-    typedef Array2D<T> root_t;
+    typedef Array2D_Frozen<T> self_t;
 
   protected:
     unsigned int m_rows;    ///< Rows
@@ -95,13 +94,13 @@ class Array2D{
      * @param rows Rows
      * @param columns Columns
      */
-    Array2D(const unsigned int &rows, const unsigned int &columns) noexcept
+    Array2D_Frozen(const unsigned int &rows, const unsigned int &columns) noexcept
         : m_rows(rows), m_columns(columns){}
 
     /**
      * Destructor of Array2D
      */
-    virtual ~Array2D() noexcept {}
+    virtual ~Array2D_Frozen() noexcept {}
 
     /**
      * Return rows
@@ -126,6 +125,48 @@ class Array2D{
     virtual const T &operator()(
         const unsigned int &row,
         const unsigned int &column) const = 0;
+
+    /**
+     * Perform copy
+     *
+     * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
+     * @return root_t Copy
+     */
+    virtual self_t *copy(const bool &is_deep = false) const = 0;
+};
+
+/**
+ * @brief 2D array abstract class for changeable content
+ *
+ * @param T precision, for example, double
+ */
+template<class T>
+class Array2D : public Array2D_Frozen<T> {
+  public:
+    typedef Array2D<T> self_t;
+
+    /**
+     * Constructor of Array2D
+     *
+     * @param rows Rows
+     * @param columns Columns
+     */
+    Array2D(const unsigned int &rows, const unsigned int &columns) noexcept
+        : Array2D_Frozen<T>(rows, columns){}
+
+    /**
+     * Destructor of Array2D
+     */
+    virtual ~Array2D() noexcept {}
+
+    /**
+     * Accessor for element
+     *
+     * @param row Row index (the first row is zero)
+     * @param column Column index (the first column is zero)
+     * @return (T) content
+     */
+    using Array2D_Frozen<T>::operator();
     T &operator()(
         const unsigned int &row,
         const unsigned int &column) {
@@ -144,7 +185,7 @@ class Array2D{
      * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
      * @return root_t Copy
      */
-    virtual root_t *copy(const bool &is_deep = false) const = 0;
+    virtual self_t *copy(const bool &is_deep = false) const = 0;
 };
 
 /**
