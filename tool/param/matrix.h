@@ -655,46 +655,35 @@ struct MatrixViewPartial : protected BaseView {
 };
 
 /**
- * @brief Matrix
+ * @brief Matrix for fixed content
  *
- * Most of useful matrix operations are defined.
- *
- * Special care when you want to make copy;
- * The copy constructor(s) and change functions of view such as
- * transpose() are implemented by using shallow copy, which means
- * these return values are linked to their original operand.
- * If you unlink the relation between the original and returned matrices,
- * you have to use copy(), which makes a deep copy explicitly,
- * for example, mat.transpose().copy().
- *
- * @param T precision such as double
- * @param Array2D_Type Storage type. The default is Array2D_Dense
- * @param ViewType View type. The default is void, which means no view, i.e. direct access.
+ * @see Matrix
  */
 template <
-    class T,
-    class Array2D_Type = Array2D_Dense<T>,
+    class T, class Array2D_Type,
     class ViewType = MatrixViewBase<> >
-class Matrix{
+class Matrix_Frozen {
   public:
     typedef Array2D_Type storage_t;
-    typedef Matrix<T, Array2D_Type, ViewType> self_t;
+    typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
 
     typedef MatrixViewProperty<ViewType> view_property_t;
     typedef typename view_property_t::self_t view_t;
     typedef MatrixViewBuilder<view_t> view_builder_t;
 
+#if 0
     typedef Matrix<T, Array2D_Type> viewless_t;
     typedef Matrix<T, Array2D_Type,
         typename view_builder_t::transpose_t> transpose_t;
     typedef Matrix<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
+#endif
 
     template <class T2, class Array2D_Type2, class ViewType2>
-    friend class Matrix;
+    friend class Matrix_Frozen;
 
   protected:
-    Array2D<T> *storage; ///< 2D storage
+    const Array2D_Frozen<T> *storage; ///< 2D storage
     view_t view;
 
     /**
@@ -702,15 +691,11 @@ class Matrix{
      *
      * @param storage new storage
      */
-    Matrix(Array2D<T> *new_storage) : storage(new_storage), view() {}
+    Matrix_Frozen(const Array2D_Frozen<T> *new_storage) : storage(new_storage), view() {}
     
     inline const storage_t *array2d() const{
       return static_cast<const storage_t *>(storage);
     }
-    inline storage_t *array2d() {
-      return const_cast<storage_t *>(const_cast<const self_t *>(this)->array2d());
-    }
-
   public:
     /**
      * Return row number.
@@ -743,11 +728,279 @@ class Matrix{
       return array2d()->storage_t::operator()(
           view.i(row, column), view.j(row, column));
     }
+
+    /**
+     * Constructor without storage.
+     *
+     */
+    Matrix_Frozen() : storage(NULL), view(){}
+
+    /**
+     * Copy constructor generating shallow copy.
+     *
+     * @param matrix original
+     */
+    Matrix_Frozen(const self_t &matrix)
+        : storage(matrix.storage
+            ? matrix.array2d()->storage_t::copy(false)
+            : NULL),
+        view(matrix.view){}
+
+    template <class T2, class Array2D_Type2>
+    Matrix_Frozen(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
+        : storage(matrix.storage
+            ? new storage_t(matrix.storage)
+            : NULL),
+        view(matrix.view) {}
+  protected:
+    template <class ViewType2>
+    Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &matrix)
+        : storage(matrix.storage
+            ? matrix.array2d()->storage_t::copy(false)
+            : NULL),
+        view() {
+      view_builder_t::copy(view, matrix.view);
+    }
+
+  public:
+    /**
+     * Destructor
+     */
+    virtual ~Matrix_Frozen(){delete storage;}
+
+  protected:
+    self_t &operator=(const self_t &matrix){
+      if(this != &matrix){
+        delete storage;
+        storage = matrix.storage ? matrix.array2d()->storage_t::copy(false) : NULL;
+        view = matrix.view;
+      }
+      return *this;
+    }
+    template <class T2, class Array2D_Type2>
+    self_t &operator=(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix){
+      delete storage;
+      storage = matrix.storage ? new storage_t(*matrix.storage) : NULL;
+      view = matrix.view;
+      return *this;
+    }
+
+  public:
+    /**
+     * Test whether elements are identical
+     *
+     * @param matrix Matrix to be compared
+     * @return true when elements of two matrices are identical, otherwise false.
+     */
+    template <
+        class T2, class Array2D_Type2,
+        class ViewType2>
+    bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
+      if(this == &matrix){return true;}
+      if((rows() != matrix.rows())
+          || columns() != matrix.columns()){
+        return false;
+      }
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
+          if((*this)(i, j) != matrix(i, j)){
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    template <
+        class T2, class Array2D_Type2,
+        class ViewType2>
+    bool operator!=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
+      return !(operator==(matrix));
+    }
+
+    /**
+     * Test whether matrix is square
+     *
+     * @return true when square, otherwise false.
+     */
+    bool isSquare() const noexcept {return rows() == columns();}
+
+    /**
+     * Test whether matrix is diagonal
+     *
+     * @return true when diagonal, otherwise false.
+     */
+    bool isDiagonal() const noexcept {
+      if(isSquare()){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(i + 1); j < columns(); j++){
+            if(((*this)(i, j) != T(0)) || ((*this)(j, i) != T(0))){
+              return false;
+            }
+          }
+        }
+        return true;
+      }else{return false;}
+    }
+
+    /**
+     * Test whether matrix is symmetric
+     *
+     * @return true when symmetric, otherwise false.
+     */
+    bool isSymmetric() const noexcept {
+      if(isSquare()){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(i + 1); j < columns(); j++){
+            if((*this)(i, j) != (*this)(j, i)){return false;}
+          }
+        }
+        return true;
+      }else{return false;}
+    }
+
+    /**
+     * Test whether size of matrices is different
+     *
+     * @param matrix Matrix to be compared
+     * @return true when size different, otherwise false.
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    bool isDifferentSize(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
+      return (rows() != matrix.rows()) || (columns() != matrix.columns());
+    }
+
+    /**
+     * Return trace of matrix
+     *
+     * @param do_check Check matrix size property. The default is true
+     * @return Trace
+     * @throw std::logic_error When matrix is not square
+     */
+    T trace(const bool &do_check = true) const {
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
+      T tr(0);
+      for(unsigned i(0); i < rows(); i++){
+        tr += (*this)(i, i);
+      }
+      return tr;
+    }
+
+    /**
+     * Test whether matrix is LU decomposed.
+     * The assumption of elements is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
+     *
+     * @return true when LU, otherwise false.
+     */
+    bool isLU() const noexcept {
+      if(rows() * 2 != columns()){return false;}
+      for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
+        for(unsigned int j(i + 1); j < rows(); j++){
+          if((*this)(i, j) != T(0)){return false;} // check L
+          if((*this)(j, i_U) != T(0)){return false;} // check U
+        }
+      }
+      return true;
+    }
+
+    /**
+     * Print matrix
+     *
+     */
+    friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
+      if(matrix.storage){
+        out << "{";
+        for(unsigned int i(0); i < matrix.rows(); i++){
+          out << (i == 0 ? "" : ",") << std::endl << "{";
+          for(unsigned int j(0); j < matrix.columns(); j++){
+            out << (j == 0 ? "" : ",") << matrix(i, j);
+          }
+          out << "}";
+        }
+        out << std::endl << "}";
+      }
+      return out;
+    }
+};
+
+/**
+ * @brief Matrix
+ *
+ * Most of useful matrix operations are defined.
+ *
+ * Special care when you want to make copy;
+ * The copy constructor(s) and change functions of view such as
+ * transpose() are implemented by using shallow copy, which means
+ * these return values are linked to their original operand.
+ * If you unlink the relation between the original and returned matrices,
+ * you have to use copy(), which makes a deep copy explicitly,
+ * for example, mat.transpose().copy().
+ *
+ * @param T precision such as double
+ * @param Array2D_Type Storage type. The default is Array2D_Dense
+ * @param ViewType View type. The default is void, which means no view, i.e. direct access.
+ */
+template <
+    class T,
+    class Array2D_Type = Array2D_Dense<T>,
+    class ViewType = MatrixViewBase<> >
+class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
+  public:
+    typedef Matrix_Frozen<T, Array2D_Type, ViewType> super_t;
+
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename super_t::storage_t storage_t;
+    typedef typename super_t::view_builder_t view_builder_t;
+    typedef typename super_t::view_property_t view_property_t;
+#else
+    using typename super_t::storage_t;
+    using typename super_t::view_builder_t;
+    using typename super_t::view_property_t;
+#endif
+
+    typedef Matrix<T, Array2D_Type, ViewType> self_t;
+
+    typedef Matrix<T, Array2D_Type> viewless_t;
+    typedef Matrix<T, Array2D_Type,
+        typename view_builder_t::transpose_t> transpose_t;
+    typedef Matrix<T, Array2D_Type,
+        typename view_builder_t::partial_t> partial_t;
+
+    template <class T2, class Array2D_Type2, class ViewType2>
+    friend class Matrix;
+
+  protected:
+    /**
+     * Constructor with storage
+     *
+     * @param storage new storage
+     */
+    Matrix(const Array2D<T> *new_storage) : super_t(new_storage) {}
+
+    using super_t::array2d;
+    inline storage_t *array2d() {
+      return const_cast<storage_t *>(const_cast<const self_t *>(this)->array2d());
+    }
+
+  public:
+    /**
+     * Return matrix element of specified indices.
+     *
+     * @param row Row index starting from 0.
+     * @param column Column index starting from 0.
+     * @return element
+     */
+    using super_t::operator();
     T &operator()(
         const unsigned int &row,
         const unsigned int &column){
       return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
     }
+
+    using super_t::rows;
+    using super_t::columns;
 
     /**
      * Clear elements.
@@ -769,7 +1022,7 @@ class Matrix{
      * Constructor without storage.
      *
      */
-    Matrix() : storage(NULL), view(){}
+    Matrix() : super_t(NULL){}
 
     /**
      * Constructor with specified row and column numbers.
@@ -782,7 +1035,7 @@ class Matrix{
     Matrix(
         const unsigned int &rows,
         const unsigned int &columns)
-        : storage(new storage_t(rows, columns)), view(){
+        : super_t(new storage_t(rows, columns)){
       clear();
     }
 
@@ -799,7 +1052,7 @@ class Matrix{
         const unsigned int &rows,
         const unsigned int &columns,
         const T *serialized)
-        : storage(new storage_t(rows, columns, serialized)), view(){
+        : super_t(new storage_t(rows, columns, serialized)){
     }
 
     /**
@@ -808,32 +1061,21 @@ class Matrix{
      * @param matrix original
      */
     Matrix(const self_t &matrix)
-        : storage(matrix.storage
-            ? matrix.array2d()->storage_t::copy(false)
-            : NULL),
-        view(matrix.view){}
+        : super_t(matrix){}
 
     template <class T2, class Array2D_Type2>
     Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
-        : storage(matrix.storage
-            ? new storage_t(matrix.storage)
-            : NULL),
-        view(matrix.view) {}
+        : super_t(matrix) {}
   protected:
     template <class ViewType2>
     Matrix(const Matrix<T, Array2D_Type, ViewType2> &matrix)
-        : storage(matrix.storage
-            ? matrix.array2d()->storage_t::copy(false)
-            : NULL),
-        view() {
-      view_builder_t::copy(view, matrix.view);
-    }
+        : super_t(matrix){}
 
   public:
     /**
      * Destructor
      */
-    virtual ~Matrix(){delete storage;}
+    virtual ~Matrix(){}
 
 
     /**
@@ -863,18 +1105,12 @@ class Matrix{
      * @return myself
      */
     self_t &operator=(const self_t &matrix){
-      if(this != &matrix){
-        delete storage;
-        storage = matrix.storage ? matrix.array2d()->storage_t::copy(false) : NULL;
-        view = matrix.view;
-      }
+      super_t::operator=(matrix);
       return *this;
     }
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
-      delete storage;
-      storage = matrix.storage ? new storage_t(*matrix.storage) : NULL;
-      view = matrix.view;
+      super_t::operator=(matrix);
       return *this;
     }
 
@@ -922,38 +1158,6 @@ class Matrix{
     }
 
   public:
-    /**
-     * Test whether elements are identical
-     * 
-     * @param matrix Matrix to be compared
-     * @return true when elements of two matrices are identical, otherwise false.
-     */
-    template <
-        class T2, class Array2D_Type2,
-        class ViewType2>
-    bool operator==(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
-      if(this == &matrix){return true;}
-      if((rows() != matrix.rows())
-          || columns() != matrix.columns()){
-        return false;
-      }
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          if((*this)(i, j) != matrix(i, j)){
-            return false;
-          }
-        }
-      }
-      return true;
-    }
-    
-    template <
-        class T2, class Array2D_Type2,
-        class ViewType2>
-    bool operator!=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
-      return !(operator==(matrix));
-    }
-
     /**
      * Generate scalar matrix
      *
@@ -1081,58 +1285,6 @@ class Matrix{
       return *this;
     }
 
-    /**
-     * Test whether matrix is square
-     *
-     * @return true when square, otherwise false.
-     */
-    bool isSquare() const noexcept {return rows() == columns();}
-
-    /**
-     * Test whether matrix is diagonal
-     *
-     * @return true when diagonal, otherwise false.
-     */
-    bool isDiagonal() const noexcept {
-      if(isSquare()){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(i + 1); j < columns(); j++){
-            if(((*this)(i, j) != T(0)) || ((*this)(j, i) != T(0))){
-              return false;
-            }
-          }
-        }
-        return true;
-      }else{return false;}
-    }
-
-    /**
-     * Test whether matrix is symmetric
-     *
-     * @return true when symmetric, otherwise false.
-     */
-    bool isSymmetric() const noexcept {
-      if(isSquare()){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(i + 1); j < columns(); j++){
-            if((*this)(i, j) != (*this)(j, i)){return false;}
-          }
-        }
-        return true;
-      }else{return false;}
-    }
-
-    /**
-     * Test whether size of matrices is different
-     *
-     * @param matrix Matrix to be compared
-     * @return true when size different, otherwise false.
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
-      return (rows() != matrix.rows()) || (columns() != matrix.columns());
-    }
-
   protected:
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &replace_internal(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
@@ -1162,21 +1314,11 @@ class Matrix{
       return replace_internal(matrix);
     }
 
-    /**
-     * Return trace of matrix
-     *
-     * @param do_check Check matrix size property. The default is true
-     * @return Trace
-     * @throw std::logic_error When matrix is not square
-     */
-    T trace(const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
-      T tr(0);
-      for(unsigned i(0); i < rows(); i++){
-        tr += (*this)(i, i);
-      }
-      return tr;
-    }
+    using super_t::isSquare;
+    using super_t::isDiagonal;
+    using super_t::isSymmetric;
+    using super_t::isDifferentSize;
+    using super_t::isLU;
 
     /**
      * Multiple by scalar (bang method)
@@ -1392,25 +1534,6 @@ class Matrix{
         }
         return sum;
       }
-    }
-
-    /**
-     * Test whether matrix is LU decomposed.
-     * The assumption of elements is
-     * (0, 0)-(n-1, n-1):  L matrix
-     * (0, n)-(n-1, 2n-1): U matrix
-     *
-     * @return true when LU, otherwise false.
-     */
-    bool isLU() const noexcept {
-      if(rows() * 2 != columns()){return false;}
-      for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
-        for(unsigned int j(i + 1); j < rows(); j++){
-          if((*this)(i, j) != T(0)){return false;} // check L
-          if((*this)(j, i_U) != T(0)){return false;} // check U
-        }
-      }
-      return true;
     }
 
     /**
@@ -2138,25 +2261,6 @@ class Matrix{
      */
     typename complex_t::m_t sqrt() const {
       return sqrt(eigen());
-    }
-
-    /**
-     * Print matrix
-     *
-     */
-    friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
-      if(matrix.storage){
-        out << "{";
-        for(unsigned int i(0); i < matrix.rows(); i++){
-          out << (i == 0 ? "" : ",") << std::endl << "{";
-          for(unsigned int j(0); j < matrix.columns(); j++){
-            out << (j == 0 ? "" : ",") << matrix(i, j);
-          }
-          out << "}";
-        }
-        out << std::endl << "}";
-      }
-      return out;
     }
 };
 
