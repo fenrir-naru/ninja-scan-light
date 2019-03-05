@@ -671,13 +671,10 @@ class Matrix_Frozen {
     typedef typename view_property_t::self_t view_t;
     typedef MatrixViewBuilder<view_t> view_builder_t;
 
-#if 0
-    typedef Matrix<T, Array2D_Type> viewless_t;
-    typedef Matrix<T, Array2D_Type,
+    typedef Matrix_Frozen<T, Array2D_Type,
         typename view_builder_t::transpose_t> transpose_t;
-    typedef Matrix<T, Array2D_Type,
+    typedef Matrix_Frozen<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
-#endif
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
@@ -906,6 +903,77 @@ class Matrix_Frozen {
     }
 
     /**
+     * Generate transpose matrix
+     *
+     * @return Transpose matrix
+     */
+    transpose_t transpose() const noexcept {
+      return transpose_t(*this);
+    }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixT::partial_t partial_internal(
+        const MatrixT &self,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset){
+      if(new_rows + row_offset > self.rows()){
+        throw std::out_of_range("Row size exceeding");
+      }else if(new_columns + column_offset > self.columns()){
+        throw std::out_of_range("Column size exceeding");
+      }
+      typename MatrixT::partial_t res(self);
+      MatrixT::partial_t::view_builder_t::set_partial(
+          res.view,
+          new_rows, new_columns, row_offset, column_offset);
+      return res;
+    }
+
+  public:
+    /**
+     * Generate partial matrix
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @param rowOffset Upper row index of original matrix for partial matrix
+     * @param columnOffset Left column index of original matrix for partial matrix
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     *
+     */
+    partial_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const {
+      return partial_internal(*this,
+          new_rows, new_columns, row_offset, column_offset);
+    }
+
+    /**
+     * Generate row vector by using partial()
+     *
+     * @param row Row index of original matrix for row vector
+     * @return Row vector
+     * @see partial()
+     */
+    partial_t rowVector(const unsigned int &row) const {
+      return partial(1, columns(), row, 0);
+    }
+    /**
+     * Generate column vector by using partial()
+     *
+     * @param column Column index of original matrix for column vector
+     * @return Column vector
+     * @see partial()
+     */
+    partial_t columnVector(const unsigned int &column) const {
+      return partial(rows(), 1, 0, column);
+    }
+
+    /**
      * Print matrix
      *
      */
@@ -967,6 +1035,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         typename view_builder_t::transpose_t> transpose_t;
     typedef Matrix<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
+
+    template <class T2, class Array2D_Type2, class ViewType2>
+    friend class Matrix_Frozen;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
@@ -1208,16 +1279,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &new_columns,
         const unsigned int &row_offset,
         const unsigned int &column_offset) const {
-      partial_t res(*this);
-      if(new_rows + row_offset > rows()){
-        throw std::out_of_range("Row size exceeding");
-      }else if(new_columns + column_offset > columns()){
-        throw std::out_of_range("Column size exceeding");
-      }
-      partial_t::view_builder_t::set_partial(
-          res.view,
+      return super_t::partial_internal(*this,
           new_rows, new_columns, row_offset, column_offset);
-      return res;
     }
 
     /**
