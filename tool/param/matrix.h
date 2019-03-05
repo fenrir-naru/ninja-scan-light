@@ -654,6 +654,9 @@ struct MatrixViewPartial : protected BaseView {
   }
 };
 
+template <class T, class Array2D_Type, class ViewType>
+class Matrix;
+
 /**
  * @brief Matrix for fixed content
  *
@@ -764,6 +767,22 @@ class Matrix_Frozen {
      * Destructor
      */
     virtual ~Matrix_Frozen(){delete storage;}
+
+    /**
+     * Down cast to Matrix to make its content changeable
+     *
+     */
+    template <class T2, class Array2D_Type2>
+    operator Matrix<T2, Array2D_Type2, MatrixViewBase<> >() const {
+      Matrix<T2, Array2D_Type2, MatrixViewBase<> > res(
+          Matrix<T2, Array2D_Type2, MatrixViewBase<> >::blank(rows(), columns()));
+      for(unsigned int i(0); i < rows(); ++i){
+        for(unsigned int j(0); j < columns(); ++j){
+          res(i, j) = (T2)(*this)(i, j);
+        }
+      }
+      return res;
+    }
 
   protected:
     self_t &operator=(const self_t &matrix){
@@ -1206,27 +1225,12 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
   protected:
     /**
-     * Cast to viewless_t is intentionally protected,
-     * because view must be taken into account by a programmer
-     * to optimize speed.
-     * In addition, this cast must be called in explicit style like
-     * subclass_instance.operator superclass::viewless_t (),
-     * because constructor<T, Array2D_Type, ViewType2> has higher priority,
-     * which also has protected.
+     * Cast to another Matrix defined in Matrix_Frozen is intentionally protected.
+     *
+     * Use copy() for Matrix
      */
-    operator viewless_t() const {
-      if(view_property_t::viewless){
-        return viewless_t(array2d()->storage_t::copy(false)); // shallow copy
-      }else{
-        viewless_t res(blank_copy());
-        for(unsigned int i(0); i < rows(); ++i){
-          for(unsigned int j(0); j < columns(); ++j){
-            res(i, j) = (*this)(i, j);
-          }
-        }
-        return res;
-      }
-    }
+    template <class T2, class Array2D_Type2>
+    operator Matrix<T2, Array2D_Type2, MatrixViewBase<> >() const;
 
   public:
     /**
