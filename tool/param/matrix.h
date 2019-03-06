@@ -334,7 +334,7 @@ class Array2D_Dense : public Array2D<T> {
     /**
      * Perform copy
      *
-     * @aparm is_deep If true, return deep copy, otherwise return shallow copy (just link).
+     * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
      * @return (root_t) copy
      */
     root_t *copy(const bool &is_deep = false) const {
@@ -769,19 +769,14 @@ class Matrix_Frozen {
     virtual ~Matrix_Frozen(){delete storage;}
 
     /**
-     * Down cast to Matrix to make its content changeable
+     * Down cast to Matrix by creating deep copy to make its content changeable
      *
      */
     template <class T2, class Array2D_Type2>
     operator Matrix<T2, Array2D_Type2, MatrixViewBase<> >() const {
       Matrix<T2, Array2D_Type2, MatrixViewBase<> > res(
           Matrix<T2, Array2D_Type2, MatrixViewBase<> >::blank(rows(), columns()));
-      for(unsigned int i(0); i < rows(); ++i){
-        for(unsigned int j(0); j < columns(); ++j){
-          res(i, j) = (T2)(*this)(i, j);
-        }
-      }
-      return res;
+      return res.replace_internal(*this);
     }
 
   protected:
@@ -1354,10 +1349,10 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
   protected:
     template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &replace_internal(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
+    self_t &replace_internal(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
       for(unsigned int i(0); i < rows(); ++i){
         for(unsigned int j(0); j < columns(); ++j){
-          (*this)(i, j) = matrix(i, j);
+          (*this)(i, j) = (T)matrix(i, j);
         }
       }
       return *this;
@@ -1373,7 +1368,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &replace(
-        const Matrix<T2, Array2D_Type2, ViewType2> &matrix,
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix,
         const bool &do_check = true){
       if(do_check && isDifferentSize(matrix)){
         throw std::invalid_argument("Incorrect size");
