@@ -126,6 +126,16 @@ class Array2D_Frozen{
         const unsigned int &row,
         const unsigned int &column) const = 0;
 
+    inline void check_index(
+        const unsigned int &row,
+        const unsigned int &column) const {
+      if(row >= rows()){
+        throw std::out_of_range("Row index incorrect");
+      }else if(column >= columns()){
+        throw std::out_of_range("Column index incorrect");
+      }
+    }
+
     /**
      * Perform copy
      *
@@ -318,11 +328,7 @@ class Array2D_Dense : public Array2D<T> {
         const unsigned int &row,
         const unsigned int &column) const throws_when_debug {
 #if defined(DEBUG)
-      if(row >= rows()){
-        throw std::out_of_range("Row index incorrect");
-      }else if(column >= columns()){
-        throw std::out_of_range("Column index incorrect");
-      }
+      super_t::check_index(row, column);
 #endif
       return values[(row * columns()) + column];
     }
