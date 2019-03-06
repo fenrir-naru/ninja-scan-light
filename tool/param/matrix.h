@@ -359,6 +359,61 @@ class Array2D_Dense : public Array2D<T> {
     }
 };
 
+/**
+ * @brief special Array2D representing scaled unit
+ *
+ * @param T precision, for example, double
+ */
+template <class T>
+class Array2D_ScaledUnit : public Array2D_Frozen<T> {
+  public:
+    typedef Array2D_ScaledUnit<T> self_t;
+    typedef Array2D_Frozen<T> super_t;
+    typedef Array2D_Frozen<T> root_t;
+
+    using root_t::rows;
+    using root_t::columns;
+
+  protected:
+    const T value; ///< scaled unit
+
+  public:
+    /**
+     * Constructor
+     *
+     * @param rows Rows
+     * @param columns Columns
+     */
+    Array2D_ScaledUnit(const unsigned int &size, const T &v)
+        : super_t(size, size), value(v){}
+
+    /**
+     * Accessor for element
+     *
+     * @param row Row index
+     * @param column Column Index
+     * @return (T) Element
+     * @throw std::out_of_range When the indices are out of range
+     */
+    T operator()(
+        const unsigned int &row, const unsigned int &column) const throws_when_debug {
+#if defined(DEBUG)
+      super_t::check_index(row, column);
+#endif
+      return (row == column) ? value : 0;
+    }
+
+    /**
+     * Perform copy
+     *
+     * @param is_deep NOP
+     * @return (root_t) (deep) copy
+     */
+    root_t *copy(const bool &is_deep = false) const {
+      return new self_t(*this);
+    }
+};
+
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -784,6 +839,27 @@ class Matrix_Frozen {
      * Destructor
      */
     virtual ~Matrix_Frozen(){delete storage;}
+
+    /**
+     * Generate scalar matrix
+     *
+     * @param size Row and column number
+     * @param scalar
+     */
+    static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getScalar(
+        const unsigned int &size, const T &scalar){
+      return Matrix_Frozen<T, Array2D_ScaledUnit<T> >(
+          new Array2D_ScaledUnit<T>(size, scalar));
+    }
+
+    /**
+     * Generate unit matrix
+     *
+     * @param size Row and column number
+     */
+    static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getI(const unsigned int &size){
+      return getScalar(size, T(1));
+    }
 
     /**
      * Down cast to Matrix by creating deep copy to make its content changeable
@@ -1246,27 +1322,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     operator Matrix<T2, Array2D_Type2, MatrixViewBase<> >() const;
 
   public:
-    /**
-     * Generate scalar matrix
-     *
-     * @param size Row and column number
-     * @param scalar
-     */
-    static viewless_t getScalar(const unsigned int &size, const T &scalar){
-      viewless_t result(size, size);
-      for(unsigned int i(0); i < size; i++){result(i, i) = scalar;}
-      return result;
-    }
-
-    /**
-     * Generate unit matrix
-     *
-     * @param size Row and column number
-     */
-    static viewless_t getI(const unsigned int &size){
-      return getScalar(size, T(1));
-    }
-
     /**
      * Generate transpose matrix
      * Be careful, the return value is linked to the original matrix.
@@ -2082,7 +2137,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       int m = _rows;
       bool first = true;
 
-      viewless_t transform(getI(_rows));
+      viewless_t transform(super_t::getI(_rows));
       viewless_t A(hessenberg(&transform));
       viewless_t A_(A);
 
