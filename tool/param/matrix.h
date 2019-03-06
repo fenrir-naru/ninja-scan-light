@@ -122,7 +122,7 @@ class Array2D_Frozen{
      * @param column Column index (the first column is zero)
      * @return (T) content
      */
-    virtual const T &operator()(
+    virtual T operator()(
         const unsigned int &row,
         const unsigned int &column) const = 0;
 
@@ -177,11 +177,9 @@ class Array2D : public Array2D_Frozen<T> {
      * @return (T) content
      */
     using Array2D_Frozen<T>::operator();
-    T &operator()(
+    virtual T &operator()(
         const unsigned int &row,
-        const unsigned int &column) {
-      return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
-    }
+        const unsigned int &column) = 0;
     
     /**
      * Perform zero clear
@@ -315,22 +313,35 @@ class Array2D_Dense : public Array2D<T> {
       }
       return *this;
     }
-
-    /**
-     * Accessor for element
-     *
-     * @param row Row index
-     * @param column Column Index
-     * @return (const T &) Element
-     * @throw std::out_of_range When the indices are out of range
-     */
-    const T &operator()(
+  protected:
+    inline const T &get(
         const unsigned int &row,
         const unsigned int &column) const throws_when_debug {
 #if defined(DEBUG)
       super_t::check_index(row, column);
 #endif
       return values[(row * columns()) + column];
+    }
+
+  public:
+    /**
+     * Accessor for element
+     *
+     * @param row Row index
+     * @param column Column Index
+     * @return (T) Element
+     * @throw std::out_of_range When the indices are out of range
+     */
+    T operator()(
+        const unsigned int &row,
+        const unsigned int &column) const throws_when_debug {
+      return get(row, column);
+    }
+    T &operator()(
+        const unsigned int &row,
+        const unsigned int &column) throws_when_debug {
+      return const_cast<T &>(
+          const_cast<const self_t *>(this)->get(row, column));
     }
 
     void clear(){
@@ -728,7 +739,7 @@ class Matrix_Frozen {
      * @param column Column index starting from 0.
      * @return element
      */
-    const T &operator()(
+    T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
       return array2d()->storage_t::operator()(
@@ -1087,7 +1098,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     T &operator()(
         const unsigned int &row,
         const unsigned int &column){
-      return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
+      return array2d()->storage_t::operator()(
+            super_t::view.i(row, column), super_t::view.j(row, column));
     }
 
     using super_t::rows;
