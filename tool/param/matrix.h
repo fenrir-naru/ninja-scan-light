@@ -414,6 +414,67 @@ class Array2D_ScaledUnit : public Array2D_Frozen<T> {
     }
 };
 
+/**
+ * @brief special Array2D representing operation
+ *
+ * @param T precision, for example, double
+ */
+template <class T>
+struct Array2D_Operator {
+  template <class OperatorT>
+  class Binary : public Array2D_Frozen<T> {
+    public:
+      typedef Binary self_t;
+      typedef Array2D_Frozen<T> super_t;
+      typedef Array2D_Frozen<T> root_t;
+
+      using root_t::rows;
+      using root_t::columns;
+
+    protected:
+      OperatorT op;
+
+    public:
+      /**
+       * Constructor
+       *
+       * @param rows Rows
+       * @param columns Columns
+       */
+      template <class LHS_Type, class RHS_Type>
+      Binary(
+          const unsigned int &r, const unsigned int &c,
+          const LHS_Type &lhs, const RHS_Type &rhs)
+          : super_t(r, c), op(lhs, rhs){}
+
+      /**
+       * Accessor for element
+       *
+       * @param row Row index
+       * @param column Column Index
+       * @return (T) Element
+       * @throw std::out_of_range When the indices are out of range
+       */
+      T operator()(
+          const unsigned int &row, const unsigned int &column) const throws_when_debug {
+#if defined(DEBUG)
+        super_t::check_index(row, colunmn);
+#endif
+        return op(row, column);
+      }
+
+      /**
+       * Perform copy
+       *
+       * @param is_deep NOP
+       * @return (root_t) (deep) copy
+       */
+      root_t *copy(const bool &is_deep = false) const {
+        return new self_t(*this);
+      }
+  };
+};
+
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -725,6 +786,7 @@ struct MatrixViewPartial : protected BaseView {
     return BaseView::j(i + partial_prop.row_offset, j + partial_prop.column_offset);
   }
 };
+
 
 template <class T, class Array2D_Type, class ViewType>
 class Matrix;
@@ -1080,6 +1142,66 @@ class Matrix_Frozen {
       return partial(rows(), 1, 0, column);
     }
 
+
+    struct mul_mat_scalar_t;
+    typedef Matrix_Frozen<T,
+        typename Array2D_Operator<T>::template Binary<mul_mat_scalar_t> >
+          mul_mat_scalar_res_t;
+
+    /**
+     * Multiply by scalar
+     *
+     * @param scalar
+     * @return multiplied matrix
+     */
+    mul_mat_scalar_res_t operator*(const T &scalar) const noexcept {
+      return mul_mat_scalar_res_t(
+          new typename mul_mat_scalar_res_t::storage_t(
+            rows(), columns(), *this, scalar));
+    }
+
+    /**
+     * Multiply by scalar
+     *
+     * @param scalar
+     * @param matrix
+     * @return multiplied matrix
+     */
+    friend mul_mat_scalar_res_t operator*(const T &scalar, const self_t &matrix) noexcept {
+      return matrix * scalar;
+    }
+
+    /**
+     * Divide by scalar
+     *
+     * @param scalar
+     * @return divided matrix
+     */
+    mul_mat_scalar_res_t operator/(const T &scalar) const noexcept {
+      return operator*(T(1) / scalar);
+    }
+
+    /**
+     * Divide by scalar
+     *
+     * @param scalar
+     * @param matrix
+     * @return divided matrix
+     */
+    friend mul_mat_scalar_res_t operator/(const T &scalar, const self_t &matrix) noexcept {
+      return matrix / scalar;
+    }
+
+    /**
+     * Unary minus operator, which is alias of matrix * -1.
+     *
+     * @return matrix * -1.
+     */
+    mul_mat_scalar_res_t operator-() const noexcept {
+      return operator*(-1);
+    }
+
+
     /**
      * Print matrix
      *
@@ -1099,6 +1221,18 @@ class Matrix_Frozen {
       return out;
     }
 };
+
+template <class T, class Array2D_Type, class ViewType>
+struct Matrix_Frozen<T, Array2D_Type, ViewType>::mul_mat_scalar_t {
+  self_t lhs; ///< Left hand side value
+  T rhs; ///< Right hand side value
+  mul_mat_scalar_t(const self_t &mat, const T &scalar)
+      : lhs(mat), rhs(scalar) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const {
+    return lhs(row, column) * rhs;
+  }
+};
+
 
 /**
  * @brief Matrix
@@ -1455,60 +1589,28 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isDifferentSize;
     using super_t::isLU;
 
+    using super_t::operator*;
+    using super_t::operator/;
+    using super_t::operator-;
+
     /**
-     * Multiple by scalar (bang method)
+     * Multiply by scalar (bang method)
      *
      * @param scalar
      * @return myself
      */
     self_t &operator*=(const T &scalar) noexcept {
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          (*this)(i, j) *= scalar;
-        }
-      }
-      return *this;
+      return replace_internal((*this) * scalar);
     }
-    /**
-     * Multiple by scalar
-     *
-     * @param scalar
-     * @return multiplied (deep) copy
-     */
-    viewless_t operator*(const T &scalar) const{return (copy() *= scalar);}
-    /**
-     * Multiple by scalar
-     *
-     * @param scalar
-     * @param matrix
-     * @return multiplied (deep) copy
-     */
-    friend viewless_t operator*(const T &scalar, const self_t &matrix){
-      return matrix * scalar;
-    }
+
     /**
      * Divide by scalar (bang method)
      *
      * @param scalar
      * @return myself
      */
-    self_t &operator/=(const T &scalar){return (*this) *= (1 / scalar);}
-    /**
-     * Divide by scalar
-     *
-     * @param scalar
-     * @return divided (deep) copy
-     */
-    viewless_t operator/(const T &scalar) const{return (copy() /= scalar);}
-    /**
-     * Divide by scalar
-     *
-     * @param scalar
-     * @param matrix
-     * @return divided (deep) copy
-     */
-    friend viewless_t operator/(const T &scalar, const self_t &matrix){
-      return matrix / scalar;
+    self_t &operator/=(const T &scalar) noexcept {
+      return operator*=(T(1) / scalar);
     }
     
     /**
@@ -1603,13 +1705,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
       return replace_internal(*this * matrix);
     }
-
-    /**
-     * Unary minus operator, which is alias of matrix * -1.
-     *
-     * @return matrix * -1.
-     */
-    viewless_t operator-() const{return (copy() *= -1);}
 
     /**
      * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
@@ -1950,7 +2045,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &pivotMerge(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
       for(int i(0); i < matrix.rows(); i++){
         if(row + i < 0){continue;}
         else if(row + i >= rows()){break;}
@@ -1974,7 +2069,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     viewless_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
       return copy().pivotMerge(row, column, matrix);
     }
 

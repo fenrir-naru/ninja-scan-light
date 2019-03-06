@@ -168,7 +168,7 @@ template<
     class T3>
 void matrix_compare_delta(
     U u,
-    const Matrix<T2, Array2D_Type2, ViewType2> &m,
+    const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &m,
     const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
@@ -182,8 +182,8 @@ template<
     class T2, class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
-    const Matrix<T1, Array2D_Type1, ViewType1> &m1,
-    const Matrix<T2, Array2D_Type2, ViewType2> &m2,
+    const Matrix_Frozen<T1, Array2D_Type1, ViewType1> &m1,
+    const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &m2,
     const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   BOOST_REQUIRE_EQUAL(m1.rows(), m2.rows());
   BOOST_REQUIRE_EQUAL(m1.columns(), m2.columns());
@@ -200,7 +200,7 @@ template<
     class T3>
 void matrix_compare_delta(
     T1 *t,
-    const Matrix<T1, Array2D_Type2, ViewType2> &m,
+    const Matrix_Frozen<T1, Array2D_Type2, ViewType2> &m,
     const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
