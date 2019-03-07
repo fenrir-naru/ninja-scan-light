@@ -1744,7 +1744,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     viewless_t matrix_for_minor(
         const unsigned int &row,
-        const unsigned int &column) const {
+        const unsigned int &column) const noexcept {
       viewless_t res(blank(rows() - 1, columns() - 1));
       unsigned int i(0), i2(0);
       for( ; i < row; ++i, ++i2){
