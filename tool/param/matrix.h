@@ -1270,6 +1270,46 @@ class Matrix_Frozen {
     }
 
 
+    template <class MatrixT>
+    struct Multiply_Matrix_by_Matrix {
+      struct op_t {
+        self_t lhs; ///< Left hand side value
+        MatrixT rhs; ///< Right hand side value
+        op_t(const self_t &mat1, const MatrixT &mat2) noexcept
+            : lhs(mat1), rhs(mat2) {}
+        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+          T res(lhs(row, 0) * rhs(0, column));
+          for(unsigned int i(1); i < lhs.columns(); ++i){
+            res += lhs(row, i) * rhs(i, column);
+          }
+          return res;
+        }
+      };
+      typedef Matrix_Frozen<T,
+          typename Array2D_Operator<T>::template Binary<op_t> >
+            mat_t;
+      static mat_t generate(const self_t &mat1, const MatrixT &mat2){
+        if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
+        return mat_t(
+            new typename mat_t::storage_t(
+              mat1.rows(), mat2.columns(), mat1, mat2));
+      }
+    };
+
+    /**
+     * Multiply by matrix
+     *
+     * @param matrix matrix to multiply
+     * @return multiplied matrix
+     * @throw std::invalid_argument When operation is undefined
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
+        operator*(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+
     /**
      * Print matrix
      *
@@ -1646,7 +1686,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isDifferentSize;
     using super_t::isLU;
 
-    using super_t::operator*;
     using super_t::operator/;
 
     /**
@@ -1690,30 +1729,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     self_t &operator-=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
       return replace_internal((*this) - matrix);
     }
-
-    /**
-     * Multiply by matrix
-     *
-     * @param matrix matrix to multiply
-     * @return multiplied (deep) copy
-     * @throw std::invalid_argument When operation is undefined
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
-      if(columns() != matrix.rows()){
-        throw std::invalid_argument("Incorrect size");
-      }
-      viewless_t result(blank(rows(), matrix.columns()));
-      for(unsigned int i(0); i < result.rows(); i++){
-        for(unsigned int j(0); j < result.columns(); j++){
-          result(i, j) = (*this)(i, 0) * matrix(0, j);
-          for(unsigned int k(1); k < columns(); k++){
-            result(i, j) += ((*this)(i, k) * matrix(k, j));
-          }
-        }
-      }
-      return result;
-    }
     
     /**
      * Multiply by matrix (bang method)
@@ -1722,8 +1737,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return myself
      */
     template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      return replace_internal(*this * matrix);
+    self_t &operator*=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      return operator=(*this * matrix);
     }
 
     /**
