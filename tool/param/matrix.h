@@ -1143,10 +1143,27 @@ class Matrix_Frozen {
     }
 
 
-    struct mul_mat_scalar_t;
-    typedef Matrix_Frozen<T,
-        typename Array2D_Operator<T>::template Binary<mul_mat_scalar_t> >
-          mul_mat_scalar_res_t;
+    template <class Array2D_Type2>
+    struct Multiply_Matrix_by_Scalar {
+      struct op_t {
+        self_t lhs; ///< Left hand side value
+        T rhs; ///< Right hand side value
+        op_t(const self_t &mat, const T &scalar) noexcept
+            : lhs(mat), rhs(scalar) {}
+        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+          return lhs(row, column) * rhs;
+        }
+      };
+      typedef Matrix_Frozen<T,
+          typename Array2D_Operator<T>::template Binary<op_t> >
+            mat_t;
+      static mat_t generate(const self_t &mat, const T &scalar) noexcept {
+        return mat_t(
+            new typename mat_t::storage_t(
+              mat.rows(), mat.columns(), mat, scalar));
+      }
+    };
+    typedef Multiply_Matrix_by_Scalar<Array2D_Type> mul_mat_scalar_t;
 
     /**
      * Multiply by scalar
@@ -1154,10 +1171,8 @@ class Matrix_Frozen {
      * @param scalar
      * @return multiplied matrix
      */
-    mul_mat_scalar_res_t operator*(const T &scalar) const noexcept {
-      return mul_mat_scalar_res_t(
-          new typename mul_mat_scalar_res_t::storage_t(
-            rows(), columns(), *this, scalar));
+    typename mul_mat_scalar_t::mat_t operator*(const T &scalar) const noexcept {
+      return mul_mat_scalar_t::generate(*this, scalar);
     }
 
     /**
@@ -1167,7 +1182,7 @@ class Matrix_Frozen {
      * @param matrix
      * @return multiplied matrix
      */
-    friend mul_mat_scalar_res_t operator*(const T &scalar, const self_t &matrix) noexcept {
+    friend typename mul_mat_scalar_t::mat_t operator*(const T &scalar, const self_t &matrix) noexcept {
       return matrix * scalar;
     }
 
@@ -1177,7 +1192,7 @@ class Matrix_Frozen {
      * @param scalar
      * @return divided matrix
      */
-    mul_mat_scalar_res_t operator/(const T &scalar) const noexcept {
+    typename mul_mat_scalar_t::mat_t operator/(const T &scalar) const noexcept {
       return operator*(T(1) / scalar);
     }
 
@@ -1188,7 +1203,7 @@ class Matrix_Frozen {
      * @param matrix
      * @return divided matrix
      */
-    friend mul_mat_scalar_res_t operator/(const T &scalar, const self_t &matrix) noexcept {
+    friend typename mul_mat_scalar_t::mat_t operator/(const T &scalar, const self_t &matrix) noexcept {
       return matrix / scalar;
     }
 
@@ -1197,7 +1212,7 @@ class Matrix_Frozen {
      *
      * @return matrix * -1.
      */
-    mul_mat_scalar_res_t operator-() const noexcept {
+    typename mul_mat_scalar_t::mat_t operator-() const noexcept {
       return operator*(-1);
     }
 
@@ -1220,17 +1235,6 @@ class Matrix_Frozen {
       }
       return out;
     }
-};
-
-template <class T, class Array2D_Type, class ViewType>
-struct Matrix_Frozen<T, Array2D_Type, ViewType>::mul_mat_scalar_t {
-  self_t lhs; ///< Left hand side value
-  T rhs; ///< Right hand side value
-  mul_mat_scalar_t(const self_t &mat, const T &scalar)
-      : lhs(mat), rhs(scalar) {}
-  T operator()(const unsigned int &row, const unsigned int &column) const {
-    return lhs(row, column) * rhs;
-  }
 };
 
 
