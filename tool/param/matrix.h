@@ -816,6 +816,8 @@ class Matrix_Frozen {
     typedef Matrix_Frozen<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
 
+    typedef Matrix<T> downcast_default_t;
+
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
 
@@ -1310,6 +1312,44 @@ class Matrix_Frozen {
     typename Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
         operator*(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+
+    downcast_default_t matrix_for_minor(
+        const unsigned int &row,
+        const unsigned int &column) const noexcept {
+      return ((downcast_default_t)*this).matrix_for_minor(row, column);
+    }
+
+    T determinant_minor(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).determinant_minor(do_check);
+    }
+
+    downcast_default_t decomposeLUP(
+        unsigned int &pivot_num,
+        unsigned int *pivot = NULL,
+        const bool &do_check = true) const {
+      return ((downcast_default_t)*this).decomposeLUP(pivot_num, pivot, do_check);
+    }
+
+    downcast_default_t decomposeLU(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).decomposeLU(do_check);
+    }
+
+    T determinant_LU(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).determinant_LU(do_check);
+    }
+
+    T determinant(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).determinant(do_check);
+    }
+
+    downcast_default_t decomposeUD(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).decomposeUD(do_check);
+    }
+
+    downcast_default_t inverse() const {
+      return ((downcast_default_t)*this).inverse();
     }
 
 
