@@ -380,6 +380,7 @@ void check_inv(const matrix_t &mat){
     matrix_t inv(mat.inverse());
     dbg("inv:" << inv << endl, false);
     matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
+    matrix_compare_delta(mat, matrix_t::getI(SIZE) / inv, 1E-5);
   }catch(std::runtime_error &e){
     dbg("inv_error:" << e.what() << endl, true);
   }

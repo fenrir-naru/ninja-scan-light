@@ -1352,6 +1352,35 @@ class Matrix_Frozen {
       return ((downcast_default_t)*this).inverse();
     }
 
+    /**
+     * Divide by matrix, in other words, multiply by inverse matrix
+     *
+     * @param matrix Matrix to divide
+     * @return divided matrix
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Multiply_Matrix_by_Matrix<
+          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t>::mat_t
+        operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Multiply_Matrix_by_Matrix<
+            typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t>::generate(
+          *this, matrix.inverse());
+    }
+
+    /**
+     * Divide by matrix, in other words, multiply by inverse matrix
+     *
+     * @param matrix Matrix to divide
+     * @return divided matrix
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Multiply_Matrix_by_Matrix<
+          typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t>::mat_t
+        operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Multiply_Matrix_by_Matrix<
+            typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t>::generate(
+          *this, matrix.inverse());
+    }
 
     /**
      * Print matrix
@@ -1720,8 +1749,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isDifferentSize;
     using super_t::isLU;
 
-    using super_t::operator/;
-
     /**
      * Multiply by scalar (bang method)
      *
@@ -2082,6 +2109,18 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       /*
       */
     }
+
+    /**
+     * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
+     *
+     * @param matrix Matrix to divide
+     * @return myself
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &operator/=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) {
+      return operator=(*this / matrix);
+    }
+
     /**
      * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
      *
@@ -2090,17 +2129,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
-        return (*this) *= matrix.inverse();
-    }
-    /**
-     * Divide by matrix, in other words, multiply by inverse matrix
-     *
-     * @param matrix Matrix to divide
-     * @return divided (deep) copy
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    viewless_t operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return (copy() /= matrix);
+      return operator=(*this / matrix);
     }
 
     /**
