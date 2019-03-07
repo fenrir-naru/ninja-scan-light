@@ -1508,6 +1508,16 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return blank(rows(), columns());
     }
 
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &replace_internal(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      for(unsigned int i(0); i < rows(); ++i){
+        for(unsigned int j(0); j < columns(); ++j){
+          (*this)(i, j) = (T)matrix(i, j);
+        }
+      }
+      return *this;
+    }
+
   public:
     /**
      * Assign operator performing shallow copy.
@@ -1534,11 +1544,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         return viewless_t(array2d()->storage_t::copy(true));
       }else{
         viewless_t res(blank_copy());
-        for(unsigned int i(0); i < rows(); ++i){
-          for(unsigned int j(0); j < columns(); ++j){
-            res(i, j) = (*this)(i, j);
-          }
-        }
+        res.replace_internal(*this);
         return res;
       }
     }
@@ -1651,18 +1657,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return *this;
     }
 
-  protected:
-    template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &replace_internal(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      for(unsigned int i(0); i < rows(); ++i){
-        for(unsigned int j(0); j < columns(); ++j){
-          (*this)(i, j) = (T)matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
-  public:
     /**
      * Replace content
      *
