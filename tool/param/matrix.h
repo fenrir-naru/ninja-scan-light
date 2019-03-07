@@ -1217,6 +1217,59 @@ class Matrix_Frozen {
     }
 
 
+    template <class MatrixT, bool rhs_positive = true>
+    struct Add_Matrix_to_Matrix {
+      struct op_t {
+        self_t lhs; ///< Left hand side value
+        MatrixT rhs; ///< Right hand side value
+        op_t(const self_t &mat1, const MatrixT &mat2) noexcept
+            : lhs(mat1), rhs(mat2) {}
+        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+          if(rhs_positive){
+            return lhs(row, column) + rhs(row, column);
+          }else{
+            return lhs(row, column) - rhs(row, column);
+          }
+        }
+      };
+      typedef Matrix_Frozen<T,
+          typename Array2D_Operator<T>::template Binary<op_t> >
+            mat_t;
+      static mat_t generate(const self_t &mat1, const MatrixT &mat2){
+        if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
+        return mat_t(
+            new typename mat_t::storage_t(
+              mat1.rows(), mat1.columns(), mat1, mat2));
+      }
+    };
+
+    /**
+     * Add to matrix
+     *
+     * @param matrix Matrix to add
+     * @return added matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
+        operator+(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+    /**
+     * Subtract from matrix
+     *
+     * @param matrix Matrix to subtract
+     * @return subtracted matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::mat_t
+        operator-(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
+      return Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::generate(*this, matrix);
+    }
+
+
     /**
      * Print matrix
      *
@@ -1595,7 +1648,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     using super_t::operator*;
     using super_t::operator/;
-    using super_t::operator-;
 
     /**
      * Multiply by scalar (bang method)
@@ -1618,61 +1670,25 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
     
     /**
-     * Add by matrix (bang method)
+     * Add to matrix (bang method)
      *
      * @param matrix Matrix to add
      * @return myself
-     * @throw std::invalid_argument When matrix sizes are not identical
      */
     template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      if(isDifferentSize(matrix)){throw std::invalid_argument("Incorrect size");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          (*this)(i, j) += matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
-    /**
-     * Add by matrix
-     *
-     * @param matrix Matrix to add
-     * @return added (deep) copy
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    viewless_t operator+(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
-      return (copy() += matrix);
+    self_t &operator+=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      return replace_internal((*this) + matrix);
     }
     
     /**
-     * Subtract by matrix (bang method)
+     * Subtract from matrix (bang method)
      *
      * @param matrix Matrix to subtract
      * @return myself
-     * @throw std::invalid_argument When matrix sizes are not identical
      */
     template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      if(isDifferentSize(matrix)){throw std::invalid_argument("Incorrect size");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          (*this)(i, j) -= matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
-    /**
-     * Subtract by matrix
-     *
-     * @param matrix Matrix to subtract
-     * @return subtracted (deep) copy
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    viewless_t operator-(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
-      return (copy() -= matrix);
+    self_t &operator-=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      return replace_internal((*this) - matrix);
     }
 
     /**
