@@ -100,7 +100,7 @@ class Array2D_Frozen{
     /**
      * Destructor of Array2D
      */
-    virtual ~Array2D_Frozen() noexcept {}
+    virtual ~Array2D_Frozen(){}
 
     /**
      * Return rows
@@ -167,7 +167,7 @@ class Array2D : public Array2D_Frozen<T> {
     /**
      * Destructor of Array2D
      */
-    virtual ~Array2D() noexcept {}
+    virtual ~Array2D(){}
 
     /**
      * Accessor for element
@@ -289,7 +289,7 @@ class Array2D_Dense : public Array2D<T> {
      * The reference counter will be decreased, and when the counter equals to zero,
      * allocated memory for elements will be deleted.
      */
-    ~Array2D_Dense() noexcept {
+    ~Array2D_Dense(){
       if(ref && ((--(*ref)) <= 0)){
         delete [] values;
         delete ref;
