@@ -1143,12 +1143,12 @@ class Matrix_Frozen {
     }
 
 
-    template <class Array2D_Type2>
+    template <class RHS_T>
     struct Multiply_Matrix_by_Scalar {
       struct op_t {
         self_t lhs; ///< Left hand side value
-        T rhs; ///< Right hand side value
-        op_t(const self_t &mat, const T &scalar) noexcept
+        RHS_T rhs; ///< Right hand side value
+        op_t(const self_t &mat, const RHS_T &scalar) noexcept
             : lhs(mat), rhs(scalar) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
           return lhs(row, column) * rhs;
@@ -1157,13 +1157,13 @@ class Matrix_Frozen {
       typedef Matrix_Frozen<T,
           typename Array2D_Operator<T>::template Binary<op_t> >
             mat_t;
-      static mat_t generate(const self_t &mat, const T &scalar) noexcept {
+      static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
         return mat_t(
             new typename mat_t::storage_t(
               mat.rows(), mat.columns(), mat, scalar));
       }
     };
-    typedef Multiply_Matrix_by_Scalar<Array2D_Type> mul_mat_scalar_t;
+    typedef Multiply_Matrix_by_Scalar<T> mul_mat_scalar_t;
 
     /**
      * Multiply by scalar
@@ -1217,12 +1217,12 @@ class Matrix_Frozen {
     }
 
 
-    template <class MatrixT, bool rhs_positive = true>
+    template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
       struct op_t {
         self_t lhs; ///< Left hand side value
-        MatrixT rhs; ///< Right hand side value
-        op_t(const self_t &mat1, const MatrixT &mat2) noexcept
+        RHS_MatrixT rhs; ///< Right hand side value
+        op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
             : lhs(mat1), rhs(mat2) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
           if(rhs_positive){
@@ -1235,7 +1235,7 @@ class Matrix_Frozen {
       typedef Matrix_Frozen<T,
           typename Array2D_Operator<T>::template Binary<op_t> >
             mat_t;
-      static mat_t generate(const self_t &mat1, const MatrixT &mat2){
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
         return mat_t(
             new typename mat_t::storage_t(
@@ -1270,12 +1270,12 @@ class Matrix_Frozen {
     }
 
 
-    template <class MatrixT>
+    template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix {
       struct op_t {
         self_t lhs; ///< Left hand side value
-        MatrixT rhs; ///< Right hand side value
-        op_t(const self_t &mat1, const MatrixT &mat2) noexcept
+        RHS_MatrixT rhs; ///< Right hand side value
+        op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
             : lhs(mat1), rhs(mat2) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
           T res(lhs(row, 0) * rhs(0, column));
@@ -1288,7 +1288,7 @@ class Matrix_Frozen {
       typedef Matrix_Frozen<T,
           typename Array2D_Operator<T>::template Binary<op_t> >
             mat_t;
-      static mat_t generate(const self_t &mat1, const MatrixT &mat2){
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
         return mat_t(
             new typename mat_t::storage_t(
