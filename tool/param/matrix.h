@@ -1282,12 +1282,28 @@ class Matrix_Frozen {
           return res;
         }
       };
-      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+      struct op_cached_t : public op_t {
+        struct item_t {bool cached; T v;};
+        mutable Array2D_Dense<item_t> cache;
+        op_cached_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
+            : op_t(mat1, mat2), cache(mat1.rows(), mat2.columns()) {
+          cache.clear();
+        }
+        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+          item_t &item = cache(row, column);
+          if(!item.cached){
+            item.cached = true;
+            item.v = op_t::operator()(row, column);
+          }
+          return item.v;
+        }
+      };
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_cached_t> > mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
         return mat_t(
             new typename mat_t::storage_t(
-              mat1.rows(), mat2.columns(), op_t(mat1, mat2)));
+              mat1.rows(), mat2.columns(), op_cached_t(mat1, mat2)));
       }
     };
 
