@@ -419,60 +419,56 @@ class Array2D_ScaledUnit : public Array2D_Frozen<T> {
  *
  * @param T precision, for example, double
  */
-template <class T>
-struct Array2D_Operator {
-  template <class OperatorT>
-  class Binary : public Array2D_Frozen<T> {
-    public:
-      typedef Binary self_t;
-      typedef Array2D_Frozen<T> super_t;
-      typedef Array2D_Frozen<T> root_t;
+template <class T, class OperatorT>
+struct Array2D_Operator : public Array2D_Frozen<T> {
+  public:
+    typedef Array2D_Operator<T, OperatorT> self_t;
+    typedef Array2D_Frozen<T> super_t;
+    typedef Array2D_Frozen<T> root_t;
 
-      using root_t::rows;
-      using root_t::columns;
+    using root_t::rows;
+    using root_t::columns;
 
-    protected:
-      OperatorT op;
+  protected:
+    OperatorT op;
 
-    public:
-      /**
-       * Constructor
-       *
-       * @param rows Rows
-       * @param columns Columns
-       */
-      template <class LHS_Type, class RHS_Type>
-      Binary(
-          const unsigned int &r, const unsigned int &c,
-          const LHS_Type &lhs, const RHS_Type &rhs)
-          : super_t(r, c), op(lhs, rhs){}
+  public:
+    /**
+     * Constructor
+     *
+     * @param rows Rows
+     * @param columns Columns
+     */
+    Array2D_Operator(
+        const unsigned int &r, const unsigned int &c,
+        const OperatorT &_op)
+        : super_t(r, c), op(_op){}
 
-      /**
-       * Accessor for element
-       *
-       * @param row Row index
-       * @param column Column Index
-       * @return (T) Element
-       * @throw std::out_of_range When the indices are out of range
-       */
-      T operator()(
-          const unsigned int &row, const unsigned int &column) const throws_when_debug {
+    /**
+     * Accessor for element
+     *
+     * @param row Row index
+     * @param column Column Index
+     * @return (T) Element
+     * @throw std::out_of_range When the indices are out of range
+     */
+    T operator()(
+        const unsigned int &row, const unsigned int &column) const throws_when_debug {
 #if defined(DEBUG)
-        super_t::check_index(row, colunmn);
+      super_t::check_index(row, colunmn);
 #endif
-        return op(row, column);
-      }
+      return op(row, column);
+    }
 
-      /**
-       * Perform copy
-       *
-       * @param is_deep NOP
-       * @return (root_t) (deep) copy
-       */
-      root_t *copy(const bool &is_deep = false) const {
-        return new self_t(*this);
-      }
-  };
+    /**
+     * Perform copy
+     *
+     * @param is_deep NOP
+     * @return (root_t) (deep) copy
+     */
+    root_t *copy(const bool &is_deep = false) const {
+      return new self_t(*this);
+    }
 };
 
 
@@ -1159,13 +1155,11 @@ class Matrix_Frozen {
           return lhs(row, column) * rhs;
         }
       };
-      typedef Matrix_Frozen<T,
-          typename Array2D_Operator<T>::template Binary<op_t> >
-            mat_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
       static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
         return mat_t(
             new typename mat_t::storage_t(
-              mat.rows(), mat.columns(), mat, scalar));
+              mat.rows(), mat.columns(), op_t(mat, scalar)));
       }
     };
     typedef Multiply_Matrix_by_Scalar<T> mul_mat_scalar_t;
@@ -1237,14 +1231,12 @@ class Matrix_Frozen {
           }
         }
       };
-      typedef Matrix_Frozen<T,
-          typename Array2D_Operator<T>::template Binary<op_t> >
-            mat_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
         return mat_t(
             new typename mat_t::storage_t(
-              mat1.rows(), mat1.columns(), mat1, mat2));
+              mat1.rows(), mat1.columns(), op_t(mat1, mat2)));
       }
     };
 
@@ -1290,14 +1282,12 @@ class Matrix_Frozen {
           return res;
         }
       };
-      typedef Matrix_Frozen<T,
-          typename Array2D_Operator<T>::template Binary<op_t> >
-            mat_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
         return mat_t(
             new typename mat_t::storage_t(
-              mat1.rows(), mat2.columns(), mat1, mat2));
+              mat1.rows(), mat2.columns(), op_t(mat1, mat2)));
       }
     };
 
