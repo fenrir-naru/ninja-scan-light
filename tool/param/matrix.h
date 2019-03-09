@@ -1143,10 +1143,30 @@ class Matrix_Frozen {
       return partial(rows(), 1, 0, column);
     }
 
+    enum {
+      OPERATOR_2_Multiply_Matrix_by_Scalar,
+      OPERATOR_2_Add_Matrix_to_Matrix,
+      OPERATOR_2_Multiply_Matrix_by_Matrix,
+    };
+
+    template <class LHS_T, class RHS_T>
+    struct BinaryOperator {
+      template <class T2, class Array2D_Type2 = void, class View_Type2 = void>
+      struct is_matrix_frozen_t {
+        typedef void res_t;
+      };
+      template <class T2, class Array2D_Type2, class View_Type2>
+      struct is_matrix_frozen_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
+        typedef typename Matrix_Frozen<T2, Array2D_Type2, View_Type2>::storage_t res_t;
+      };
+      typedef typename is_matrix_frozen_t<LHS_T>::res_t lhs_frozen_storage_t;
+      typedef typename is_matrix_frozen_t<RHS_T>::res_t rhs_frozen_storage_t;
+    };
 
     template <class RHS_T>
     struct Multiply_Matrix_by_Scalar {
-      struct op_t {
+      struct op_t : public BinaryOperator<self_t, RHS_T> {
+        static const unsigned int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
         self_t lhs; ///< Left hand side value
         RHS_T rhs; ///< Right hand side value
         op_t(const self_t &mat, const RHS_T &scalar) noexcept
@@ -1218,7 +1238,8 @@ class Matrix_Frozen {
 
     template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
-      struct op_t {
+      struct op_t : public BinaryOperator<self_t, RHS_MatrixT> {
+        static const unsigned int tag = OPERATOR_2_Add_Matrix_to_Matrix;
         self_t lhs; ///< Left hand side value
         RHS_MatrixT rhs; ///< Right hand side value
         op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
@@ -1269,9 +1290,49 @@ class Matrix_Frozen {
 
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix {
-      struct op_t {
-        self_t lhs; ///< Left hand side value
-        RHS_MatrixT rhs; ///< Right hand side value
+
+      /*
+       * Optimization policy: If each side include M * M, then use cache.
+       * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
+       * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
+       */
+
+      template <class U1, class U2 = void>
+      struct check_t {
+        static const bool has_multiplication_mat_by_mat = false;
+      };
+      template <class T2, class OperatorT>
+      struct check_t<Array2D_Operator<T2, OperatorT> > {
+        static const bool has_multiplication_mat_by_mat
+            = (OperatorT::tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+              || check_t<typename OperatorT::lhs_frozen_storage_t>::has_multiplication_mat_by_mat
+              || check_t<typename OperatorT::rhs_frozen_storage_t>::has_multiplication_mat_by_mat;
+      };
+
+      template <class MatrixT, bool cache_on = false>
+      struct optimizer_t {
+        typedef MatrixT res_t;
+      };
+      template <class MatrixT>
+      struct optimizer_t<MatrixT, true> {
+        typedef typename MatrixT::downcast_default_t res_t;
+      };
+
+#if 1
+      typedef typename optimizer_t<self_t,
+          check_t<typename self_t::storage_t>::has_multiplication_mat_by_mat>::res_t lhs_opt_t;
+      typedef typename optimizer_t<RHS_MatrixT,
+          check_t<typename RHS_MatrixT::storage_t>::has_multiplication_mat_by_mat>::res_t rhs_opt_t;
+#else
+      // Remove optimization
+      typedef self_t lhs_opt_t;
+      typedef RHS_MatrixT rhs_opt_t;
+#endif
+
+      struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
+        static const unsigned int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
+        lhs_opt_t lhs; ///< Left hand side value
+        rhs_opt_t rhs; ///< Right hand side value
         op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
             : lhs(mat1), rhs(mat2) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
@@ -1282,28 +1343,12 @@ class Matrix_Frozen {
           return res;
         }
       };
-      struct op_cached_t : public op_t {
-        struct item_t {bool cached; T v;};
-        mutable Array2D_Dense<item_t> cache;
-        op_cached_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
-            : op_t(mat1, mat2), cache(mat1.rows(), mat2.columns()) {
-          cache.clear();
-        }
-        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-          item_t &item = cache(row, column);
-          if(!item.cached){
-            item.cached = true;
-            item.v = op_t::operator()(row, column);
-          }
-          return item.v;
-        }
-      };
-      typedef Matrix_Frozen<T, Array2D_Operator<T, op_cached_t> > mat_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
         return mat_t(
             new typename mat_t::storage_t(
-              mat1.rows(), mat2.columns(), op_cached_t(mat1, mat2)));
+              mat1.rows(), mat2.columns(), op_t(mat1, mat2)));
       }
     };
 
