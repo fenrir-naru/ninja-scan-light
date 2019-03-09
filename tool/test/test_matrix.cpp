@@ -322,6 +322,11 @@ BOOST_AUTO_TEST_CASE(scalar_mul){
   matrix_t _A((*A) * a.scalar);
   dbg("*:" << _A << endl, false);
   matrix_compare(a, _A);
+
+  matrix_t _A2((*A) * a.scalar * a.scalar);
+  a.scalar *= a.scalar;
+  dbg("*:" << _A2 << endl, false);
+  matrix_compare(a, _A2);
 }
 BOOST_AUTO_TEST_CASE(scalar_div){
   dbg_print();

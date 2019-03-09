@@ -429,10 +429,8 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
     using root_t::rows;
     using root_t::columns;
 
-  protected:
     OperatorT op;
 
-  public:
     /**
      * Constructor
      *
@@ -1175,11 +1173,51 @@ class Matrix_Frozen {
           return lhs(row, column) * rhs;
         }
       };
-      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+
+      /*
+       * Optimization policy: If upper pattern is M * scalar, then reuse it.
+       * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
+       */
+
+      template <class U1, class U2 = void>
+      struct check_t {
+        static const bool is_multiplication_mat_by_scalar = false;
+      };
+      template <class T2, class OperatorT>
+      struct check_t<Array2D_Operator<T2, OperatorT> > {
+        static const bool is_multiplication_mat_by_scalar
+            = (OperatorT::tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
+      };
+
+      template <bool reuse, class U = void>
+      struct optimizer_t {
+        typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
+        static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+          return res_t(
+              new typename res_t::storage_t(
+                mat.rows(), mat.columns(), op_t(mat, scalar)));
+        }
+      };
+      template <class U>
+      struct optimizer_t<true, U> {
+        typedef self_t res_t;
+        static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+          res_t res(mat);
+          const_cast<typename res_t::storage_t *>(res.array2d())->op.rhs *= scalar;
+          return res;
+        }
+      };
+
+#if 1
+      typedef optimizer_t<check_t<
+          typename self_t::storage_t>::is_multiplication_mat_by_scalar> opt_t;
+#else
+      // Remove optimization
+      typedef optimizer_t<false> opt_t;
+#endif
+      typedef typename opt_t::res_t mat_t;
       static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
-        return mat_t(
-            new typename mat_t::storage_t(
-              mat.rows(), mat.columns(), op_t(mat, scalar)));
+        return opt_t::generate(mat, scalar);
       }
     };
     typedef Multiply_Matrix_by_Scalar<T> mul_mat_scalar_t;
