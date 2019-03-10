@@ -371,9 +371,6 @@ class Array2D_ScaledUnit : public Array2D_Frozen<T> {
     typedef Array2D_Frozen<T> super_t;
     typedef Array2D_Frozen<T> root_t;
 
-    using root_t::rows;
-    using root_t::columns;
-
   protected:
     const T value; ///< scaled unit
 
@@ -425,9 +422,6 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
     typedef Array2D_Operator<T, OperatorT> self_t;
     typedef Array2D_Frozen<T> super_t;
     typedef Array2D_Frozen<T> root_t;
-
-    using root_t::rows;
-    using root_t::columns;
 
     OperatorT op;
 
@@ -1145,20 +1139,36 @@ class Matrix_Frozen {
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
+      OPERATOR_NONE,
+    };
+
+    struct Operator {
+      template <class MatrixT = self_t, class U1 = void, class U2 = void>
+      struct property_t {
+        static const unsigned tag = OPERATOR_NONE;
+        typedef void operator_t;
+      };
+      template <class T2, class Array2D_Type2, class View_Type2>
+      struct property_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
+        template <class Array2D_Type3, class U3 = void>
+        struct check_t {
+          static const unsigned tag = OPERATOR_NONE;
+          typedef void operator_t;
+        };
+        template <class OperatorT>
+        struct check_t<Array2D_Operator<T2, OperatorT> >{
+          static const unsigned int tag = OperatorT::tag;
+          typedef OperatorT operator_t;
+        };
+        static const unsigned tag = check_t<Array2D_Type2>::tag;
+        typedef typename check_t<Array2D_Type2>::operator_t operator_t;
+      };
     };
 
     template <class LHS_T, class RHS_T>
-    struct BinaryOperator {
-      template <class T2, class Array2D_Type2 = void, class View_Type2 = void>
-      struct is_matrix_frozen_t {
-        typedef void res_t;
-      };
-      template <class T2, class Array2D_Type2, class View_Type2>
-      struct is_matrix_frozen_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
-        typedef typename Matrix_Frozen<T2, Array2D_Type2, View_Type2>::storage_t res_t;
-      };
-      typedef typename is_matrix_frozen_t<LHS_T>::res_t lhs_frozen_storage_t;
-      typedef typename is_matrix_frozen_t<RHS_T>::res_t rhs_frozen_storage_t;
+    struct BinaryOperator : public Operator {
+      typedef LHS_T lhs_t;
+      typedef RHS_T rhs_t;
     };
 
     template <class RHS_T>
@@ -1179,17 +1189,7 @@ class Matrix_Frozen {
        * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
        */
 
-      template <class U1, class U2 = void>
-      struct check_t {
-        static const bool is_multiplication_mat_by_scalar = false;
-      };
-      template <class T2, class OperatorT>
-      struct check_t<Array2D_Operator<T2, OperatorT> > {
-        static const bool is_multiplication_mat_by_scalar
-            = (OperatorT::tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
-      };
-
-      template <bool reuse, class U = void>
+      template <unsigned tag, class U = void>
       struct optimizer_t {
         typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
         static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
@@ -1199,18 +1199,19 @@ class Matrix_Frozen {
         }
       };
       template <class U>
-      struct optimizer_t<true, U> {
+      struct optimizer_t<OPERATOR_2_Multiply_Matrix_by_Scalar, U> {
         typedef self_t res_t;
         static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
-          res_t res(mat);
-          const_cast<typename res_t::storage_t *>(res.array2d())->op.rhs *= scalar;
-          return res;
+          return res_t(
+              new typename res_t::storage_t(
+                mat.rows(), mat.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat.array2d()->op.lhs, mat.array2d()->op.rhs * scalar)));
         }
       };
 
 #if 1
-      typedef optimizer_t<check_t<
-          typename self_t::storage_t>::is_multiplication_mat_by_scalar> opt_t;
+      typedef optimizer_t<Operator::template property_t<self_t>::tag> opt_t;
 #else
       // Remove optimization
       typedef optimizer_t<false> opt_t;
@@ -1335,16 +1336,29 @@ class Matrix_Frozen {
        * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
        */
 
-      template <class U1, class U2 = void>
+      template <class MatrixT,
+          unsigned tag = Operator::template property_t<MatrixT>::tag,
+          class U = void>
       struct check_t {
         static const bool has_multiplication_mat_by_mat = false;
       };
-      template <class T2, class OperatorT>
-      struct check_t<Array2D_Operator<T2, OperatorT> > {
+      template <class MatrixT>
+      struct check_t<MatrixT, OPERATOR_2_Multiply_Matrix_by_Scalar> {
         static const bool has_multiplication_mat_by_mat
-            = (OperatorT::tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
-              || check_t<typename OperatorT::lhs_frozen_storage_t>::has_multiplication_mat_by_mat
-              || check_t<typename OperatorT::rhs_frozen_storage_t>::has_multiplication_mat_by_mat;
+            = check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
+              ::has_multiplication_mat_by_mat;
+      };
+      template <class MatrixT>
+      struct check_t<MatrixT, OPERATOR_2_Add_Matrix_to_Matrix> {
+        static const bool has_multiplication_mat_by_mat
+            = (check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
+                ::has_multiplication_mat_by_mat)
+              || (check_t<typename Operator::template property_t<MatrixT>::operator_t::rhs_t>
+                ::has_multiplication_mat_by_mat);
+      };
+      template <class MatrixT>
+      struct check_t<MatrixT, OPERATOR_2_Multiply_Matrix_by_Matrix> {
+        static const bool has_multiplication_mat_by_mat = true;
       };
 
       template <class MatrixT, bool cache_on = false>
@@ -1358,9 +1372,9 @@ class Matrix_Frozen {
 
 #if 1
       typedef typename optimizer_t<self_t,
-          check_t<typename self_t::storage_t>::has_multiplication_mat_by_mat>::res_t lhs_opt_t;
+          check_t<self_t>::has_multiplication_mat_by_mat>::res_t lhs_opt_t;
       typedef typename optimizer_t<RHS_MatrixT,
-          check_t<typename RHS_MatrixT::storage_t>::has_multiplication_mat_by_mat>::res_t rhs_opt_t;
+          check_t<RHS_MatrixT>::has_multiplication_mat_by_mat>::res_t rhs_opt_t;
 #else
       // Remove optimization
       typedef self_t lhs_opt_t;
