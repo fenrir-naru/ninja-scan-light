@@ -1330,77 +1330,166 @@ class Matrix_Frozen {
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix {
 
-      /*
-       * Optimization policy: If each side include M * M, then use cache.
-       * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
-       * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
-       */
-
       template <class MatrixT,
           unsigned tag = Operator::template property_t<MatrixT>::tag,
           class U = void>
       struct check_t {
-        static const bool has_multiplication_mat_by_mat = false;
+        static const bool has_multi_mat_by_mat = false;
+        static const bool is_multi_mat_by_scalar = false;
       };
       template <class MatrixT>
       struct check_t<MatrixT, OPERATOR_2_Multiply_Matrix_by_Scalar> {
-        static const bool has_multiplication_mat_by_mat
+        static const bool has_multi_mat_by_mat
             = check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
-              ::has_multiplication_mat_by_mat;
+              ::has_multi_mat_by_mat;
+        static const bool is_multi_mat_by_scalar = true;
       };
       template <class MatrixT>
       struct check_t<MatrixT, OPERATOR_2_Add_Matrix_to_Matrix> {
-        static const bool has_multiplication_mat_by_mat
+        static const bool has_multi_mat_by_mat
             = (check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
-                ::has_multiplication_mat_by_mat)
+                ::has_multi_mat_by_mat)
               || (check_t<typename Operator::template property_t<MatrixT>::operator_t::rhs_t>
-                ::has_multiplication_mat_by_mat);
+                ::has_multi_mat_by_mat);
+        static const bool is_multi_mat_by_scalar = false;
       };
       template <class MatrixT>
       struct check_t<MatrixT, OPERATOR_2_Multiply_Matrix_by_Matrix> {
-        static const bool has_multiplication_mat_by_mat = true;
+        static const bool has_multi_mat_by_mat = true;
+        static const bool is_multi_mat_by_scalar = false;
       };
 
-      template <class MatrixT, bool cache_on = false>
-      struct optimizer_t {
-        typedef MatrixT res_t;
-      };
-      template <class MatrixT>
-      struct optimizer_t<MatrixT, true> {
-        typedef typename MatrixT::downcast_default_t res_t;
-      };
+      template <class LHS_T = self_t, class RHS_T = RHS_MatrixT>
+      struct op_gen_t {
 
-#if 1
-      typedef typename optimizer_t<self_t,
-          check_t<self_t>::has_multiplication_mat_by_mat>::res_t lhs_opt_t;
-      typedef typename optimizer_t<RHS_MatrixT,
-          check_t<RHS_MatrixT>::has_multiplication_mat_by_mat>::res_t rhs_opt_t;
-#else
-      // Remove optimization
-      typedef self_t lhs_opt_t;
-      typedef RHS_MatrixT rhs_opt_t;
+        /*
+         * [Optimization policy 1]
+         * If each side include M * M, then use cache.
+         * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
+         * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
+         */
+
+        template <class MatrixT, bool cache_on = false>
+        struct optimizer1_t {
+          typedef MatrixT res_t;
+        };
+#if 1 // 0 = remove optimizer
+        template <class MatrixT>
+        struct optimizer1_t<MatrixT, true> {
+          typedef typename MatrixT::downcast_default_t res_t;
+        };
 #endif
+        typedef typename optimizer1_t<LHS_T,
+            check_t<LHS_T>::has_multi_mat_by_mat>::res_t lhs_opt_t;
+        typedef typename optimizer1_t<RHS_T,
+            check_t<RHS_T>::has_multi_mat_by_mat>::res_t rhs_opt_t;
 
-      struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
-        static const unsigned int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
-        lhs_opt_t lhs; ///< Left hand side value
-        rhs_opt_t rhs; ///< Right hand side value
-        op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
-            : lhs(mat1), rhs(mat2) {}
-        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-          T res(lhs(row, 0) * rhs(0, column));
-          for(unsigned int i(1); i < lhs.columns(); ++i){
-            res += lhs(row, i) * rhs(i, column);
+        struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
+          static const unsigned int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
+          lhs_opt_t lhs; ///< Left hand side value
+          rhs_opt_t rhs; ///< Right hand side value
+          op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
+              : lhs(mat1), rhs(mat2) {}
+          T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+            T res(lhs(row, 0) * rhs(0, column));
+            for(unsigned int i(1); i < lhs.columns(); ++i){
+              res += lhs(row, i) * rhs(i, column);
+            }
+            return res;
           }
-          return res;
+        };
+      };
+
+      /*
+       * [Optimization policy 2]
+       * Sort lhs and rhs to make the scalar multiplication term last.
+       */
+      template <
+          bool lhs_m_by_s = check_t<self_t>::is_multi_mat_by_scalar,
+          bool rhs_m_by_s = check_t<RHS_MatrixT>::is_multi_mat_by_scalar,
+          class U = void>
+      struct optimizer2_t {
+        // M * M
+        typedef Matrix_Frozen<T, Array2D_Operator<T, typename op_gen_t<>::op_t> > res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(mat1, mat2)));
         }
       };
-      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+#if 1 // 0 = remove optimizer
+      template <class U>
+      struct optimizer2_t<true, false, U> {
+        // (M * S) * M => (M * M) * S
+        typedef typename Operator::template property_t<self_t>::operator_t::lhs_t
+            ::template Multiply_Matrix_by_Matrix<RHS_MatrixT>::mat_t stage1_t;
+        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Scalar<
+              typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          stage1_t mat_stage1(
+              new typename stage1_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<stage1_t>::operator_t(
+                  mat1.array2d()->op.lhs, mat2)));
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat_stage1, mat1.array2d()->op.rhs)));
+        }
+      };
+      template <class U>
+      struct optimizer2_t<false, true, U> {
+        // M * (M * S) => (M * M) * S
+        typedef typename self_t
+            ::template Multiply_Matrix_by_Matrix<
+              typename Operator::template property_t<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
+        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Scalar<
+              typename Operator::template property_t<RHS_MatrixT>::operator_t::rhs_t>::mat_t res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          stage1_t mat_stage1(
+              new typename stage1_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<stage1_t>::operator_t(
+                  mat1, mat2.array2d()->op.lhs)));
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat_stage1, mat2.array2d()->op.rhs)));
+        }
+      };
+      template <class U>
+      struct optimizer2_t<true, true, U> {
+        // (M * S) * (M * S) => (M * M) * (S * S)
+        typedef typename Operator::template property_t<self_t>::operator_t::lhs_t
+            ::template Multiply_Matrix_by_Matrix<
+              typename Operator::template property_t<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
+        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Scalar<
+              typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          stage1_t mat_stage1(
+              new typename stage1_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<stage1_t>::operator_t(
+                  mat1.array2d()->op.lhs, mat2.array2d()->op.lhs)));
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat_stage1, mat1.array2d()->op.rhs * mat2.array2d()->op.rhs)));
+        }
+      };
+#endif
+
+      typedef typename optimizer2_t<>::res_t mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
-        return mat_t(
-            new typename mat_t::storage_t(
-              mat1.rows(), mat2.columns(), op_t(mat1, mat2)));
+        return optimizer2_t<>::generate(mat1, mat2);
       }
     };
 

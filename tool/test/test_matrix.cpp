@@ -378,6 +378,21 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   matrix_t _A((*A) * (*B));
   dbg("*:" << _A << endl, false);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_mul_t a2 = {(*A) * 2, *B};
+  matrix_t _A2((*A) * 2 * (*B));
+  dbg("*:" << _A2 << endl, false);
+  matrix_compare_delta(a2, _A2, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_mul_t a3 = {*A, (*B) * 2};
+  matrix_t _A3((*A) * ((*B) * 2));
+  dbg("*:" << _A3 << endl, false);
+  matrix_compare_delta(a3, _A3, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_mul_t a4 = {(*A) * 2, (*B) * 2};
+  matrix_t _A4(((*A) * 2) * ((*B) * 2));
+  dbg("*:" << _A4 << endl, false);
+  matrix_compare_delta(a4, _A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 void check_inv(const matrix_t &mat){
