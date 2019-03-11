@@ -1145,22 +1145,22 @@ class Matrix_Frozen {
     struct Operator {
       template <class MatrixT = self_t, class U1 = void, class U2 = void>
       struct property_t {
-        static const unsigned tag = OPERATOR_NONE;
+        static const int tag = OPERATOR_NONE;
         typedef void operator_t;
       };
       template <class T2, class Array2D_Type2, class View_Type2>
       struct property_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
-        template <class Array2D_Type3, class U3 = void>
+        template <class Array2D_Type3>
         struct check_t {
-          static const unsigned tag = OPERATOR_NONE;
+          static const int tag = OPERATOR_NONE;
           typedef void operator_t;
         };
         template <class OperatorT>
         struct check_t<Array2D_Operator<T2, OperatorT> >{
-          static const unsigned int tag = OperatorT::tag;
+          static const int tag = OperatorT::tag;
           typedef OperatorT operator_t;
         };
-        static const unsigned tag = check_t<Array2D_Type2>::tag;
+        static const int tag = check_t<Array2D_Type2>::tag;
         typedef typename check_t<Array2D_Type2>::operator_t operator_t;
       };
     };
@@ -1174,7 +1174,7 @@ class Matrix_Frozen {
     template <class RHS_T>
     struct Multiply_Matrix_by_Scalar {
       struct op_t : public BinaryOperator<self_t, RHS_T> {
-        static const unsigned int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
+        static const int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
         self_t lhs; ///< Left hand side value
         RHS_T rhs; ///< Right hand side value
         op_t(const self_t &mat, const RHS_T &scalar) noexcept
@@ -1189,7 +1189,7 @@ class Matrix_Frozen {
        * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
        */
 
-      template <unsigned tag, class U = void>
+      template <bool, class U = void>
       struct optimizer_t {
         typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
         static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
@@ -1198,8 +1198,9 @@ class Matrix_Frozen {
                 mat.rows(), mat.columns(), op_t(mat, scalar)));
         }
       };
+#if 1 // 0 = Remove optimization
       template <class U>
-      struct optimizer_t<OPERATOR_2_Multiply_Matrix_by_Scalar, U> {
+      struct optimizer_t<true, U> {
         typedef self_t res_t;
         static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
           return res_t(
@@ -1209,13 +1210,11 @@ class Matrix_Frozen {
                   mat.array2d()->op.lhs, mat.array2d()->op.rhs * scalar)));
         }
       };
-
-#if 1
-      typedef optimizer_t<Operator::template property_t<self_t>::tag> opt_t;
-#else
-      // Remove optimization
-      typedef optimizer_t<false> opt_t;
 #endif
+
+      typedef optimizer_t<
+          Operator::template property_t<self_t>::tag
+            == OPERATOR_2_Multiply_Matrix_by_Scalar> opt_t;
       typedef typename opt_t::res_t mat_t;
       static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
         return opt_t::generate(mat, scalar);
@@ -1278,7 +1277,7 @@ class Matrix_Frozen {
     template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
       struct op_t : public BinaryOperator<self_t, RHS_MatrixT> {
-        static const unsigned int tag = OPERATOR_2_Add_Matrix_to_Matrix;
+        static const int tag = OPERATOR_2_Add_Matrix_to_Matrix;
         self_t lhs; ///< Left hand side value
         RHS_MatrixT rhs; ///< Right hand side value
         op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
@@ -1330,33 +1329,29 @@ class Matrix_Frozen {
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix {
 
-      template <class MatrixT,
-          unsigned tag = Operator::template property_t<MatrixT>::tag,
-          class U = void>
+      template <class MatrixT, int tag = Operator::template property_t<MatrixT>::tag>
       struct check_t {
-        static const bool has_multi_mat_by_mat = false;
-        static const bool is_multi_mat_by_scalar = false;
-      };
-      template <class MatrixT>
-      struct check_t<MatrixT, OPERATOR_2_Multiply_Matrix_by_Scalar> {
+        template <bool is_binary, class U = void>
+        struct check_binary_t {
+          static const bool has_multi_mat_by_mat = false;
+        };
+        template <class U>
+        struct check_binary_t<true, U> {
+          static const bool has_multi_mat_by_mat
+              = (check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
+                  ::has_multi_mat_by_mat)
+                || (check_t<typename Operator::template property_t<MatrixT>::operator_t::rhs_t>
+                  ::has_multi_mat_by_mat);
+        };
         static const bool has_multi_mat_by_mat
-            = check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
-              ::has_multi_mat_by_mat;
-        static const bool is_multi_mat_by_scalar = true;
-      };
-      template <class MatrixT>
-      struct check_t<MatrixT, OPERATOR_2_Add_Matrix_to_Matrix> {
-        static const bool has_multi_mat_by_mat
-            = (check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
-                ::has_multi_mat_by_mat)
-              || (check_t<typename Operator::template property_t<MatrixT>::operator_t::rhs_t>
-                ::has_multi_mat_by_mat);
-        static const bool is_multi_mat_by_scalar = false;
-      };
-      template <class MatrixT>
-      struct check_t<MatrixT, OPERATOR_2_Multiply_Matrix_by_Matrix> {
-        static const bool has_multi_mat_by_mat = true;
-        static const bool is_multi_mat_by_scalar = false;
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+              || check_binary_t<
+                (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
+                || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
+                || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+                >::has_multi_mat_by_mat;
+        static const bool is_multi_mat_by_scalar
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
       };
 
       template <class LHS_T = self_t, class RHS_T = RHS_MatrixT>
@@ -1385,7 +1380,7 @@ class Matrix_Frozen {
             check_t<RHS_T>::has_multi_mat_by_mat>::res_t rhs_opt_t;
 
         struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
-          static const unsigned int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
+          static const int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
           lhs_opt_t lhs; ///< Left hand side value
           rhs_opt_t rhs; ///< Right hand side value
           op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
