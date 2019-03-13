@@ -1254,17 +1254,6 @@ class Matrix_Frozen {
     }
 
     /**
-     * Divide by scalar
-     *
-     * @param scalar
-     * @param matrix
-     * @return divided matrix
-     */
-    friend typename mul_mat_scalar_t::mat_t operator/(const T &scalar, const self_t &matrix) noexcept {
-      return matrix / scalar;
-    }
-
-    /**
      * Unary minus operator, which is alias of matrix * -1.
      *
      * @return matrix * -1.
@@ -2298,6 +2287,18 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
+     * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
+     *
+     * @param scalar
+     * @param matrix
+     * @return result matrix
+     */
+    friend typename viewless_t::super_t::mul_mat_scalar_t::mat_t
+        operator/(const T &scalar, const self_t &matrix) {
+      return matrix.inverse() * scalar;
+    }
+
+    /**
      * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
      *
      * @param matrix Matrix to divide
@@ -2778,6 +2779,19 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return sqrt(eigen());
     }
 };
+
+/**
+ * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
+ *
+ * @param scalar
+ * @param matrix
+ * @return result matrix
+ */
+template <class T, class Array2D_Type, class ViewType>
+typename Matrix_Frozen<T, Array2D_Type, ViewType>::downcast_default_t::super_t::mul_mat_scalar_t::mat_t operator/(
+    const T &scalar, const Matrix_Frozen<T, Array2D_Type, ViewType> &matrix) {
+  return scalar / (typename Matrix_Frozen<T, Array2D_Type, ViewType>::downcast_default_t)matrix;
+}
 
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)

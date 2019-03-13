@@ -401,6 +401,8 @@ void check_inv(const matrix_t &mat){
     BOOST_TEST_MESSAGE("inv:" << inv);
     matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
     matrix_compare_delta(mat, matrix_t::getI(SIZE) / inv, 1E-5);
+    matrix_t inv2(1 / mat);
+    BOOST_CHECK(inv == inv2);
   }catch(std::runtime_error &e){
     BOOST_ERROR("inv_error:" << e.what());
   }
