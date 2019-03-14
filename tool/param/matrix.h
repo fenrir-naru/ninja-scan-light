@@ -43,6 +43,9 @@
  * which is very important for embedded environment.
  * 3) to use views for transpose and partial matrices
  * to reduce copies.
+ * 4) to use expression template technique
+ * for matrix multiplying, adding, and subtracting
+ * to eliminate temporary objects.
  *
  * Currently it only supports dense matrices,
  * whose storage is prepared as continuous array,
