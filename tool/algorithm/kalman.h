@@ -167,7 +167,7 @@ class KalmanFilter{
     virtual Matrix<FloatT> correct(const Matrix<FloatT> &H, const Matrix<FloatT> &R){
 
       // カルマンゲインの計算
-      Matrix<FloatT> K(m_P * H.transpose() * ((H * m_P * H.transpose()) += R).inverse());
+      Matrix<FloatT> K(m_P * H.transpose() * ((H * m_P * H.transpose()) + R).inverse());
 #if DEBUG > 1
       std::cerr << "K:" << K << std::endl;
 #endif

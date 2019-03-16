@@ -3,7 +3,7 @@
 #include <cmath>
 #include <ctime>
 #include <iostream>
-#include <exception>
+#include <stdexcept>
 #include <set>
 #include <deque>
 
@@ -23,6 +23,14 @@
 #define BOOST_FIXTURE_TEST_SUITE(name, fixture)
 #define BOOST_AUTO_TEST_SUITE_END()
 #define BOOST_AUTO_TEST_CASE(name) void name()
+#define BOOST_AUTO_TEST_CASE_MAY_FAILURES(name, failures) void name()
+#elif defined(BOOST_VERSION) && (BOOST_VERSION < 105900)
+#define BOOST_AUTO_TEST_CASE_MAY_FAILURES(name, failures) \
+    BOOST_AUTO_TEST_CASE_EXPECTED_FAILURES(name, failures) \
+    BOOST_AUTO_TEST_CASE(name)
+#else
+#define BOOST_AUTO_TEST_CASE_MAY_FAILURES(name, failures) \
+    BOOST_AUTO_TEST_CASE(name, * boost::unit_test::expected_failures(failures))
 #endif
 
 #define SIZE 8
@@ -44,13 +52,6 @@ struct rand_t {
     return (double)dist(gen);
   }
 };
-
-#ifndef DEBUG_PRINT
-#define DEBUG_PRINT false
-#endif
-#define dbg(exp, force) \
-if((force) || DEBUG_PRINT){cerr << endl << exp;} \
-else{ostream(NULL) << exp;}
 
 int k_delta(const unsigned &i, const unsigned &j){
   return (i == j) ? 1 : 0;
@@ -102,10 +103,9 @@ struct Fixture {
       B_array[row][j] = (*B)(row, j) = content_t(0);
     }
   }
-  void dbg_print(){
-    dbg(endl, false);
-    dbg("A:" << *A << endl, false);
-    dbg("B:" << *B << endl, false);
+  void prologue_print(){
+    BOOST_TEST_MESSAGE("A:" << *A);
+    BOOST_TEST_MESSAGE("B:" << *B);
   }
 
   Fixture()
@@ -164,12 +164,12 @@ void element_compare_delta(
 
 template<
     class U,
-    class T2, template <class> class Array2D_Type2, class ViewType2,
+    class T2, class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
     U u,
-    const Matrix<T2, Array2D_Type2, ViewType2> &m,
-    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
+    const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &m,
+    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
       element_compare_delta(u(i, j), m(i, j), delta);
@@ -178,29 +178,30 @@ void matrix_compare_delta(
 }
 
 template<
-    class T1, template <class> class Array2D_Type1, class ViewType1,
-    class T2, template <class> class Array2D_Type2, class ViewType2,
+    class T1, class Array2D_Type1, class ViewType1,
+    class T2, class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
-    const Matrix<T1, Array2D_Type1, ViewType1> &m1,
-    const Matrix<T2, Array2D_Type2, ViewType2> &m2,
-    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
+    const Matrix_Frozen<T1, Array2D_Type1, ViewType1> &m1,
+    const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &m2,
+    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   BOOST_REQUIRE_EQUAL(m1.rows(), m2.rows());
   BOOST_REQUIRE_EQUAL(m1.columns(), m2.columns());
-  matrix_compare_delta<
-      Matrix<T1, Array2D_Type1, ViewType1>,
-      T2, Array2D_Type2, ViewType2,
-      T3>(m1, m2, delta);
+  for(unsigned i(0); i < m1.rows(); i++){
+    for(unsigned j(0); j < m1.columns(); j++){
+      element_compare_delta(m1(i, j), m2(i, j), delta);
+    }
+  }
 }
 
 template<
     class T1,
-    template <class> class Array2D_Type2, class ViewType2,
+    class Array2D_Type2, class ViewType2,
     class T3>
 void matrix_compare_delta(
     T1 *t,
-    const Matrix<T1, Array2D_Type2, ViewType2> &m,
-    T3 delta = ACCEPTABLE_DELTA_DEFAULT){
+    const Matrix_Frozen<T1, Array2D_Type2, ViewType2> &m,
+    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
   for(unsigned i(0); i < m.rows(); i++){
     for(unsigned j(0); j < m.columns(); j++){
       element_compare_delta(*(t++), m(i, j), delta);
@@ -242,23 +243,23 @@ struct direct_t {
 BOOST_FIXTURE_TEST_SUITE(matrix, Fixture)
 
 BOOST_AUTO_TEST_CASE(init){
-  dbg_print();
+  prologue_print();
   matrix_t _A(*A);
-  dbg("init:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("init:" << _A);
   matrix_compare(*A, _A);
 }
 
 BOOST_AUTO_TEST_CASE(equal){
-  dbg_print();
+  prologue_print();
   matrix_t _A = *A;
-  dbg("=:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("=:" << _A);
   matrix_compare(*A, _A);
 }
 
 BOOST_AUTO_TEST_CASE(copy){
-  dbg_print();
+  prologue_print();
   matrix_t _A(A->copy());
-  dbg("copy:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("copy:" << _A);
   matrix_compare(*A, _A);
 }
 
@@ -270,73 +271,78 @@ BOOST_AUTO_TEST_CASE(assign_null_matrix){
 }
 
 BOOST_AUTO_TEST_CASE(properties){
-  dbg_print();
-  dbg("rows:" << A->rows() << endl, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("rows:" << A->rows());
   BOOST_REQUIRE_EQUAL(SIZE, A->rows());
-  dbg("columns:" << A->columns() << endl, false);
+  BOOST_TEST_MESSAGE("columns:" << A->columns());
   BOOST_REQUIRE_EQUAL(SIZE, A->columns());
 }
 
 BOOST_AUTO_TEST_CASE(getI){
-  dbg_print();
+  prologue_print();
   matrix_t _A(matrix_t::getI(SIZE));
-  dbg("I:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("I:" << _A);
   matrix_compare(k_delta, _A);
 }
 
 BOOST_AUTO_TEST_CASE(exchange_row){
-  dbg_print();
+  prologue_print();
   direct_t a(A->copy());
   a.row[0] = 1;
   a.row[1] = 0;
   matrix_t _A(A->exchangeRows(0, 1));
-  dbg("ex_rows:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("ex_rows:" << _A);
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(exchange_column){
-  dbg_print();
+  prologue_print();
   direct_t a(A->copy());
   a.column[1] = 0;
   a.column[0] = 1;
   matrix_t _A(A->exchangeColumns(0, 1));
-  dbg("ex_columns:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("ex_columns:" << _A);
   matrix_compare(a, _A);
 }
 
 BOOST_AUTO_TEST_CASE(check_square){
-  dbg_print();
-  dbg("square?:" << A->isSquare() << endl, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("square?:" << A->isSquare());
   BOOST_REQUIRE_EQUAL(true, A->isSquare());
 }
 BOOST_AUTO_TEST_CASE(check_symmetric){
-  dbg_print();
-  dbg("sym?:" << A->isSymmetric() << endl, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("sym?:" << A->isSymmetric());
   BOOST_REQUIRE_EQUAL(true, A->isSymmetric());
 }
 
 BOOST_AUTO_TEST_CASE(scalar_mul){
-  dbg_print();
+  prologue_print();
   direct_t a(*A);
   a.scalar = 2.;
   matrix_t _A((*A) * a.scalar);
-  dbg("*:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("*:" << _A);
   matrix_compare(a, _A);
+
+  matrix_t _A2((*A) * a.scalar * a.scalar);
+  a.scalar *= a.scalar;
+  BOOST_TEST_MESSAGE("*:" << _A2);
+  matrix_compare(a, _A2);
 }
 BOOST_AUTO_TEST_CASE(scalar_div){
-  dbg_print();
+  prologue_print();
   direct_t a(*A);
   int div(2);
   a.scalar = (1.0 / div);
   matrix_t _A((*A) / div);
-  dbg("/:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("/:" << _A);
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(scalar_minus){
-  dbg_print();
+  prologue_print();
   direct_t a(*A);
   a.scalar = -1;
   matrix_t _A(-(*A));
-  dbg("-():" << _A << endl, false);
+  BOOST_TEST_MESSAGE("-():" << _A);
   matrix_compare(a, _A);
 }
 
@@ -348,10 +354,10 @@ struct mat_add_t {
 };
 
 BOOST_AUTO_TEST_CASE(matrix_add){
-  dbg_print();
+  prologue_print();
   mat_add_t a = {*A, *B};
   matrix_t _A((*A) + (*B));
-  dbg("+:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("+:" << _A);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
@@ -367,95 +373,113 @@ struct mat_mul_t {
 };
 
 BOOST_AUTO_TEST_CASE(matrix_mul){
-  dbg_print();
+  prologue_print();
   mat_mul_t a = {*A, *B};
   matrix_t _A((*A) * (*B));
-  dbg("*:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("*:" << _A);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_mul_t a2 = {(*A) * 2, *B};
+  matrix_t _A2((*A) * 2 * (*B));
+  BOOST_TEST_MESSAGE("*:" << _A2);
+  matrix_compare_delta(a2, _A2, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_mul_t a3 = {*A, (*B) * 2};
+  matrix_t _A3((*A) * ((*B) * 2));
+  BOOST_TEST_MESSAGE("*:" << _A3);
+  matrix_compare_delta(a3, _A3, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_mul_t a4 = {(*A) * 2, (*B) * 2};
+  matrix_t _A4(((*A) * 2) * ((*B) * 2));
+  BOOST_TEST_MESSAGE("*:" << _A4);
+  matrix_compare_delta(a4, _A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 void check_inv(const matrix_t &mat){
   try{
     matrix_t inv(mat.inverse());
-    dbg("inv:" << inv << endl, false);
+    BOOST_TEST_MESSAGE("inv:" << inv);
     matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
-  }catch(MatrixException &e){
-    dbg("inv_error:" << e.what() << endl, true);
+    matrix_compare_delta(mat, matrix_t::getI(SIZE) / inv, 1E-5);
+    matrix_t inv2(1 / mat);
+    BOOST_CHECK(inv == inv2);
+  }catch(std::runtime_error &e){
+    BOOST_ERROR("inv_error:" << e.what());
   }
 }
 
-BOOST_AUTO_TEST_CASE(inv){
-  dbg_print();
+BOOST_AUTO_TEST_CASE_MAY_FAILURES(inv, 2){
+  prologue_print();
   check_inv(*A);
   assign_intermediate_zeros();
-  dbg_print();
+  prologue_print();
   check_inv(*A);
 }
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::view_t,
-      MatrixViewTranspose<MatrixView> >::value));
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::transpose_t::view_t,
-      MatrixView>::value));
+      MatrixViewBase<> >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixView> > >::value));
+      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::partial_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixView> > >::value));
+      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
-      MatrixViewPartial<MatrixView> >::value));
+      MatrixViewPartial<MatrixViewBase<> > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
-  dbg_print();
+  prologue_print();
   direct_t a(*A);
   a.trans = true;
   matrix_t::transpose_t _A(A->transpose());
-  dbg("trans:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("trans:" << _A);
   matrix_compare(a, _A);
   matrix_t __A(_A.copy());
-  dbg("trans.copy:" << __A << endl, false);
+  BOOST_TEST_MESSAGE("trans.copy:" << __A);
   matrix_compare(a, __A);
   matrix_t::transpose_t::transpose_t ___A(_A.transpose()); // matrix_t::transpose_t::transpose_t = matrix_t
-  dbg("trans.trans:" << ___A << endl, false);
+  BOOST_TEST_MESSAGE("trans.trans:" << ___A);
   matrix_compare(*A, ___A);
 }
 BOOST_AUTO_TEST_CASE(partial){
-  dbg_print();
+  prologue_print();
   direct_t a(*A);
 
-  BOOST_CHECK_THROW(A->partial(A->rows() + 1, 0, 0, 0), MatrixException);
-  BOOST_CHECK_THROW(A->partial(0, A->columns() + 1, 0, 0), MatrixException);
-  BOOST_CHECK_THROW(A->partial(A->rows(), 0, 1, 0), MatrixException);
-  BOOST_CHECK_THROW(A->partial(0, A->columns(), 0, 1), MatrixException);
+  BOOST_CHECK_THROW(A->partial(A->rows() + 1, 0, 0, 0), std::logic_error);
+  BOOST_CHECK_THROW(A->partial(0, A->columns() + 1, 0, 0), std::logic_error);
+  BOOST_CHECK_THROW(A->partial(A->rows(), 0, 1, 0), std::logic_error);
+  BOOST_CHECK_THROW(A->partial(0, A->columns(), 0, 1), std::logic_error);
 
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2 + 1, A->columns() / 2, 0, 0), MatrixException);
+        .partial(A->rows() / 2 + 1, A->columns() / 2, 0, 0), std::logic_error);
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2, A->columns() / 2 + 1, 0, 0), MatrixException);
+        .partial(A->rows() / 2, A->columns() / 2 + 1, 0, 0), std::logic_error);
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2, A->columns() / 2, 1, 0), MatrixException);
+        .partial(A->rows() / 2, A->columns() / 2, 1, 0), std::logic_error);
   BOOST_CHECK_THROW(
       A->partial(A->rows() / 2, A->columns() / 2, 0, 0)
-        .partial(A->rows() / 2, A->columns() / 2, 0, 1), MatrixException);
+        .partial(A->rows() / 2, A->columns() / 2, 0, 1), std::logic_error);
 
   a.i_offset = a.j_offset = 1;
   matrix_t::partial_t _A(A->partial(3, 3, a.i_offset, a.j_offset));
-  dbg("_A:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("_A:" << _A);
   matrix_compare(a, _A);
   matrix_compare(a, _A.copy());
 
@@ -467,12 +491,12 @@ BOOST_AUTO_TEST_CASE(partial){
       i_offset2, j_offset2);
   a.i_offset += i_offset2;
   a.j_offset += j_offset2;
-  dbg("_A:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("_A:" << _A);
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(trans_partial){
   assign_unsymmetric();
-  dbg_print();
+  prologue_print();
   direct_t a(*A);
 
   a.trans = true;   a.i_offset = 4; a.j_offset = 3;
@@ -499,69 +523,64 @@ BOOST_AUTO_TEST_CASE(trans_partial){
 
 BOOST_AUTO_TEST_CASE(cast){
   assign_unsymmetric();
-  dbg_print();
+  prologue_print();
 
   direct_t a(*A);
   a.trans = true;   a.i_offset = 4; a.j_offset = 3;
 
   typedef matrix_t::transpose_t::partial_t mat_tp_t;
-  struct mat_tp_ex_t : protected mat_tp_t {
-    using mat_tp_t::viewless_t;
-    using mat_tp_t::operator viewless_t;
-    mat_tp_ex_t(const mat_tp_t &mat) : mat_tp_t(mat) {}
-  } mat_tp_ex(A->transpose().partial(2,3,3,4));
+  mat_tp_t mat_tp(A->transpose().partial(2,3,3,4));
 
-  matrix_t _A(mat_tp_ex.operator mat_tp_t::viewless_t ()); // explicit cast, because defined constructor interrupts implicit call.
-  //matrix_t _A2((mat_tp_t::viewless_t)mat_tp_ex); // compile error
-  //matrix_t _A3(mat_tp_ex); // compile error
+  matrix_t _A(static_cast<mat_tp_t::super_t &>(mat_tp)); // down cast (internally deep copy) is available
+  //matrix_t _A2(mat_tp); // compile error due to protected
   matrix_compare(a, _A);
 }
 
 BOOST_AUTO_TEST_CASE(minor){
-  dbg_print();
+  prologue_print();
   for(unsigned i(0); i < A->rows(); ++i){
     for(unsigned j(0); j < A->columns(); ++j){
       direct_t a(*A);
       a.row.erase(a.row.begin() + i);
       a.column.erase(a.column.begin() + j);
       matrix_t _A(A->matrix_for_minor(i, j));
-      dbg("matrix_for_minor:" << _A << endl, false);
+      BOOST_TEST_MESSAGE("matrix_for_minor:" << _A);
       matrix_compare(a, _A);
     }
   }
 }
 
 BOOST_AUTO_TEST_CASE(det){
-  dbg_print();
+  prologue_print();
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
-  dbg("det:" << A->determinant() << endl, false);
+  BOOST_TEST_MESSAGE("det:" << A->determinant());
 
   assign_unsymmetric();
   assign_intermediate_zeros();
-  dbg_print();
+  prologue_print();
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
-  dbg("det:" << A->determinant() << endl, false);
+  BOOST_TEST_MESSAGE("det:" << A->determinant());
 }
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
-  dbg_print();
+  prologue_print();
   mat_add_t a = {A->copy(), B->copy()};
   matrix_t _A(A->pivotMerge(0, 0, *B));
-  dbg("pivotMerge:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("pivotMerge:" << _A);
   matrix_compare_delta(a, *A, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
-  dbg_print();
+  prologue_print();
   mat_add_t a = {*A, *B};
   matrix_t _A(A->pivotAdd(0, 0, *B));
-  dbg("pivotAdd:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("pivotAdd:" << _A);
   matrix_compare_delta(a, *A + *B, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
-BOOST_AUTO_TEST_CASE(eigen){
-  dbg_print();
+BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
+  prologue_print();
   try{
     cmatrix_t A_copy(A->rows(), A->columns());
     for(unsigned i(0); i < A_copy.rows(); i++){
@@ -570,26 +589,26 @@ BOOST_AUTO_TEST_CASE(eigen){
       }
     }
     cmatrix_t _A(A->eigen());
-    dbg("eigen:" << _A << endl, false);
+    BOOST_TEST_MESSAGE("eigen:" << _A);
     for(unsigned i(0); i < A->rows(); i++){
-      //dbg("eigen(" << i << "):" << A_copy * _A.partial(A->rows(), 1, 0, i) << endl, false);
-      //dbg("eigen(" << i << "):" << _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()) << endl, false);
+      BOOST_TEST_MESSAGE("eigen(" << i << "):" << A_copy * _A.partial(A->rows(), 1, 0, i));
+      BOOST_TEST_MESSAGE("eigen(" << i << "):" << _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()));
       matrix_compare_delta(A_copy * _A.partial(A->rows(), 1, 0, i),
           _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), 1E-4);
     }
-  }catch(MatrixException &e){
-    dbg("eigen_error:" << e.what() << endl, true);
+  }catch(std::runtime_error &e){
+    BOOST_ERROR("eigen_error:" << e.what());
   }
 }
 
-BOOST_AUTO_TEST_CASE(sqrt){
-  dbg_print();
+BOOST_AUTO_TEST_CASE_MAY_FAILURES(sqrt, 1){
+  prologue_print();
   try{
     cmatrix_t _A(A->sqrt());
-    dbg("sqrt:" << _A << endl, false);
+    BOOST_TEST_MESSAGE("sqrt:" << _A);
     matrix_compare_delta(*A, _A * _A, 1E-4);
-  }catch(MatrixException &e){
-    dbg("sqrt_error:" << e.what() << endl, true);
+  }catch(std::runtime_error &e){
+    BOOST_ERROR("sqrt_error:" << e.what());
   }
 }
 
@@ -608,8 +627,8 @@ void check_LU(const matrix_t &mat){
   matrix_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
-  dbg("LU(L):" << L << endl, false);
-  dbg("LU(U):" << U << endl, false);
+  BOOST_TEST_MESSAGE("LU(L):" << L);
+  BOOST_TEST_MESSAGE("LU(U):" << U);
 
   for(unsigned i(0); i < mat.rows(); i++){
     for(unsigned j(i+1); j < mat.columns(); j++){
@@ -620,7 +639,7 @@ void check_LU(const matrix_t &mat){
   BOOST_REQUIRE_EQUAL(true, LU.isLU());
 
   matrix_t LU_multi(L * U);
-  dbg("LU(L) * LU(U):" << LU_multi << endl, false);
+  BOOST_TEST_MESSAGE("LU(L) * LU(U):" << LU_multi);
   // column permutation will possibly be performed
   set<unsigned> unused_columns;
   for(unsigned j(0); j < mat.columns(); j++){
@@ -649,37 +668,37 @@ void check_LU(const matrix_t &mat){
 }
 
 BOOST_AUTO_TEST_CASE(LU){
-  dbg_print();
+  prologue_print();
   check_LU(*A);
   assign_intermediate_zeros();
-  dbg_print();
+  prologue_print();
   check_LU(*A);
 }
 
 BOOST_AUTO_TEST_CASE(UH){
-  dbg_print();
+  prologue_print();
   matrix_t U(matrix_t::getI(A->rows()));
   matrix_t H(A->hessenberg(&U));
 
-  dbg("hessen(H):" << H << endl, false);
+  BOOST_TEST_MESSAGE("hessen(H):" << H);
   for(unsigned i(2); i < H.rows(); i++){
     for(unsigned j(0); j < (i - 1); j++){
       BOOST_CHECK_EQUAL(H(i, j), 0);
     }
   }
   matrix_t _A(U * H * U.transpose());
-  dbg("U * H * U^{T}:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("U * H * U^{T}:" << _A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 BOOST_AUTO_TEST_CASE(UD){
-  dbg_print();
+  prologue_print();
   matrix_t UD(A->decomposeUD());
   matrix_t::partial_t
       U(UD.partial(UD.rows(), UD.rows(), 0, 0)),
       D(UD.partial(UD.rows(), UD.rows(), 0, UD.rows()));
-  dbg("UD(U):" << U << endl, false);
-  dbg("UD(D):" << D << endl, false);
+  BOOST_TEST_MESSAGE("UD(U):" << U);
+  BOOST_TEST_MESSAGE("UD(D):" << D);
 
   for(unsigned i(0); i < A->rows(); i++){
     for(unsigned j(i+1); j < A->columns(); j++){
@@ -689,9 +708,9 @@ BOOST_AUTO_TEST_CASE(UD){
     }
   }
 
-  dbg("UD(U):" << U.transpose() << endl, false);
+  BOOST_TEST_MESSAGE("UD(U):" << U.transpose());
   matrix_t _A(U * D * U.transpose());
-  dbg("U * D * U^{T}:" << _A << endl, false);
+  BOOST_TEST_MESSAGE("U * D * U^{T}:" << _A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 }
 
@@ -788,7 +807,7 @@ void mat_mul_unrolled(FloatT *x, const int &r1, const int &c1,
 
 BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD such as DSP
   assign_unsymmetric();
-  dbg_print();
+  prologue_print();
   content_t *AB_array(new content_t[A->rows() * B->columns()]);
   {
     // normal * normal
@@ -796,8 +815,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array);
     matrix_t AB((*A) * (*B));
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   {
     // normal * transpose
@@ -805,8 +823,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array, false, true);
     matrix_t AB((*A) * B->transpose());
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   {
     // transpose * normal
@@ -814,8 +831,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array, true, false);
     matrix_t AB(A->transpose() * (*B));
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   {
     // transpose * transpose
@@ -823,8 +839,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
         (content_t *)B_array, B->columns(),
         (content_t *)AB_array, true, true);
     matrix_t AB(A->transpose() * B->transpose());
-    content_t *AB_array_target((content_t *)AB_array);
-    matrix_compare_delta(AB_array_target, AB, ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(AB_array, AB, ACCEPTABLE_DELTA_DEFAULT);
   }
   delete [] AB_array;
 }

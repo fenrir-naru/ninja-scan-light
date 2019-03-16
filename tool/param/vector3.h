@@ -40,6 +40,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <stdexcept>
 #include "param/matrix.h"
 
 #if (__cplusplus < 201103L) && !defined(noexcept)
@@ -519,7 +520,7 @@ class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
      * @f$ 3 \times 1 @f$行列あるいは@f$ 1 \times 3 @f$行列をVector3型に変換します。
      * 
      * @param matrix 行列
-     * @throws MatrixException 行列のサイズが正しくないとき
+     * @throw std::logic_error 行列のサイズが正しくないとき
      */
     Vector3(const Matrix<FloatT> &matrix) : super_t() {
       if((matrix.rows() == OUT_OF_INDEX) && (matrix.columns() == 1)){
@@ -531,13 +532,13 @@ class Vector3 : public Vector3Data_TypeMapper<FloatT>::res_t {
           (*this)[i] = matrix(0, i);
         }
       }else{
-        throw MatrixException("Operatiorn void!! ; Need Matrix(3, 1) or Matrix(1, 3)");
+        throw std::logic_error("Operatiorn void!! ; Need Matrix(3, 1) or Matrix(1, 3)");
       }
     }
     
     friend self_t operator*(const Matrix<FloatT> &matrix, const self_t &vec){
       if((matrix.rows() != OUT_OF_INDEX) || (matrix.columns() != OUT_OF_INDEX)){
-        throw MatrixException("Operatiorn void!! ; Need Matrix(3, 3)");
+        throw std::logic_error("Operatiorn void!! ; Need Matrix(3, 3)");
       }
       self_t res;
       for(unsigned int i(0); i < OUT_OF_INDEX; i++){
