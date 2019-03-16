@@ -43,6 +43,9 @@
  * which is very important for embedded environment.
  * 3) to use views for transpose and partial matrices
  * to reduce copies.
+ * 4) to use expression template technique
+ * for matrix multiplying, adding, and subtracting
+ * to eliminate temporary objects.
  *
  * Currently it only supports dense matrices,
  * whose storage is prepared as continuous array,
@@ -51,7 +54,7 @@
  */
 
 #include <string>
-#include <exception>
+#include <stdexcept>
 
 #include <cstring>
 #include <cmath>
@@ -69,43 +72,7 @@
 #endif
 
 /**
- * @brief Exception related to matrix
- *
- * This exception will be thrown when matrix operation is incorrect.
- */
-class MatrixException: public std::exception{
-  private:
-    std::string what_str;
-  public:
-    /**
-     * Constructor
-     *
-     * @param what_arg error
-     */
-    MatrixException(const std::string &what_arg) : what_str(what_arg){}
-
-    ~MatrixException() noexcept {}
-
-    const char *what() const noexcept {
-      return what_str.c_str();
-    }
-};
-
-/**
- * @brief Exception related to storage
- *
- * This exception will be thrown when access to storage for matrix elements is invalid.
- *
- */
-class StorageException: public MatrixException {
-  public:
-    StorageException(const std::string &what_arg)
-        : MatrixException(what_arg) {}
-    ~StorageException() noexcept {}
-};
-
-/**
- * @brief 2D array abstract class
+ * @brief 2D array abstract class for fixed content
  *
  * This class provides basic interface of 2D array, such as row and column numbers,
  * accessor for element.
@@ -113,10 +80,9 @@ class StorageException: public MatrixException {
  * @param T precision, for example, double
  */
 template<class T>
-class Array2D{
+class Array2D_Frozen{
   public:
-    typedef Array2D<T> self_t;
-    typedef Array2D<T> root_t;
+    typedef Array2D_Frozen<T> self_t;
 
   protected:
     unsigned int m_rows;    ///< Rows
@@ -131,13 +97,13 @@ class Array2D{
      * @param rows Rows
      * @param columns Columns
      */
-    Array2D(const unsigned int &rows, const unsigned int &columns) noexcept
+    Array2D_Frozen(const unsigned int &rows, const unsigned int &columns) noexcept
         : m_rows(rows), m_columns(columns){}
 
     /**
      * Destructor of Array2D
      */
-    virtual ~Array2D() noexcept {}
+    virtual ~Array2D_Frozen(){}
 
     /**
      * Return rows
@@ -157,16 +123,66 @@ class Array2D{
      *
      * @param row Row index (the first row is zero)
      * @param column Column index (the first column is zero)
-     * @return (T) 成分
+     * @return (T) content
      */
-    virtual const T &operator()(
+    virtual T operator()(
         const unsigned int &row,
         const unsigned int &column) const = 0;
-    T &operator()(
+
+    inline void check_index(
         const unsigned int &row,
-        const unsigned int &column) {
-      return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
+        const unsigned int &column) const {
+      if(row >= rows()){
+        throw std::out_of_range("Row index incorrect");
+      }else if(column >= columns()){
+        throw std::out_of_range("Column index incorrect");
+      }
     }
+
+    /**
+     * Perform copy
+     *
+     * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
+     * @return root_t Copy
+     */
+    virtual self_t *copy(const bool &is_deep = false) const = 0;
+};
+
+/**
+ * @brief 2D array abstract class for changeable content
+ *
+ * @param T precision, for example, double
+ */
+template<class T>
+class Array2D : public Array2D_Frozen<T> {
+  public:
+    typedef Array2D<T> self_t;
+
+    /**
+     * Constructor of Array2D
+     *
+     * @param rows Rows
+     * @param columns Columns
+     */
+    Array2D(const unsigned int &rows, const unsigned int &columns) noexcept
+        : Array2D_Frozen<T>(rows, columns){}
+
+    /**
+     * Destructor of Array2D
+     */
+    virtual ~Array2D(){}
+
+    /**
+     * Accessor for element
+     *
+     * @param row Row index (the first row is zero)
+     * @param column Column index (the first column is zero)
+     * @return (T) content
+     */
+    using Array2D_Frozen<T>::operator();
+    virtual T &operator()(
+        const unsigned int &row,
+        const unsigned int &column) = 0;
     
     /**
      * Perform zero clear
@@ -180,7 +196,7 @@ class Array2D{
      * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
      * @return root_t Copy
      */
-    virtual root_t *copy(const bool &is_deep = false) const = 0;
+    virtual self_t *copy(const bool &is_deep = false) const = 0;
 };
 
 /**
@@ -196,6 +212,11 @@ class Array2D_Dense : public Array2D<T> {
     typedef Array2D<T> super_t;
     typedef Array2D<T> root_t;
     
+    template <class T2>
+    struct family_t {
+      typedef Array2D_Dense<T2> res_t;
+    };
+
     using root_t::rows;
     using root_t::columns;
 
@@ -271,7 +292,7 @@ class Array2D_Dense : public Array2D<T> {
      * The reference counter will be decreased, and when the counter equals to zero,
      * allocated memory for elements will be deleted.
      */
-    ~Array2D_Dense() noexcept {
+    ~Array2D_Dense(){
       if(ref && ((--(*ref)) <= 0)){
         delete [] values;
         delete ref;
@@ -295,24 +316,35 @@ class Array2D_Dense : public Array2D<T> {
       }
       return *this;
     }
+  protected:
+    inline const T &get(
+        const unsigned int &row,
+        const unsigned int &column) const throws_when_debug {
+#if defined(DEBUG)
+      super_t::check_index(row, column);
+#endif
+      return values[(row * columns()) + column];
+    }
 
+  public:
     /**
      * Accessor for element
      *
      * @param row Row index
      * @param column Column Index
-     * @return (const T &) Element
-     * @throw StorageException It will be thrown when the indices are incorrect.
+     * @return (T) Element
+     * @throw std::out_of_range When the indices are out of range
      */
-    const T &operator()(
+    T operator()(
         const unsigned int &row,
         const unsigned int &column) const throws_when_debug {
-#if defined(DEBUG)
-      if((row >= rows()) || (column >= columns())){
-        throw StorageException("Index incorrect");
-      }
-#endif
-      return values[(row * columns()) + column];
+      return get(row, column);
+    }
+    T &operator()(
+        const unsigned int &row,
+        const unsigned int &column) throws_when_debug {
+      return const_cast<T &>(
+          const_cast<const self_t *>(this)->get(row, column));
     }
 
     void clear(){
@@ -322,7 +354,7 @@ class Array2D_Dense : public Array2D<T> {
     /**
      * Perform copy
      *
-     * @aparm is_deep If true, return deep copy, otherwise return shallow copy (just link).
+     * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
      * @return (root_t) copy
      */
     root_t *copy(const bool &is_deep = false) const {
@@ -330,9 +362,114 @@ class Array2D_Dense : public Array2D<T> {
     }
 };
 
+/**
+ * @brief special Array2D representing scaled unit
+ *
+ * @param T precision, for example, double
+ */
+template <class T>
+class Array2D_ScaledUnit : public Array2D_Frozen<T> {
+  public:
+    typedef Array2D_ScaledUnit<T> self_t;
+    typedef Array2D_Frozen<T> super_t;
+    typedef Array2D_Frozen<T> root_t;
 
-struct MatrixView {
-  typedef MatrixView self_t;
+  protected:
+    const T value; ///< scaled unit
+
+  public:
+    /**
+     * Constructor
+     *
+     * @param rows Rows
+     * @param columns Columns
+     */
+    Array2D_ScaledUnit(const unsigned int &size, const T &v)
+        : super_t(size, size), value(v){}
+
+    /**
+     * Accessor for element
+     *
+     * @param row Row index
+     * @param column Column Index
+     * @return (T) Element
+     * @throw std::out_of_range When the indices are out of range
+     */
+    T operator()(
+        const unsigned int &row, const unsigned int &column) const throws_when_debug {
+#if defined(DEBUG)
+      super_t::check_index(row, column);
+#endif
+      return (row == column) ? value : 0;
+    }
+
+    /**
+     * Perform copy
+     *
+     * @param is_deep NOP
+     * @return (root_t) (deep) copy
+     */
+    root_t *copy(const bool &is_deep = false) const {
+      return new self_t(*this);
+    }
+};
+
+/**
+ * @brief special Array2D representing operation
+ *
+ * @param T precision, for example, double
+ */
+template <class T, class OperatorT>
+struct Array2D_Operator : public Array2D_Frozen<T> {
+  public:
+    typedef Array2D_Operator<T, OperatorT> self_t;
+    typedef Array2D_Frozen<T> super_t;
+    typedef Array2D_Frozen<T> root_t;
+
+    OperatorT op;
+
+    /**
+     * Constructor
+     *
+     * @param rows Rows
+     * @param columns Columns
+     */
+    Array2D_Operator(
+        const unsigned int &r, const unsigned int &c,
+        const OperatorT &_op)
+        : super_t(r, c), op(_op){}
+
+    /**
+     * Accessor for element
+     *
+     * @param row Row index
+     * @param column Column Index
+     * @return (T) Element
+     * @throw std::out_of_range When the indices are out of range
+     */
+    T operator()(
+        const unsigned int &row, const unsigned int &column) const throws_when_debug {
+#if defined(DEBUG)
+      super_t::check_index(row, colunmn);
+#endif
+      return op(row, column);
+    }
+
+    /**
+     * Perform copy
+     *
+     * @param is_deep NOP
+     * @return (root_t) (deep) copy
+     */
+    root_t *copy(const bool &is_deep = false) const {
+      return new self_t(*this);
+    }
+};
+
+
+template <class BaseView = void>
+struct MatrixViewBase {
+  typedef MatrixViewBase self_t;
 
   friend std::ostream &operator<<(std::ostream &out, const self_t &view){
     return out << " [V]";
@@ -641,50 +778,42 @@ struct MatrixViewPartial : protected BaseView {
   }
 };
 
-/**
- * @brief Matrix
- *
- * Most of useful matrix operations are defined.
- *
- * Special care when you want to make copy;
- * The copy constructor(s) and change functions of view such as
- * transpose() are implemented by using shallow copy, which means
- * these return values are linked to their original operand.
- * If you unlink the relation between the original and returned matrices,
- * you have to use copy(), which makes a deep copy explicitly,
- * for example, mat.transpose().copy().
- *
- * @param T precision such as double
- * @param Array2D_Type Storage type. The default is Array2D_Dense
- * @param ViewType View type. The default is void, which means no view, i.e. direct access.
- */
+
 template <
     class T,
-    template <class> class Array2D_Type = Array2D_Dense,
-    class ViewType = MatrixView>
-class Matrix{
+    class Array2D_Type = Array2D_Dense<T>,
+    class ViewType = MatrixViewBase<> >
+class Matrix;
+
+/**
+ * @brief Matrix for fixed content
+ *
+ * @see Matrix
+ */
+template <
+    class T, class Array2D_Type,
+    class ViewType = MatrixViewBase<> >
+class Matrix_Frozen {
   public:
-    typedef Array2D_Type<T> storage_t;
-    typedef Matrix<T, Array2D_Type, ViewType> self_t;
+    typedef Array2D_Type storage_t;
+    typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
 
     typedef MatrixViewProperty<ViewType> view_property_t;
     typedef typename view_property_t::self_t view_t;
     typedef MatrixViewBuilder<view_t> view_builder_t;
 
-    typedef Matrix<T, Array2D_Type> viewless_t;
-    typedef Matrix<T, Array2D_Type,
+    typedef Matrix_Frozen<T, Array2D_Type,
         typename view_builder_t::transpose_t> transpose_t;
-    typedef Matrix<T, Array2D_Type,
+    typedef Matrix_Frozen<T, Array2D_Type,
         typename view_builder_t::partial_t> partial_t;
 
-    template <
-        class T2,
-        template <class> class Array2D_Type2,
-        class ViewType2>
-    friend class Matrix;
+    typedef Matrix<T> downcast_default_t;
+
+    template <class T2, class Array2D_Type2, class ViewType2>
+    friend class Matrix_Frozen;
 
   protected:
-    Array2D<T> *storage; ///< 内部的に利用する2次元配列のメモリ
+    const Array2D_Frozen<T> *storage; ///< 2D storage
     view_t view;
 
     /**
@@ -692,15 +821,11 @@ class Matrix{
      *
      * @param storage new storage
      */
-    Matrix(Array2D<T> *new_storage) : storage(new_storage), view() {}
+    Matrix_Frozen(const Array2D_Frozen<T> *new_storage) : storage(new_storage), view() {}
     
     inline const storage_t *array2d() const{
       return static_cast<const storage_t *>(storage);
     }
-    inline storage_t *array2d() {
-      return const_cast<storage_t *>(const_cast<const self_t *>(this)->array2d());
-    }
-
   public:
     /**
      * Return row number.
@@ -727,91 +852,39 @@ class Matrix{
      * @param column Column index starting from 0.
      * @return element
      */
-    const T &operator()(
+    T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
       return array2d()->storage_t::operator()(
           view.i(row, column), view.j(row, column));
-    }
-    T &operator()(
-        const unsigned int &row,
-        const unsigned int &column){
-      return const_cast<T &>(const_cast<const self_t &>(*this)(row, column));
-    }
-
-    /**
-     * Clear elements.
-     *
-     */
-    void clear(){
-      if(view_property_t::truncated){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(0); j < columns(); j++){
-            (*this)(i, j) = T(0);
-          }
-        }
-      }else{
-        array2d()->storage_t::clear();
-      }
     }
 
     /**
      * Constructor without storage.
      *
      */
-    Matrix() : storage(NULL), view(){}
-
-    /**
-     * Constructor with specified row and column numbers.
-     * The storage will be assigned with the size.
-     * The elements will be cleared with T(0).
-     *
-     * @param rows Row number
-     * @param columns Column number
-     */
-    Matrix(
-        const unsigned int &rows,
-        const unsigned int &columns)
-        : storage(new storage_t(rows, columns)), view(){
-      clear();
-    }
-
-    /**
-     * Constructor with specified row and column numbers, and values.
-     * The storage will be assigned with the size.
-     * The elements will be initialized with specified values。
-     *
-     * @param rows Row number
-     * @param columns Column number
-     * @param serialized Initial values of elements
-     */
-    Matrix(
-        const unsigned int &rows,
-        const unsigned int &columns,
-        const T *serialized)
-        : storage(new storage_t(rows, columns, serialized)), view(){
-    }
+    Matrix_Frozen() : storage(NULL), view(){}
 
     /**
      * Copy constructor generating shallow copy.
      *
      * @param matrix original
      */
-    Matrix(const self_t &matrix)
+    Matrix_Frozen(const self_t &matrix)
         : storage(matrix.storage
             ? matrix.array2d()->storage_t::copy(false)
             : NULL),
         view(matrix.view){}
 
-    template <class T2, template <class> class Array2D_Type2>
-    Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
+    template <class T2, class Array2D_Type2>
+    Matrix_Frozen(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
         : storage(matrix.storage
             ? new storage_t(matrix.storage)
             : NULL),
         view(matrix.view) {}
   protected:
     template <class ViewType2>
-    Matrix(const Matrix<T, Array2D_Type, ViewType2> &matrix)
+    Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &matrix)
         : storage(matrix.storage
             ? matrix.array2d()->storage_t::copy(false)
             : NULL),
@@ -823,35 +896,39 @@ class Matrix{
     /**
      * Destructor
      */
-    virtual ~Matrix(){delete storage;}
-
+    virtual ~Matrix_Frozen(){delete storage;}
 
     /**
-     * Matrix generator with specified row and column numbers.
-     * The storage will be assigned with the size,
-     * however, initialization of elements will NOT be performed.
-     * In addition, its view is none.
+     * Generate scalar matrix
      *
-     * @param new_rows Row number
-     * @param new_columns Column number
+     * @param size Row and column number
+     * @param scalar
      */
-    static viewless_t blank(
-        const unsigned int &new_rows,
-        const unsigned int &new_columns){
-      return viewless_t(new storage_t(new_rows, new_columns));
+    static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getScalar(
+        const unsigned int &size, const T &scalar){
+      return Matrix_Frozen<T, Array2D_ScaledUnit<T> >(
+          new Array2D_ScaledUnit<T>(size, scalar));
+    }
+
+    /**
+     * Generate unit matrix
+     *
+     * @param size Row and column number
+     */
+    static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getI(const unsigned int &size){
+      return getScalar(size, T(1));
+    }
+
+    /**
+     * Down cast to Matrix by creating deep copy to make its content changeable
+     *
+     */
+    template <class T2, class Array2D_Type2>
+    operator Matrix<T2, Array2D_Type2>() const {
+      return Matrix<T2, Array2D_Type2>::blank(rows(), columns()).replace_internal(*this);
     }
 
   protected:
-    viewless_t blank_copy() const {
-      return blank(rows(), columns());
-    }
-
-  public:
-    /**
-     * Assign operator performing shallow copy.
-     *
-     * @return myself
-     */
     self_t &operator=(const self_t &matrix){
       if(this != &matrix){
         delete storage;
@@ -860,68 +937,25 @@ class Matrix{
       }
       return *this;
     }
-    template <class T2, template <class> class Array2D_Type2>
-    self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
+    template <class T2, class Array2D_Type2>
+    self_t &operator=(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix){
       delete storage;
       storage = matrix.storage ? new storage_t(*matrix.storage) : NULL;
       view = matrix.view;
       return *this;
     }
 
-    /**
-     * Perform (deep) copy
-     *
-     * @return (viewless_t)
-     */
-    viewless_t copy() const {
-      if(view_property_t::viewless){
-        return viewless_t(array2d()->storage_t::copy(true));
-      }else{
-        viewless_t res(blank_copy());
-        for(unsigned int i(0); i < rows(); ++i){
-          for(unsigned int j(0); j < columns(); ++j){
-            res(i, j) = (*this)(i, j);
-          }
-        }
-        return res;
-      }
-    }
-
-  protected:
-    /**
-     * Cast to viewless_t is intentionally protected,
-     * because view must be taken into account by a programmer
-     * to optimize speed.
-     * In addition, this cast must be called in explicit style like
-     * subclass_instance.operator superclass::viewless_t (),
-     * because constructor<T, Array2D_Type, ViewType2> has higher priority,
-     * which also has protected.
-     */
-    operator viewless_t() const {
-      if(view_property_t::viewless){
-        return viewless_t(array2d()->storage_t::copy(false)); // shallow copy
-      }else{
-        viewless_t res(blank_copy());
-        for(unsigned int i(0); i < rows(); ++i){
-          for(unsigned int j(0); j < columns(); ++j){
-            res(i, j) = (*this)(i, j);
-          }
-        }
-        return res;
-      }
-    }
-
   public:
     /**
      * Test whether elements are identical
-     * 
+     *
      * @param matrix Matrix to be compared
      * @return true when elements of two matrices are identical, otherwise false.
      */
     template <
-        class T2, template <class> class Array2D_Type2,
+        class T2, class Array2D_Type2,
         class ViewType2>
-    bool operator==(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
+    bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       if(this == &matrix){return true;}
       if((rows() != matrix.rows())
           || columns() != matrix.columns()){
@@ -936,133 +970,12 @@ class Matrix{
       }
       return true;
     }
-    
+
     template <
-        class T2, template <class> class Array2D_Type2,
+        class T2, class Array2D_Type2,
         class ViewType2>
-    bool operator!=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
+    bool operator!=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       return !(operator==(matrix));
-    }
-
-    /**
-     * Generate scalar matrix
-     *
-     * @param size Row and column number
-     * @param scalar
-     */
-    static viewless_t getScalar(const unsigned int &size, const T &scalar){
-      viewless_t result(size, size);
-      for(unsigned int i(0); i < size; i++){result(i, i) = scalar;}
-      return result;
-    }
-
-    /**
-     * Generate unit matrix
-     *
-     * @param size Row and column number
-     */
-    static viewless_t getI(const unsigned int &size){
-      return getScalar(size, T(1));
-    }
-
-    /**
-     * Generate transpose matrix
-     * Be careful, the return value is linked to the original matrix.
-     * In order to unlink, do transpose().copy().
-     *
-     * @return Transpose matrix
-     */
-    transpose_t transpose() const noexcept {
-      return transpose_t(*this);
-    }
-
-    /**
-     * Generate partial matrix
-     * Be careful, the return value is linked to the original matrix.
-     * In order to unlink, do partial().copy().
-     *
-     * @param rowSize Row number
-     * @param columnSize Column number
-     * @param rowOffset Upper row index of original matrix for partial matrix
-     * @param columnOffset Left column index of original matrix for partial matrix
-     * @return partial matrix
-     *
-     */
-    partial_t partial(
-        const unsigned int &new_rows,
-        const unsigned int &new_columns,
-        const unsigned int &row_offset,
-        const unsigned int &column_offset) const {
-      partial_t res(*this);
-      if((new_rows + row_offset > rows())
-          || (new_columns + column_offset > columns())){
-        throw MatrixException("size exceeding");
-      }
-      partial_t::view_builder_t::set_partial(
-          res.view,
-          new_rows, new_columns, row_offset, column_offset);
-      return res;
-    }
-
-    /**
-     * Generate row vector by using partial()
-     *
-     * @param row Row index of original matrix for row vector
-     * @return Row vector
-     * @see partial()
-     */
-    partial_t rowVector(const unsigned int &row) const {
-      return partial(1, columns(), row, 0);
-    }
-    /**
-     * Generate column vector by using partial()
-     *
-     * @param column Column index of original matrix for column vector
-     * @return Column vector
-     * @see partial()
-     */
-    partial_t columnVector(const unsigned int &column) const {
-      return partial(rows(), 1, 0, column);
-    }
-
-    /**
-     * Exchange rows (bang method).
-     *
-     * @param row1 Target row (1)
-     * @param row2 Target row (2)
-     * @return myself
-     * @throw MatrixException
-     */
-    self_t &exchangeRows(
-        const unsigned int &row1, const unsigned int &row2){
-      if(row1 >= rows() || row2 >= rows()){throw MatrixException("Index incorrect");}
-      T temp;
-      for(unsigned int j(0); j < columns(); j++){
-        temp = (*this)(row1, j);
-        (*this)(row1, j) = (*this)(row2, j);
-        (*this)(row2, j) = temp;
-      }
-      return *this;
-    }
-
-    /**
-     * Exchange columns (bang method).
-     *
-     * @param column1 Target column (1)
-     * @param column2 Target column (2)
-     * @return myself
-     * @throw MatrixException
-     */
-    self_t &exchangeColumns(
-        const unsigned int &column1, const unsigned int &column2){
-      if(column1 >= columns() || column2 >= columns()){throw MatrixException("Index incorrect");}
-      T temp;
-      for(unsigned int i(0); i < rows(); i++){
-        temp = (*this)(i, column1);
-        (*this)(i, column1) = (*this)(i, column2);
-        (*this)(i, column2) = temp;
-      }
-      return *this;
     }
 
     /**
@@ -1112,31 +1025,9 @@ class Matrix{
      * @param matrix Matrix to be compared
      * @return true when size different, otherwise false.
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    bool isDifferentSize(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
+    template <class T2, class Array2D_Type2, class ViewType2>
+    bool isDifferentSize(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
       return (rows() != matrix.rows()) || (columns() != matrix.columns());
-    }
-
-  protected:
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &replace_internal(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      for(unsigned int i(0); i < rows(); ++i){
-        for(unsigned int j(0); j < columns(); ++j){
-          (*this)(i, j) = matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
-  public:
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &replace(
-        const Matrix<T2, Array2D_Type2, ViewType2> &matrix,
-        const bool &do_check = true){
-      if(do_check && isDifferentSize(matrix)){
-        throw MatrixException("Incorrect size");
-      }
-      return replace_internal(matrix);
     }
 
     /**
@@ -1144,9 +1035,10 @@ class Matrix{
      *
      * @param do_check Check matrix size property. The default is true
      * @return Trace
+     * @throw std::logic_error When matrix is not square
      */
     T trace(const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw MatrixException("rows != columns");}
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
       T tr(0);
       for(unsigned i(0); i < rows(); i++){
         tr += (*this)(i, i);
@@ -1155,151 +1047,211 @@ class Matrix{
     }
 
     /**
-     * Multiple by scalar (bang method)
+     * Test whether matrix is LU decomposed.
+     * The assumption of elements is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
      *
-     * @param scalar
-     * @return myself
+     * @return true when LU, otherwise false.
      */
-    self_t &operator*=(const T &scalar) noexcept {
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          (*this)(i, j) *= scalar;
+    bool isLU() const noexcept {
+      if(rows() * 2 != columns()){return false;}
+      for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
+        for(unsigned int j(i + 1); j < rows(); j++){
+          if((*this)(i, j) != T(0)){return false;} // check L
+          if((*this)(j, i_U) != T(0)){return false;} // check U
         }
       }
-      return *this;
+      return true;
+    }
+
+    /**
+     * Generate transpose matrix
+     *
+     * @return Transpose matrix
+     */
+    transpose_t transpose() const noexcept {
+      return transpose_t(*this);
+    }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixT::partial_t partial_internal(
+        const MatrixT &self,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset){
+      if(new_rows + row_offset > self.rows()){
+        throw std::out_of_range("Row size exceeding");
+      }else if(new_columns + column_offset > self.columns()){
+        throw std::out_of_range("Column size exceeding");
+      }
+      typename MatrixT::partial_t res(self);
+      MatrixT::partial_t::view_builder_t::set_partial(
+          res.view,
+          new_rows, new_columns, row_offset, column_offset);
+      return res;
+    }
+
+  public:
+    /**
+     * Generate partial matrix
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @param rowOffset Upper row index of original matrix for partial matrix
+     * @param columnOffset Left column index of original matrix for partial matrix
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     *
+     */
+    partial_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const {
+      return partial_internal(*this,
+          new_rows, new_columns, row_offset, column_offset);
+    }
+
+    /**
+     * Generate row vector by using partial()
+     *
+     * @param row Row index of original matrix for row vector
+     * @return Row vector
+     * @see partial()
+     */
+    partial_t rowVector(const unsigned int &row) const {
+      return partial(1, columns(), row, 0);
     }
     /**
-     * Multiple by scalar
+     * Generate column vector by using partial()
+     *
+     * @param column Column index of original matrix for column vector
+     * @return Column vector
+     * @see partial()
+     */
+    partial_t columnVector(const unsigned int &column) const {
+      return partial(rows(), 1, 0, column);
+    }
+
+    enum {
+      OPERATOR_2_Multiply_Matrix_by_Scalar,
+      OPERATOR_2_Add_Matrix_to_Matrix,
+      OPERATOR_2_Multiply_Matrix_by_Matrix,
+      OPERATOR_NONE,
+    };
+
+    struct Operator {
+      template <class MatrixT = self_t, class U1 = void, class U2 = void>
+      struct property_t {
+        static const int tag = OPERATOR_NONE;
+        typedef void operator_t;
+      };
+      template <class T2, class Array2D_Type2, class View_Type2>
+      struct property_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
+        template <class Array2D_Type3>
+        struct check_t {
+          static const int tag = OPERATOR_NONE;
+          typedef void operator_t;
+        };
+        template <class OperatorT>
+        struct check_t<Array2D_Operator<T2, OperatorT> >{
+          static const int tag = OperatorT::tag;
+          typedef OperatorT operator_t;
+        };
+        static const int tag = check_t<Array2D_Type2>::tag;
+        typedef typename check_t<Array2D_Type2>::operator_t operator_t;
+      };
+    };
+
+    template <class LHS_T, class RHS_T>
+    struct BinaryOperator : public Operator {
+      typedef LHS_T lhs_t;
+      typedef RHS_T rhs_t;
+    };
+
+    template <class RHS_T>
+    struct Multiply_Matrix_by_Scalar {
+      struct op_t : public BinaryOperator<self_t, RHS_T> {
+        static const int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
+        self_t lhs; ///< Left hand side value
+        RHS_T rhs; ///< Right hand side value
+        op_t(const self_t &mat, const RHS_T &scalar) noexcept
+            : lhs(mat), rhs(scalar) {}
+        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+          return lhs(row, column) * rhs;
+        }
+      };
+
+      /*
+       * Optimization policy: If upper pattern is M * scalar, then reuse it.
+       * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
+       */
+
+      template <bool, class U = void>
+      struct optimizer_t {
+        typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
+        static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+          return res_t(
+              new typename res_t::storage_t(
+                mat.rows(), mat.columns(), op_t(mat, scalar)));
+        }
+      };
+#if 1 // 0 = Remove optimization
+      template <class U>
+      struct optimizer_t<true, U> {
+        typedef self_t res_t;
+        static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+          return res_t(
+              new typename res_t::storage_t(
+                mat.rows(), mat.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat.array2d()->op.lhs, mat.array2d()->op.rhs * scalar)));
+        }
+      };
+#endif
+
+      typedef optimizer_t<
+          Operator::template property_t<self_t>::tag
+            == OPERATOR_2_Multiply_Matrix_by_Scalar> opt_t;
+      typedef typename opt_t::res_t mat_t;
+      static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+        return opt_t::generate(mat, scalar);
+      }
+    };
+    typedef Multiply_Matrix_by_Scalar<T> mul_mat_scalar_t;
+
+    /**
+     * Multiply by scalar
      *
      * @param scalar
-     * @return multiplied (deep) copy
+     * @return multiplied matrix
      */
-    viewless_t operator*(const T &scalar) const{return (copy() *= scalar);}
+    typename mul_mat_scalar_t::mat_t operator*(const T &scalar) const noexcept {
+      return mul_mat_scalar_t::generate(*this, scalar);
+    }
+
     /**
-     * Multiple by scalar
+     * Multiply by scalar
      *
      * @param scalar
      * @param matrix
-     * @return multiplied (deep) copy
+     * @return multiplied matrix
      */
-    friend viewless_t operator*(const T &scalar, const self_t &matrix){
+    friend typename mul_mat_scalar_t::mat_t operator*(const T &scalar, const self_t &matrix) noexcept {
       return matrix * scalar;
     }
-    /**
-     * Divide by scalar (bang method)
-     *
-     * @param scalar
-     * @return myself
-     */
-    self_t &operator/=(const T &scalar){return (*this) *= (1 / scalar);}
+
     /**
      * Divide by scalar
      *
      * @param scalar
-     * @return divided (deep) copy
+     * @return divided matrix
      */
-    viewless_t operator/(const T &scalar) const{return (copy() /= scalar);}
-    /**
-     * Divide by scalar
-     *
-     * @param scalar
-     * @param matrix
-     * @return divided (deep) copy
-     */
-    friend viewless_t operator/(const T &scalar, const self_t &matrix){
-      return matrix / scalar;
-    }
-    
-    /**
-     * Add by matrix (bang method)
-     *
-     * @param matrix Matrix to add
-     * @return myself
-     */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator+=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          (*this)(i, j) += matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
-    /**
-     * Add by matrix
-     *
-     * @param matrix Matrix to add
-     * @return added (deep) copy
-     */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    viewless_t operator+(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
-      return (copy() += matrix);
-    }
-    
-    /**
-     * Subtract by matrix (bang method)
-     *
-     * @param matrix Matrix to subtract
-     * @return myself
-     */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator-=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      if(isDifferentSize(matrix)){throw MatrixException("Incorrect size");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          (*this)(i, j) -= matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
-    /**
-     * Subtract by matrix
-     *
-     * @param matrix Matrix to subtract
-     * @return subtracted (deep) copy
-     */
-    template <class T2, template <class> class Array2D_Type2>
-    viewless_t operator-(const Matrix<T2, Array2D_Type2> &matrix) const{
-      return (copy() -= matrix);
-    }
-
-    /**
-     * Multiply by matrix
-     *
-     * @param matrix matrix to multiply
-     * @return multiplied (deep) copy
-     * @throw MatrixException
-     */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    viewless_t operator*(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
-      if(columns() != matrix.rows()){
-        throw MatrixException("Incorrect size");
-      }
-      viewless_t result(blank(rows(), matrix.columns()));
-      for(unsigned int i(0); i < result.rows(); i++){
-        for(unsigned int j(0); j < result.columns(); j++){
-          result(i, j) = (*this)(i, 0) * matrix(0, j);
-          for(unsigned int k(1); k < columns(); k++){
-            result(i, j) += ((*this)(i, k) * matrix(k, j));
-          }
-        }
-      }
-      return result;
-    }
-    
-    /**
-     * Multiply by matrix (bang method)
-     *
-     * @param matrix Matrix to multiply
-     * @return myself
-     * @throw MatrixException
-     */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator*=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
-      return replace_internal(*this * matrix);
+    typename mul_mat_scalar_t::mat_t operator/(const T &scalar) const noexcept {
+      return operator*(T(1) / scalar);
     }
 
     /**
@@ -1307,7 +1259,723 @@ class Matrix{
      *
      * @return matrix * -1.
      */
-    viewless_t operator-() const{return (copy() *= -1);}
+    typename mul_mat_scalar_t::mat_t operator-() const noexcept {
+      return operator*(-1);
+    }
+
+
+    template <class RHS_MatrixT, bool rhs_positive = true>
+    struct Add_Matrix_to_Matrix {
+      struct op_t : public BinaryOperator<self_t, RHS_MatrixT> {
+        static const int tag = OPERATOR_2_Add_Matrix_to_Matrix;
+        self_t lhs; ///< Left hand side value
+        RHS_MatrixT rhs; ///< Right hand side value
+        op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
+            : lhs(mat1), rhs(mat2) {}
+        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+          if(rhs_positive){
+            return lhs(row, column) + rhs(row, column);
+          }else{
+            return lhs(row, column) - rhs(row, column);
+          }
+        }
+      };
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+        if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
+        return mat_t(
+            new typename mat_t::storage_t(
+              mat1.rows(), mat1.columns(), op_t(mat1, mat2)));
+      }
+    };
+
+    /**
+     * Add to matrix
+     *
+     * @param matrix Matrix to add
+     * @return added matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
+        operator+(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+    /**
+     * Subtract from matrix
+     *
+     * @param matrix Matrix to subtract
+     * @return subtracted matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::mat_t
+        operator-(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
+      return Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::generate(*this, matrix);
+    }
+
+
+    template <class RHS_MatrixT>
+    struct Multiply_Matrix_by_Matrix {
+
+      template <class MatrixT, int tag = Operator::template property_t<MatrixT>::tag>
+      struct check_t {
+        template <bool is_binary, class U = void>
+        struct check_binary_t {
+          static const bool has_multi_mat_by_mat = false;
+        };
+        template <class U>
+        struct check_binary_t<true, U> {
+          static const bool has_multi_mat_by_mat
+              = (check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
+                  ::has_multi_mat_by_mat)
+                || (check_t<typename Operator::template property_t<MatrixT>::operator_t::rhs_t>
+                  ::has_multi_mat_by_mat);
+        };
+        static const bool has_multi_mat_by_mat
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+              || check_binary_t<
+                (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
+                || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
+                || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+                >::has_multi_mat_by_mat;
+        static const bool is_multi_mat_by_scalar
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
+      };
+
+      template <class LHS_T = self_t, class RHS_T = RHS_MatrixT>
+      struct op_gen_t {
+
+        /*
+         * [Optimization policy 1]
+         * If each side include M * M, then use cache.
+         * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
+         * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
+         */
+
+        template <class MatrixT, bool cache_on = false>
+        struct optimizer1_t {
+          typedef MatrixT res_t;
+        };
+#if 1 // 0 = remove optimizer
+        template <class MatrixT>
+        struct optimizer1_t<MatrixT, true> {
+          typedef typename MatrixT::downcast_default_t res_t;
+        };
+#endif
+        typedef typename optimizer1_t<LHS_T,
+            check_t<LHS_T>::has_multi_mat_by_mat>::res_t lhs_opt_t;
+        typedef typename optimizer1_t<RHS_T,
+            check_t<RHS_T>::has_multi_mat_by_mat>::res_t rhs_opt_t;
+
+        struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
+          static const int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
+          lhs_opt_t lhs; ///< Left hand side value
+          rhs_opt_t rhs; ///< Right hand side value
+          op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
+              : lhs(mat1), rhs(mat2) {}
+          T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+            T res(lhs(row, 0) * rhs(0, column));
+            for(unsigned int i(1); i < lhs.columns(); ++i){
+              res += lhs(row, i) * rhs(i, column);
+            }
+            return res;
+          }
+        };
+      };
+
+      /*
+       * [Optimization policy 2]
+       * Sort lhs and rhs to make the scalar multiplication term last.
+       */
+      template <
+          bool lhs_m_by_s = check_t<self_t>::is_multi_mat_by_scalar,
+          bool rhs_m_by_s = check_t<RHS_MatrixT>::is_multi_mat_by_scalar,
+          class U = void>
+      struct optimizer2_t {
+        // M * M
+        typedef Matrix_Frozen<T, Array2D_Operator<T, typename op_gen_t<>::op_t> > res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(mat1, mat2)));
+        }
+      };
+#if 1 // 0 = remove optimizer
+      template <class U>
+      struct optimizer2_t<true, false, U> {
+        // (M * S) * M => (M * M) * S
+        typedef typename Operator::template property_t<self_t>::operator_t::lhs_t
+            ::template Multiply_Matrix_by_Matrix<RHS_MatrixT>::mat_t stage1_t;
+        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Scalar<
+              typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          stage1_t mat_stage1(
+              new typename stage1_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<stage1_t>::operator_t(
+                  mat1.array2d()->op.lhs, mat2)));
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat_stage1, mat1.array2d()->op.rhs)));
+        }
+      };
+      template <class U>
+      struct optimizer2_t<false, true, U> {
+        // M * (M * S) => (M * M) * S
+        typedef typename self_t
+            ::template Multiply_Matrix_by_Matrix<
+              typename Operator::template property_t<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
+        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Scalar<
+              typename Operator::template property_t<RHS_MatrixT>::operator_t::rhs_t>::mat_t res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          stage1_t mat_stage1(
+              new typename stage1_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<stage1_t>::operator_t(
+                  mat1, mat2.array2d()->op.lhs)));
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat_stage1, mat2.array2d()->op.rhs)));
+        }
+      };
+      template <class U>
+      struct optimizer2_t<true, true, U> {
+        // (M * S) * (M * S) => (M * M) * (S * S)
+        typedef typename Operator::template property_t<self_t>::operator_t::lhs_t
+            ::template Multiply_Matrix_by_Matrix<
+              typename Operator::template property_t<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
+        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Scalar<
+              typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
+        static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+          stage1_t mat_stage1(
+              new typename stage1_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<stage1_t>::operator_t(
+                  mat1.array2d()->op.lhs, mat2.array2d()->op.lhs)));
+          return res_t(
+              new typename res_t::storage_t(
+                mat1.rows(), mat2.columns(),
+                typename Operator::template property_t<res_t>::operator_t(
+                  mat_stage1, mat1.array2d()->op.rhs * mat2.array2d()->op.rhs)));
+        }
+      };
+#endif
+
+      typedef typename optimizer2_t<>::res_t mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+        if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
+        return optimizer2_t<>::generate(mat1, mat2);
+      }
+    };
+
+    /**
+     * Multiply by matrix
+     *
+     * @param matrix matrix to multiply
+     * @return multiplied matrix
+     * @throw std::invalid_argument When operation is undefined
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
+        operator*(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+
+    downcast_default_t matrix_for_minor(
+        const unsigned int &row,
+        const unsigned int &column) const noexcept {
+      return ((downcast_default_t)*this).matrix_for_minor(row, column);
+    }
+
+    T determinant_minor(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).determinant_minor(do_check);
+    }
+
+    downcast_default_t decomposeLUP(
+        unsigned int &pivot_num,
+        unsigned int *pivot = NULL,
+        const bool &do_check = true) const {
+      return ((downcast_default_t)*this).decomposeLUP(pivot_num, pivot, do_check);
+    }
+
+    downcast_default_t decomposeLU(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).decomposeLU(do_check);
+    }
+
+    T determinant_LU(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).determinant_LU(do_check);
+    }
+
+    T determinant(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).determinant(do_check);
+    }
+
+    downcast_default_t decomposeUD(const bool &do_check = true) const {
+      return ((downcast_default_t)*this).decomposeUD(do_check);
+    }
+
+    downcast_default_t inverse() const {
+      return ((downcast_default_t)*this).inverse();
+    }
+
+    /**
+     * Divide by matrix, in other words, multiply by inverse matrix
+     *
+     * @param matrix Matrix to divide
+     * @return divided matrix
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Multiply_Matrix_by_Matrix<
+          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t>::mat_t
+        operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Multiply_Matrix_by_Matrix<
+            typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t>::generate(
+          *this, matrix.inverse());
+    }
+
+    /**
+     * Divide by matrix, in other words, multiply by inverse matrix
+     *
+     * @param matrix Matrix to divide
+     * @return divided matrix
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Multiply_Matrix_by_Matrix<
+          typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t>::mat_t
+        operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Multiply_Matrix_by_Matrix<
+            typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t>::generate(
+          *this, matrix.inverse());
+    }
+
+    /**
+     * Print matrix
+     *
+     */
+    friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
+      if(matrix.storage){
+        out << "{";
+        for(unsigned int i(0); i < matrix.rows(); i++){
+          out << (i == 0 ? "" : ",") << std::endl << "{";
+          for(unsigned int j(0); j < matrix.columns(); j++){
+            out << (j == 0 ? "" : ",") << matrix(i, j);
+          }
+          out << "}";
+        }
+        out << std::endl << "}";
+      }
+      return out;
+    }
+};
+
+
+/**
+ * @brief Matrix
+ *
+ * Most of useful matrix operations are defined.
+ *
+ * Special care when you want to make copy;
+ * The copy constructor(s) and change functions of view such as
+ * transpose() are implemented by using shallow copy, which means
+ * these return values are linked to their original operand.
+ * If you unlink the relation between the original and returned matrices,
+ * you have to use copy(), which makes a deep copy explicitly,
+ * for example, mat.transpose().copy().
+ *
+ * @param T precision such as double
+ * @param Array2D_Type Storage type. The default is Array2D_Dense
+ * @param ViewType View type. The default is void, which means no view, i.e. direct access.
+ */
+template <class T, class Array2D_Type, class ViewType>
+class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
+  public:
+    typedef Matrix_Frozen<T, Array2D_Type, ViewType> super_t;
+
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename super_t::storage_t storage_t;
+    typedef typename super_t::view_builder_t view_builder_t;
+    typedef typename super_t::view_property_t view_property_t;
+#else
+    using typename super_t::storage_t;
+    using typename super_t::view_builder_t;
+    using typename super_t::view_property_t;
+#endif
+
+    typedef Matrix<T, Array2D_Type, ViewType> self_t;
+
+    typedef Matrix<T, Array2D_Type> viewless_t;
+    typedef Matrix<T, Array2D_Type,
+        typename view_builder_t::transpose_t> transpose_t;
+    typedef Matrix<T, Array2D_Type,
+        typename view_builder_t::partial_t> partial_t;
+
+    template <class T2, class Array2D_Type2, class ViewType2>
+    friend class Matrix_Frozen;
+
+    template <class T2, class Array2D_Type2, class ViewType2>
+    friend class Matrix;
+
+  protected:
+    /**
+     * Constructor with storage
+     *
+     * @param storage new storage
+     */
+    Matrix(const Array2D<T> *new_storage) : super_t(new_storage) {}
+
+    using super_t::array2d;
+    inline storage_t *array2d() {
+      return const_cast<storage_t *>(const_cast<const self_t *>(this)->array2d());
+    }
+
+  public:
+    /**
+     * Return matrix element of specified indices.
+     *
+     * @param row Row index starting from 0.
+     * @param column Column index starting from 0.
+     * @return element
+     */
+    using super_t::operator();
+    T &operator()(
+        const unsigned int &row,
+        const unsigned int &column){
+      return array2d()->storage_t::operator()(
+            super_t::view.i(row, column), super_t::view.j(row, column));
+    }
+
+    using super_t::rows;
+    using super_t::columns;
+
+    /**
+     * Clear elements.
+     *
+     */
+    void clear(){
+      if(view_property_t::truncated){
+        for(unsigned int i(0); i < rows(); i++){
+          for(unsigned int j(0); j < columns(); j++){
+            (*this)(i, j) = T(0);
+          }
+        }
+      }else{
+        array2d()->storage_t::clear();
+      }
+    }
+
+    /**
+     * Constructor without storage.
+     *
+     */
+    Matrix() : super_t(NULL){}
+
+    /**
+     * Constructor with specified row and column numbers.
+     * The storage will be assigned with the size.
+     * The elements will be cleared with T(0).
+     *
+     * @param rows Row number
+     * @param columns Column number
+     */
+    Matrix(
+        const unsigned int &rows,
+        const unsigned int &columns)
+        : super_t(new storage_t(rows, columns)){
+      clear();
+    }
+
+    /**
+     * Constructor with specified row and column numbers, and values.
+     * The storage will be assigned with the size.
+     * The elements will be initialized with specified values。
+     *
+     * @param rows Row number
+     * @param columns Column number
+     * @param serialized Initial values of elements
+     */
+    Matrix(
+        const unsigned int &rows,
+        const unsigned int &columns,
+        const T *serialized)
+        : super_t(new storage_t(rows, columns, serialized)){
+    }
+
+    /**
+     * Copy constructor generating shallow copy.
+     *
+     * @param matrix original
+     */
+    Matrix(const self_t &matrix)
+        : super_t(matrix){}
+
+    template <class T2, class Array2D_Type2>
+    Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
+        : super_t(matrix) {}
+  protected:
+    template <class ViewType2>
+    Matrix(const Matrix<T, Array2D_Type, ViewType2> &matrix)
+        : super_t(matrix){}
+
+  public:
+    /**
+     * Destructor
+     */
+    virtual ~Matrix(){}
+
+
+    /**
+     * Matrix generator with specified row and column numbers.
+     * The storage will be assigned with the size,
+     * however, initialization of elements will NOT be performed.
+     * In addition, its view is none.
+     *
+     * @param new_rows Row number
+     * @param new_columns Column number
+     */
+    static viewless_t blank(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns){
+      return viewless_t(new storage_t(new_rows, new_columns));
+    }
+
+  protected:
+    viewless_t blank_copy() const {
+      return blank(rows(), columns());
+    }
+
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &replace_internal(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      for(unsigned int i(0); i < rows(); ++i){
+        for(unsigned int j(0); j < columns(); ++j){
+          (*this)(i, j) = (T)matrix(i, j);
+        }
+      }
+      return *this;
+    }
+
+  public:
+    /**
+     * Assign operator performing shallow copy.
+     *
+     * @return myself
+     */
+    self_t &operator=(const self_t &matrix){
+      super_t::operator=(matrix);
+      return *this;
+    }
+    template <class T2, class Array2D_Type2>
+    self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
+      super_t::operator=(matrix);
+      return *this;
+    }
+
+    /**
+     * Perform (deep) copy
+     *
+     * @return (viewless_t)
+     */
+    viewless_t copy() const {
+      if(view_property_t::viewless){
+        return viewless_t(array2d()->storage_t::copy(true));
+      }else{
+        return blank_copy().replace_internal(*this);
+      }
+    }
+
+  protected:
+    /**
+     * Cast to another Matrix defined in Matrix_Frozen is intentionally protected.
+     *
+     * Use copy() for Matrix
+     */
+    template <class T2, class Array2D_Type2>
+    operator Matrix<T2, Array2D_Type2>() const;
+
+  public:
+    /**
+     * Generate transpose matrix
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do transpose().copy().
+     *
+     * @return Transpose matrix
+     */
+    transpose_t transpose() const noexcept {
+      return transpose_t(*this);
+    }
+
+    /**
+     * Generate partial matrix
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do partial().copy().
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @param rowOffset Upper row index of original matrix for partial matrix
+     * @param columnOffset Left column index of original matrix for partial matrix
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     *
+     */
+    partial_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const {
+      return super_t::partial_internal(*this,
+          new_rows, new_columns, row_offset, column_offset);
+    }
+
+    /**
+     * Generate row vector by using partial()
+     *
+     * @param row Row index of original matrix for row vector
+     * @return Row vector
+     * @see partial()
+     */
+    partial_t rowVector(const unsigned int &row) const {
+      return partial(1, columns(), row, 0);
+    }
+    /**
+     * Generate column vector by using partial()
+     *
+     * @param column Column index of original matrix for column vector
+     * @return Column vector
+     * @see partial()
+     */
+    partial_t columnVector(const unsigned int &column) const {
+      return partial(rows(), 1, 0, column);
+    }
+
+    /**
+     * Exchange rows (bang method).
+     *
+     * @param row1 Target row (1)
+     * @param row2 Target row (2)
+     * @return myself
+     * @throw std::out_of_range When row1 or row2 exceeds bound
+     */
+    self_t &exchangeRows(
+        const unsigned int &row1, const unsigned int &row2){
+      if(row1 >= rows() || row2 >= rows()){
+        throw std::out_of_range("Row index incorrect");
+      }
+      T temp;
+      for(unsigned int j(0); j < columns(); j++){
+        temp = (*this)(row1, j);
+        (*this)(row1, j) = (*this)(row2, j);
+        (*this)(row2, j) = temp;
+      }
+      return *this;
+    }
+
+    /**
+     * Exchange columns (bang method).
+     *
+     * @param column1 Target column (1)
+     * @param column2 Target column (2)
+     * @return myself
+     * @throw std::out_of_range When column1 or column2 exceeds bound
+     */
+    self_t &exchangeColumns(
+        const unsigned int &column1, const unsigned int &column2){
+      if(column1 >= columns() || column2 >= columns()){
+        throw std::out_of_range("Column index incorrect");
+      }
+      T temp;
+      for(unsigned int i(0); i < rows(); i++){
+        temp = (*this)(i, column1);
+        (*this)(i, column1) = (*this)(i, column2);
+        (*this)(i, column2) = temp;
+      }
+      return *this;
+    }
+
+    /**
+     * Replace content
+     *
+     * @param matrix matrix to be replaced to
+     * @param do_check Check matrix size property. The default is true
+     * @return matrix with new content
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &replace(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix,
+        const bool &do_check = true){
+      if(do_check && isDifferentSize(matrix)){
+        throw std::invalid_argument("Incorrect size");
+      }
+      return replace_internal(matrix);
+    }
+
+    using super_t::isSquare;
+    using super_t::isDiagonal;
+    using super_t::isSymmetric;
+    using super_t::isDifferentSize;
+    using super_t::isLU;
+
+    /**
+     * Multiply by scalar (bang method)
+     *
+     * @param scalar
+     * @return myself
+     */
+    self_t &operator*=(const T &scalar) noexcept {
+      return replace_internal((*this) * scalar);
+    }
+
+    /**
+     * Divide by scalar (bang method)
+     *
+     * @param scalar
+     * @return myself
+     */
+    self_t &operator/=(const T &scalar) noexcept {
+      return operator*=(T(1) / scalar);
+    }
+    
+    /**
+     * Add to matrix (bang method)
+     *
+     * @param matrix Matrix to add
+     * @return myself
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &operator+=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      return replace_internal((*this) + matrix);
+    }
+    
+    /**
+     * Subtract from matrix (bang method)
+     *
+     * @param matrix Matrix to subtract
+     * @return myself
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &operator-=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      return replace_internal((*this) - matrix);
+    }
+    
+    /**
+     * Multiply by matrix (bang method)
+     *
+     * @param matrix Matrix to multiply
+     * @return myself
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &operator*=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      return operator=(*this * matrix);
+    }
 
     /**
      * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
@@ -1318,7 +1986,7 @@ class Matrix{
      */
     viewless_t matrix_for_minor(
         const unsigned int &row,
-        const unsigned int &column) const {
+        const unsigned int &column) const noexcept {
       viewless_t res(blank(rows() - 1, columns() - 1));
       unsigned int i(0), i2(0);
       for( ; i < row; ++i, ++i2){
@@ -1350,10 +2018,10 @@ class Matrix{
      *
      * @param do_check Whether check size property. The default is true.
      * @return Determinant
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
      */
     T determinant_minor(const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
       if(rows() == 1){
         return (*this)(0, 0);
       }else{
@@ -1370,43 +2038,26 @@ class Matrix{
     }
 
     /**
-     * Test whether matrix is LU decomposed.
-     * The assumption of elements is
-     * (0, 0)-(n-1, n-1):  L matrix
-     * (0, n)-(n-1, 2n-1): U matrix
-     *
-     * @return true when LU, otherwise false.
-     */
-    bool isLU() const noexcept {
-      if(rows() * 2 != columns()){return false;}
-      for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
-        for(unsigned int j(i + 1); j < rows(); j++){
-          if((*this)(i, j) != T(0)){return false;} // check L
-          if((*this)(j, i_U) != T(0)){return false;} // check U
-        }
-      }
-      return true;
-    }
-
-    /**
      * Resolve x of (Ax = y), where this matrix is A and has already been decomposed as LU.
      *
      * @param y Right hand term
      * @param do_check Check whether already LU decomposed
      * @return Left hand second term
+     * @throw std::logic_error When operation is undefined
+     * @throw std::invalid_argument When input is incorrect
      * @see decomposeLU(const bool &)
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t
         solve_linear_eq_with_LU(
             const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
             const {
       if(do_check && (!isLU())){
-        throw MatrixException("Not LU decomposed matrix!!");
+        throw std::logic_error("Not LU decomposed matrix!!");
       }
       if((y.columns() != 1)
           || (y.rows() != rows())){
-        throw MatrixException("Incorrect y size");
+        throw std::invalid_argument("Incorrect y size");
       }
 
       partial_t
@@ -1450,13 +2101,14 @@ class Matrix{
      * [[1,0,0], [0,0,1], [0,1,0]].
      * @param do_check Check size, the default is true.
      * @return LU decomposed matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
      */
     viewless_t decomposeLUP(
         unsigned int &pivot_num,
         unsigned int *pivot = NULL,
         const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw MatrixException("rows() != columns()");}
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
       viewless_t LU(blank(rows(), columns() * 2));
 #define L(i, j) LU(i, j)
 #define U(i, j) LU(i, j + columns())
@@ -1481,7 +2133,7 @@ class Matrix{
           unsigned int j(i);
           do{
             if(++j == rows()){
-              throw MatrixException("LU decomposition cannot be performed");
+              throw std::runtime_error("LU decomposition cannot be performed");
             }
           }while(U(i, j) == T(0));
           for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
@@ -1543,10 +2195,10 @@ class Matrix{
      *
      * @param do_check Check size, the default is true.
      * @return UD decomposed matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
      */
     viewless_t decomposeUD(const bool &do_check = true) const {
-      if(do_check && !isSymmetric()){throw MatrixException("not symmetric");}
+      if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
       viewless_t P(copy());
       viewless_t UD(rows(), columns() * 2);
 #define U(i, j) UD(i, j)
@@ -1570,17 +2222,18 @@ class Matrix{
      * Calculate inverse matrix
      *
      * @return Inverse matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
      */
     viewless_t inverse() const {
 
-      if(!isSquare()){throw MatrixException("rows() != columns()");}
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       //クラメール(遅い)
       /*
       viewless_t result(rows(), columns());
       T det;
-      if((det = determinant()) == 0){throw MatrixException("Operation void!!");}
+      if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
           result(i, j) = coMatrix(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
@@ -1597,7 +2250,7 @@ class Matrix{
           unsigned int i2(i);
           do{
             if(++i2 == rows()){
-              throw MatrixException("invert matrix not exist");
+              throw std::runtime_error("invert matrix not exist");
             }
           }while(left(i2, i) == T(0));
           // exchange i-th and i2-th rows
@@ -1631,25 +2284,39 @@ class Matrix{
       /*
       */
     }
+
+    /**
+     * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
+     *
+     * @param scalar
+     * @param matrix
+     * @return result matrix
+     */
+    friend typename viewless_t::super_t::mul_mat_scalar_t::mat_t
+        operator/(const T &scalar, const self_t &matrix) {
+      return matrix.inverse() * scalar;
+    }
+
     /**
      * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
      *
      * @param matrix Matrix to divide
      * @return myself
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
-        return (*this) *= matrix.inverse();
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &operator/=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) {
+      return operator=(*this / matrix);
     }
+
     /**
-     * Divide by matrix, in other words, multiply by inverse matrix
+     * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
      *
      * @param matrix Matrix to divide
-     * @return divided (deep) copy
+     * @return myself
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
-    viewless_t operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return (copy() /= matrix);
+    template <class T2, class Array2D_Type2, class ViewType2>
+    self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
+      return operator=(*this / matrix);
     }
 
     /**
@@ -1660,10 +2327,10 @@ class Matrix{
      * @param matrix Matrix to add
      * @return myself
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     self_t &pivotMerge(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T2, Array2D_Type2, ViewType2> &matrix){
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
       for(int i(0); i < matrix.rows(); i++){
         if(row + i < 0){continue;}
         else if(row + i >= rows()){break;}
@@ -1684,10 +2351,10 @@ class Matrix{
      * @param matrix Matrix to add
      * @return added (deep) copy
      */
-    template <class T2, template <class> class Array2D_Type2, class ViewType2>
+    template <class T2, class Array2D_Type2, class ViewType2>
     viewless_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
-        const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const{
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
       return copy().pivotMerge(row, column, matrix);
     }
 
@@ -1697,10 +2364,10 @@ class Matrix{
      * @param transform Pointer to store multiplication of matrices used for the conversion.
      * If NULL is specified, the store will not be performed, The default is NULL.
      * @return Hessenberg matrix
-     * @throw MatrixException
+     * @throw std::logic_error When operation is undefined
      */
     viewless_t hessenberg(viewless_t *transform = NULL) const {
-      if(!isSquare()){throw MatrixException("rows() != columns()");}
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       viewless_t result(copy());
       for(unsigned int j(0); j < columns() - 2; j++){
@@ -1741,17 +2408,24 @@ class Matrix{
       return result;
     }
 
-    template <class T2>
+
     struct complex_t {
-      static const bool is_complex = false;
-      typedef Complex<T2> v_t;
-      typedef typename Matrix<Complex<T2>, Array2D_Type, ViewType>::viewless_t m_t;
-    };
-    template <class T2>
-    struct complex_t<Complex<T2> > {
-        static const bool is_complex = true;
-      typedef Complex<T2> v_t;
-      typedef typename Matrix<Complex<T2>, Array2D_Type, ViewType>::viewless_t m_t;
+      template <class T2>
+      struct check_t {
+        static const bool hit = false;
+        typedef Complex<T2> res_t;
+      };
+      template <class T2>
+      struct check_t<Complex<T2> > {
+        static const bool hit = true;
+        typedef Complex<T2> res_t;
+      };
+      static const bool is_complex = check_t<T>::hit;
+      typedef typename check_t<T>::res_t v_t;
+      typedef typename Matrix<
+          v_t,
+          typename Array2D_Type::template family_t<v_t>::res_t,
+          ViewType>::viewless_t m_t;
     };
 
     /**
@@ -1764,20 +2438,20 @@ class Matrix{
      */
     void eigen22(
         const unsigned int &row, const unsigned int &column,
-        typename complex_t<T>::v_t &upper, typename complex_t<T>::v_t &lower) const {
+        typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
       T a((*this)(row, column)),
         b((*this)(row, column + 1)),
         c((*this)(row + 1, column)),
         d((*this)(row + 1, column + 1));
       T root2(pow((a - d), 2) + b * c * 4);
-      if(complex_t<T>::is_complex || (root2 > 0)){
+      if(complex_t::is_complex || (root2 > 0)){
         T root(::sqrt(root2));
         upper = ((a + d + root) / 2);
         lower = ((a + d - root) / 2);
       }else{
         T root(::sqrt(root2 * -1));
-        upper = typename complex_t<T>::v_t((a + d) / 2, root / 2);
-        lower = typename complex_t<T>::v_t((a + d) / 2, root / 2 * -1);
+        upper = typename complex_t::v_t((a + d) / 2, root / 2);
+        lower = typename complex_t::v_t((a + d) / 2, root / 2 * -1);
       }
     }
 
@@ -1790,14 +2464,16 @@ class Matrix{
      * @param threshold_abs Absolute error to be used for convergence determination
      * @param threshold_rel Relative error to be used for convergence determination
      * @return Eigenvalues and eigenvectors
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
      */
-    typename complex_t<T>::m_t eigen(
+    typename complex_t::m_t eigen(
         const T &threshold_abs = 1E-10,
         const T &threshold_rel = 1E-7) const {
 
-      typedef typename complex_t<T>::m_t res_t;
+      typedef typename complex_t::m_t res_t;
 
-      if(!isSquare()){throw MatrixException("rows() != columns()");}
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       //パワー法(べき乗法)
       /*viewless_t result(rows(), rows() + 1);
@@ -1837,11 +2513,11 @@ class Matrix{
 #define lambda(i) result(i, _rows)
 
       T mu_sum(0), mu_multi(0);
-      typename complex_t<T>::v_t p1, p2;
+      typename complex_t::v_t p1, p2;
       int m = _rows;
       bool first = true;
 
-      viewless_t transform(getI(_rows));
+      viewless_t transform(super_t::getI(_rows));
       viewless_t A(hessenberg(&transform));
       viewless_t A_(A);
 
@@ -1858,7 +2534,7 @@ class Matrix{
 
         //μ、μ*の更新(4.143)
         {
-          typename complex_t<T>::v_t p1_new, p2_new;
+          typename complex_t::v_t p1_new, p2_new;
           A.eigen22(m-2, m-2, p1_new, p2_new);
           if(first ? (first = false) : true){
             if((p1_new - p1).abs() > p1_new.abs() / 2){
@@ -1919,7 +2595,7 @@ class Matrix{
 #else
         if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
 #endif
-          throw MatrixException("eigen values calculation failed");
+          throw std::runtime_error("eigen values calculation failed");
         }
 
         //収束判定
@@ -1978,7 +2654,7 @@ class Matrix{
         // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
         // を参考に、値を振ってみることにした
         res_t A_C_lambda(A_C.copy());
-        typename complex_t<T>::v_t approx_lambda(lambda(j));
+        typename complex_t::v_t approx_lambda(lambda(j));
         if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
           approx_lambda += 2E-3;
         }
@@ -2009,7 +2685,7 @@ class Matrix{
             break;
           }
           if(loop > 100){
-            throw MatrixException("eigen vectors calculation failed");
+            throw std::runtime_error("eigen vectors calculation failed");
           }
         }
       }
@@ -2033,7 +2709,7 @@ class Matrix{
         }
 
         //正規化
-        typename complex_t<T>::v_t _norm;
+        typename complex_t::v_t _norm;
         for(unsigned int i(0); i < _rows; i++){
           _norm += result(i, j).abs2();
         }
@@ -2066,11 +2742,11 @@ class Matrix{
      * @return square root
      * @see eiegn(const T &, const T &)
      */
-    static typename complex_t<T>::m_t sqrt(
-        const typename complex_t<T>::m_t &eigen_mat){
+    static typename complex_t::m_t sqrt(
+        const typename complex_t::m_t &eigen_mat){
       unsigned int n(eigen_mat.rows());
-      typename complex_t<T>::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
-      typename complex_t<T>::m_t nV(VsD.inverse());
+      typename complex_t::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename complex_t::m_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
         VsD.partial(n, 1, 0, i) *= (eigen_mat(i, n).sqrt());
       }
@@ -2087,7 +2763,7 @@ class Matrix{
      * @return square root
      * @see eigen(const T &, const T &)
      */
-    typename complex_t<T>::m_t sqrt(
+    typename complex_t::m_t sqrt(
         const T &threshold_abs,
         const T &threshold_rel) const {
       return sqrt(eigen(threshold_abs, threshold_rel));
@@ -2098,29 +2774,23 @@ class Matrix{
      *
      * @return square root
      */
-    typename complex_t<T>::m_t sqrt() const {
+    typename complex_t::m_t sqrt() const {
       return sqrt(eigen());
     }
-
-    /**
-     * Print matrix
-     *
-     */
-    friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
-      if(matrix.storage){
-        out << "{";
-        for(unsigned int i(0); i < matrix.rows(); i++){
-          out << (i == 0 ? "" : ",") << std::endl << "{";
-          for(unsigned int j(0); j < matrix.columns(); j++){
-            out << (j == 0 ? "" : ",") << matrix(i, j);
-          }
-          out << "}";
-        }
-        out << std::endl << "}";
-      }
-      return out;
-    }
 };
+
+/**
+ * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
+ *
+ * @param scalar
+ * @param matrix
+ * @return result matrix
+ */
+template <class T, class Array2D_Type, class ViewType>
+typename Matrix_Frozen<T, Array2D_Type, ViewType>::downcast_default_t::super_t::mul_mat_scalar_t::mat_t operator/(
+    const T &scalar, const Matrix_Frozen<T, Array2D_Type, ViewType> &matrix) {
+  return scalar / (typename Matrix_Frozen<T, Array2D_Type, ViewType>::downcast_default_t)matrix;
+}
 
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)

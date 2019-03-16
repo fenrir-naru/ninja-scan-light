@@ -49,38 +49,6 @@
  */
 
 /**
- * @brief 複素数に関わる例外
- *
- * Complexクラスの例外クラス。
- * 例として、演算が成立しない場合など。
- *
- */
-class ComplexException: public std::exception{
-  private:
-    std::string what_str;  ///< エラー内容
-  public:
-    /**
-     * コンストラクタ
-     *
-     * @param what_arg エラー内容
-     */
-    ComplexException(const std::string &what_arg) noexcept : what_str(what_arg){}
-    /**
-     * デストラクタ
-     *
-     */
-    ~ComplexException() noexcept {}
-    /**
-     * エラー内容を取得します。
-     *
-     * @return (chsr *) エラー内容
-     */
-    const char *what() const noexcept {
-      return what_str.c_str();
-    }
-};
-
-/**
  * @brief 複素数
  *
  * 複素数をあらわすクラスです。
