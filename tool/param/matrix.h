@@ -925,9 +925,7 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2>
     operator Matrix<T2, Array2D_Type2>() const {
-      Matrix<T2, Array2D_Type2> res(
-          Matrix<T2, Array2D_Type2>::blank(rows(), columns()));
-      return res.replace_internal(*this);
+      return Matrix<T2, Array2D_Type2>::blank(rows(), columns()).replace_internal(*this);
     }
 
   protected:
@@ -1791,9 +1789,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       if(view_property_t::viewless){
         return viewless_t(array2d()->storage_t::copy(true));
       }else{
-        viewless_t res(blank_copy());
-        res.replace_internal(*this);
-        return res;
+        return blank_copy().replace_internal(*this);
       }
     }
 
