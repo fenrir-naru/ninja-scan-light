@@ -139,13 +139,8 @@ class Array2D_Frozen{
       }
     }
 
-    /**
-     * Perform copy
-     *
-     * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
-     * @return root_t Copy
-     */
-    virtual self_t *copy(const bool &is_deep = false) const = 0;
+  protected:
+    self_t &operator=(const self_t &array);
 };
 
 /**
@@ -153,10 +148,10 @@ class Array2D_Frozen{
  *
  * @param T precision, for example, double
  */
-template<class T>
+template<class T, class ImplementedT>
 class Array2D : public Array2D_Frozen<T> {
   public:
-    typedef Array2D<T> self_t;
+    typedef Array2D<T, ImplementedT> self_t;
 
     /**
      * Constructor of Array2D
@@ -171,6 +166,14 @@ class Array2D : public Array2D_Frozen<T> {
      * Destructor of Array2D
      */
     virtual ~Array2D(){}
+
+    /**
+     * Assigner, which performs shallow copy.
+     *
+     * @param array another one
+     * @return (ImplementedT)
+     */
+    virtual ImplementedT &operator=(const ImplementedT &array) = 0;
 
     /**
      * Accessor for element
@@ -194,9 +197,9 @@ class Array2D : public Array2D_Frozen<T> {
      * Perform copy
      *
      * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
-     * @return root_t Copy
+     * @return (ImplementedT) Copy
      */
-    virtual self_t *copy(const bool &is_deep = false) const = 0;
+    virtual ImplementedT copy(const bool &is_deep = false) const = 0;
 };
 
 /**
@@ -206,11 +209,11 @@ class Array2D : public Array2D_Frozen<T> {
  * @param T precision, for example, double
  */
 template <class T>
-class Array2D_Dense : public Array2D<T> {
+class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
   public:
     typedef Array2D_Dense<T> self_t;
-    typedef Array2D<T> super_t;
-    typedef Array2D<T> root_t;
+    typedef Array2D<T, self_t> super_t;
+    typedef Array2D<T, self_t> root_t;
     
     template <class T2>
     struct family_t {
@@ -235,6 +238,9 @@ class Array2D_Dense : public Array2D<T> {
     }
 
   public:
+    Array2D_Dense() : super_t(0, 0), values(NULL), ref(NULL) {
+    }
+
     /**
      * Constructor
      *
@@ -277,9 +283,9 @@ class Array2D_Dense : public Array2D<T> {
      * @param array another one
      */
     template <class T2>
-    Array2D_Dense(const Array2D<T2> &array)
+    Array2D_Dense(const Array2D_Frozen<T2> &array)
         : values(new T[array.rows() * array.columns()]), ref(new int(1)) {
-      T *buf;
+      T *buf(values);
       for(unsigned int i(0); i < array.rows(); ++i){
         for(unsigned int j(0); j < array.rows(); ++j){
           *(buf++) = array(i, j);
@@ -308,6 +314,7 @@ class Array2D_Dense : public Array2D<T> {
     self_t &operator=(const self_t &array){
       if(this != &array){
         if(ref && ((--(*ref)) <= 0)){delete ref; delete [] values;}
+        ref = NULL;
         if(values = array.values){
           super_t::m_rows = array.m_rows;
           super_t::m_columns = array.m_columns;
@@ -355,10 +362,10 @@ class Array2D_Dense : public Array2D<T> {
      * Perform copy
      *
      * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
-     * @return (root_t) copy
+     * @return (self_t) copy
      */
-    root_t *copy(const bool &is_deep = false) const {
-      return is_deep ? new self_t(rows(), columns(), values) : new self_t(*this);
+    self_t copy(const bool &is_deep = false) const {
+      return is_deep ? self_t(rows(), columns(), values) : self_t(*this);
     }
 };
 
@@ -402,16 +409,6 @@ class Array2D_ScaledUnit : public Array2D_Frozen<T> {
 #endif
       return (row == column) ? value : 0;
     }
-
-    /**
-     * Perform copy
-     *
-     * @param is_deep NOP
-     * @return (root_t) (deep) copy
-     */
-    root_t *copy(const bool &is_deep = false) const {
-      return new self_t(*this);
-    }
 };
 
 /**
@@ -453,16 +450,6 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
       super_t::check_index(row, colunmn);
 #endif
       return op(row, column);
-    }
-
-    /**
-     * Perform copy
-     *
-     * @param is_deep NOP
-     * @return (root_t) (deep) copy
-     */
-    root_t *copy(const bool &is_deep = false) const {
-      return new self_t(*this);
     }
 };
 
@@ -813,19 +800,23 @@ class Matrix_Frozen {
     friend class Matrix_Frozen;
 
   protected:
-    const Array2D_Frozen<T> *storage; ///< 2D storage
+    storage_t storage; ///< 2D storage
     view_t view;
+
+    /**
+     * Constructor without storage.
+     *
+     */
+    Matrix_Frozen() : storage(), view(){}
 
     /**
      * Constructor with storage
      *
      * @param storage new storage
      */
-    Matrix_Frozen(const Array2D_Frozen<T> *new_storage) : storage(new_storage), view() {}
-    
-    inline const storage_t *array2d() const{
-      return static_cast<const storage_t *>(storage);
-    }
+    Matrix_Frozen(const Array2D_Frozen<T> &new_storage)
+        : storage(static_cast<const storage_t &>(new_storage)),
+        view() {}
   public:
     /**
      * Return row number.
@@ -833,7 +824,7 @@ class Matrix_Frozen {
      * @return row number.
      */
     const unsigned int rows() const noexcept {
-      return view.rows(storage->rows(), storage->columns());
+      return view.rows(storage.rows(), storage.columns());
     }
 
     /**
@@ -842,7 +833,7 @@ class Matrix_Frozen {
      * @return column number.
      */
     const unsigned int columns() const noexcept {
-      return view.columns(storage->rows(), storage->columns());
+      return view.columns(storage.rows(), storage.columns());
     }
 
     /**
@@ -855,15 +846,9 @@ class Matrix_Frozen {
     T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      return array2d()->storage_t::operator()(
+      return storage.storage_t::operator()(
           view.i(row, column), view.j(row, column));
     }
-
-    /**
-     * Constructor without storage.
-     *
-     */
-    Matrix_Frozen() : storage(NULL), view(){}
 
     /**
      * Copy constructor generating shallow copy.
@@ -871,23 +856,17 @@ class Matrix_Frozen {
      * @param matrix original
      */
     Matrix_Frozen(const self_t &matrix)
-        : storage(matrix.storage
-            ? matrix.array2d()->storage_t::copy(false)
-            : NULL),
+        : storage(matrix.storage),
         view(matrix.view){}
 
     template <class T2, class Array2D_Type2>
     Matrix_Frozen(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
-        : storage(matrix.storage
-            ? new storage_t(matrix.storage)
-            : NULL),
+        : storage(matrix.storage),
         view(matrix.view) {}
   protected:
     template <class ViewType2>
     Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &matrix)
-        : storage(matrix.storage
-            ? matrix.array2d()->storage_t::copy(false)
-            : NULL),
+        : storage(matrix.storage),
         view() {
       view_builder_t::copy(view, matrix.view);
     }
@@ -896,7 +875,7 @@ class Matrix_Frozen {
     /**
      * Destructor
      */
-    virtual ~Matrix_Frozen(){delete storage;}
+    virtual ~Matrix_Frozen(){}
 
     /**
      * Generate scalar matrix
@@ -907,7 +886,7 @@ class Matrix_Frozen {
     static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getScalar(
         const unsigned int &size, const T &scalar){
       return Matrix_Frozen<T, Array2D_ScaledUnit<T> >(
-          new Array2D_ScaledUnit<T>(size, scalar));
+          Array2D_ScaledUnit<T>(size, scalar));
     }
 
     /**
@@ -931,16 +910,14 @@ class Matrix_Frozen {
   protected:
     self_t &operator=(const self_t &matrix){
       if(this != &matrix){
-        delete storage;
-        storage = matrix.storage ? matrix.array2d()->storage_t::copy(false) : NULL;
+        storage = matrix.storage;
         view = matrix.view;
       }
       return *this;
     }
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix){
-      delete storage;
-      storage = matrix.storage ? new storage_t(*matrix.storage) : NULL;
+      storage = storage_t(matrix.storage);
       view = matrix.view;
       return *this;
     }
@@ -1195,7 +1172,7 @@ class Matrix_Frozen {
         typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
         static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
           return res_t(
-              new typename res_t::storage_t(
+              typename res_t::storage_t(
                 mat.rows(), mat.columns(), op_t(mat, scalar)));
         }
       };
@@ -1205,10 +1182,10 @@ class Matrix_Frozen {
         typedef self_t res_t;
         static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
           return res_t(
-              new typename res_t::storage_t(
+              typename res_t::storage_t(
                 mat.rows(), mat.columns(),
                 typename Operator::template property_t<res_t>::operator_t(
-                  mat.array2d()->op.lhs, mat.array2d()->op.rhs * scalar)));
+                  mat.storage.op.lhs, mat.storage.op.rhs * scalar)));
         }
       };
 #endif
@@ -1284,7 +1261,7 @@ class Matrix_Frozen {
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
         return mat_t(
-            new typename mat_t::storage_t(
+            typename mat_t::storage_t(
               mat1.rows(), mat1.columns(), op_t(mat1, mat2)));
       }
     };
@@ -1398,7 +1375,7 @@ class Matrix_Frozen {
         typedef Matrix_Frozen<T, Array2D_Operator<T, typename op_gen_t<>::op_t> > res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           return res_t(
-              new typename res_t::storage_t(
+              typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<res_t>::operator_t(mat1, mat2)));
         }
@@ -1414,15 +1391,15 @@ class Matrix_Frozen {
               typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           stage1_t mat_stage1(
-              new typename stage1_t::storage_t(
+              typename stage1_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<stage1_t>::operator_t(
-                  mat1.array2d()->op.lhs, mat2)));
+                  mat1.storage.op.lhs, mat2)));
           return res_t(
-              new typename res_t::storage_t(
+              typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<res_t>::operator_t(
-                  mat_stage1, mat1.array2d()->op.rhs)));
+                  mat_stage1, mat1.storage.op.rhs)));
         }
       };
       template <class U>
@@ -1436,15 +1413,15 @@ class Matrix_Frozen {
               typename Operator::template property_t<RHS_MatrixT>::operator_t::rhs_t>::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           stage1_t mat_stage1(
-              new typename stage1_t::storage_t(
+              typename stage1_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<stage1_t>::operator_t(
-                  mat1, mat2.array2d()->op.lhs)));
+                  mat1, mat2.storage.op.lhs)));
           return res_t(
-              new typename res_t::storage_t(
+              typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<res_t>::operator_t(
-                  mat_stage1, mat2.array2d()->op.rhs)));
+                  mat_stage1, mat2.storage.op.rhs)));
         }
       };
       template <class U>
@@ -1458,15 +1435,15 @@ class Matrix_Frozen {
               typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           stage1_t mat_stage1(
-              new typename stage1_t::storage_t(
+              typename stage1_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<stage1_t>::operator_t(
-                  mat1.array2d()->op.lhs, mat2.array2d()->op.lhs)));
+                  mat1.storage.op.lhs, mat2.storage.op.lhs)));
           return res_t(
-              new typename res_t::storage_t(
+              typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
                 typename Operator::template property_t<res_t>::operator_t(
-                  mat_stage1, mat1.array2d()->op.rhs * mat2.array2d()->op.rhs)));
+                  mat_stage1, mat1.storage.op.rhs * mat2.storage.op.rhs)));
         }
       };
 #endif
@@ -1564,17 +1541,15 @@ class Matrix_Frozen {
      *
      */
     friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
-      if(matrix.storage){
-        out << "{";
-        for(unsigned int i(0); i < matrix.rows(); i++){
-          out << (i == 0 ? "" : ",") << std::endl << "{";
-          for(unsigned int j(0); j < matrix.columns(); j++){
-            out << (j == 0 ? "" : ",") << matrix(i, j);
-          }
-          out << "}";
+      out << "{";
+      for(unsigned int i(0); i < matrix.rows(); i++){
+        out << (i == 0 ? "" : ",") << std::endl << "{";
+        for(unsigned int j(0); j < matrix.columns(); j++){
+          out << (j == 0 ? "" : ",") << matrix(i, j);
         }
-        out << std::endl << "}";
+        out << "}";
       }
+      out << std::endl << "}";
       return out;
     }
 };
@@ -1632,12 +1607,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      *
      * @param storage new storage
      */
-    Matrix(const Array2D<T> *new_storage) : super_t(new_storage) {}
+    Matrix(const Array2D<T, Array2D_Type> &new_storage) : super_t(new_storage) {}
 
-    using super_t::array2d;
-    inline storage_t *array2d() {
-      return const_cast<storage_t *>(const_cast<const self_t *>(this)->array2d());
-    }
+    using super_t::storage;
 
   public:
     /**
@@ -1651,7 +1623,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     T &operator()(
         const unsigned int &row,
         const unsigned int &column){
-      return array2d()->storage_t::operator()(
+      return storage.storage_t::operator()(
             super_t::view.i(row, column), super_t::view.j(row, column));
     }
 
@@ -1670,7 +1642,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
           }
         }
       }else{
-        array2d()->storage_t::clear();
+        storage.storage_t::clear();
       }
     }
 
@@ -1678,7 +1650,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * Constructor without storage.
      *
      */
-    Matrix() : super_t(NULL){}
+    Matrix() : super_t(){}
 
     /**
      * Constructor with specified row and column numbers.
@@ -1691,7 +1663,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     Matrix(
         const unsigned int &rows,
         const unsigned int &columns)
-        : super_t(new storage_t(rows, columns)){
+        : super_t(Array2D_Type(rows, columns)){
+      /* Array2D_Type is intentionally used instead of storage_t due to VC10(C2514) */
       clear();
     }
 
@@ -1708,7 +1681,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &rows,
         const unsigned int &columns,
         const T *serialized)
-        : super_t(new storage_t(rows, columns, serialized)){
+        : super_t(Array2D_Type(rows, columns, serialized)){
+      /* Array2D_Type is intentionally used instead of storage_t due to VC10(C2514) */
     }
 
     /**
@@ -1746,7 +1720,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     static viewless_t blank(
         const unsigned int &new_rows,
         const unsigned int &new_columns){
-      return viewless_t(new storage_t(new_rows, new_columns));
+      /* Array2D_Type is intentionally used instead of storage_t due to VC10(C2597) */
+      return viewless_t(Array2D_Type(new_rows, new_columns));
     }
 
   protected:
@@ -1787,7 +1762,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     viewless_t copy() const {
       if(view_property_t::viewless){
-        return viewless_t(array2d()->storage_t::copy(true));
+        return viewless_t(storage.storage_t::copy(true));
       }else{
         return blank_copy().replace_internal(*this);
       }
