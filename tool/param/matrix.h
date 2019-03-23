@@ -1147,18 +1147,21 @@ class Matrix_Frozen {
     struct BinaryOperator : public Operator {
       typedef LHS_T lhs_t;
       typedef RHS_T rhs_t;
+      lhs_t lhs; ///< Left hand side value
+      rhs_t rhs; ///< Right hand side value
+      BinaryOperator(const lhs_t &_lhs, const RHS_T &_rhs) noexcept
+          : lhs(_lhs), rhs(_rhs) {}
     };
 
     template <class RHS_T>
     struct Multiply_Matrix_by_Scalar {
       struct op_t : public BinaryOperator<self_t, RHS_T> {
         static const int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
-        self_t lhs; ///< Left hand side value
-        RHS_T rhs; ///< Right hand side value
+        typedef BinaryOperator<self_t, RHS_T> super_t;
         op_t(const self_t &mat, const RHS_T &scalar) noexcept
-            : lhs(mat), rhs(scalar) {}
+            : super_t(mat, scalar) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-          return lhs(row, column) * rhs;
+          return super_t::lhs(row, column) * super_t::rhs;
         }
       };
 
@@ -1245,15 +1248,14 @@ class Matrix_Frozen {
     struct Add_Matrix_to_Matrix {
       struct op_t : public BinaryOperator<self_t, RHS_MatrixT> {
         static const int tag = OPERATOR_2_Add_Matrix_to_Matrix;
-        self_t lhs; ///< Left hand side value
-        RHS_MatrixT rhs; ///< Right hand side value
+        typedef BinaryOperator<self_t, RHS_MatrixT> super_t;
         op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
-            : lhs(mat1), rhs(mat2) {}
+            : super_t(mat1, mat2) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
           if(rhs_positive){
-            return lhs(row, column) + rhs(row, column);
+            return super_t::lhs(row, column) + super_t::rhs(row, column);
           }else{
-            return lhs(row, column) - rhs(row, column);
+            return super_t::lhs(row, column) - super_t::rhs(row, column);
           }
         }
       };
@@ -1348,14 +1350,13 @@ class Matrix_Frozen {
 
         struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
           static const int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
-          lhs_opt_t lhs; ///< Left hand side value
-          rhs_opt_t rhs; ///< Right hand side value
+          typedef BinaryOperator<lhs_opt_t, rhs_opt_t> super_t;
           op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
-              : lhs(mat1), rhs(mat2) {}
+              : super_t(mat1, mat2) {}
           T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-            T res(lhs(row, 0) * rhs(0, column));
-            for(unsigned int i(1); i < lhs.columns(); ++i){
-              res += lhs(row, i) * rhs(i, column);
+            T res(0);
+            for(unsigned int i(0); i < super_t::lhs.columns(); ++i){
+              res += super_t::lhs(row, i) * super_t::rhs(i, column);
             }
             return res;
           }
