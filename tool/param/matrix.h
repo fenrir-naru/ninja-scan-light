@@ -423,7 +423,7 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
     typedef Array2D_Frozen<T> super_t;
     typedef Array2D_Frozen<T> root_t;
 
-    OperatorT op;
+    const OperatorT op;
 
     /**
      * Constructor
