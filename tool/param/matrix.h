@@ -1117,10 +1117,12 @@ class Matrix_Frozen {
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
+      OPERATOR_UNKNOWN,
       OPERATOR_NONE,
     };
 
     struct Operator {
+      static const int tag = OPERATOR_UNKNOWN;
       template <class MatrixT = self_t, class U1 = void, class U2 = void>
       struct property_t {
         static const int tag = OPERATOR_NONE;
@@ -1552,6 +1554,66 @@ class Matrix_Frozen {
       }
       out << std::endl << "}";
       return out;
+    }
+
+    struct inspect_t {
+      self_t mat;
+      inspect_t(const self_t &target) : mat(target){}
+
+      struct formatter_t {
+        std::ostream &out;
+        formatter_t(std::ostream &_out) : out(_out) {}
+
+        template <class U>
+        formatter_t &operator<<(const U &u){
+          out << u;
+          return *this;
+        }
+        formatter_t &operator<<(std::ostream &(*f)(std::ostream &)){
+          // for std::endl, which is defined with template<class CharT, class Traits>
+          // ostream = basic_ostream<char>
+          out << f;
+          return *this;
+        }
+
+        template <class T2, class Array2D_Type2, class View_Type2>
+        formatter_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
+          return (*this) << "M(" << m.rows() << "," << m.columns() << ")";
+        }
+        template <class OperatorT>
+        formatter_t &print_op2(const OperatorT &op){
+          return (*this) << op.lhs << ", " << op.rhs;
+        }
+        template <class T2, class OperatorT, class View_Type2>
+        formatter_t &operator<<(
+            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
+          switch(Operator::template property_t<
+              Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> >::tag){
+            case OPERATOR_2_Multiply_Matrix_by_Scalar:
+            case OPERATOR_2_Multiply_Matrix_by_Matrix:
+              return ((*this) << "(*, ").print_op2(m.storage.op) << ")";
+            case OPERATOR_2_Add_Matrix_to_Matrix:
+              return ((*this) << "(+, ").print_op2(m.storage.op) << ")";
+          }
+          return (*this) << "(?)";
+        }
+      };
+
+      std::ostream &operator()(std::ostream &out) const {
+        formatter_t(out)
+            << "prop: {" << std::endl
+            << "  *(R,C): (" << mat.rows() << "," << mat.columns() << ")" << std::endl
+            << "  *view: " << mat.view << std::endl
+            << "  *storage: " << mat << std::endl
+            << "}";
+        return out;
+      }
+    };
+    friend std::ostream &operator<<(std::ostream &out, const inspect_t &inspector){
+      return inspector(out);
+    }
+    inspect_t inspect() const {
+      return inspect_t(*this);
     }
 };
 
