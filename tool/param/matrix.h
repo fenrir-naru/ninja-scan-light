@@ -468,7 +468,9 @@ template <class BaseView = void>
 struct MatrixViewBase {
   typedef MatrixViewBase self_t;
 
-  friend std::ostream &operator<<(std::ostream &out, const self_t &view){
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const self_t &view){
     return out << " [V]";
   }
 
@@ -704,7 +706,9 @@ struct MatrixViewTranspose : protected BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
-  friend std::ostream &operator<<(std::ostream &out, const MatrixViewTranspose<BaseView> &view){
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewTranspose<BaseView> &view){
     return out << " [T]" << (const BaseView &)view;
   }
 
@@ -748,7 +752,9 @@ struct MatrixViewPartial : protected BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
-  friend std::ostream &operator<<(std::ostream &out, const MatrixViewPartial<BaseView> &view){
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewPartial<BaseView> &view){
     return out << " [P]("
          << view.partial_prop.rows << ","
          << view.partial_prop.columns << ","
@@ -1544,7 +1550,9 @@ class Matrix_Frozen {
      * Print matrix
      *
      */
-    friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(
+        std::basic_ostream<CharT, Traits> &out, const self_t &matrix){
       out << "{";
       for(unsigned int i(0); i < matrix.rows(); i++){
         out << (i == 0 ? "" : ",") << std::endl << "{";
@@ -1561,32 +1569,32 @@ class Matrix_Frozen {
       self_t mat;
       inspect_t(const self_t &target) : mat(target){}
 
-      struct formatter_t {
-        std::ostream &out;
-        formatter_t(std::ostream &_out) : out(_out) {}
+      template <class CharT, class Traits>
+      struct format_t {
+        std::basic_ostream<CharT, Traits> &out;
+        format_t(std::basic_ostream<CharT, Traits> &_out) : out(_out) {}
 
         template <class U>
-        formatter_t &operator<<(const U &u){
+        format_t &operator<<(const U &u){
           out << u;
           return *this;
         }
-        formatter_t &operator<<(std::ostream &(*f)(std::ostream &)){
+        format_t &operator<<(std::basic_ostream<CharT, Traits> &(*f)(std::basic_ostream<CharT, Traits> &)){
           // for std::endl, which is defined with template<class CharT, class Traits>
-          // ostream = basic_ostream<char>
           out << f;
           return *this;
         }
 
         template <class T2, class Array2D_Type2, class View_Type2>
-        formatter_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
+        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
           return (*this) << "M(" << m.rows() << "," << m.columns() << ")";
         }
         template <class LHS_T, class RHS_T>
-        formatter_t &operator<<(const Array2D_Operator_Binary<LHS_T, RHS_T> &op){
+        format_t &operator<<(const Array2D_Operator_Binary<LHS_T, RHS_T> &op){
           return (*this) << op.lhs << ", " << op.rhs;
         }
         template <class T2, class OperatorT, class View_Type2>
-        formatter_t &operator<<(
+        format_t &operator<<(
             const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
           const char *symbol = "";
           switch(OperatorProperty<
@@ -1604,8 +1612,9 @@ class Matrix_Frozen {
         }
       };
 
-      std::ostream &operator()(std::ostream &out) const {
-        formatter_t(out)
+      template<class CharT, class Traits>
+      std::basic_ostream<CharT, Traits> &operator()(std::basic_ostream<CharT, Traits> &out) const {
+        format_t<CharT, Traits>(out)
             << "prop: {" << std::endl
             << "  *(R,C): (" << mat.rows() << "," << mat.columns() << ")" << std::endl
             << "  *view: " << mat.view << std::endl
@@ -1614,7 +1623,8 @@ class Matrix_Frozen {
         return out;
       }
     };
-    friend std::ostream &operator<<(std::ostream &out, const inspect_t &inspector){
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(std::basic_ostream<CharT, Traits> &out, const inspect_t &inspector){
       return inspector(out);
     }
     inspect_t inspect() const {
