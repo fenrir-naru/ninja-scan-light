@@ -1342,7 +1342,7 @@ class Matrix_Frozen {
          * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
          */
 
-        template <class MatrixT, bool cache_on = false>
+        template <class MatrixT, bool cache_on = check_t<MatrixT>::has_multi_mat_by_mat>
         struct optimizer1_t {
           typedef MatrixT res_t;
         };
@@ -1352,20 +1352,21 @@ class Matrix_Frozen {
           typedef typename MatrixT::downcast_default_t res_t;
         };
 #endif
-        typedef typename optimizer1_t<LHS_T,
-            check_t<LHS_T>::has_multi_mat_by_mat>::res_t lhs_opt_t;
-        typedef typename optimizer1_t<RHS_T,
-            check_t<RHS_T>::has_multi_mat_by_mat>::res_t rhs_opt_t;
+        typedef typename optimizer1_t<LHS_T>::res_t lhs_opt_t;
+        typedef typename optimizer1_t<RHS_T>::res_t rhs_opt_t;
 
-        struct op_t : public Array2D_Operator_Binary<lhs_opt_t, rhs_opt_t> {
+        struct op_t : public Array2D_Operator_Binary<LHS_T, RHS_T> {
           static const int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
-          typedef Array2D_Operator_Binary<lhs_opt_t, rhs_opt_t> super_t;
+          typedef Array2D_Operator_Binary<LHS_T, RHS_T> super_t;
+          lhs_opt_t lhs_opt;
+          rhs_opt_t rhs_opt;
           op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
-              : super_t(mat1, mat2) {}
+              : super_t(mat1, mat2), // Preserve original operation on superclass
+              lhs_opt(super_t::lhs), rhs_opt(super_t::rhs) {}
           T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
             T res(0);
-            for(unsigned int i(0); i < super_t::lhs.columns(); ++i){
-              res += super_t::lhs(row, i) * super_t::rhs(i, column);
+            for(unsigned int i(0); i < lhs_opt.columns(); ++i){
+              res += lhs_opt(row, i) * rhs_opt(i, column);
             }
             return res;
           }
