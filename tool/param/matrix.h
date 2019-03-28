@@ -1132,6 +1132,7 @@ class Matrix_Frozen {
     enum {
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
+      OPERATOR_2_Subtract_Matrix_from_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
       OPERATOR_NONE,
     };
@@ -1256,7 +1257,9 @@ class Matrix_Frozen {
     template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
       struct op_t : public Array2D_Operator_Binary<self_t, RHS_MatrixT> {
-        static const int tag = OPERATOR_2_Add_Matrix_to_Matrix;
+        static const int tag = rhs_positive
+            ? OPERATOR_2_Add_Matrix_to_Matrix
+            : OPERATOR_2_Subtract_Matrix_from_Matrix;
         typedef Array2D_Operator_Binary<self_t, RHS_MatrixT> super_t;
         op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
             : super_t(mat1, mat2) {}
@@ -1326,6 +1329,7 @@ class Matrix_Frozen {
               || check_binary_t<
                 (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
                 || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
+                || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
                 || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
                 >::has_multi_mat_by_mat;
         static const bool is_multi_mat_by_scalar
@@ -1608,6 +1612,8 @@ class Matrix_Frozen {
               symbol = "*"; break;
             case OPERATOR_2_Add_Matrix_to_Matrix:
               symbol = "+"; break;
+            case OPERATOR_2_Subtract_Matrix_from_Matrix:
+              symbol = "-"; break;
             default:
               return (*this) << "(?)";
           }
