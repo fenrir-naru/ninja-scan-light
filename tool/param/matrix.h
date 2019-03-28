@@ -1588,7 +1588,10 @@ class Matrix_Frozen {
 
         template <class T2, class Array2D_Type2, class View_Type2>
         format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
-          return (*this) << "M(" << m.rows() << "," << m.columns() << ")";
+          return (*this) << "M"
+              << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
+              << (MatrixViewProperty<View_Type2>::partialized ? "p" : "")
+              << "(" << m.rows() << "," << m.columns() << ")";
         }
         template <class LHS_T, class RHS_T>
         format_t &operator<<(const Array2D_Operator_Binary<LHS_T, RHS_T> &op){
