@@ -15,9 +15,12 @@
 
 #include <boost/type_traits/is_same.hpp>
 
+#include <boost/format.hpp>
+
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
 #include <boost/test/floating_point_comparison.hpp>
+#include <boost/test/output_test_stream.hpp>
 
 #if !defined(BOOST_VERSION)
 #define BOOST_FIXTURE_TEST_SUITE(name, fixture)
@@ -393,6 +396,53 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   matrix_t _A4(((*A) * 2) * ((*B) * 2));
   BOOST_TEST_MESSAGE("*:" << _A4);
   matrix_compare_delta(a4, _A4, ACCEPTABLE_DELTA_DEFAULT);
+}
+
+template<class T, class Array2D_Type, class ViewType, class U>
+void matrix_inspect_contains(
+    const Matrix_Frozen<T, Array2D_Type, ViewType> &m,
+    const U &cmp){
+  boost::test_tools::output_test_stream os;
+  os << m.inspect();
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.str().find(cmp) != std::string::npos);
+}
+BOOST_AUTO_TEST_CASE(matrix_inspect){
+  using boost::format;
+
+  matrix_inspect_contains(
+      *A,
+      (format("*storage: M(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
+      A->transpose(),
+      (format("*storage: Mt(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
+      A->partial(2, 3, 1, 1),
+      "*storage: Mp(2,3)");
+  matrix_inspect_contains(
+      (*A * 2),
+      (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
+  matrix_inspect_contains(
+      (-(*A)),
+      (format("*storage: (*, M(%1%,%1%), -1)") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A) + (*B)),
+      (format("*storage: (+, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A) - (*B)),
+      (format("*storage: (-, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A) * (*B)),
+      (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A) * (*B) * (*A)),
+      (format("*storage: (*, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      (((*A) * (*B)) + (*A)),
+      (format("*storage: (+, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      (((A->partial(2, 3, 1, 1).transpose()) * (B->partial(2, 3, 1, 1))) + (A->partial(3, 3, 1, 2))),
+      "*storage: (+, (*, Mtp(3,2), Mp(2,3)), Mp(3,3))");
 }
 
 void check_inv(const matrix_t &mat){

@@ -423,7 +423,7 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
     typedef Array2D_Frozen<T> super_t;
     typedef Array2D_Frozen<T> root_t;
 
-    OperatorT op;
+    const OperatorT op;
 
     /**
      * Constructor
@@ -453,12 +453,24 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
     }
 };
 
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_Binary {
+  typedef LHS_T lhs_t;
+  typedef RHS_T rhs_t;
+  lhs_t lhs; ///< Left hand side value
+  rhs_t rhs; ///< Right hand side value
+  Array2D_Operator_Binary(const lhs_t &_lhs, const RHS_T &_rhs) noexcept
+      : lhs(_lhs), rhs(_rhs) {}
+};
+
 
 template <class BaseView = void>
 struct MatrixViewBase {
   typedef MatrixViewBase self_t;
 
-  friend std::ostream &operator<<(std::ostream &out, const self_t &view){
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const self_t &view){
     return out << " [V]";
   }
 
@@ -694,7 +706,9 @@ struct MatrixViewTranspose : protected BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
-  friend std::ostream &operator<<(std::ostream &out, const MatrixViewTranspose<BaseView> &view){
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewTranspose<BaseView> &view){
     return out << " [T]" << (const BaseView &)view;
   }
 
@@ -738,7 +752,9 @@ struct MatrixViewPartial : protected BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
-  friend std::ostream &operator<<(std::ostream &out, const MatrixViewPartial<BaseView> &view){
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewPartial<BaseView> &view){
     return out << " [P]("
          << view.partial_prop.rows << ","
          << view.partial_prop.columns << ","
@@ -1116,49 +1132,46 @@ class Matrix_Frozen {
     enum {
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
+      OPERATOR_2_Subtract_Matrix_from_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
       OPERATOR_NONE,
     };
 
-    struct Operator {
-      template <class MatrixT = self_t, class U1 = void, class U2 = void>
-      struct property_t {
+    template <class MatrixT = self_t>
+    struct OperatorProperty {
+      template <class U>
+      struct check1_t {
         static const int tag = OPERATOR_NONE;
         typedef void operator_t;
       };
       template <class T2, class Array2D_Type2, class View_Type2>
-      struct property_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
+      struct check1_t<Matrix_Frozen<T2, Array2D_Type2, View_Type2> > {
         template <class Array2D_Type3>
-        struct check_t {
+        struct check2_t {
           static const int tag = OPERATOR_NONE;
           typedef void operator_t;
         };
         template <class OperatorT>
-        struct check_t<Array2D_Operator<T2, OperatorT> >{
+        struct check2_t<Array2D_Operator<T2, OperatorT> >{
           static const int tag = OperatorT::tag;
           typedef OperatorT operator_t;
         };
-        static const int tag = check_t<Array2D_Type2>::tag;
-        typedef typename check_t<Array2D_Type2>::operator_t operator_t;
+        static const int tag = check2_t<Array2D_Type2>::tag;
+        typedef typename check2_t<Array2D_Type2>::operator_t operator_t;
       };
-    };
-
-    template <class LHS_T, class RHS_T>
-    struct BinaryOperator : public Operator {
-      typedef LHS_T lhs_t;
-      typedef RHS_T rhs_t;
+      static const int tag = check1_t<MatrixT>::tag;
+      typedef typename check1_t<MatrixT>::operator_t operator_t;
     };
 
     template <class RHS_T>
     struct Multiply_Matrix_by_Scalar {
-      struct op_t : public BinaryOperator<self_t, RHS_T> {
+      struct op_t : public Array2D_Operator_Binary<self_t, RHS_T> {
         static const int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
-        self_t lhs; ///< Left hand side value
-        RHS_T rhs; ///< Right hand side value
+        typedef Array2D_Operator_Binary<self_t, RHS_T> super_t;
         op_t(const self_t &mat, const RHS_T &scalar) noexcept
-            : lhs(mat), rhs(scalar) {}
+            : super_t(mat, scalar) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-          return lhs(row, column) * rhs;
+          return super_t::lhs(row, column) * super_t::rhs;
         }
       };
 
@@ -1184,14 +1197,14 @@ class Matrix_Frozen {
           return res_t(
               typename res_t::storage_t(
                 mat.rows(), mat.columns(),
-                typename Operator::template property_t<res_t>::operator_t(
+                typename OperatorProperty<res_t>::operator_t(
                   mat.storage.op.lhs, mat.storage.op.rhs * scalar)));
         }
       };
 #endif
 
       typedef optimizer_t<
-          Operator::template property_t<self_t>::tag
+          OperatorProperty<self_t>::tag
             == OPERATOR_2_Multiply_Matrix_by_Scalar> opt_t;
       typedef typename opt_t::res_t mat_t;
       static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
@@ -1243,17 +1256,18 @@ class Matrix_Frozen {
 
     template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
-      struct op_t : public BinaryOperator<self_t, RHS_MatrixT> {
-        static const int tag = OPERATOR_2_Add_Matrix_to_Matrix;
-        self_t lhs; ///< Left hand side value
-        RHS_MatrixT rhs; ///< Right hand side value
+      struct op_t : public Array2D_Operator_Binary<self_t, RHS_MatrixT> {
+        static const int tag = rhs_positive
+            ? OPERATOR_2_Add_Matrix_to_Matrix
+            : OPERATOR_2_Subtract_Matrix_from_Matrix;
+        typedef Array2D_Operator_Binary<self_t, RHS_MatrixT> super_t;
         op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
-            : lhs(mat1), rhs(mat2) {}
+            : super_t(mat1, mat2) {}
         T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
           if(rhs_positive){
-            return lhs(row, column) + rhs(row, column);
+            return super_t::lhs(row, column) + super_t::rhs(row, column);
           }else{
-            return lhs(row, column) - rhs(row, column);
+            return super_t::lhs(row, column) - super_t::rhs(row, column);
           }
         }
       };
@@ -1296,7 +1310,7 @@ class Matrix_Frozen {
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix {
 
-      template <class MatrixT, int tag = Operator::template property_t<MatrixT>::tag>
+      template <class MatrixT, int tag = OperatorProperty<MatrixT>::tag>
       struct check_t {
         template <bool is_binary, class U = void>
         struct check_binary_t {
@@ -1305,9 +1319,9 @@ class Matrix_Frozen {
         template <class U>
         struct check_binary_t<true, U> {
           static const bool has_multi_mat_by_mat
-              = (check_t<typename Operator::template property_t<MatrixT>::operator_t::lhs_t>
+              = (check_t<typename OperatorProperty<MatrixT>::operator_t::lhs_t>
                   ::has_multi_mat_by_mat)
-                || (check_t<typename Operator::template property_t<MatrixT>::operator_t::rhs_t>
+                || (check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t>
                   ::has_multi_mat_by_mat);
         };
         static const bool has_multi_mat_by_mat
@@ -1315,6 +1329,7 @@ class Matrix_Frozen {
               || check_binary_t<
                 (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
                 || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
+                || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
                 || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
                 >::has_multi_mat_by_mat;
         static const bool is_multi_mat_by_scalar
@@ -1331,7 +1346,7 @@ class Matrix_Frozen {
          * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
          */
 
-        template <class MatrixT, bool cache_on = false>
+        template <class MatrixT, bool cache_on = check_t<MatrixT>::has_multi_mat_by_mat>
         struct optimizer1_t {
           typedef MatrixT res_t;
         };
@@ -1341,21 +1356,21 @@ class Matrix_Frozen {
           typedef typename MatrixT::downcast_default_t res_t;
         };
 #endif
-        typedef typename optimizer1_t<LHS_T,
-            check_t<LHS_T>::has_multi_mat_by_mat>::res_t lhs_opt_t;
-        typedef typename optimizer1_t<RHS_T,
-            check_t<RHS_T>::has_multi_mat_by_mat>::res_t rhs_opt_t;
+        typedef typename optimizer1_t<LHS_T>::res_t lhs_opt_t;
+        typedef typename optimizer1_t<RHS_T>::res_t rhs_opt_t;
 
-        struct op_t : public BinaryOperator<lhs_opt_t, rhs_opt_t> {
+        struct op_t : public Array2D_Operator_Binary<LHS_T, RHS_T> {
           static const int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
-          lhs_opt_t lhs; ///< Left hand side value
-          rhs_opt_t rhs; ///< Right hand side value
+          typedef Array2D_Operator_Binary<LHS_T, RHS_T> super_t;
+          lhs_opt_t lhs_opt;
+          rhs_opt_t rhs_opt;
           op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
-              : lhs(mat1), rhs(mat2) {}
+              : super_t(mat1, mat2), // Preserve original operation on superclass
+              lhs_opt(super_t::lhs), rhs_opt(super_t::rhs) {}
           T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-            T res(lhs(row, 0) * rhs(0, column));
-            for(unsigned int i(1); i < lhs.columns(); ++i){
-              res += lhs(row, i) * rhs(i, column);
+            T res(0);
+            for(unsigned int i(0); i < lhs_opt.columns(); ++i){
+              res += lhs_opt(row, i) * rhs_opt(i, column);
             }
             return res;
           }
@@ -1377,28 +1392,28 @@ class Matrix_Frozen {
           return res_t(
               typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<res_t>::operator_t(mat1, mat2)));
+                typename OperatorProperty<res_t>::operator_t(mat1, mat2)));
         }
       };
 #if 1 // 0 = remove optimizer
       template <class U>
       struct optimizer2_t<true, false, U> {
         // (M * S) * M => (M * M) * S
-        typedef typename Operator::template property_t<self_t>::operator_t::lhs_t
+        typedef typename OperatorProperty<self_t>::operator_t::lhs_t
             ::template Multiply_Matrix_by_Matrix<RHS_MatrixT>::mat_t stage1_t;
         typedef typename stage1_t
             ::template Multiply_Matrix_by_Scalar<
-              typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
+              typename OperatorProperty<self_t>::operator_t::rhs_t>::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           stage1_t mat_stage1(
               typename stage1_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<stage1_t>::operator_t(
+                typename OperatorProperty<stage1_t>::operator_t(
                   mat1.storage.op.lhs, mat2)));
           return res_t(
               typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<res_t>::operator_t(
+                typename OperatorProperty<res_t>::operator_t(
                   mat_stage1, mat1.storage.op.rhs)));
         }
       };
@@ -1407,42 +1422,42 @@ class Matrix_Frozen {
         // M * (M * S) => (M * M) * S
         typedef typename self_t
             ::template Multiply_Matrix_by_Matrix<
-              typename Operator::template property_t<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
+              typename OperatorProperty<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
         typedef typename stage1_t
             ::template Multiply_Matrix_by_Scalar<
-              typename Operator::template property_t<RHS_MatrixT>::operator_t::rhs_t>::mat_t res_t;
+              typename OperatorProperty<RHS_MatrixT>::operator_t::rhs_t>::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           stage1_t mat_stage1(
               typename stage1_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<stage1_t>::operator_t(
+                typename OperatorProperty<stage1_t>::operator_t(
                   mat1, mat2.storage.op.lhs)));
           return res_t(
               typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<res_t>::operator_t(
+                typename OperatorProperty<res_t>::operator_t(
                   mat_stage1, mat2.storage.op.rhs)));
         }
       };
       template <class U>
       struct optimizer2_t<true, true, U> {
         // (M * S) * (M * S) => (M * M) * (S * S)
-        typedef typename Operator::template property_t<self_t>::operator_t::lhs_t
+        typedef typename OperatorProperty<self_t>::operator_t::lhs_t
             ::template Multiply_Matrix_by_Matrix<
-              typename Operator::template property_t<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
+              typename OperatorProperty<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
         typedef typename stage1_t
             ::template Multiply_Matrix_by_Scalar<
-              typename Operator::template property_t<self_t>::operator_t::rhs_t>::mat_t res_t;
+              typename OperatorProperty<self_t>::operator_t::rhs_t>::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           stage1_t mat_stage1(
               typename stage1_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<stage1_t>::operator_t(
+                typename OperatorProperty<stage1_t>::operator_t(
                   mat1.storage.op.lhs, mat2.storage.op.lhs)));
           return res_t(
               typename res_t::storage_t(
                 mat1.rows(), mat2.columns(),
-                typename Operator::template property_t<res_t>::operator_t(
+                typename OperatorProperty<res_t>::operator_t(
                   mat_stage1, mat1.storage.op.rhs * mat2.storage.op.rhs)));
         }
       };
@@ -1540,7 +1555,9 @@ class Matrix_Frozen {
      * Print matrix
      *
      */
-    friend std::ostream &operator<<(std::ostream &out, const self_t &matrix){
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(
+        std::basic_ostream<CharT, Traits> &out, const self_t &matrix){
       out << "{";
       for(unsigned int i(0); i < matrix.rows(); i++){
         out << (i == 0 ? "" : ",") << std::endl << "{";
@@ -1551,6 +1568,77 @@ class Matrix_Frozen {
       }
       out << std::endl << "}";
       return out;
+    }
+
+    struct inspect_t {
+      self_t mat;
+      inspect_t(const self_t &target) : mat(target){}
+
+      template <class CharT, class Traits>
+      struct format_t {
+        std::basic_ostream<CharT, Traits> &out;
+        format_t(std::basic_ostream<CharT, Traits> &_out) : out(_out) {}
+
+        template <class U>
+        format_t &operator<<(const U &u){
+          out << u;
+          return *this;
+        }
+        format_t &operator<<(std::basic_ostream<CharT, Traits> &(*f)(std::basic_ostream<CharT, Traits> &)){
+          // for std::endl, which is defined with template<class CharT, class Traits>
+          out << f;
+          return *this;
+        }
+
+        template <class T2, class Array2D_Type2, class View_Type2>
+        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
+          return (*this) << "M"
+              << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
+              << (MatrixViewProperty<View_Type2>::partialized ? "p" : "")
+              << "(" << m.rows() << "," << m.columns() << ")";
+        }
+        template <class LHS_T, class RHS_T>
+        format_t &operator<<(const Array2D_Operator_Binary<LHS_T, RHS_T> &op){
+          return (*this) << op.lhs << ", " << op.rhs;
+        }
+        template <class T2, class OperatorT, class View_Type2>
+        format_t &operator<<(
+            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
+          const char *symbol = "";
+          switch(OperatorProperty<
+              Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> >::tag){
+            case OPERATOR_2_Multiply_Matrix_by_Scalar:
+            case OPERATOR_2_Multiply_Matrix_by_Matrix:
+              symbol = "*"; break;
+            case OPERATOR_2_Add_Matrix_to_Matrix:
+              symbol = "+"; break;
+            case OPERATOR_2_Subtract_Matrix_from_Matrix:
+              symbol = "-"; break;
+            default:
+              return (*this) << "(?)";
+          }
+          return (*this) << "(" << symbol << ", "
+              << (typename OperatorT::super_t)m.storage.op << ")"; // cast to Array2D_Operator_Binary
+        }
+      };
+
+      template<class CharT, class Traits>
+      std::basic_ostream<CharT, Traits> &operator()(std::basic_ostream<CharT, Traits> &out) const {
+        format_t<CharT, Traits>(out)
+            << "prop: {" << std::endl
+            << "  *(R,C): (" << mat.rows() << "," << mat.columns() << ")" << std::endl
+            << "  *view: " << mat.view << std::endl
+            << "  *storage: " << mat << std::endl
+            << "}";
+        return out;
+      }
+    };
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(std::basic_ostream<CharT, Traits> &out, const inspect_t &inspector){
+      return inspector(out);
+    }
+    inspect_t inspect() const {
+      return inspect_t(*this);
     }
 };
 
