@@ -1,33 +1,67 @@
 #!/usr/bin/ruby
-#coding cp932
 
 class R_Bootstrap
-  
-  SETUP_INF = <<-__TEXT__
+  class <<self
+    def registry_check
+      [:HKLM, :HKCU].collect{|head|
+        `reg query "#{head}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall" /f "R for Windows*is1" 2>nul`.scrub.lines
+      }.flatten.collect{|line|
+        next unless line.strip =~ /^\s*(.*_is1)/
+        $1
+      }.compact
+    end
+    
+    def setup_options(opt = {})
+      r_ver = opt[:ver] || '3.5.3'
+      dst_dir = opt[:dst_dir] \
+          || File::join(File::dirname(File::absolute_path(__FILE__)), "R-#{r_ver}")
+      arch = opt[:arch] || case `echo %PROCESSOR_ARCHITECTURE% `
+        when /AMD64/; 'x64'
+        when /x86/; `echo %PROCESSOR_ARCHITEW6432% ` =~ /AMD86/ ? 'x64' : 'i386'
+        else; 'i386'
+      end
+      {
+        :dst_dir => dst_dir,
+        :r_ver => r_ver,
+        :arch => arch,
+        :src_url => "https://cran.ism.ac.jp/bin/windows/base/R-#{r_ver}-win.exe",
+        :setup_inf => (<<-__TEXT__).gsub(/\R/, "\r\n"),
 [Setup]
-Dir=DST_DIR
+Dir=#{dst_dir}
 Group=R
 NoIcons=1
 SetupType=custom
-Components=main,x64,translations
+Components=main,#{arch},translations
 Tasks=
 [R]
 MDISDI=MDI
 HelpStyle=HTML
-  __TEXT__
-  
-  DEFAULT_PROP = {
-    :dst_dir => File::join(File::dirname(File::absolute_path(__FILE__)), 'R'),
-    :url => 'https://cran.ism.ac.jp/bin/windows/base/R-3.5.3-win.exe',
-  }
-  
-  class <<self
+            __TEXT__
+      }.merge(opt)
+    end
+    
+    def check_installation(opt = {})
+      opt = setup_options(opt)
+      File::exist?(File::join(opt[:dst_dir], 'bin', opt[:arch], 'R.exe')) ? opt : nil
+    end
+    
     def setup(opt = {})
-      opt = DEFAULT_PROP.merge(opt)
-      require 'open-uri'
+      opt = setup_options(opt)
       
-      $stderr.print "1) Downloading R "
-      open(opt[:url], 'rb',
+      $stderr.print "0) Check previous installation of R #{opt[:r_ver]}: "
+      checked = check_installation(opt)
+      if checked then
+        $stderr.puts "found, installation will be skipped."
+        return checked
+      else
+        $stderr.puts "not found."
+      end 
+        
+      require 'open-uri'
+      require 'tempfile'
+      
+      $stderr.print "1) Downloading R #{opt[:r_ver]} installer"
+      installer = open(opt[:src_url], 'rb',
           proc{
             len = nil
             step_bytes = 1_000_000
@@ -48,34 +82,44 @@ HelpStyle=HTML
           }.call){|io|
         $stderr.puts " done."
         
-        require 'tempfile'
-        installer = Tempfile::open(['R-install', '.exe']){|io2|
+        Tempfile::open(['R-install', '.exe']){|io2|
           io2.binmode
           io2.write(io.read)
           io2.path
         }
-        setup_conf = Tempfile::open(['R-setup', '.inf']){|io2|
-          io2.binmode
-          io2.print(SETUP_INF.gsub('DST_DIR', opt[:dst_dir]).gsub(/\R/, "\r\n"))
-          io2.path
-        } 
-        FileUtils::chmod(0755, installer)
-        cmd = "#{installer} /LOADINF=\"#{setup_conf}\" /SILENT"
-        $stderr.print "2) Deploying 64-bit version R (#{cmd}) ..."
-        system(cmd)
-        $stderr.puts " done."
       }
+      FileUtils::chmod(0755, installer)
+      
+      setup_conf = Tempfile::open(['R-setup', '.inf']){|io|
+        io.binmode
+        io.print(opt[:setup_inf])
+        io.path
+      }
+      
+      # check uninstaller registry entries before install
+      reg_before = registry_check()    
+      
+      cmd = "#{installer} /LOADINF=\"#{setup_conf}\" /SILENT"
+      $stderr.print "2) Deploying R (#{cmd}) ..."
+      system(cmd)
+      $stderr.puts " done."
+      
+      # Remove uninstaller entry
+      (registry_check() - reg_before).each{|key|
+        `reg delete "#{key}" /f`
+      }
+      
+      check_installation(opt)
     end
   end
 end
 
-if $0 == __FILE__ then
-  R_Bootstrap::setup
-  
-  require 'rinruby_without_r_constant'
-  r = RinRuby::new({
-    :executable => File::join(R_Bootstrap::DEFAULT_PROP[:dst_dir], 'bin', 'x64', 'Rterm.exe'),
-  })
-  p r
-  r.prompt
-end
+R_Bootstrap::setup if $0 == __FILE__
+
+__END__
+require 'rinruby_without_r_constant'
+r = RinRuby::new({
+  :executable => File::join(r_dir, 'bin', 'x64', 'Rterm.exe'),
+})
+p r
+r.prompt
