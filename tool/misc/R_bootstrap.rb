@@ -2,11 +2,11 @@
 
 class R_Bootstrap
   class <<self
-    def registry_check
+    def registry_check(ver = nil)
       [:HKLM, :HKCU].collect{|head|
         `reg query "#{head}\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall" /f "R for Windows*is1" 2>nul`.scrub.lines
       }.flatten.collect{|line|
-        next unless line.strip =~ /^\s*(.*_is1)/
+        next unless line.strip =~ /^\s*(.*#{ver}_is1)/
         $1
       }.compact
     end
@@ -34,7 +34,7 @@ class R_Bootstrap
         :dst_dir => dst_dir,
         :r_ver => r_ver,
         :arch => arch,
-        :src_url => "https://cloud.r-project.org/bin/windows/base/R-#{r_ver}-win.exe",
+        :src_url => "https://cloud.r-project.org/bin/windows/base/old/#{r_ver}/R-#{r_ver}-win.exe",
         :setup_inf => (<<-__TEXT__).gsub(/\R/, "\r\n"),
 [Setup]
 Dir=#{dst_dir}
@@ -106,17 +106,39 @@ HelpStyle=HTML
         io.path
       }
       
-      # check uninstaller registry entries before install
-      reg_before = registry_check()    
+      # Check uninstaller registry entries before install
+      reg_before_with_backup = Hash[*(registry_check(opt[:r_ver]).collect{|key|
+        f = Tempfile::open(['R', '.reg']){|fp| fp}
+        `reg export "#{key}" "#{f.path}" /y 2>nul`
+        [key, f.open.read(0x4000)] # backup
+      }.flatten(1))]
       
       cmd = "#{installer} /LOADINF=\"#{setup_conf}\" /SILENT"
       $stderr.print "2) Deploying R (#{cmd}) ..."
       system(cmd)
       $stderr.puts " done."
       
-      # Remove uninstaller entry
-      (registry_check() - reg_before).each{|key|
+      # Remove newly generated uninstaller entry
+      reg_after = registry_check(opt[:r_ver])
+      (reg_after - reg_before_with_backup.keys).each{|key|
         `reg delete "#{key}" /f`
+      }
+      
+      # Restore previous uninstaller entry
+      (reg_after & reg_before_with_backup.keys).each{|key|
+        f = Tempfile::open(['R', '.reg']){|fp|
+          fp.binmode
+          fp.write(reg_before_with_backup[key])
+          fp
+        }
+        `reg import "#{f.path}" 2>nul`
+      }
+      
+      # remove uninstaller binary, because it may remove registry 
+      # required for uninstall of previously installed version.
+      File::delete(*(["unins000.exe", "unins000.dat"].collect{|f| File::join(opt[:dst_dir], f)}))
+      open(File::join(opt[:dst_dir], "README.uninstall"), "w"){|io|
+        io.puts "To uninstall, just remove all files under this and sub directories"
       }
       
       check_installation(opt)
