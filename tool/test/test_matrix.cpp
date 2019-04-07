@@ -423,6 +423,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       (*A * 2),
       (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
   matrix_inspect_contains(
+      (2 * (*A)),
+      (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
+  matrix_inspect_contains(
       (-(*A)),
       (format("*storage: (*, M(%1%,%1%), -1)") % SIZE).str());
   matrix_inspect_contains(
@@ -443,6 +446,17 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       (((A->partial(2, 3, 1, 1).transpose()) * (B->partial(2, 3, 1, 1))) + (A->partial(3, 3, 1, 2))),
       "*storage: (+, (*, Mtp(3,2), Mp(2,3)), Mp(3,3))");
+
+  // optimized cases
+  matrix_inspect_contains(
+      ((*A * 2) * 2), // should be *A * 4
+      (format("*storage: (*, M(%1%,%1%), 4)") % SIZE).str());
+  matrix_inspect_contains(
+      (*A * (*B * 2)), // should be (*A * (*B)) * 2
+      (format("*storage: (*, (*, M(%1%,%1%), M(%1%,%1%)), 2)") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A * 2) * (*B * 2)), // should be (*A * (*B)) * 4
+      (format("*storage: (*, (*, M(%1%,%1%), M(%1%,%1%)), 4)") % SIZE).str());
 }
 
 void check_inv(const matrix_t &mat){
