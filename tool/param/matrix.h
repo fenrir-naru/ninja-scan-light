@@ -463,6 +463,18 @@ struct Array2D_Operator_Binary {
       : lhs(_lhs), rhs(_rhs) {}
 };
 
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_Multiply : public Array2D_Operator_Binary<LHS_T, RHS_T>{
+  Array2D_Operator_Multiply(const LHS_T &_lhs, const RHS_T &_rhs) noexcept
+    : Array2D_Operator_Binary<LHS_T, RHS_T>(_lhs, _rhs) {}
+};
+
+template <class LHS_T, class RHS_T, bool rhs_positive>
+struct Array2D_Operator_Add : public Array2D_Operator_Binary<LHS_T, RHS_T>{
+  Array2D_Operator_Add(const LHS_T &_lhs, const RHS_T &_rhs) noexcept
+      : Array2D_Operator_Binary<LHS_T, RHS_T>(_lhs, _rhs) {}
+};
+
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -1165,15 +1177,7 @@ class Matrix_Frozen {
 
     template <class RHS_T>
     struct Multiply_Matrix_by_Scalar {
-      struct op_t : public Array2D_Operator_Binary<self_t, RHS_T> {
-        static const int tag = OPERATOR_2_Multiply_Matrix_by_Scalar;
-        typedef Array2D_Operator_Binary<self_t, RHS_T> super_t;
-        op_t(const self_t &mat, const RHS_T &scalar) noexcept
-            : super_t(mat, scalar) {}
-        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-          return super_t::lhs(row, column) * super_t::rhs;
-        }
-      };
+      typedef Array2D_Operator_Multiply<self_t, RHS_T> op_t;
 
       /*
        * Optimization policy: If upper pattern is M * scalar, then reuse it.
@@ -1256,21 +1260,7 @@ class Matrix_Frozen {
 
     template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
-      struct op_t : public Array2D_Operator_Binary<self_t, RHS_MatrixT> {
-        static const int tag = rhs_positive
-            ? OPERATOR_2_Add_Matrix_to_Matrix
-            : OPERATOR_2_Subtract_Matrix_from_Matrix;
-        typedef Array2D_Operator_Binary<self_t, RHS_MatrixT> super_t;
-        op_t(const self_t &mat1, const RHS_MatrixT &mat2) noexcept
-            : super_t(mat1, mat2) {}
-        T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-          if(rhs_positive){
-            return super_t::lhs(row, column) + super_t::rhs(row, column);
-          }else{
-            return super_t::lhs(row, column) - super_t::rhs(row, column);
-          }
-        }
-      };
+      typedef Array2D_Operator_Add<self_t, RHS_MatrixT, rhs_positive> op_t;
       typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
         if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
@@ -1336,46 +1326,26 @@ class Matrix_Frozen {
             = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
       };
 
-      template <class LHS_T = self_t, class RHS_T = RHS_MatrixT>
-      struct op_gen_t {
-
-        /*
-         * [Optimization policy 1]
-         * If each side include M * M, then use cache.
-         * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
-         * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
-         */
-
-        template <class MatrixT, bool cache_on = check_t<MatrixT>::has_multi_mat_by_mat>
-        struct optimizer1_t {
-          typedef MatrixT res_t;
-        };
-#if 1 // 0 = remove optimizer
-        template <class MatrixT>
-        struct optimizer1_t<MatrixT, true> {
-          typedef typename MatrixT::downcast_default_t res_t;
-        };
-#endif
-        typedef typename optimizer1_t<LHS_T>::res_t lhs_opt_t;
-        typedef typename optimizer1_t<RHS_T>::res_t rhs_opt_t;
-
-        struct op_t : public Array2D_Operator_Binary<LHS_T, RHS_T> {
-          static const int tag = OPERATOR_2_Multiply_Matrix_by_Matrix;
-          typedef Array2D_Operator_Binary<LHS_T, RHS_T> super_t;
-          lhs_opt_t lhs_opt;
-          rhs_opt_t rhs_opt;
-          op_t(const LHS_T &mat1, const RHS_T &mat2) noexcept
-              : super_t(mat1, mat2), // Preserve original operation on superclass
-              lhs_opt(super_t::lhs), rhs_opt(super_t::rhs) {}
-          T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-            T res(0);
-            for(unsigned int i(0); i < lhs_opt.columns(); ++i){
-              res += lhs_opt(row, i) * rhs_opt(i, column);
-            }
-            return res;
-          }
-        };
+      /*
+       * [Optimization policy 1]
+       * If each side include M * M, then use cache.
+       * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
+       * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
+       */
+      template <class MatrixT, bool cache_on = check_t<MatrixT>::has_multi_mat_by_mat>
+      struct optimizer1_t {
+        typedef MatrixT res_t;
       };
+#if 1 // 0 = remove optimizer
+      template <class MatrixT>
+      struct optimizer1_t<MatrixT, true> {
+        typedef typename MatrixT::downcast_default_t res_t;
+      };
+#endif
+      typedef typename optimizer1_t<self_t>::res_t lhs_opt_t;
+      typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_opt_t;
+
+      typedef Array2D_Operator_Multiply<self_t, RHS_MatrixT> op_t;
 
       /*
        * [Optimization policy 2]
@@ -1387,7 +1357,7 @@ class Matrix_Frozen {
           class U = void>
       struct optimizer2_t {
         // M * M
-        typedef Matrix_Frozen<T, Array2D_Operator<T, typename op_gen_t<>::op_t> > res_t;
+        typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           return res_t(
               typename res_t::storage_t(
@@ -1529,11 +1499,9 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t>::mat_t
+          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t::super_t>::mat_t
         operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return Multiply_Matrix_by_Matrix<
-            typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t>::generate(
-          *this, matrix.inverse());
+      return *this * matrix.inverse();
     }
 
     /**
@@ -1544,11 +1512,9 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t>::mat_t
+          typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t::super_t>::mat_t
         operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return Multiply_Matrix_by_Matrix<
-            typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t>::generate(
-          *this, matrix.inverse());
+      return *this * matrix.inverse();
     }
 
     /**
@@ -1640,6 +1606,87 @@ class Matrix_Frozen {
     inspect_t inspect() const {
       return inspect_t(*this);
     }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class RHS_T>
+struct Array2D_Operator_Multiply<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      RHS_T>
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        RHS_T>{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      RHS_T> super_t;
+  static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Scalar;
+  Array2D_Operator_Multiply(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    return super_t::lhs(row, column) * super_t::rhs;
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2, class Array2D_Type2, class ViewType2,
+    bool rhs_positive>
+struct Array2D_Operator_Add<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2>,
+      rhs_positive>
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+  static const int tag = rhs_positive
+      ? super_t::lhs_t::OPERATOR_2_Add_Matrix_to_Matrix
+      : super_t::lhs_t::OPERATOR_2_Subtract_Matrix_from_Matrix;
+  Array2D_Operator_Add(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    if(rhs_positive){
+      return super_t::lhs(row, column) + super_t::rhs(row, column);
+    }else{
+      return super_t::lhs(row, column) - super_t::rhs(row, column);
+    }
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2, class Array2D_Type2, class ViewType2>
+struct Array2D_Operator_Multiply<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> >
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+  static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix;
+  typedef typename super_t::lhs_t::template Multiply_Matrix_by_Matrix<typename super_t::rhs_t> gen_t;
+  typename gen_t::lhs_opt_t lhs_opt;
+  typename gen_t::rhs_opt_t rhs_opt;
+  Array2D_Operator_Multiply(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs), lhs_opt(_lhs), rhs_opt(_rhs) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    T res(0);
+    for(unsigned int i(0); i < lhs_opt.columns(); ++i){
+      res += lhs_opt(row, i) * rhs_opt(i, column);
+    }
+    return res;
+  }
 };
 
 
