@@ -585,7 +585,7 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
 
-BOOST_AUTO_TEST_CASE(cast){
+BOOST_AUTO_TEST_CASE(view_downcast){
   assign_unsymmetric();
   prologue_print();
 
@@ -595,9 +595,27 @@ BOOST_AUTO_TEST_CASE(cast){
   typedef matrix_t::transpose_t::partial_t mat_tp_t;
   mat_tp_t mat_tp(A->transpose().partial(2,3,3,4));
 
-  matrix_t _A(static_cast<mat_tp_t::super_t &>(mat_tp)); // down cast (internally deep copy) is available
+  matrix_t _A(static_cast<mat_tp_t::super_t &>(mat_tp)); // downcast (internally deep copy) is available
   //matrix_t _A2(mat_tp); // compile error due to protected
   matrix_compare(a, _A);
+}
+
+BOOST_AUTO_TEST_CASE(replace){
+  assign_unsymmetric();
+  prologue_print();
+
+  direct_t a(*A), b(B->copy());
+
+  B->transpose().partial(2,3,3,4).replace(A->transpose().partial(2,3,3,4));
+
+  // replaced part
+  a.i_offset = 4; a.j_offset = 3; matrix_compare(a, B->partial(3,2,4,3));
+
+  // other parts
+  b.i_offset = 0; b.j_offset = 0; matrix_compare(b, B->partial(B->rows(),3,0,0)); // left
+  b.i_offset = 0; b.j_offset = 5; matrix_compare(b, B->partial(B->rows(),3,0,5)); // right
+  b.i_offset = 0; b.j_offset = 0; matrix_compare(b, B->partial(4,B->columns(),0,0)); // top
+  b.i_offset = 7; b.j_offset = 0; matrix_compare(b, B->partial(1,B->columns(),7,0)); // bottom
 }
 
 BOOST_AUTO_TEST_CASE(minor){
