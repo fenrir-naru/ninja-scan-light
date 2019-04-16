@@ -32,13 +32,16 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 class Unified_CSV
-  OPTIONS_DEFAULT = {
-    :tool_dirs => [
-        File::dirname($0), 
-        File::join(File::dirname($0), "build_GCC"),
-        File::join(File::dirname($0), "build_VC", "Release"),],
-    :page => [],
-  }
+  OPTIONS_DEFAULT = proc{
+    base_dir = File::dirname(ENV['OCRA_EXECUTABLE'] || $0)
+    {
+      :tool_dirs => [
+          base_dir, 
+          File::join(base_dir, "build_GCC"),
+          File::join(base_dir, "build_VC", "Release"),],
+      :page => [],
+    }
+  }.call
   
   def initialize(options)
     @options = options
