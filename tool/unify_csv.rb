@@ -152,6 +152,7 @@ Usage: #{__FILE__} [options] log.dat > log_unified.csv
 [options] = mostly same as log_CSV ones represented by --page=[A|G|P|M]
 __TEXT__
 
+exit(0) if defined?(Ocra)
 raise "log_CSV is not specified!" if ARGV.empty?
 
 Unified_CSV::new(options).generate(ARGV.shift)
