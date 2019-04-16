@@ -102,6 +102,12 @@ class Unified_CSV
     
     # sort and output
     
+    has_gap = @options[:calendar_time] ? proc{|prv, aft|
+      prv[0] - aft[0] < 0 # compare in year
+    } : proc{|prv, aft|
+      prv - aft < -1200 # compare in second
+    }
+    
     # t_sorted = [[t0, i2], [t1, i0], [t1, i3], [t2, i1], ...]
     t_sorted = data.collect.with_index{|items, i| [items[0][0], i]}.sort{|a, b| a[0] <=> b[0]}
     while !t_sorted.empty?
@@ -115,8 +121,8 @@ class Unified_CSV
       oldest.each{|i|
         output[i] = data[i].shift[1..-1]
         next if data[i].empty?
-        # TODO check super jump
         t_sorted.insert(t_sorted.find_index{|t_i2|
+          false if has_gap.call(t_i2[0], data[i][0][0]) # check super jump
           (data[i][0][0] <=> t_i2[0]) <= 0
         } || -1, [data[i][0][0], i])
       }
