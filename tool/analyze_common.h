@@ -483,18 +483,36 @@ struct CalendarTime {
     std::time_t utc_time; ///< corresponding base UTC time in time_t
     int correction_sec;
     static const std::time_t gps_time_zero;
+
+    mutable struct roll_over_monitor_t {
+      static const int one_week = 60 * 60 * 7 * 24;
+      int itow_offset;
+      float_t itow_previous;
+      roll_over_monitor_t() : itow_offset(0), itow_previous(0) {}
+      float_t operator()(const float_t &itow){
+        float_t itow_mod(itow + itow_offset);
+        if((itow_mod - itow_previous) < -(one_week / 2)){ // detect super jump
+          if((itow_previous - itow_offset) > (one_week - 1200)){ // probably roll over
+            itow_offset += one_week;
+            itow_mod += one_week;
+          }else{ // otherwise probably reset occurred
+            itow_offset = 0;
+            itow_mod = itow;
+          }
+        }
+        return (itow_previous = itow_mod);
+      }
+    } roll_over_monitor;
+
     Converter()
         : gps_time(0),
         leap_seconds(LEAP_SECONDS_UNKNOWN),
-        correction_sec(0) {}
+        correction_sec(0),
+        roll_over_monitor() {}
 
-    CalendarTime convert(const FloatT &itow) const {
+    CalendarTime convert(const float_t &itow) const {
       if(gps_time.wn != gps_time_t::WN_INVALID){
-        float_t gap(itow - gps_time.sec);
-        static const int one_week(60 * 60 * 7 * 24);
-        if(gap <= -(one_week / 2)){ // Check roll over
-          gap += one_week;
-        }
+        float_t gap(roll_over_monitor(itow) - gps_time.sec);
         int gap_sec(std::floor(gap));
         std::time_t current(utc_time + gap_sec + correction_sec);
         tm *t(std::gmtime(&current));
@@ -507,7 +525,7 @@ struct CalendarTime {
             gap - gap_sec + t->tm_sec};
         return res;
       }else{
-        CalendarTime res = {0, 0, 0, 0, 0, itow};
+        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
         return res;
       }
     }
@@ -551,7 +569,12 @@ struct CalendarTime {
     }
     void update(const float_t &gps_sec, const int &gps_wn, const int &leap_sec){
       gps_time.sec = gps_sec;
-      gps_time.wn = gps_wn;
+      if(gps_time.wn != gps_time_t::WN_INVALID){
+        // GPS second will be greater than one week to assume roll over of itow
+        gps_time.sec += (gps_wn - gps_time.wn) * roll_over_monitor_t::one_week;
+      }else{
+        gps_time.wn = gps_wn;
+      }
       utc_time = gps_time_zero
           + (7u * 24 * 60 * 60) * gps_time.wn
           + gps_time.sec - leap_sec; // POSIX time ignores leap seconds.
