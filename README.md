@@ -23,4 +23,4 @@ It consists of
 
 [![Build Status (Firmware + Linux/RasPi tools)](https://travis-ci.org/fenrir-naru/ninja-scan-light.svg?branch=master)](https://travis-ci.org/fenrir-naru/ninja-scan-light)
 [![Build status (Windows tools)](https://ci.appveyor.com/api/projects/status/6r6koh5rophe6yns?svg=true)](https://ci.appveyor.com/project/fenrir-naru/ninja-scan-light)
-[![Download](https://api.bintray.com/packages/fenrir-naru/github/ninja-scan-light/images/download.svg) ](https://bintray.com/fenrir-naru/github/ninja-scan-light/_latestVersion)
+[![Download precompiled tool binaries](https://api.bintray.com/packages/fenrir-naru/github/ninja-scan-light/images/download.svg) ](https://bintray.com/fenrir-naru/github/ninja-scan-light/_latestVersion#files)
