@@ -794,6 +794,22 @@ template <
     class ViewType = MatrixViewBase<> >
 class Matrix;
 
+template <class MatrixT>
+struct MatrixBuilder;
+
+template <
+    template <class, class, class> class MatrixT,
+    class T, class Array2D_Type, class ViewType>
+struct MatrixBuilder<MatrixT<T, Array2D_Type, ViewType> >{
+
+  typedef MatrixViewBuilder<ViewType> view_builder_t;
+
+  typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::transpose_t> transpose_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::partial_t> partial_t;
+};
+
 /**
  * @brief Matrix for fixed content
  *
@@ -805,16 +821,10 @@ template <
 class Matrix_Frozen {
   public:
     typedef Array2D_Type storage_t;
+    typedef ViewType view_t;
     typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
 
-    typedef MatrixViewProperty<ViewType> view_property_t;
-    typedef typename view_property_t::self_t view_t;
-    typedef MatrixViewBuilder<view_t> view_builder_t;
-
-    typedef Matrix_Frozen<T, Array2D_Type,
-        typename view_builder_t::transpose_t> transpose_t;
-    typedef Matrix_Frozen<T, Array2D_Type,
-        typename view_builder_t::partial_t> partial_t;
+    typedef MatrixBuilder<self_t> builder_t;
 
     typedef Matrix<T> downcast_default_t;
 
@@ -890,7 +900,7 @@ class Matrix_Frozen {
     Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &matrix)
         : storage(matrix.storage),
         view() {
-      view_builder_t::copy(view, matrix.view);
+      builder_t::view_builder_t::copy(view, matrix.view);
     }
 
   public:
@@ -1069,13 +1079,13 @@ class Matrix_Frozen {
      *
      * @return Transpose matrix
      */
-    transpose_t transpose() const noexcept {
-      return transpose_t(*this);
+    typename builder_t::transpose_t transpose() const noexcept {
+      return typename builder_t::transpose_t(*this);
     }
 
   protected:
     template <class MatrixT>
-    static typename MatrixT::partial_t partial_internal(
+    static typename MatrixBuilder<MatrixT>::partial_t partial_internal(
         const MatrixT &self,
         const unsigned int &new_rows,
         const unsigned int &new_columns,
@@ -1086,8 +1096,9 @@ class Matrix_Frozen {
       }else if(new_columns + column_offset > self.columns()){
         throw std::out_of_range("Column size exceeding");
       }
-      typename MatrixT::partial_t res(self);
-      MatrixT::partial_t::view_builder_t::set_partial(
+      typedef typename MatrixBuilder<MatrixT>::partial_t res_t;
+      res_t res(self);
+      res_t::builder_t::view_builder_t::set_partial(
           res.view,
           new_rows, new_columns, row_offset, column_offset);
       return res;
@@ -1105,7 +1116,7 @@ class Matrix_Frozen {
      * @return partial matrix
      *
      */
-    partial_t partial(
+    typename builder_t::partial_t partial(
         const unsigned int &new_rows,
         const unsigned int &new_columns,
         const unsigned int &row_offset,
@@ -1121,7 +1132,7 @@ class Matrix_Frozen {
      * @return Row vector
      * @see partial()
      */
-    partial_t rowVector(const unsigned int &row) const {
+    typename builder_t::partial_t rowVector(const unsigned int &row) const {
       return partial(1, columns(), row, 0);
     }
     /**
@@ -1131,7 +1142,7 @@ class Matrix_Frozen {
      * @return Column vector
      * @see partial()
      */
-    partial_t columnVector(const unsigned int &column) const {
+    typename builder_t::partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
     }
 
@@ -1708,21 +1719,17 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename super_t::storage_t storage_t;
-    typedef typename super_t::view_builder_t view_builder_t;
-    typedef typename super_t::view_property_t view_property_t;
 #else
     using typename super_t::storage_t;
-    using typename super_t::view_builder_t;
-    using typename super_t::view_property_t;
 #endif
 
     typedef Matrix<T, Array2D_Type, ViewType> self_t;
+    typedef MatrixViewProperty<ViewType> view_property_t;
+    typedef MatrixBuilder<self_t> builder_t;
 
     typedef Matrix<T, Array2D_Type> viewless_t;
-    typedef Matrix<T, Array2D_Type,
-        typename view_builder_t::transpose_t> transpose_t;
-    typedef Matrix<T, Array2D_Type,
-        typename view_builder_t::partial_t> partial_t;
+    typedef typename builder_t::transpose_t transpose_t;
+    typedef typename builder_t::partial_t partial_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
