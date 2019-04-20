@@ -464,16 +464,10 @@ struct Array2D_Operator_Binary {
 };
 
 template <class LHS_T, class RHS_T>
-struct Array2D_Operator_Multiply : public Array2D_Operator_Binary<LHS_T, RHS_T>{
-  Array2D_Operator_Multiply(const LHS_T &_lhs, const RHS_T &_rhs) noexcept
-    : Array2D_Operator_Binary<LHS_T, RHS_T>(_lhs, _rhs) {}
-};
+struct Array2D_Operator_Multiply;
 
 template <class LHS_T, class RHS_T, bool rhs_positive>
-struct Array2D_Operator_Add : public Array2D_Operator_Binary<LHS_T, RHS_T>{
-  Array2D_Operator_Add(const LHS_T &_lhs, const RHS_T &_rhs) noexcept
-      : Array2D_Operator_Binary<LHS_T, RHS_T>(_lhs, _rhs) {}
-};
+struct Array2D_Operator_Add;
 
 
 template <class BaseView = void>
