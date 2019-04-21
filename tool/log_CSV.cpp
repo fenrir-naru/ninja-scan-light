@@ -244,7 +244,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         options.out() << values.temperature << endl;
       }
       void dump_physical(const float_sylph_t &current, const A_Observer_t::values_t &values) const {
-        options.out() << options.format_time(current);
+        options.out()
+            << count << ", "
+            << options.format_time(current);
 
         int ch[9];
         for(int i = 0; i < 8; i++){
