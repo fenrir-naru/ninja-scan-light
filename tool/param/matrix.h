@@ -1598,6 +1598,56 @@ class Matrix_Frozen {
     }
 
     /**
+     * Resolve x of (Ax = y), where this matrix is A and has already been decomposed as LU.
+     *
+     * @param y Right hand term
+     * @param do_check Check whether already LU decomposed
+     * @return Left hand second term
+     * @throw std::logic_error When operation is undefined
+     * @throw std::invalid_argument When input is incorrect
+     * @see decomposeLU(const bool &)
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t
+        solve_linear_eq_with_LU(
+            const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
+            const {
+      if(do_check && (!isLU())){
+        throw std::logic_error("Not LU decomposed matrix!!");
+      }
+      if(do_check && ((y.columns() != 1) || (y.rows() != rows()))){
+        throw std::invalid_argument("Incorrect y size");
+      }
+
+      typename builder_t::partial_t
+          L(partial(rows(), rows(), 0, 0)),
+          U(partial(rows(), rows(), 0, rows()));
+      typedef typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t y_t;
+      // L(Ux) = y ‚Å y' = (Ux)‚ð‚Ü‚¸‰ð‚­
+      y_t y_copy(y);
+      y_t y_prime(y_t::blank(y.rows(), 1));
+      for(unsigned i(0); i < rows(); i++){
+        y_prime(i, 0) = y_copy(i, 0) / L(i, i);
+        for(unsigned j(i + 1); j < rows(); j++){
+          y_copy(j, 0) -= L(j, i) * y_prime(i, 0);
+        }
+      }
+
+      // ‘±‚¢‚ÄUx = y'‚Å x‚ð‰ð‚­
+      y_t x(y_t::blank(y.rows(), 1));
+      for(unsigned i(rows()); i > 0;){
+        i--;
+        x(i, 0) = y_prime(i, 0) / U(i, i);
+        for(unsigned j(i); j > 0;){
+          j--;
+          y_prime(j, 0) -= U(j, i) * x(i, 0);
+        }
+      }
+
+      return x;
+    }
+
+    /**
      * Calculate determinant by using LU decomposition
      *
      * @param do_check Whether check size property. The default is true.
@@ -2302,57 +2352,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator*=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
       return operator=(*this * matrix);
-    }
-
-    /**
-     * Resolve x of (Ax = y), where this matrix is A and has already been decomposed as LU.
-     *
-     * @param y Right hand term
-     * @param do_check Check whether already LU decomposed
-     * @return Left hand second term
-     * @throw std::logic_error When operation is undefined
-     * @throw std::invalid_argument When input is incorrect
-     * @see decomposeLU(const bool &)
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t
-        solve_linear_eq_with_LU(
-            const Matrix<T2, Array2D_Type2, ViewType2> &y, const bool &do_check = true)
-            const {
-      if(do_check && (!isLU())){
-        throw std::logic_error("Not LU decomposed matrix!!");
-      }
-      if((y.columns() != 1)
-          || (y.rows() != rows())){
-        throw std::invalid_argument("Incorrect y size");
-      }
-
-      partial_t
-          L(partial(rows(), rows(), 0, 0)),
-          U(partial(rows(), rows(), 0, rows()));
-      typedef typename Matrix<T2, Array2D_Type2>::viewless_t y_t;
-      // L(Ux) = y ‚Å y' = (Ux)‚ð‚Ü‚¸‰ð‚­
-      y_t y_copy(y.copy());
-      y_t y_prime(y_t::blank(y.rows(), 1));
-      for(unsigned i(0); i < rows(); i++){
-        y_prime(i, 0) = y_copy(i, 0) / L(i, i);
-        for(unsigned j(i + 1); j < rows(); j++){
-          y_copy(j, 0) -= L(j, i) * y_prime(i, 0);
-        }
-      }
-
-      // ‘±‚¢‚ÄUx = y'‚Å x‚ð‰ð‚­
-      y_t x(y_t::blank(y.rows(), 1));
-      for(unsigned i(rows()); i > 0;){
-        i--;
-        x(i, 0) = y_prime(i, 0) / U(i, i);
-        for(unsigned j(i); j > 0;){
-          j--;
-          y_prime(j, 0) -= U(j, i) * x(i, 0);
-        }
-      }
-
-      return x;
     }
 
     /**
