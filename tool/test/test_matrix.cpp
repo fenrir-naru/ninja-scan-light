@@ -646,19 +646,46 @@ BOOST_AUTO_TEST_CASE(det){
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
   prologue_print();
-  mat_add_t a = {A->copy(), B->copy()};
-  matrix_t _A(A->pivotMerge(0, 0, *B));
-  BOOST_TEST_MESSAGE("pivotMerge:" << _A);
-  matrix_compare_delta(a, *A, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
+    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+      matrix_t A_copy(A->copy());
+      matrix_t _A(A->pivotMerge(i, j, *B));
+      BOOST_TEST_MESSAGE("pivotMerge:" << _A);
+
+      // make [[X, 0], [0, 0]], [[0, X], [0, 0]], [[0, 0], [X, 0]], or [[0, 0], [0, X]]
+      unsigned int
+          i_B(i < 0 ? 0 : i), j_B(j < 0 ? 0 : j),
+          i2_B(i < 0 ? -i : 0), j2_B(j < 0 ? -j : 0),
+          rows_B(B->rows() + (i < 0 ? i : -i)),
+          columns_B(B->columns() + (j < 0 ? j : -j));
+      matrix_t B_cutout(matrix_t::getScalar(B->rows(), 0));
+      B_cutout.partial(rows_B, columns_B, i_B, j_B).replace(
+          B->partial(rows_B, columns_B, i2_B, j2_B));
+      mat_add_t a = {A_copy, B_cutout};
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+    }
+  }
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
   prologue_print();
-  mat_add_t a = {*A, *B};
-  matrix_t _A(A->pivotAdd(0, 0, *B));
-  BOOST_TEST_MESSAGE("pivotAdd:" << _A);
-  matrix_compare_delta(a, *A + *B, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
+    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+      matrix_t _A(A->pivotAdd(i, j, *B));
+      BOOST_TEST_MESSAGE("pivotAdd:" << _A);
+
+      // make [[X, 0], [0, 0]], [[0, X], [0, 0]], [[0, 0], [X, 0]], or [[0, 0], [0, X]]
+      unsigned int
+          i_B(i < 0 ? 0 : i), j_B(j < 0 ? 0 : j),
+          i2_B(i < 0 ? -i : 0), j2_B(j < 0 ? -j : 0),
+          rows_B(B->rows() + (i < 0 ? i : -i)),
+          columns_B(B->columns() + (j < 0 ? j : -j));
+      matrix_t B_cutout(matrix_t::getScalar(B->rows(), 0));
+      B_cutout.partial(rows_B, columns_B, i_B, j_B).replace(
+          B->partial(rows_B, columns_B, i2_B, j2_B));
+      mat_add_t a = {*A, B_cutout};
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+    }
+  }
 }
 
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){

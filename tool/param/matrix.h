@@ -1789,6 +1789,22 @@ class Matrix_Frozen {
     }
 
     /**
+     * Add by matrix with specified pivot
+     *
+     * @param row Upper row index (pivot) of matrix to be added
+     * @param column Left column index (pivot) of matrix to be added
+     * @param matrix Matrix to add
+     * @return added (deep) copy
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename builder_t::assignable_t pivotAdd(
+        const unsigned int &row, const unsigned int &column,
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
+      return ((typename builder_t::assignable_t)(*this)).pivotMerge(row, column, matrix);
+    }
+
+
+    /**
      * Print matrix
      *
      */
@@ -2375,33 +2391,19 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &pivotMerge(
-        const unsigned int &row, const unsigned int &column,
+        const int &row, const int &column,
         const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      for(int i(0); i < matrix.rows(); i++){
-        if(row + i < 0){continue;}
-        else if(row + i >= rows()){break;}
-        for(int j(0); j < matrix.columns(); j++){
-          if(column + j < 0){continue;}
-          else if(column + j >= columns()){break;}
-          (*this)(row + i, column + j) += matrix(i, j);
+
+      unsigned int i_min(row < 0 ? 0 : row), j_min(column < 0 ? 0 : column),
+          i_max((row + matrix.rows()) > rows() ? rows() : row + matrix.rows()),
+          j_max((column + matrix.columns()) > columns() ? columns() : column + matrix.columns());
+      for(unsigned int i(i_min), i2(i_min - row); i < i_max; i++, i2++){
+        for(unsigned int j(j_min), j2(j_min - column); j < j_max; j++, j2++){
+          (*this)(i, j) += matrix(i2, j2);
         }
       }
-      return *this;
-    }
 
-    /**
-     * Add by matrix with specified pivot
-     *
-     * @param row Upper row index (pivot) of matrix to be added
-     * @param column Left column index (pivot) of matrix to be added
-     * @param matrix Matrix to add
-     * @return added (deep) copy
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    viewless_t pivotAdd(
-        const unsigned int &row, const unsigned int &column,
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
-      return copy().pivotMerge(row, column, matrix);
+      return *this;
     }
 
     /**
