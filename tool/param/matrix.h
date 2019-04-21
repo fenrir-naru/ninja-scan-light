@@ -808,6 +808,8 @@ struct MatrixBuilder<MatrixT<T, Array2D_Type, ViewType> >{
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::partial_t> partial_t;
+
+  typedef Matrix<T> assignable_t;
 };
 
 /**
@@ -825,8 +827,6 @@ class Matrix_Frozen {
     typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
 
     typedef MatrixBuilder<self_t> builder_t;
-
-    typedef Matrix<T> downcast_default_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
@@ -1344,7 +1344,7 @@ class Matrix_Frozen {
 #if 1 // 0 = remove optimizer
       template <class MatrixT>
       struct optimizer1_t<MatrixT, true> {
-        typedef typename MatrixT::downcast_default_t res_t;
+        typedef typename MatrixT::builder_t::assignable_t res_t;
       };
 #endif
       typedef typename optimizer1_t<self_t>::res_t lhs_opt_t;
@@ -1459,41 +1459,258 @@ class Matrix_Frozen {
     }
 
 
-    downcast_default_t matrix_for_minor(
+    /**
+     * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
+     *
+     * @param row Row to be removed
+     * @param column Column to be removed
+     * @return Removed matrix
+     */
+    typename builder_t::assignable_t matrix_for_minor(
         const unsigned int &row,
         const unsigned int &column) const noexcept {
-      return ((downcast_default_t)*this).matrix_for_minor(row, column);
+      typename builder_t::assignable_t res(builder_t::assignable_t::blank(rows() - 1, columns() - 1));
+      unsigned int i(0), i2(0);
+      for( ; i < row; ++i, ++i2){
+        unsigned int j(0), j2(0);
+        for( ; j < column; ++j, ++j2){
+          res(i, j) = operator()(i2, j2);
+        }
+        ++j2;
+        for( ; j < res.columns(); ++j, ++j2){
+          res(i, j) = operator()(i2, j2);
+        }
+      }
+      ++i2;
+      for( ; i < res.rows(); ++i, ++i2){
+        unsigned int j(0), j2(0);
+        for( ; j < column; ++j, ++j2){
+          res(i, j) = operator()(i2, j2);
+        }
+        ++j2;
+        for( ; j < res.columns(); ++j, ++j2){
+          res(i, j) = operator()(i2, j2);
+        }
+      }
+      return res;
     }
 
+    /**
+     * Calculate determinant by using minor
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return Determinant
+     * @throw std::logic_error When operation is undefined
+     */
     T determinant_minor(const bool &do_check = true) const {
-      return ((downcast_default_t)*this).determinant_minor(do_check);
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
+      if(rows() == 1){
+        return (*this)(0, 0);
+      }else{
+        T sum(0);
+        T sign(1);
+        for(unsigned int i(0); i < rows(); i++){
+          if((*this)(i, 0) != T(0)){
+            sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant(false)) * sign;
+          }
+          sign = -sign;
+        }
+        return sum;
+      }
     }
 
-    downcast_default_t decomposeLUP(
+    /**
+     * Perform decomposition of LUP
+     * Return matrix is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
+     *
+     * @param pivot_num Number of pivoting to be returned
+     * @param pivot Array of pivoting indices to be returned, NULL is acceptable (no return).
+     * For example, [0,2,1] means the left hand side pivot matrix,
+     * which multiplies original matrix (not to be multiplied), equals to
+     * [[1,0,0], [0,0,1], [0,1,0]].
+     * @param do_check Check size, the default is true.
+     * @return LU decomposed matrix
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
+     */
+    typename builder_t::assignable_t decomposeLUP(
         unsigned int &pivot_num,
         unsigned int *pivot = NULL,
         const bool &do_check = true) const {
-      return ((downcast_default_t)*this).decomposeLUP(pivot_num, pivot, do_check);
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
+      typename builder_t::assignable_t LU(builder_t::assignable_t::blank(rows(), columns() * 2));
+
+      typename builder_t::assignable_t::builder_t::partial_t
+          L(LU.partial(rows(), columns(), 0, 0)),
+          U(LU.partial(rows(), columns(), 0, columns()));
+      for(unsigned int i(0); i < rows(); ++i){
+        U(i, i) = (*this)(i, i);
+        L(i, i) = T(1);
+        for(unsigned int j(i + 1); j < rows(); ++j){
+          U(i, j) = (*this)(i, j);
+          U(j, i) = (*this)(j, i); // U is full copy
+          L(i, j) = T(0);
+        }
+      }
+      pivot_num = 0;
+      if(pivot){
+        for(unsigned int i(0); i < rows(); ++i){
+          pivot[i] = i;
+        }
+      }
+      // apply Gaussian elimination
+      for(unsigned int i(0); i < rows(); ++i){
+        if(U(i, i) == T(0)){ // check (i, i) is not zero
+          unsigned int j(i);
+          do{
+            if(++j == rows()){
+              throw std::runtime_error("LU decomposition cannot be performed");
+            }
+          }while(U(i, j) == T(0));
+          for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
+            T temp(U(i2, i));
+            U(i2, i) = U(i2, j);
+            U(i2, j) = temp;
+          }
+          pivot_num++;
+          if(pivot){
+            unsigned int temp(pivot[i]);
+            pivot[i] = pivot[j];
+            pivot[j] = temp;
+          }
+        }
+        for(unsigned int i2(i + 1); i2 < rows(); ++i2){
+          L(i2, i) = U(i2, i) / U(i, i);
+          U(i2, i) = T(0);
+          for(unsigned int j2(i + 1); j2 < rows(); ++j2){
+            U(i2, j2) -= L(i2, i) * U(i, j2);
+          }
+        }
+      }
+      return LU;
     }
 
-    downcast_default_t decomposeLU(const bool &do_check = true) const {
-      return ((downcast_default_t)*this).decomposeLU(do_check);
+    typename builder_t::assignable_t decomposeLU(const bool &do_check = true) const {
+      unsigned int pivot_num;
+      return decomposeLUP(pivot_num, NULL, do_check);
     }
 
+    /**
+     * Calculate determinant by using LU decomposition
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return Determinant
+     */
     T determinant_LU(const bool &do_check = true) const {
-      return ((downcast_default_t)*this).determinant_LU(do_check);
+      unsigned int pivot_num;
+      typename builder_t::assignable_t LU(decomposeLUP(pivot_num, NULL, do_check));
+      T res((pivot_num % 2 == 0) ? 1 : -1);
+      for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
+        res *= LU(i, i) * LU(i, j);
+      }
+      return res;
     }
 
     T determinant(const bool &do_check = true) const {
-      return ((downcast_default_t)*this).determinant(do_check);
+      return determinant_LU(do_check);
     }
 
-    downcast_default_t decomposeUD(const bool &do_check = true) const {
-      return ((downcast_default_t)*this).decomposeUD(do_check);
+    /**
+     * Perform UD decomposition
+     * Return matrix is
+     * (0, 0)-(n-1,n-1):  U matrix
+     * (0, n)-(n-1,2n-1): D matrix
+     *
+     * @param do_check Check size, the default is true.
+     * @return UD decomposed matrix
+     * @throw std::logic_error When operation is undefined
+     */
+    typename builder_t::assignable_t decomposeUD(const bool &do_check = true) const {
+      if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
+      typename builder_t::assignable_t P(*this);
+      typename builder_t::assignable_t UD(rows(), columns() * 2);
+      typename builder_t::assignable_t::builder_t::partial_t
+          U(UD.partial(rows(), columns(), 0, 0)),
+          D(UD.partial(rows(), columns(), 0, columns()));
+      for(int i(rows() - 1); i >= 0; i--){
+        D(i, i) = P(i, i);
+        U(i, i) = T(1);
+        for(unsigned int j(0); j < i; j++){
+          U(j, i) = P(j, i) / D(i, i);
+          for(unsigned int k(0); k <= j; k++){
+            P(k, j) -= U(k, i) * D(i, i) * U(j, i);
+          }
+        }
+      }
+      return UD;
     }
 
-    downcast_default_t inverse() const {
-      return ((downcast_default_t)*this).inverse();
+    /**
+     * Calculate inverse matrix
+     *
+     * @return Inverse matrix
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
+     */
+    typename builder_t::assignable_t inverse() const {
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
+
+      //クラメール(遅い)
+      /*
+      typename builder_t::assignable_t result(rows(), columns());
+      T det;
+      if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
+      for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int j(0); j < columns(); j++){
+          result(i, j) = coMatrix(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
+        }
+      }
+      return result.transpose() / det;
+      */
+
+      //ガウス消去法
+      typename builder_t::assignable_t left(*this);
+      typename builder_t::assignable_t right(getI(rows()));
+      for(unsigned int i(0); i < rows(); i++){
+        if(left(i, i) == T(0)){
+          unsigned int i2(i);
+          do{
+            if(++i2 == rows()){
+              throw std::runtime_error("invert matrix not exist");
+            }
+          }while(left(i2, i) == T(0));
+          // exchange i-th and i2-th rows
+          for(unsigned int j(i); j < columns(); ++j){
+            T temp(left(i, j));
+            left(i, j) = left(i2, j);
+            left(i2, j) = temp;
+          }
+          right.exchangeRows(i, i2);
+        }
+        if(left(i, i) != T(1)){
+          for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}
+          for(unsigned int j(i+1); j < columns(); j++){left(i, j) /= left(i, i);}
+          left(i, i) = T(1);
+        }
+        for(unsigned int k(0); k < rows(); k++){
+          if(k == i){continue;}
+          if(left(k, i) != T(0)){
+            for(unsigned int j(0); j < columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
+            for(unsigned int j(i+1); j < columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
+            left(k, i) = T(0);
+          }
+        }
+      }
+      //std::cout << "L:" << left << std::endl;
+      //std::cout << "R:" << right << std::endl;
+
+      return right;
+
+      //LU分解
+      /*
+      */
     }
 
     /**
@@ -1504,22 +1721,21 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::downcast_default_t::super_t>::mat_t
+          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t::super_t>::mat_t
         operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
       return *this * matrix.inverse();
     }
 
     /**
-     * Divide by matrix, in other words, multiply by inverse matrix
+     * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
      *
-     * @param matrix Matrix to divide
-     * @return divided matrix
+     * @param scalar
+     * @param matrix
+     * @return result matrix
      */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    typename Multiply_Matrix_by_Matrix<
-          typename Matrix<T2, Array2D_Type2, ViewType2>::viewless_t::super_t>::mat_t
-        operator/(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return *this * matrix.inverse();
+    friend typename mul_mat_scalar_t::mat_t
+        operator/(const T &scalar, const self_t &matrix) {
+      return matrix.inverse() * scalar;
     }
 
     /**
@@ -2089,66 +2305,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
-     *
-     * @param row Row to be removed
-     * @param column Column to be removed
-     * @return Removed matrix
-     */
-    viewless_t matrix_for_minor(
-        const unsigned int &row,
-        const unsigned int &column) const noexcept {
-      viewless_t res(blank(rows() - 1, columns() - 1));
-      unsigned int i(0), i2(0);
-      for( ; i < row; ++i, ++i2){
-        unsigned int j(0), j2(0);
-        for( ; j < column; ++j, ++j2){
-          res(i, j) = operator()(i2, j2);
-        }
-        ++j2;
-        for( ; j < res.columns(); ++j, ++j2){
-          res(i, j) = operator()(i2, j2);
-        }
-      }
-      ++i2;
-      for( ; i < res.rows(); ++i, ++i2){
-        unsigned int j(0), j2(0);
-        for( ; j < column; ++j, ++j2){
-          res(i, j) = operator()(i2, j2);
-        }
-        ++j2;
-        for( ; j < res.columns(); ++j, ++j2){
-          res(i, j) = operator()(i2, j2);
-        }
-      }
-      return res;
-    }
-
-    /**
-     * Calculate determinant by using minor
-     *
-     * @param do_check Whether check size property. The default is true.
-     * @return Determinant
-     * @throw std::logic_error When operation is undefined
-     */
-    T determinant_minor(const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
-      if(rows() == 1){
-        return (*this)(0, 0);
-      }else{
-        T sum(0);
-        T sign(1);
-        for(unsigned int i(0); i < rows(); i++){
-          if((*this)(i, 0) != T(0)){
-            sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant(false)) * sign;
-          }
-          sign = -sign;
-        }
-        return sum;
-      }
-    }
-
-    /**
      * Resolve x of (Ax = y), where this matrix is A and has already been decomposed as LU.
      *
      * @param y Right hand term
@@ -2200,215 +2356,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Perform decomposition of LUP
-     * Return matrix is
-     * (0, 0)-(n-1, n-1):  L matrix
-     * (0, n)-(n-1, 2n-1): U matrix
-     *
-     * @param pivot_num Number of pivoting to be returned
-     * @param pivot Array of pivoting indices to be returned, NULL is acceptable (no return).
-     * For example, [0,2,1] means the left hand side pivot matrix,
-     * which multiplies original matrix (not to be multiplied), equals to
-     * [[1,0,0], [0,0,1], [0,1,0]].
-     * @param do_check Check size, the default is true.
-     * @return LU decomposed matrix
-     * @throw std::logic_error When operation is undefined
-     * @throw std::runtime_error When operation is unavailable
-     */
-    viewless_t decomposeLUP(
-        unsigned int &pivot_num,
-        unsigned int *pivot = NULL,
-        const bool &do_check = true) const {
-      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
-      viewless_t LU(blank(rows(), columns() * 2));
-#define L(i, j) LU(i, j)
-#define U(i, j) LU(i, j + columns())
-      for(unsigned int i(0); i < rows(); ++i){
-        U(i, i) = (*this)(i, i);
-        L(i, i) = T(1);
-        for(unsigned int j(i + 1); j < rows(); ++j){
-          U(i, j) = (*this)(i, j);
-          U(j, i) = (*this)(j, i); // U is full copy
-          L(i, j) = T(0);
-        }
-      }
-      pivot_num = 0;
-      if(pivot){
-        for(unsigned int i(0); i < rows(); ++i){
-          pivot[i] = i;
-        }
-      }
-      // apply Gaussian elimination
-      for(unsigned int i(0); i < rows(); ++i){
-        if(U(i, i) == T(0)){ // check (i, i) is not zero
-          unsigned int j(i);
-          do{
-            if(++j == rows()){
-              throw std::runtime_error("LU decomposition cannot be performed");
-            }
-          }while(U(i, j) == T(0));
-          for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
-            T temp(U(i2, i));
-            U(i2, i) = U(i2, j);
-            U(i2, j) = temp;
-          }
-          pivot_num++;
-          if(pivot){
-            unsigned int temp(pivot[i]);
-            pivot[i] = pivot[j];
-            pivot[j] = temp;
-          }
-        }
-        for(unsigned int i2(i + 1); i2 < rows(); ++i2){
-          L(i2, i) = U(i2, i) / U(i, i);
-          U(i2, i) = T(0);
-          for(unsigned int j2(i + 1); j2 < rows(); ++j2){
-            U(i2, j2) -= L(i2, i) * U(i, j2);
-          }
-        }
-      }
-#undef L
-#undef U
-
-      return LU;
-    }
-
-    viewless_t decomposeLU(const bool &do_check = true) const {
-      unsigned int pivot_num;
-      return decomposeLUP(pivot_num, NULL, do_check);
-    }
-
-    /**
-     * Calculate determinant by using LU decomposition
-     *
-     * @param do_check Whether check size property. The default is true.
-     * @return Determinant
-     */
-    T determinant_LU(const bool &do_check = true) const {
-      unsigned int pivot_num;
-      viewless_t LU(decomposeLUP(pivot_num, NULL, do_check));
-      T res((pivot_num % 2 == 0) ? 1 : -1);
-      for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
-        res *= LU(i, i) * LU(i, j);
-      }
-      return res;
-    }
-
-    T determinant(const bool &do_check = true) const {
-      return determinant_LU(do_check);
-    }
-
-    /**
-     * Perform UD decomposition
-     * Return matrix is
-     * (0, 0)-(n-1,n-1):  U matrix
-     * (0, n)-(n-1,2n-1): D matrix
-     *
-     * @param do_check Check size, the default is true.
-     * @return UD decomposed matrix
-     * @throw std::logic_error When operation is undefined
-     */
-    viewless_t decomposeUD(const bool &do_check = true) const {
-      if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
-      viewless_t P(copy());
-      viewless_t UD(rows(), columns() * 2);
-#define U(i, j) UD(i, j)
-#define D(i, j) UD(i, j + columns())
-      for(int i(rows() - 1); i >= 0; i--){
-        D(i, i) = P(i, i);
-        U(i, i) = T(1);
-        for(unsigned int j(0); j < i; j++){
-          U(j, i) = P(j, i) / D(i, i);
-          for(unsigned int k(0); k <= j; k++){
-            P(k, j) -= U(k, i) * D(i, i) * U(j, i);
-          }
-        }
-      }
-#undef U
-#undef D
-      return UD;
-    }
-
-    /**
-     * Calculate inverse matrix
-     *
-     * @return Inverse matrix
-     * @throw std::logic_error When operation is undefined
-     * @throw std::runtime_error When operation is unavailable
-     */
-    viewless_t inverse() const {
-
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
-
-      //クラメール(遅い)
-      /*
-      viewless_t result(rows(), columns());
-      T det;
-      if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          result(i, j) = coMatrix(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
-        }
-      }
-      return result.transpose() / det;
-      */
-
-      //ガウス消去法
-      viewless_t left(copy());
-      viewless_t right(viewless_t::getI(rows()));
-      for(unsigned int i(0); i < rows(); i++){
-        if(left(i, i) == T(0)){
-          unsigned int i2(i);
-          do{
-            if(++i2 == rows()){
-              throw std::runtime_error("invert matrix not exist");
-            }
-          }while(left(i2, i) == T(0));
-          // exchange i-th and i2-th rows
-          for(unsigned int j(i); j < columns(); ++j){
-            T temp(left(i, j));
-            left(i, j) = left(i2, j);
-            left(i2, j) = temp;
-          }
-          right.exchangeRows(i, i2);
-        }
-        if(left(i, i) != T(1)){
-          for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}
-          for(unsigned int j(i+1); j < columns(); j++){left(i, j) /= left(i, i);}
-          left(i, i) = T(1);
-        }
-        for(unsigned int k(0); k < rows(); k++){
-          if(k == i){continue;}
-          if(left(k, i) != T(0)){
-            for(unsigned int j(0); j < columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
-            for(unsigned int j(i+1); j < columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
-            left(k, i) = T(0);
-          }
-        }
-      }
-      //std::cout << "L:" << left << std::endl;
-      //std::cout << "R:" << right << std::endl;
-
-      return right;
-
-      //LU分解
-      /*
-      */
-    }
-
-    /**
-     * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
-     *
-     * @param scalar
-     * @param matrix
-     * @return result matrix
-     */
-    friend typename viewless_t::super_t::mul_mat_scalar_t::mat_t
-        operator/(const T &scalar, const self_t &matrix) {
-      return matrix.inverse() * scalar;
-    }
-
-    /**
      * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
      *
      * @param matrix Matrix to divide
@@ -2416,17 +2363,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator/=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) {
-      return operator=(*this / matrix);
-    }
-
-    /**
-     * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
-     *
-     * @param matrix Matrix to divide
-     * @return myself
-     */
-    template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &operator/=(const Matrix<T2, Array2D_Type2, ViewType2> &matrix) {
       return operator=(*this / matrix);
     }
 
@@ -2889,19 +2825,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return sqrt(eigen());
     }
 };
-
-/**
- * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
- *
- * @param scalar
- * @param matrix
- * @return result matrix
- */
-template <class T, class Array2D_Type, class ViewType>
-typename Matrix_Frozen<T, Array2D_Type, ViewType>::downcast_default_t::super_t::mul_mat_scalar_t::mat_t operator/(
-    const T &scalar, const Matrix_Frozen<T, Array2D_Type, ViewType> &matrix) {
-  return scalar / (typename Matrix_Frozen<T, Array2D_Type, ViewType>::downcast_default_t)matrix;
-}
 
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)
