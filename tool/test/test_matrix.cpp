@@ -585,7 +585,7 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
 
-BOOST_AUTO_TEST_CASE(cast){
+BOOST_AUTO_TEST_CASE(view_downcast){
   assign_unsymmetric();
   prologue_print();
 
@@ -595,9 +595,27 @@ BOOST_AUTO_TEST_CASE(cast){
   typedef matrix_t::transpose_t::partial_t mat_tp_t;
   mat_tp_t mat_tp(A->transpose().partial(2,3,3,4));
 
-  matrix_t _A(static_cast<mat_tp_t::super_t &>(mat_tp)); // down cast (internally deep copy) is available
+  matrix_t _A(static_cast<mat_tp_t::super_t &>(mat_tp)); // downcast (internally deep copy) is available
   //matrix_t _A2(mat_tp); // compile error due to protected
   matrix_compare(a, _A);
+}
+
+BOOST_AUTO_TEST_CASE(replace){
+  assign_unsymmetric();
+  prologue_print();
+
+  direct_t a(*A), b(B->copy());
+
+  B->transpose().partial(2,3,3,4).replace(A->transpose().partial(2,3,3,4));
+
+  // replaced part
+  a.i_offset = 4; a.j_offset = 3; matrix_compare(a, B->partial(3,2,4,3));
+
+  // other parts
+  b.i_offset = 0; b.j_offset = 0; matrix_compare(b, B->partial(B->rows(),3,0,0)); // left
+  b.i_offset = 0; b.j_offset = 5; matrix_compare(b, B->partial(B->rows(),3,0,5)); // right
+  b.i_offset = 0; b.j_offset = 0; matrix_compare(b, B->partial(4,B->columns(),0,0)); // top
+  b.i_offset = 7; b.j_offset = 0; matrix_compare(b, B->partial(1,B->columns(),7,0)); // bottom
 }
 
 BOOST_AUTO_TEST_CASE(minor){
@@ -628,19 +646,46 @@ BOOST_AUTO_TEST_CASE(det){
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
   prologue_print();
-  mat_add_t a = {A->copy(), B->copy()};
-  matrix_t _A(A->pivotMerge(0, 0, *B));
-  BOOST_TEST_MESSAGE("pivotMerge:" << _A);
-  matrix_compare_delta(a, *A, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
+    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+      matrix_t A_copy(A->copy());
+      matrix_t _A(A->pivotMerge(i, j, *B));
+      BOOST_TEST_MESSAGE("pivotMerge:" << _A);
+
+      // make [[X, 0], [0, 0]], [[0, X], [0, 0]], [[0, 0], [X, 0]], or [[0, 0], [0, X]]
+      unsigned int
+          i_B(i < 0 ? 0 : i), j_B(j < 0 ? 0 : j),
+          i2_B(i < 0 ? -i : 0), j2_B(j < 0 ? -j : 0),
+          rows_B(B->rows() + (i < 0 ? i : -i)),
+          columns_B(B->columns() + (j < 0 ? j : -j));
+      matrix_t B_cutout(matrix_t::getScalar(B->rows(), 0));
+      B_cutout.partial(rows_B, columns_B, i_B, j_B).replace(
+          B->partial(rows_B, columns_B, i2_B, j2_B));
+      mat_add_t a = {A_copy, B_cutout};
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+    }
+  }
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
   prologue_print();
-  mat_add_t a = {*A, *B};
-  matrix_t _A(A->pivotAdd(0, 0, *B));
-  BOOST_TEST_MESSAGE("pivotAdd:" << _A);
-  matrix_compare_delta(a, *A + *B, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
+    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+      matrix_t _A(A->pivotAdd(i, j, *B));
+      BOOST_TEST_MESSAGE("pivotAdd:" << _A);
+
+      // make [[X, 0], [0, 0]], [[0, X], [0, 0]], [[0, 0], [X, 0]], or [[0, 0], [0, X]]
+      unsigned int
+          i_B(i < 0 ? 0 : i), j_B(j < 0 ? 0 : j),
+          i2_B(i < 0 ? -i : 0), j2_B(j < 0 ? -j : 0),
+          rows_B(B->rows() + (i < 0 ? i : -i)),
+          columns_B(B->columns() + (j < 0 ? j : -j));
+      matrix_t B_cutout(matrix_t::getScalar(B->rows(), 0));
+      B_cutout.partial(rows_B, columns_B, i_B, j_B).replace(
+          B->partial(rows_B, columns_B, i2_B, j2_B));
+      mat_add_t a = {*A, B_cutout};
+      matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+    }
+  }
 }
 
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
