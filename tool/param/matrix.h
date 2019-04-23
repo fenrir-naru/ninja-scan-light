@@ -1639,7 +1639,7 @@ class Matrix_Frozen {
           L(partial(rows(), rows(), 0, 0)),
           U(partial(rows(), rows(), 0, rows()));
       typedef typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t y_t;
-      // L(Ux) = y で y' = (Ux)をまず解く
+      // By using L(Ux) = y, firstly y' = (Ux) will be solved; L(Ux) = y で y' = (Ux)をまず解く
       y_t y_copy(y);
       y_t y_prime(y_t::blank(y.rows(), 1));
       for(unsigned i(0); i < rows(); i++){
@@ -1649,7 +1649,7 @@ class Matrix_Frozen {
         }
       }
 
-      // 続いてUx = y'で xを解く
+      // Then, Ux = y' gives solution of x; 続いてUx = y'で xを解く
       y_t x(y_t::blank(y.rows(), 1));
       for(unsigned i(rows()); i > 0;){
         i--;
@@ -1724,20 +1724,20 @@ class Matrix_Frozen {
     typename builder_t::assignable_t inverse() const {
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
-      //クラメール(遅い)
-      /*
+#if 0
+      // Cramer (slow); クラメール
       typename builder_t::assignable_t result(rows(), columns());
       T det;
       if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
       for(unsigned int i(0); i < rows(); i++){
         for(unsigned int j(0); j < columns(); j++){
-          result(i, j) = coMatrix(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
+          result(i, j) = matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
         }
       }
       return result.transpose() / det;
-      */
+#endif
 
-      //ガウス消去法
+      // Gaussian elimination; ガウス消去法
       typename builder_t::assignable_t left(*this);
       typename builder_t::assignable_t right(getI(rows()));
       for(unsigned int i(0); i < rows(); i++){
@@ -1775,7 +1775,7 @@ class Matrix_Frozen {
 
       return right;
 
-      //LU分解
+      // TODO: method to use LU decomposition
       /*
       */
     }
@@ -2566,19 +2566,22 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return result;
 #endif
 
-      //ダブルQR法
-      /* <手順>
-       * ハウスホルダー法を適用して、上ヘッセンベルク行列に置換後、
+      // Double QR method
+      /* <Procedure>
+       * 1) Transform upper Hessenburg's matrix by using Householder's method
+       * ハウスホルダー法を適用して、上ヘッセンベルク行列に置換後
+       * 2) Then, Apply double QR method to get eigenvalues
        * ダブルQR法を適用。
+       * 3) Finally, compute eigenvectors
        * 結果、固有値が得られるので、固有ベクトルを計算。
        */
 
       const unsigned int &_rows(rows());
 
-      //結果の格納用の行列
+      // 結果の格納用の行列
       res_t result(_rows, _rows + 1);
 
-      //固有値の計算
+      // 固有値の計算
 #define lambda(i) result(i, _rows)
 
       T mu_sum(0), mu_multi(0);
@@ -2667,7 +2670,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
           throw std::runtime_error("eigen values calculation failed");
         }
 
-        //収束判定
+        // Convergence test; 収束判定
 #define _abs(x) ((x) >= 0 ? (x) : -(x))
         T A_m2_abs(_abs(A(m-2, m-2))), A_m1_abs(_abs(A(m-1, m-1)));
         T epsilon(threshold_abs
@@ -2686,8 +2689,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 #undef _abs
 
 #if defined(MATRIX_EIGENVEC_SIMPLE)
-      //固有ベクトルの計算
-      res_t x(_rows, _rows);  //固有ベクトル
+      // 固有ベクトルの計算
+      res_t x(_rows, _rows);  // 固有ベクトル
       A = A_;
 
       for(unsigned int j(0); j < _rows; j++){
@@ -2707,7 +2710,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         //std::cout << x.partial(_rows, 1, 0, j).transpose() << std::endl;
       }
 #else
-      //固有ベクトルの計算(逆反復法)
+      // Inverse Iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
       res_t x(res_t::getI(_rows));  //固有ベクトル
       A = A_;
       res_t A_C(_rows, _rows);
@@ -2769,7 +2772,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       //std::cout << "x * x^-1" << x * x.inverse() << std::endl;
       std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
 
-      //結果の格納
+      // 結果の格納
       for(unsigned int j(0); j < x.columns(); j++){
         for(unsigned int i(0); i < x.rows(); i++){
           for(unsigned int k(0); k < transform.columns(); k++){
@@ -2777,7 +2780,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
           }
         }
 
-        //正規化
+        // Normalization; 正規化
         typename complex_t::v_t _norm;
         for(unsigned int i(0); i < _rows; i++){
           _norm += result(i, j).abs2();
@@ -2829,7 +2832,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * Calculate square root of a matrix
      *
      * @param threshold_abs Absolute error to be used for convergence determination of eigenvalue calculation
-     * @param threshold_abs Relative error to be used for convergence determination of eigenvalue calculation
+     * @param threshold_rel Relative error to be used for convergence determination of eigenvalue calculation
      * @return square root
      * @see eigen(const T &, const T &)
      */
