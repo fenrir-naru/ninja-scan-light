@@ -7,11 +7,13 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <None Include="log_mixer.rb" />
     <None Include="unify_csv.rb" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{71BAE922-9824-41C0-ADB5-E25E2AB9203F}</ProjectGuid>
+    <ProjectGuid>{3503DACF-2EA9-4617-9381-BD40B42A4DA1}</ProjectGuid>
     <Keyword>MakeFileProj</Keyword>
+    <ProjectName>ruby_tools</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='AppVeyor|Win32'" Label="Configuration">
@@ -25,7 +27,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='AppVeyor|Win32'">
-    <NMakeBuildCommandLine>ocra --version &amp;&amp; ocra --verbose --gem-minimal --no-enc $(ProjectDir)unify_csv.rb --output $(OutDir)$(TargetName).exe</NMakeBuildCommandLine>
+    <NMakeBuildCommandLine>ocra --version &amp;&amp; cd $(ProjectDir) &amp;&amp; for %%f in (*.rb) do ocra --verbose --gem-minimal --no-enc %%f --output $(OutDir)%%~nf.exe</NMakeBuildCommandLine>
     <NMakeReBuildCommandLine>
     </NMakeReBuildCommandLine>
     <NMakeOutput>
