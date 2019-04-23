@@ -793,13 +793,18 @@ template <
     class ViewType = MatrixViewBase<> >
 class Matrix;
 
-template <class MatrixT>
+template <
+    class MatrixT,
+    int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
 struct MatrixBuilder;
 
 template <
     template <class, class, class> class MatrixT,
-    class T, class Array2D_Type, class ViewType>
-struct MatrixBuilder<MatrixT<T, Array2D_Type, ViewType> >{
+    class T, class Array2D_Type, class ViewType,
+    int nR_add, int nC_add, int nR_multiply, int nC_multiply>
+struct MatrixBuilder<
+    MatrixT<T, Array2D_Type, ViewType>,
+    nR_add, nC_add, nR_multiply, nC_multiply>{
 
   typedef MatrixViewBuilder<ViewType> view_builder_t;
 
@@ -1473,10 +1478,11 @@ class Matrix_Frozen {
      * @param column Column to be removed
      * @return Removed matrix
      */
-    typename builder_t::assignable_t matrix_for_minor(
+    typename MatrixBuilder<self_t, -1, -1>::assignable_t matrix_for_minor(
         const unsigned int &row,
         const unsigned int &column) const noexcept {
-      typename builder_t::assignable_t res(builder_t::assignable_t::blank(rows() - 1, columns() - 1));
+      typename MatrixBuilder<self_t, -1, -1>::assignable_t res(
+          MatrixBuilder<self_t, -1, -1>::assignable_t::blank(rows() - 1, columns() - 1));
       unsigned int i(0), i2(0);
       for( ; i < row; ++i, ++i2){
         unsigned int j(0), j2(0);
@@ -1542,14 +1548,16 @@ class Matrix_Frozen {
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename builder_t::assignable_t decomposeLUP(
+    typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t decomposeLUP(
         unsigned int &pivot_num,
         unsigned int *pivot = NULL,
         const bool &do_check = true) const {
       if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
-      typename builder_t::assignable_t LU(builder_t::assignable_t::blank(rows(), columns() * 2));
 
-      typename builder_t::assignable_t::builder_t::partial_t
+      typedef typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t res_t;
+      res_t LU(res_t::blank(rows(), columns() * 2));
+
+      typename res_t::partial_t
           L(LU.partial(rows(), columns(), 0, 0)),
           U(LU.partial(rows(), columns(), 0, columns()));
       for(unsigned int i(0); i < rows(); ++i){
@@ -1599,7 +1607,8 @@ class Matrix_Frozen {
       return LU;
     }
 
-    typename builder_t::assignable_t decomposeLU(const bool &do_check = true) const {
+    typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t decomposeLU(
+        const bool &do_check = true) const {
       unsigned int pivot_num;
       return decomposeLUP(pivot_num, NULL, do_check);
     }
@@ -1662,7 +1671,7 @@ class Matrix_Frozen {
      */
     T determinant_LU(const bool &do_check = true) const {
       unsigned int pivot_num;
-      typename builder_t::assignable_t LU(decomposeLUP(pivot_num, NULL, do_check));
+      typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t LU(decomposeLUP(pivot_num, NULL, do_check));
       T res((pivot_num % 2 == 0) ? 1 : -1);
       for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
         res *= LU(i, i) * LU(i, j);
@@ -1684,11 +1693,12 @@ class Matrix_Frozen {
      * @return UD decomposed matrix
      * @throw std::logic_error When operation is undefined
      */
-    typename builder_t::assignable_t decomposeUD(const bool &do_check = true) const {
+    typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t decomposeUD(const bool &do_check = true) const {
       if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
       typename builder_t::assignable_t P(*this);
-      typename builder_t::assignable_t UD(rows(), columns() * 2);
-      typename builder_t::assignable_t::builder_t::partial_t
+      typedef typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t res_t;
+      res_t UD(rows(), columns() * 2);
+      typename res_t::partial_t
           U(UD.partial(rows(), columns(), 0, 0)),
           D(UD.partial(rows(), columns(), 0, columns()));
       for(int i(rows() - 1); i >= 0; i--){
@@ -2425,6 +2435,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       clone_t result(copy());
+      typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
+      omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
       for(unsigned int j(0); j < columns() - 2; j++){
         T t(0);
         for(unsigned int i(j + 1); i < rows(); i++){
@@ -2433,7 +2445,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         T s = ::sqrt(t);
         if(result(j + 1, j) < 0){s *= -1;}
 
-        typename builder_t::assignable_t omega(blank(rows() - (j+1), 1));
+        typename omega_buf_t::partial_t omega(omega_buf.partial(rows() - (j+1), 1, 0, 0));
         {
           for(unsigned int i(0); i < omega.rows(); i++){
             omega(i, 0) = result(j+i+1, j);
@@ -2522,21 +2534,22 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename complex_t::m_t eigen(
+    typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t eigen(
         const T &threshold_abs = 1E-10,
         const T &threshold_rel = 1E-7) const {
 
-      typedef typename complex_t::m_t res_t;
+      typedef typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t res_t;
 
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
+#if 0
       //パワー法(べき乗法)
-      /*typename builder_t::assignable_t result(rows(), rows() + 1);
+      typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows(), rows() + 1);
       clone_t source(copy());
       for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
       for(unsigned int i(0); i < columns(); i++){
         while(true){
-          typename builder_t::assignable_t approxVec(source * result.columnVector(i));
+          typename MatrixBuilder<self_t, 0, 1>::assignable_t approxVec(source * result.columnVector(i));
           T approxVal(0);
           for(unsigned int j(0); j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
           approxVal = sqrt(approxVal);
@@ -2550,7 +2563,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
           }
         }
       }
-      return result;*/
+      return result;
+#endif
 
       //ダブルQR法
       /* <手順>
@@ -2628,7 +2642,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
           r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
 
-          typename builder_t::assignable_t omega(3, 1);
+          typename MatrixBuilder<self_t, 3, 1, 0, 0>::assignable_t omega(3, 1);
           {
             omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
             omega(1, 0) = b2;
@@ -2797,16 +2811,17 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return square root
      * @see eiegn(const T &, const T &)
      */
-    static typename complex_t::m_t sqrt(
-        const typename complex_t::m_t &eigen_mat){
+    template <class MatrixT>
+    static typename MatrixBuilder<MatrixT, 0, -1>::assignable_t sqrt(
+        const MatrixT &eigen_mat){
       unsigned int n(eigen_mat.rows());
-      typename complex_t::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
-      typename complex_t::m_t nV(VsD.inverse());
+      typename MatrixT::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename MatrixBuilder<MatrixT, 0, -1>::assignable_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
         nV.partial(1, n, i, 0) *= (eigen_mat(i, n).sqrt());
       }
 
-      return VsD * nV;
+      return (typename MatrixBuilder<MatrixT, 0, -1>::assignable_t)(VsD * nV);
     }
 
   public:
