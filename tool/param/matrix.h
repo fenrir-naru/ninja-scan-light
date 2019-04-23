@@ -2803,7 +2803,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       typename complex_t::m_t::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
       typename complex_t::m_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
-        VsD.partial(n, 1, 0, i) *= (eigen_mat(i, n).sqrt());
+        nV.partial(1, n, i, 0) *= (eigen_mat(i, n).sqrt());
       }
 
       return VsD * nV;
