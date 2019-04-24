@@ -2099,7 +2099,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &rows,
         const unsigned int &columns)
         : super_t(Array2D_Type(rows, columns)){
-      /* Array2D_Type is intentionally used instead of storage_t due to VC10(C2514) */
+      /* Array2D_Type is intentionally used instead of storage_t due to VC2010(C2514) */
       clear();
     }
 
@@ -2117,7 +2117,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &columns,
         const T *serialized)
         : super_t(Array2D_Type(rows, columns, serialized)){
-      /* Array2D_Type is intentionally used instead of storage_t due to VC10(C2514) */
+      /* Array2D_Type is intentionally used instead of storage_t due to VC2010(C2514) */
     }
 
     /**
@@ -2155,8 +2155,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     static typename builder_t::assignable_t blank(
         const unsigned int &new_rows,
         const unsigned int &new_columns){
-      /* Array2D_Type is intentionally used instead of storage_t due to VC10(C2597) */
-      return typename builder_t::assignable_t(Array2D_Type(new_rows, new_columns));
+      typedef typename builder_t::assignable_t res_t;
+      typedef typename res_t::storage_t s_t; // work around of VC2010(C2514)
+      return res_t(s_t(new_rows, new_columns));
     }
 
   protected:
