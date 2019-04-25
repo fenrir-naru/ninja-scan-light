@@ -793,6 +793,22 @@ template <
     class ViewType = MatrixViewBase<> >
 class Matrix;
 
+template <class MatrixT>
+struct MatrixBuilder_ViewTransformer;
+
+template <
+    template <class, class, class> class MatrixT,
+    class T, class Array2D_Type, class ViewType>
+struct MatrixBuilder_ViewTransformer<
+    MatrixT<T, Array2D_Type, ViewType> > {
+  typedef MatrixViewBuilder<ViewType> view_builder_t;
+
+  typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::transpose_t> transpose_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::partial_t> partial_t;
+};
+
 template <
     class MatrixT,
     int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
@@ -804,14 +820,8 @@ template <
     int nR_add, int nC_add, int nR_multiply, int nC_multiply>
 struct MatrixBuilder<
     MatrixT<T, Array2D_Type, ViewType>,
-    nR_add, nC_add, nR_multiply, nC_multiply>{
-
-  typedef MatrixViewBuilder<ViewType> view_builder_t;
-
-  typedef MatrixT<T, Array2D_Type,
-      typename view_builder_t::transpose_t> transpose_t;
-  typedef MatrixT<T, Array2D_Type,
-      typename view_builder_t::partial_t> partial_t;
+    nR_add, nC_add, nR_multiply, nC_multiply>
+    : public MatrixBuilder_ViewTransformer<MatrixT<T, Array2D_Type, ViewType> > {
 
   template <bool is_writable_array, class U = void>
   struct assignable_matrix_t {
