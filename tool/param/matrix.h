@@ -2500,10 +2500,10 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       };
       static const bool is_complex = check_t<T>::hit;
       typedef typename check_t<T>::res_t v_t;
-      typedef typename Matrix<
+      typedef Matrix<
           v_t,
           typename Array2D_Type::template family_t<v_t>::res_t,
-          ViewType>::clone_t m_t;
+          ViewType> m_t;
     };
 
     /**
@@ -2847,7 +2847,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return square root
      * @see eigen(const T &, const T &)
      */
-    typename complex_t::m_t sqrt(
+    typename complex_t::m_t::clone_t sqrt(
         const T &threshold_abs,
         const T &threshold_rel) const {
       return sqrt(eigen(threshold_abs, threshold_rel));
@@ -2858,7 +2858,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      *
      * @return square root
      */
-    typename complex_t::m_t sqrt() const {
+    typename complex_t::m_t::clone_t sqrt() const {
       return sqrt(eigen());
     }
 };
