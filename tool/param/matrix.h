@@ -2549,6 +2549,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const T &threshold_abs = 1E-10,
         const T &threshold_rel = 1E-7) const {
 
+      typedef typename complex_t::m_t::clone_t cmat_t;
+      typedef typename MatrixBuilder<
+          typename complex_t::m_t, 0, 1, 1, 0>::assignable_t cvec_t;
       typedef typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t res_t;
 
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
@@ -2701,7 +2704,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
 #if defined(MATRIX_EIGENVEC_SIMPLE)
       // 固有ベクトルの計算
-      res_t x(_rows, _rows);  // 固有ベクトル
+      cmat_t x(_rows, _rows);  // 固有ベクトル
       A = A_;
 
       for(unsigned int j(0); j < _rows; j++){
@@ -2722,9 +2725,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       }
 #else
       // Inverse Iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
-      res_t x(res_t::getI(_rows));  //固有ベクトル
+      cmat_t x(cmat_t::getI(_rows));  //固有ベクトル
       A = A_;
-      res_t A_C(_rows, _rows);
+      cmat_t A_C(_rows, _rows);
       for(unsigned int i(0); i < _rows; i++){
         for(unsigned int j(0); j < columns(); j++){
           A_C(i, j) = A(i, j);
@@ -2736,7 +2739,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         // かつ、固有値が等しい場合の対処方法として、
         // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
         // を参考に、値を振ってみることにした
-        res_t A_C_lambda(A_C.copy());
+        cmat_t A_C_lambda(A_C.copy());
         typename complex_t::v_t approx_lambda(lambda(j));
         if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
           approx_lambda += 2E-3;
@@ -2744,14 +2747,15 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         for(unsigned int i(0); i < _rows; i++){
           A_C_lambda(i, i) -= approx_lambda;
         }
-        res_t A_C_lambda_LU(A_C_lambda.decomposeLU());
+        typename MatrixBuilder<typename complex_t::m_t, 0, 0, 1, 2>::assignable_t
+            A_C_lambda_LU(A_C_lambda.decomposeLU());
 
-        res_t target_x(res_t::blank(_rows, 1));
+        cvec_t target_x(cvec_t::blank(_rows, 1));
         for(unsigned i(0); i < _rows; ++i){
           target_x(i, 0) = x(i, j);
         }
         for(unsigned loop(0); true; loop++){
-          res_t target_x_new(
+          cvec_t target_x_new(
               A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
           T mu((target_x_new.transpose() * target_x)(0, 0).abs2()),
             v2((target_x_new.transpose() * target_x_new)(0, 0).abs2()),
