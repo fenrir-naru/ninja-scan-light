@@ -970,4 +970,14 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   delete [] AB_array;
 }
 
+#if 1
+BOOST_AUTO_TEST_CASE(fixed){
+  prologue_print();
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t _A(fixed_t::blank(SIZE, SIZE).replace(*A));
+  _A.eigen();
+  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
+}
+#endif
+
 BOOST_AUTO_TEST_SUITE_END()
