@@ -3096,6 +3096,9 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename super_t::storage_t storage_t;
+#elif defined(_MSC_VER)
+    typedef typename super_t::storage_t storage_t; // To fix VC2010(C2514) in constructor
+    using super_t::operator(); // To fix VC2010(C2106) of X(r, c) = something
 #else
     using typename super_t::storage_t;
 #endif
