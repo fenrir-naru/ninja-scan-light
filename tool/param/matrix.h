@@ -2172,7 +2172,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
   protected:
     clone_t blank_copy() const {
-      return blank(rows(), columns());
+      return clone_t::blank(rows(), columns());
     }
 
     template <class T2, class Array2D_Type2, class ViewType2>
