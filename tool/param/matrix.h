@@ -2315,17 +2315,32 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return *this;
     }
 
+  protected:
+    template <bool clone_storage = false, class U = void>
+    struct copy_t {
+      static clone_t run(const self_t &self){
+        clone_t res(self.blank_copy());
+        res.replace_internal(self);
+        return res;
+      }
+    };
+    template <class U>
+    struct copy_t<true, U> {
+      static clone_t run(const self_t &self){
+        return clone_t(self.storage.storage_t::copy(true));
+      }
+    };
+
+  public:
     /**
      * Perform (deep) copy
      *
      * @return (clone_t)
      */
     clone_t copy() const {
-      if(view_property_t::viewless){
-        return clone_t(storage.storage_t::copy(true));
-      }else{
-        return blank_copy().replace_internal(*this);
-      }
+      // To avoid undefined reference of (future defined, such as Matrix_Fixed) downcast in GCC,
+      // template is used.
+      return copy_t<view_property_t::viewless>::run(*this);
     }
 
   protected:
