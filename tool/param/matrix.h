@@ -2395,7 +2395,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator*=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      return operator=(*this * matrix);
+      return operator=((clone_t)(*this * matrix));
     }
 
     /**
@@ -2406,7 +2406,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator/=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) {
-      return operator=(*this / matrix);
+      return operator=((clone_t)(*this / matrix));
     }
 
     /**
