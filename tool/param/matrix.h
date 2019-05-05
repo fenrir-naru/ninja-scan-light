@@ -956,9 +956,11 @@ class Matrix_Frozen {
      * Down cast to Matrix by creating deep copy to make its content changeable
      *
      */
-    template <class T2, class Array2D_Type2>
-    operator Matrix<T2, Array2D_Type2>() const {
-      return Matrix<T2, Array2D_Type2>::blank(rows(), columns()).replace_internal(*this);
+    operator typename builder_t::assignable_t() const {
+      typedef typename builder_t::assignable_t res_t;
+      res_t res(res_t::blank(rows(), columns()));
+      res.replace_internal(*this);
+      return res;
     }
 
   protected:
@@ -2220,8 +2222,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      *
      * Use copy() for Matrix
      */
-    template <class T2, class Array2D_Type2>
-    operator Matrix<T2, Array2D_Type2>() const;
+    operator clone_t() const;
 
   public:
     /**
