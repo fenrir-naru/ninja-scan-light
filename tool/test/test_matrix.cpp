@@ -975,8 +975,15 @@ BOOST_AUTO_TEST_CASE(fixed){
   prologue_print();
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t _A(fixed_t::blank(SIZE, SIZE).replace(*A));
-  _A.eigen();
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
+
+  typedef Matrix_Fixed<Complex<content_t>, SIZE> cfixed_t;
+  cfixed_t _Ac1(cfixed_t::blank(SIZE, SIZE).replace(*A));
+  cfixed_t _Ac2(_Ac1.copy());
+  matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
+  matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
+
+  matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
 }
 #endif
 

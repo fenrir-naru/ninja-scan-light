@@ -3001,7 +3001,7 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
     friend class Matrix; // for protected copy(), which can only generate shallow copy
 
   protected:
-    T (*values)[nR][nC]; ///< array for values
+    T (* const values)[nR][nC]; ///< array for values
 
   public:
     Array2D_Fixed(T (*buf)[nR][nC] = NULL) noexcept
@@ -3022,14 +3022,8 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
      *
      * @param array another one
      */
-    Array2D_Fixed(const self_t &src, T (*buf)[nR][nC] = NULL) noexcept
+    Array2D_Fixed(const self_t &src) noexcept
         : super_t(src.rows(), src.columns()), values(src.values){
-      if(buf){
-        if(values){
-          std::memcpy(buf, values, sizeof(T) * nR * nC);
-        }
-        values = buf;
-      }
     }
 
     /**
@@ -3048,7 +3042,7 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
         super_t::m_rows = rhs.m_rows;
         super_t::m_columns = rhs.m_columns;
         if(rhs.values && values){
-          std::memcpy(values, rhs.values, sizeof(T) * nR * nC);
+          std::memcpy(values, rhs.values, sizeof(T[nR][nC]));
         }
       }
       return *this;
@@ -3116,7 +3110,9 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
     T buf[nR][nC]; ///< fixed size buffer
 
     Matrix_Fixed(const storage_t &storage) noexcept
-        : super_t(storage_t(storage, &buf)){}
+        : super_t(storage_t(&buf)) {
+      super_t::storage = storage;
+    }
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
@@ -3163,7 +3159,8 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
      * Copy constructor generating deep copy.
      */
     Matrix_Fixed(const self_t &matrix) noexcept
-        : super_t(storage_t(matrix.storage, &buf)) {
+        : super_t(storage_t(&buf)) {
+      super_t::storage = matrix.storage;
     }
 
     template <class T2, class Array2D_Type2, class ViewType2>
@@ -3176,9 +3173,14 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
      */
     virtual ~Matrix_Fixed(){}
 
-    template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &operator=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      super_t::replace(matrix);
+    self_t &operator=(const self_t &matrix){
+      super_t::operator=(matrix);
+      return *this;
+    }
+
+    template <class T2, class Array2D_Type2>
+    self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
+      super_t::operator=(matrix);
       return *this;
     }
 };
