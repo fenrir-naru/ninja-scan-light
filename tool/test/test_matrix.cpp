@@ -971,7 +971,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
 }
 
 #if 1
-BOOST_AUTO_TEST_CASE(fixed){
+BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t _A(fixed_t::blank(SIZE, SIZE).replace(*A));
@@ -983,7 +983,15 @@ BOOST_AUTO_TEST_CASE(fixed){
   matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
 
-  matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
+  try{
+    matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(
+        A->partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
+        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
+        ACCEPTABLE_DELTA_DEFAULT);
+  }catch(std::runtime_error &e){
+    BOOST_ERROR("eigen_error:" << e.what());
+  }
 }
 #endif
 
