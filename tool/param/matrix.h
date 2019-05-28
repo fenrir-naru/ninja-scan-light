@@ -3218,6 +3218,35 @@ struct MatrixBuilder<
       (MatrixViewProperty<ViewType>::transposed ? nR : nC) * nC_multiply + nC_add> assignable_t;
 };
 
+template <
+    template <class, class, class> class MatrixT,
+    class T, class Array2D_Type, class ViewType,
+    int nR_add, int nC_add>
+struct MatrixBuilder<
+    MatrixT<T, Array2D_Type, ViewType>,
+    nR_add, nC_add, 0, 0>
+    : public MatrixBuilder_ViewTransformer<
+        MatrixT<T, Array2D_Type, ViewType> > {
+  typedef Matrix_Fixed<T,
+      (MatrixViewProperty<ViewType>::transposed ? nC_add : nR_add),
+      (MatrixViewProperty<ViewType>::transposed ? nR_add : nC_add)> assignable_t;
+};
+
+// For resolution of partial specialization ambiguity
+template <
+    template <class, class, class> class MatrixT,
+    class T, int nR, int nC, class ViewType,
+    int nR_add, int nC_add>
+struct MatrixBuilder<
+    MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
+    nR_add, nC_add, 0, 0>
+    : public MatrixBuilder_ViewTransformer<
+        MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
+  typedef Matrix_Fixed<T,
+      (MatrixViewProperty<ViewType>::transposed ? nC_add : nR_add),
+      (MatrixViewProperty<ViewType>::transposed ? nR_add : nC_add)> assignable_t;
+};
+
 #endif
 
 #undef throws_when_debug
