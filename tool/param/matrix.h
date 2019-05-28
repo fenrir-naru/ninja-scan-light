@@ -3247,6 +3247,38 @@ struct MatrixBuilder<
       (MatrixViewProperty<ViewType>::transposed ? nR_add : nC_add)> assignable_t;
 };
 
+template <
+    class T,
+    class ViewType,
+    int nR_L, int nC_L, class ViewType_L,
+    int nR_R, int nC_R, class ViewType_R,
+    int nR_add, int nC_add, int nR_multiply, int nC_multiply>
+struct MatrixBuilder<
+    Matrix_Frozen<
+        T,
+        Array2D_Operator<T, Array2D_Operator_Multiply<
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+        ViewType>,
+    nR_add, nC_add, nR_multiply, nC_multiply>
+    : public MatrixBuilder_ViewTransformer<
+      Matrix_Frozen<
+          T,
+          Array2D_Operator<T, Array2D_Operator_Multiply<
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          ViewType> > {
+  typedef Matrix_Fixed<T,
+      (MatrixViewProperty<ViewType>::transposed
+          ? (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R)
+          : (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L))
+            * nR_multiply + nR_add,
+      (MatrixViewProperty<ViewType>::transposed
+          ? (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L)
+          : (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R))
+            * nC_multiply + nC_add> assignable_t;
+};
+
 #endif
 
 #undef throws_when_debug
