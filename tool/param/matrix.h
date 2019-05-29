@@ -648,6 +648,18 @@ struct priority_t<MatrixView ## name, U> { \
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
   typedef typename once_t<MatrixViewPartial>::res_t partial_t;
 
+  template <class View2>
+  struct merge_t {
+    typedef View res_t;
+  };
+  template <class BaseView>
+  struct merge_t<MatrixViewTranspose<BaseView> > {
+    typedef typename MatrixViewBuilder<transpose_t>::template merge_t<BaseView>::res_t res_t;
+  };
+  template <class BaseView>
+  struct merge_t<MatrixViewPartial<BaseView> > {
+    typedef typename MatrixViewBuilder<partial_t>::template merge_t<BaseView>::res_t res_t;
+  };
 
   template <class View2>
   struct copy_t {
@@ -807,6 +819,12 @@ struct MatrixBuilder_ViewTransformer<
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::partial_t> partial_t;
+
+  template <class ViewType2>
+  struct view_merge_t {
+    typedef MatrixT<T, Array2D_Type,
+        typename view_builder_t::template merge_t<ViewType2>::res_t> merged_t;
+  };
 };
 
 template <

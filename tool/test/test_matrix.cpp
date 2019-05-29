@@ -504,6 +504,23 @@ BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
       MatrixViewPartial<MatrixViewBase<> > >::value));
+
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::transpose_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
+      MatrixViewBase<> >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
+      MatrixViewPartial<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::partial_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
+      MatrixViewPartial<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::transpose_t::partial_t::builder_t::template view_merge_t<
+        typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
+      MatrixViewPartial<MatrixViewBase<> > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
   prologue_print();
