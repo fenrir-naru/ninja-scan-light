@@ -458,7 +458,7 @@ struct Array2D_Operator_Binary {
   typedef RHS_T rhs_t;
   lhs_t lhs; ///< Left hand side value
   rhs_t rhs; ///< Right hand side value
-  Array2D_Operator_Binary(const lhs_t &_lhs, const RHS_T &_rhs) noexcept
+  Array2D_Operator_Binary(const lhs_t &_lhs, const rhs_t &_rhs) noexcept
       : lhs(_lhs), rhs(_rhs) {}
 };
 
