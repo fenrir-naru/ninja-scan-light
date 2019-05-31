@@ -9,6 +9,7 @@
 
 #include "param/complex.h"
 #include "param/matrix.h"
+#include "param/matrix_fixed.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -504,6 +505,23 @@ BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
       MatrixViewPartial<MatrixViewBase<> > >::value));
+
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::transpose_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
+      MatrixViewBase<> >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
+      MatrixViewPartial<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::partial_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
+      MatrixViewPartial<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      typename matrix_t::transpose_t::partial_t::builder_t::template view_merge_t<
+        typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
+      MatrixViewPartial<MatrixViewBase<> > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
   prologue_print();
@@ -952,5 +970,64 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   }
   delete [] AB_array;
 }
+
+#if 1
+BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
+  prologue_print();
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t _A(fixed_t::blank(SIZE, SIZE).replace(*A));
+  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
+
+  typedef Matrix_Fixed<Complex<content_t>, SIZE> cfixed_t;
+  cfixed_t _Ac1(cfixed_t::blank(SIZE, SIZE).replace(*A));
+  cfixed_t _Ac2(_Ac1.copy());
+  matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
+  matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
+
+  try{
+    matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
+    matrix_compare_delta(
+        A->partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
+        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
+        ACCEPTABLE_DELTA_DEFAULT);
+  }catch(std::runtime_error &e){
+    BOOST_ERROR("eigen_error:" << e.what());
+  }
+}
+
+BOOST_AUTO_TEST_CASE(fixed_types){
+  prologue_print();
+
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
+        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
+        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
+          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
+          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 2, 16> >::value));
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
+        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
+          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
+          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> > > > >,
+        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 2, 16> >::value));
+  BOOST_CHECK((boost::is_same<
+      Matrix_Fixed<content_t, 2, 4>::super_t::super_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::super_t::super_t>::mat_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::super_t::super_t::builder_t::transpose_t>::mat_t
+        ::builder_t::transpose_t::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 16, 2> >::value));
+  BOOST_CHECK((boost::is_same<
+      Matrix_Fixed<content_t, 2, 4>::super_t::super_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::super_t::super_t>::mat_t
+        ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::super_t::super_t>::mat_t
+        ::template Multiply_Matrix_by_Scalar<int>::mat_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::super_t::super_t>::mat_t
+        ::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 2, 16> >::value));
+}
+
+#endif
 
 BOOST_AUTO_TEST_SUITE_END()
