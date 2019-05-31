@@ -2083,18 +2083,18 @@ struct MatrixBuilder<
   struct check_t<Array2D_Operator_Multiply<
       LHS_T,
       Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> > > { // (M or M') * M
-    template <class OperatorT2 = typename LHS_T::template OperatorProperty<>::operator_t>
-    struct check2_t { // Non operator case
-      // Ml * Mr => Ml
-      typedef LHS_T res_t;
-    };
-    template <class OperatorT_L>
-    struct check2_t<Array2D_Operator<T, OperatorT_L> > {
+    template <class OperatorT2 = typename LHS_T::template OperatorProperty<>::operator_t, class U = void>
+    struct check2_t {
       // (op, M1, M2, ...) * Mr => M1 * Mr
       typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
           typename MatrixBuilder<typename previous_t<LHS_T>::mat1_t>
             ::template view_merge_t<typename LHS_T::view_t>::merged_t,
          typename OperatorT::rhs_t> > > res_t;
+    };
+    template <class U>
+    struct check2_t<void, U> { // Non operator case
+      // Ml * Mr => Ml
+      typedef LHS_T res_t;
     };
     typedef typename check2_t<>::res_t mat_t;
   };
@@ -2103,7 +2103,7 @@ struct MatrixBuilder<
       class T_R, class OperatorT_R, class ViewType_R>
   struct check_t<Array2D_Operator_Multiply<
       LHS_T,
-      Matrix_Frozen<T_R, Array2D_Operator<T, OperatorT_R>, ViewType_R> > > { // (M or M') * M'
+      Matrix_Frozen<T_R, Array2D_Operator<T_R, OperatorT_R>, ViewType_R> > > { // (M or M') * M'
     // [Ml * (op, M1, M2, ...) => Ml * M1], or [Ml * (M1 * M2) => Ml * M2]
     typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
         LHS_T,
