@@ -9,6 +9,7 @@
 
 #include "param/complex.h"
 #include "param/matrix.h"
+#include "param/matrix_fixed.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
