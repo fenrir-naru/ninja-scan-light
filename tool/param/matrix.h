@@ -454,6 +454,7 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
 
 template <class LHS_T, class RHS_T>
 struct Array2D_Operator_Binary {
+  typedef LHS_T first_t;
   typedef LHS_T lhs_t;
   typedef RHS_T rhs_t;
   lhs_t lhs; ///< Left hand side value
@@ -2021,6 +2022,99 @@ struct Array2D_Operator_Multiply<
     }
     return res;
   }
+};
+
+/*
+ * Downcast rules including operation
+ * When multiplication of multiple matrices, the most left and right hand terms are extracted intermediately.
+ * For example, type((M1 * M2) * M3) will be type(M1 * M3).
+ * type((M1 * M2) * (M3 * M4)) will be (M1 * M4).
+ * In addition, a type of the most left hand term is used for any operation.
+ * Please see the following examples:
+ * type((M1 + M2) + M3) will be type(M1 + M2), then type(M1).
+ * type(((M1 * M2) * M3) + M4) will be type((M1 * M2) * M3), then type(M1 * M3), and finally type(M1).
+ */
+template <
+    class T, class OperatorT, class ViewType,
+    int nR_add, int nC_add, int nR_multiply, int nC_multiply>
+struct MatrixBuilder<
+    Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType>,
+    nR_add, nC_add, nR_multiply, nC_multiply>
+    : public MatrixBuilder_ViewTransformer<
+      Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
+
+  template <class MatrixT>
+  struct previous_t {
+    typedef MatrixT mat1_t;
+    typedef MatrixT mat2_t;
+  };
+  template <class T2, class OperatorT2, class ViewType2>
+  struct previous_t<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> > {
+    template <class OperatorT3 = OperatorT2>
+    struct check_op_t {
+      // consequently, M * S, M + M are captured
+      typedef typename OperatorT2::first_t mat1_t;
+      typedef typename OperatorT2::first_t mat2_t;
+    };
+    template <
+        class LHS_T,
+        class T_R, class Array2D_Type_R, class ViewType_R>
+    struct check_op_t<Array2D_Operator_Multiply<
+        LHS_T,
+        Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> > > { // specialization for M * M
+      typedef typename OperatorT2::lhs_t mat1_t;
+      typedef typename OperatorT2::rhs_t mat2_t;
+    };
+
+    typedef typename check_op_t<>::mat1_t mat1_t;
+    typedef typename check_op_t<>::mat2_t mat2_t;
+  };
+
+
+  template <class OperatorT2 = OperatorT>
+  struct check_t {
+    // consequently, M * S, M + M are captured
+    // (op, M1, M2, ...) => M1
+    typedef typename OperatorT::first_t mat_t;
+  };
+  template <
+      class LHS_T,
+      class T_R, class Array2D_Type_R, class ViewType_R>
+  struct check_t<Array2D_Operator_Multiply<
+      LHS_T,
+      Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> > > { // (M or M') * M
+    template <class OperatorT2 = typename LHS_T::template OperatorProperty<>::operator_t>
+    struct check2_t { // Non operator case
+      // Ml * Mr => Ml
+      typedef LHS_T res_t;
+    };
+    template <class OperatorT_L>
+    struct check2_t<Array2D_Operator<T, OperatorT_L> > {
+      // (op, M1, M2, ...) * Mr => M1 * Mr
+      typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
+          typename MatrixBuilder<typename previous_t<LHS_T>::mat1_t>
+            ::template view_merge_t<typename LHS_T::view_t>::merged_t,
+         typename OperatorT::rhs_t> > > res_t;
+    };
+    typedef typename check2_t<>::res_t mat_t;
+  };
+  template <
+      class LHS_T,
+      class T_R, class OperatorT_R, class ViewType_R>
+  struct check_t<Array2D_Operator_Multiply<
+      LHS_T,
+      Matrix_Frozen<T_R, Array2D_Operator<T, OperatorT_R>, ViewType_R> > > { // (M or M') * M'
+    // [Ml * (op, M1, M2, ...) => Ml * M1], or [Ml * (M1 * M2) => Ml * M2]
+    typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
+        LHS_T,
+        typename MatrixBuilder<typename previous_t<typename OperatorT::rhs_t>::mat2_t>
+          ::template view_merge_t<ViewType_R>::merged_t> > > mat_t;
+  };
+
+
+  typedef typename MatrixBuilder<
+      typename MatrixBuilder<typename check_t<>::mat_t>::template view_merge_t<ViewType>::merged_t,
+      nR_add, nC_add, nR_multiply, nC_multiply>::assignable_t assignable_t;
 };
 
 
