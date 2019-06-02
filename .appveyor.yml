@@ -2,7 +2,7 @@ version: 1.0.{build}.{branch}
 configuration: AppVeyor
 install:
   - set PATH=C:\Ruby21\bin;%PATH%
-  - gem install ocra
+  - gem install ocra serialport
 before_build:
   - nuget restore tool\NinjaScanLight_tools.sln
 build:
