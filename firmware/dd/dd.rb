@@ -52,11 +52,14 @@ opt[:port][:name] = proc{
 opt[:dst_fname] ||= File::basename("#{opt[:port][:name]}_#{Time::now.strftime("%Y%d%m_%H%M%S")}.bin")
 
 sp = SerialPort.new(*([:num, :bps, :nbits, :stopb, :parity].collect{|k| opt[:port][k]}))
-sp.read_timeout = 100
+sp.read_timeout = 500
+sp.fsync
+sp.getbyte while !sp.eof? # buffer clear
 $stderr.puts "#{opt[:port][:name]} opened."
 
 read_prop = proc{|k|
   sp.write(k)
+  sp.fsync
   next $&.to_i if sp.gets =~ /\d+/
   $stderr.puts "Unknown property(#{k})!"
   exit(-1)
@@ -71,10 +74,21 @@ $stderr.puts "Storage property: #{property.inspect}"
 read_block = proc{|sector_start, sectors|
   sectors ||= 1
   sp.write([sector_start, sectors].join(' '))
+  sp.fsync
   raise if sp.gets !~ /READ\((\d+),(\d+)\)/
   raise if ($1.to_i != sector_start) || ($2.to_i != sectors)
-  res = sp.read(property[:size] * sectors)
-  raise if res.size != (property[:size] * sectors)
+  bytes = property[:size] * sectors
+  res = ""
+  err_cnt = 0
+  begin
+    rx = sp.read(bytes)
+    res += rx
+    raise if (bytes -= rx.size) > 0
+  rescue
+    raise if (err_cnt += 1) > 10
+    $stderr.print 'e'
+    retry
+  end
   res
 }
 
@@ -87,8 +101,9 @@ open(opt[:dst_fname], 'a+'){|dst|
   each_sectors = opt[:each_sectors]
   (bs...es).step(each_sectors){|i|
     i_rel = i - bs
-    $stderr.puts "Reading #{sprintf("%8d (%8d of %8d, %5.1f%%)", i, i_rel, sectors, 100.0 * i_rel / sectors)} #{Time::now.strftime("%T")} ..."
+    $stderr.print "Reading #{sprintf("%8d (%8d of %8d, %5.1f%%)", i, i_rel, sectors, 100.0 * i_rel / sectors)}... "
     dst.write(read_block.call(i, [each_sectors, es - i].min))
+    $stderr.puts " #{Time::now.strftime("%T")}"
   }
   $stderr.puts "done."
 }
