@@ -1,6 +1,7 @@
 #!/usr/bin/ruby
 
 require 'serialport' # gem install serialport
+require 'io/console'
 
 opt = {
   :port => {
@@ -35,7 +36,7 @@ ARGV[1..-1].each{|arg|
   next false if arg !~ /--([^=]+)=?/
   k, v = [$1.to_sym, $' == "" ? true : $']
   case opt[k]
-  when Fixnum
+  when Integer
     v = Integer(v) rescue eval(v)
   when true, false
     v = (v == "true") if v.kind_of?(String)
@@ -51,16 +52,21 @@ opt[:port][:name] = proc{
 
 opt[:dst_fname] ||= File::basename("#{opt[:port][:name]}_#{Time::now.strftime("%Y%d%m_%H%M%S")}.bin")
 
-sp = SerialPort.new(*([:num, :bps, :nbits, :stopb, :parity].collect{|k| opt[:port][k]}))
-sp.read_timeout = 500
-sp.fsync
-sp.getbyte while !sp.eof? # buffer clear
+open_proc = proc{
+  io = SerialPort.new(*([:num, :bps, :nbits, :stopb, :parity].collect{|k| opt[:port][k]}))
+  io.read_timeout = 100
+  io.fsync
+  #io.readpartial(0x20000) rescue nil
+  io
+}
+  
+sp = open_proc.call
 $stderr.puts "#{opt[:port][:name]} opened."
 
 read_prop = proc{|k|
   sp.write(k)
   sp.fsync
-  next $&.to_i if sp.gets =~ /\d+/
+  next $&.to_i if sp.gets.force_encoding(Encoding::ASCII_8BIT) =~ /\d+/
   $stderr.puts "Unknown property(#{k})!"
   exit(-1)
 }
@@ -85,7 +91,7 @@ read_block = proc{|sector_start, sectors|
     res += rx
     raise if (bytes -= rx.size) > 0
   rescue
-    raise if (err_cnt += 1) > 10
+    raise if (err_cnt += 1) > 8
     $stderr.print 'e'
     retry
   end
@@ -102,7 +108,15 @@ open(opt[:dst_fname], 'a+'){|dst|
   (bs...es).step(each_sectors){|i|
     i_rel = i - bs
     $stderr.print "Reading #{sprintf("%8d (%8d of %8d, %5.1f%%)", i, i_rel, sectors, 100.0 * i_rel / sectors)}... "
-    dst.write(read_block.call(i, [each_sectors, es - i].min))
+    begin
+      dst.write(read_block.call(i, [each_sectors, es - i].min))
+    rescue
+      sp.close
+      sleep(1000)
+      sp = open_proc.call
+      $stderr.print 'r'
+      retry
+    end
     $stderr.puts " #{Time::now.strftime("%T")}"
   }
   $stderr.puts "done."
