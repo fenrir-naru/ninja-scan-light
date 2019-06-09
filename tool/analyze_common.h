@@ -510,20 +510,22 @@ struct CalendarTime {
         correction_sec(0),
         roll_over_monitor() {}
 
+    CalendarTime convert(const std::time_t &in, const float_t &subsec = 0) const {
+      tm *t(std::gmtime(&in));
+      CalendarTime res = {
+          t->tm_year + 1900,
+          t->tm_mon + 1,
+          t->tm_mday,
+          t->tm_hour,
+          t->tm_min,
+          subsec + t->tm_sec};
+      return res;
+    }
     CalendarTime convert(const float_t &itow) const {
       if(gps_time.wn != gps_time_t::WN_INVALID){
         float_t gap(roll_over_monitor(itow) - gps_time.sec);
         int gap_sec(std::floor(gap));
-        std::time_t current(utc_time + gap_sec + correction_sec);
-        tm *t(std::gmtime(&current));
-        CalendarTime res = {
-            t->tm_year + 1900,
-            t->tm_mon + 1,
-            t->tm_mday,
-            t->tm_hour,
-            t->tm_min,
-            gap - gap_sec + t->tm_sec};
-        return res;
+        return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
       }else{
         CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
         return res;
@@ -584,6 +586,25 @@ struct CalendarTime {
       update(gps_sec, gps_wn, 0);
       utc_time -= estimate_leap_sec(utc_time);
       leap_seconds = LEAP_SECONDS_ESTIMATED;
+    }
+    CalendarTime convert(const gps_time_t &current_gps) const {
+      if(current_gps.wn == gps_time_t::WN_INVALID){
+        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(current_gps.sec)};
+        return res;
+      }else if(gps_time.wn == gps_time_t::WN_INVALID){
+        // use estimated leap seconds
+        float_t gap(gps_time_zero + current_gps.wn * roll_over_monitor_t::one_week + current_gps.sec);
+        gap -= estimate_leap_sec(std::time_t(gap));
+        int gap_sec(std::floor(gap));
+        return convert(std::time_t(gap_sec + correction_sec), gap - gap_sec);
+      }else{
+        // use internal correction value for leap seconds
+        float_t gap(
+            (current_gps.wn - gps_time.wn) * roll_over_monitor_t::one_week
+              + (current_gps.sec - gps_time.sec));
+        int gap_sec(std::floor(gap));
+        return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
+      }
     }
   };
 };
