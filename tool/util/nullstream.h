@@ -70,18 +70,21 @@ class basic_NullStreambuf : public std::basic_streambuf<_Elem, _Traits> {
     }
 };
 
-typedef basic_NullStreambuf<char, std::char_traits<char> > NullStreambuf;
-
-class NullStream : public std::iostream{
+template<
+    class _Elem,
+    class _Traits>
+class basic_NullStream : public std::iostream{
   public:
-    typedef NullStreambuf buf_t;
+    typedef basic_NullStreambuf<_Elem, _Traits> buf_t;
   protected:
     typedef std::iostream super_t;
     buf_t buf;
   public:
-    NullStream() : buf(), super_t(&buf){}
-    ~NullStream() noexcept {}
+    basic_NullStream() : buf(), super_t(&buf){}
+    ~basic_NullStream() noexcept {}
 };
+
+typedef basic_NullStream<char, std::char_traits<char> > NullStream;
 
 #if (__cplusplus < 201103L) && defined(noexcept)
 #undef noexcept

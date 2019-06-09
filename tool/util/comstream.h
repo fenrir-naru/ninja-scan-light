@@ -660,19 +660,22 @@ class basic_ComportStreambuf : public std::basic_streambuf<_Elem, _Traits> {
     }
 };
 
-typedef basic_ComportStreambuf<char, std::char_traits<char> > ComportStreambuf;
-
-class ComportStream : public std::iostream{
+template<
+    class _Elem,
+    class _Traits>
+class basic_ComportStream : public std::iostream{
   public:
-    typedef ComportStreambuf buf_t;
+    typedef basic_ComportStreambuf<_Elem, _Traits> buf_t;
   protected:
     typedef std::iostream super_t;
     buf_t buf;
   public:
-    ComportStream(const char *port_spec)
+    basic_ComportStream(const char *port_spec)
         : buf(port_spec), super_t(&buf){}
-    ~ComportStream(){}
+    ~basic_ComportStream(){}
     buf_t &buffer(){return buf;}
 };
+
+typedef basic_ComportStream<char, std::char_traits<char> > ComportStream;
 
 #endif /* __COMSTREAM_H__ */
