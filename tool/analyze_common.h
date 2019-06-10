@@ -486,21 +486,31 @@ struct CalendarTime {
 
     mutable struct roll_over_monitor_t {
       static const int one_week = 60 * 60 * 7 * 24;
-      int itow_offset;
+      static const int threshold = 60 * 30; // 30min
+      int roll_over_offset;
       float_t itow_previous;
-      roll_over_monitor_t() : itow_offset(0), itow_previous(0) {}
+      roll_over_monitor_t() : roll_over_offset(0), itow_previous(0) {}
       float_t operator()(const float_t &itow){
-        float_t itow_mod(itow + itow_offset);
-        if((itow_mod - itow_previous) < -(one_week / 2)){ // detect super jump
-          if((itow_previous - itow_offset) > (one_week - 1200)){ // probably roll over
-            itow_offset += one_week;
-            itow_mod += one_week;
-          }else{ // otherwise probably reset occurred
-            itow_offset = 0;
-            itow_mod = itow;
+        float_t delta(itow - itow_previous);
+        do{
+          if(delta < -(one_week / 2)){ // detect backward super jump (now << previous)
+            if(itow_previous > (one_week - threshold)){ // roll over
+              roll_over_offset += one_week;
+              break;
+            }
+          }else if(delta > (one_week / 2)){ // detect forward super jump (previous << now)
+            if(itow_previous < threshold){ // roll over (backward)
+              roll_over_offset -= one_week;
+              break;
+            }
+          }else if((delta > -threshold) && (delta < threshold)){ // normal
+            break;
           }
-        }
-        return (itow_previous = itow_mod);
+          // otherwise probably reset occurred
+          roll_over_offset = 0;
+        }while(false);
+        itow_previous = itow;
+        return itow + roll_over_offset;
       }
     } roll_over_monitor;
 
