@@ -1746,7 +1746,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     template <class TimeStamp>
     struct TimeStampGenerator {
       void update(const TimePacket &packet){}
-      TimeStamp operator()(const float_t &t) const {
+      TimeStamp operator()(const float_t &t, const int &wn = 0) const {
         return (TimeStamp)t;
       }
     };
@@ -1764,6 +1764,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       stamp_t operator()(const FloatT &itow) const {
         return stamp_t(itow2calendar.convert(itow), itow);
+      }
+      stamp_t operator()(const FloatT &itow, const int &wn) const {
+        return stamp_t(itow2calendar.convert(itow, wn), itow);
       }
     };
 

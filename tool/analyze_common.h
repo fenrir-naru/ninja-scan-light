@@ -597,24 +597,27 @@ struct CalendarTime {
       utc_time -= estimate_leap_sec(utc_time);
       leap_seconds = LEAP_SECONDS_ESTIMATED;
     }
-    CalendarTime convert(const gps_time_t &current_gps) const {
-      if(current_gps.wn == gps_time_t::WN_INVALID){
-        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(current_gps.sec)};
+    CalendarTime convert(const float_t &itow, const int &wn) const {
+      if(wn == gps_time_t::WN_INVALID){
+        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
         return res;
       }else if(gps_time.wn == gps_time_t::WN_INVALID){
         // use estimated leap seconds
-        float_t gap(gps_time_zero + current_gps.wn * roll_over_monitor_t::one_week + current_gps.sec);
+        float_t gap(gps_time_zero + wn * roll_over_monitor_t::one_week + itow);
         gap -= estimate_leap_sec(std::time_t(gap));
         int gap_sec(std::floor(gap));
         return convert(std::time_t(gap_sec + correction_sec), gap - gap_sec);
       }else{
         // use internal correction value for leap seconds
         float_t gap(
-            (current_gps.wn - gps_time.wn) * roll_over_monitor_t::one_week
-              + (current_gps.sec - gps_time.sec));
+            (wn - gps_time.wn) * roll_over_monitor_t::one_week
+              + (itow - gps_time.sec));
         int gap_sec(std::floor(gap));
         return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
       }
+    }
+    CalendarTime convert(const gps_time_t &current_gps) const {
+      return convert(current_gps.sec, current_gps.wn);
     }
   };
 };
