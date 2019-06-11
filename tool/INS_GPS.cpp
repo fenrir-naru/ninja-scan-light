@@ -776,7 +776,7 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
   gps_pvt_t() : G_Packet_Measurement::pvt_t() {}
   static void label(std::ostream &out) {
     out << "week"
-        << ',' << "itow"
+        << ',' << "itow_rcv"
         << ',' << "receiver_clock_error_meter"
         << ',' << "longitude"
         << ',' << "latitude"
@@ -2424,6 +2424,14 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         recent_m(0x10),
         gps_raw_pvt(),
         t_stamp_generator() {
+
+      if(options.out_raw_pvt){
+        INS_GPS::label_time(*options.out_raw_pvt);
+        (*options.out_raw_pvt) << ",";
+        gps_pvt_t::label(*options.out_raw_pvt);
+        (*options.out_raw_pvt) << endl;
+        options.out_raw_pvt->precision(12);
+      }
     }
   
   protected:
@@ -2699,7 +2707,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       g_packet.take_consistency();
       if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
-        (*(options.out_raw_pvt)) << gps_raw_pvt << std::endl;
+        (*(options.out_raw_pvt))
+            << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week) << ","
+            << gps_raw_pvt << std::endl;
       }
 
       if(status >= JUST_INITIALIZED){
@@ -2918,12 +2928,6 @@ int main(int argc, char *argv[]){
     options.out() << setprecision(10);
   }
   options.out_debug() << setprecision(16);
-
-  if(options.out_raw_pvt){
-    gps_pvt_t::label(*options.out_raw_pvt);
-    (*options.out_raw_pvt) << endl;
-    options.out_raw_pvt->precision(12);
-  }
 
   loop();
 
