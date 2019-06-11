@@ -486,21 +486,31 @@ struct CalendarTime {
 
     mutable struct roll_over_monitor_t {
       static const int one_week = 60 * 60 * 7 * 24;
-      int itow_offset;
+      static const int threshold = 60 * 30; // 30min
+      int roll_over_offset;
       float_t itow_previous;
-      roll_over_monitor_t() : itow_offset(0), itow_previous(0) {}
+      roll_over_monitor_t() : roll_over_offset(0), itow_previous(0) {}
       float_t operator()(const float_t &itow){
-        float_t itow_mod(itow + itow_offset);
-        if((itow_mod - itow_previous) < -(one_week / 2)){ // detect super jump
-          if((itow_previous - itow_offset) > (one_week - 1200)){ // probably roll over
-            itow_offset += one_week;
-            itow_mod += one_week;
-          }else{ // otherwise probably reset occurred
-            itow_offset = 0;
-            itow_mod = itow;
+        float_t delta(itow - itow_previous);
+        do{
+          if(delta < -(one_week / 2)){ // detect backward super jump (now << previous)
+            if(itow_previous > (one_week - threshold)){ // roll over
+              roll_over_offset += one_week;
+              break;
+            }
+          }else if(delta > (one_week / 2)){ // detect forward super jump (previous << now)
+            if(itow_previous < threshold){ // roll over (backward)
+              roll_over_offset -= one_week;
+              break;
+            }
+          }else if((delta > -threshold) && (delta < threshold)){ // normal
+            break;
           }
-        }
-        return (itow_previous = itow_mod);
+          // otherwise probably reset occurred
+          roll_over_offset = 0;
+        }while(false);
+        itow_previous = itow;
+        return itow + roll_over_offset;
       }
     } roll_over_monitor;
 
@@ -510,20 +520,22 @@ struct CalendarTime {
         correction_sec(0),
         roll_over_monitor() {}
 
+    CalendarTime convert(const std::time_t &in, const float_t &subsec = 0) const {
+      tm *t(std::gmtime(&in));
+      CalendarTime res = {
+          t->tm_year + 1900,
+          t->tm_mon + 1,
+          t->tm_mday,
+          t->tm_hour,
+          t->tm_min,
+          subsec + t->tm_sec};
+      return res;
+    }
     CalendarTime convert(const float_t &itow) const {
       if(gps_time.wn != gps_time_t::WN_INVALID){
         float_t gap(roll_over_monitor(itow) - gps_time.sec);
         int gap_sec(std::floor(gap));
-        std::time_t current(utc_time + gap_sec + correction_sec);
-        tm *t(std::gmtime(&current));
-        CalendarTime res = {
-            t->tm_year + 1900,
-            t->tm_mon + 1,
-            t->tm_mday,
-            t->tm_hour,
-            t->tm_min,
-            gap - gap_sec + t->tm_sec};
-        return res;
+        return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
       }else{
         CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
         return res;
@@ -584,6 +596,28 @@ struct CalendarTime {
       update(gps_sec, gps_wn, 0);
       utc_time -= estimate_leap_sec(utc_time);
       leap_seconds = LEAP_SECONDS_ESTIMATED;
+    }
+    CalendarTime convert(const float_t &itow, const int &wn) const {
+      if(wn == gps_time_t::WN_INVALID){
+        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
+        return res;
+      }else if(gps_time.wn == gps_time_t::WN_INVALID){
+        // use estimated leap seconds
+        float_t gap(gps_time_zero + wn * roll_over_monitor_t::one_week + itow);
+        gap -= estimate_leap_sec(std::time_t(gap));
+        int gap_sec(std::floor(gap));
+        return convert(std::time_t(gap_sec + correction_sec), gap - gap_sec);
+      }else{
+        // use internal correction value for leap seconds
+        float_t gap(
+            (wn - gps_time.wn) * roll_over_monitor_t::one_week
+              + (itow - gps_time.sec));
+        int gap_sec(std::floor(gap));
+        return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
+      }
+    }
+    CalendarTime convert(const gps_time_t &current_gps) const {
+      return convert(current_gps.sec, current_gps.wn);
     }
   };
 };

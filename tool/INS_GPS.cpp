@@ -1317,19 +1317,28 @@ typename PureINS::float_t fname() const {return PureINS::fname();}
       mode = _mode;
       itow = _itow;
     }
-  protected:
-    static void label_time(std::ostream &out, const void *){
-      out << "itow";
-    }
 
+  protected:
+    template <class T>
+    struct label_time_t {
+      static void print(std::ostream &out){
+        out << "itow";
+      }
+    };
     template <class FloatT>
-    static void label_time(std::ostream &out, const CalendarTimeStamp<FloatT> *){
-      CalendarTimeStamp<FloatT>::label(out);
-    }
+    struct label_time_t<CalendarTimeStamp<FloatT> > {
+      static void print(std::ostream &out){
+        CalendarTimeStamp<FloatT>::label(out);
+      }
+    };
+
   public:
+    static void label_time(std::ostream &out){
+      label_time_t<time_stamp_t>::print(out);
+    }
     void label(std::ostream &out) const {
       out << "mode" << ',';
-      label_time(out, &itow);
+      label_time(out);
       out << ',';
       super_data_t::label(out);
     }
@@ -2372,7 +2381,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     template <class TimeStamp>
     struct TimeStampGenerator {
       void update(const TimePacket &packet){}
-      TimeStamp operator()(const float_t &t) const {
+      TimeStamp operator()(const float_t &t, const int &wn = 0) const {
         return (TimeStamp)t;
       }
     };
@@ -2390,6 +2399,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
       stamp_t operator()(const FloatT &itow) const {
         return stamp_t(itow2calendar.convert(itow), itow);
+      }
+      stamp_t operator()(const FloatT &itow, const int &wn) const {
+        return stamp_t(itow2calendar.convert(itow, wn), itow);
       }
     };
 

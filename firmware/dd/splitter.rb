@@ -3,7 +3,11 @@
 $stderr.puts "Usage: begin end [log.dat or $stdin]"
 exit(-1) if ARGV.size < 2
 
-i, j = ARGV[0..1].collect{|arg| Integer(arg)}
+i, j = ARGV[0..1].collect{|arg|
+  res = eval(arg)
+  raise "Invalid parameter: #{arg}" unless (res.kind_of?(Integer) and res >= 0)
+  res
+}
 
 src = (ARGV.size == 3) ? ARGV[2] : $stdin
 $stderr.puts(<<__TEXT__)
