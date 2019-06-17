@@ -13,6 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_INS_GPS_Factory", "tes
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ruby_tools", "ruby_tools.vcxproj", "{3503DACF-2EA9-4617-9381-BD40B42A4DA1}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_common", "test\test_common.vcxproj", "{FFBB9244-30EC-4B88-9190-D1560EBE93D7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		AppVeyor|Win32 = AppVeyor|Win32
@@ -56,6 +58,12 @@ Global
 		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.Debug|Win32.Build.0 = AppVeyor|Win32
 		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.Release|Win32.ActiveCfg = AppVeyor|Win32
 		{3503DACF-2EA9-4617-9381-BD40B42A4DA1}.Release|Win32.Build.0 = AppVeyor|Win32
+		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
+		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Debug|Win32.Build.0 = Debug|Win32
+		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Release|Win32.ActiveCfg = Release|Win32
+		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
