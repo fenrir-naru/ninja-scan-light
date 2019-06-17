@@ -489,25 +489,28 @@ struct CalendarTime {
       static const int threshold = 60 * 30; // 30min
       int roll_over_offset;
       float_t itow_previous;
-      roll_over_monitor_t() : roll_over_offset(0), itow_previous(0) {}
+      bool abnormal_jump_detected;
+      void reset() {
+        roll_over_offset = 0;
+        itow_previous = 0;
+        abnormal_jump_detected = false;
+      }
+      roll_over_monitor_t(){reset();}
       float_t operator()(const float_t &itow){
-        float_t delta(itow - itow_previous);
         do{
-          if(delta < -(one_week / 2)){ // detect backward super jump (now << previous)
-            if(itow_previous > (one_week - threshold)){ // roll over
-              roll_over_offset += one_week;
-              break;
-            }
-          }else if(delta > (one_week / 2)){ // detect forward super jump (previous << now)
-            if(itow_previous < threshold){ // roll over (backward)
-              roll_over_offset -= one_week;
-              break;
-            }
-          }else if((delta > -threshold) && (delta < threshold)){ // normal
+          if((itow_previous > (one_week - threshold)) && (itow < threshold)){ // roll over
+            roll_over_offset += one_week;
+            break;
+          }else if((itow_previous < threshold) && (itow > (one_week - threshold))){ // roll over (backward)
+            roll_over_offset -= one_week;
+            break;
+          }
+          float_t delta(itow - itow_previous);
+          if((delta > -threshold) && (delta < threshold)){ // normal
             break;
           }
           // otherwise probably reset occurred
-          roll_over_offset = 0;
+          abnormal_jump_detected = true;
         }while(false);
         itow_previous = itow;
         return itow + roll_over_offset;
@@ -532,14 +535,16 @@ struct CalendarTime {
       return res;
     }
     CalendarTime convert(const float_t &itow) const {
-      if(gps_time.wn != gps_time_t::WN_INVALID){
-        float_t gap(roll_over_monitor(itow) - gps_time.sec);
+      float_t itow_corrected(roll_over_monitor(itow));
+      if(roll_over_monitor.abnormal_jump_detected){
+        itow_corrected = itow;
+      }else if(gps_time.wn != gps_time_t::WN_INVALID){
+        float_t gap(itow_corrected - gps_time.sec);
         int gap_sec(std::floor(gap));
         return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
-      }else{
-        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
-        return res;
       }
+      CalendarTime res = {0, 0, 0, 0, 0, itow_corrected};
+      return res;
     }
     static int estimate_leap_sec(const std::time_t &t_gps){
       static const struct {
@@ -575,18 +580,27 @@ struct CalendarTime {
       }
       return res;
     }
-    void update(const float_t &gps_sec){
-      gps_time.sec = gps_sec;
-      gps_time.wn = gps_time_t::WN_INVALID;
-    }
+
     void update(const float_t &gps_sec, const int &gps_wn, const int &leap_sec){
       gps_time.sec = gps_sec;
-      if(gps_time.wn != gps_time_t::WN_INVALID){
-        // GPS second will be greater than one week to assume roll over of itow
-        gps_time.sec += (gps_wn - gps_time.wn) * roll_over_monitor_t::one_week;
-      }else{
-        gps_time.wn = gps_wn;
-      }
+      leap_seconds = LEAP_SECONDS_UNKNOWN;
+
+      do{
+        if(roll_over_monitor.abnormal_jump_detected){
+          roll_over_monitor.reset();
+          roll_over_monitor.itow_previous = gps_sec;
+        }else if((gps_wn != gps_time_t::WN_INVALID)
+            && (gps_time.wn != gps_time_t::WN_INVALID)){
+          // Make GPS second greater than one week to compensate for roll over of itow
+          gps_time.sec += (gps_wn - gps_time.wn) * roll_over_monitor_t::one_week;
+          break;
+        }
+
+        if((gps_time.wn = gps_wn) == gps_time_t::WN_INVALID){
+          return;
+        }
+      }while(false);
+
       utc_time = gps_time_zero
           + (7u * 24 * 60 * 60) * gps_time.wn
           + gps_time.sec - leap_sec; // POSIX time ignores leap seconds.
@@ -594,9 +608,15 @@ struct CalendarTime {
     }
     void update(const float_t &gps_sec, const int &gps_wn){
       update(gps_sec, gps_wn, 0);
-      utc_time -= estimate_leap_sec(utc_time);
-      leap_seconds = LEAP_SECONDS_ESTIMATED;
+      if(gps_wn != gps_time_t::WN_INVALID){
+        utc_time -= estimate_leap_sec(utc_time);
+        leap_seconds = LEAP_SECONDS_ESTIMATED;
+      }
     }
+    void update(const float_t &gps_sec){
+      update(gps_sec, gps_time_t::WN_INVALID);
+    }
+
     CalendarTime convert(const float_t &itow, const int &wn) const {
       if(wn == gps_time_t::WN_INVALID){
         CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
