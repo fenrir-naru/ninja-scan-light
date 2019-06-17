@@ -99,7 +99,7 @@ struct GlobalOptions {
   struct gps_time_t {
     FloatT sec; ///< GPS time
     int wn; ///< GPS week number
-    static const int WN_INVALID = -1;
+    static const int WN_INVALID;
     gps_time_t(const FloatT &_sec = 0, const int &_wn = WN_INVALID)
         : sec(_sec), wn(_wn) {}
     template <class T1, class T2>
@@ -464,6 +464,9 @@ if(key_checked){ \
     return true;
   }
 };
+
+template <class FloatT>
+const int GlobalOptions<FloatT>::gps_time_t::WN_INVALID = -1;
 
 template <class FloatT>
 struct CalendarTime {
