@@ -610,6 +610,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             }
           };
 
+          bool is_available() const {
+            return (sigma2 > 0);
+          }
+
           static const PointProperty unavailable;
         };
 
@@ -1442,7 +1446,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
 
           // A.4.4.10.2 IGP selection, and A.4.4.10.3 Interpolation
           PointProperty prop(interpolate(pp.latitude / M_PI * 180, pp.longitude / M_PI * 180));
-          if(prop != PointProperty::unavailable){
+          if(prop.is_available()){
 
             // A.4.4.10.4 Compute slant delay
             float_t fpp(gps_space_node_t::slant_factor(relative_pos));
@@ -2131,7 +2135,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           ++it){
         int prn((*it)->prn);
         if(!has_satellite(prn)){continue;}
-        res.push_back(std::make_pair(prn, &_satellites[prn]));
+        res.push_back(std::make_pair(prn, &(const_cast<SBAS_SpaceNode *>(this)->_satellites[prn])));
       }
       return res;
     }
