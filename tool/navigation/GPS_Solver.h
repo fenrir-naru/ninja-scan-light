@@ -102,6 +102,22 @@ struct GPS_Solver_GeneralOptions {
 
     return true;
   }
+  bool remove_ionospheric_model(const ionospheric_model_t &model) {
+    // shift, then replace
+    int j(0);
+    for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
+      if(ionospheric_models[i] == model){continue;}
+      ionospheric_models[j++] = ionospheric_models[i];
+    }
+    if(j == (sizeof(ionospheric_models) / sizeof(ionospheric_models[0]))){
+      return false;
+    }
+    do{
+      ionospheric_models[j++] = IONOSPHERIC_SKIP;
+    }while(j < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]));
+
+    return true;
+  }
 };
 
 template <class FloatT>
@@ -288,7 +304,19 @@ class GPS_SinglePositioning : public SolverBaseT {
               residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
               break;
             case options_t::IONOSPHERIC_SBAS: {
-              continue; // TODO placeholder of checking availability and performing correction
+              // placeholder of checking availability and performing correction
+              typedef typename SBAS_SpaceNode<float_t>::available_satellites_t sats_t;
+              sats_t sats(space_node_sbas->available_satellites(usr_pos.llh.longitude()));
+
+              typename SBAS_SpaceNode<float_t>::IonosphericGridPoints::PointProperty prop;
+              for(typename sats_t::const_iterator it(sats.begin()); it != sats.end(); ++it){
+                prop = it->second
+                    ->ionospheric_grid_points().iono_correction(relative_pos, usr_pos.llh);
+                break; // TODO The nearest satellite is only checked
+              }
+              if(!prop.is_available()){continue;}
+              residual.residual += prop.delay;
+              break;
             }
             case options_t::IONOSPHERIC_NTCM_GL: {
               // TODO f_10_7 setup, optimization (mag_model etc.)

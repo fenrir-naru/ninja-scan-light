@@ -110,7 +110,9 @@ struct GNSS_Receiver {
     solver_t(const GNSS_Receiver &rcv)
         : base_t(),
         gps(rcv.data.gps.space_node)
-        {}
+        {
+      gps.space_node_sbas = &rcv.data.sbas.space_node;
+    }
 
     // Proxy functions
     const base_t &select(const typename base_t::prn_t &serial) const {
@@ -333,6 +335,20 @@ data.gps.solver_options. expr
       option_apply(f_10_7 = f_10_7);
       option_apply(insert_ionospheric_model(
           gps_solver_t::options_t::IONOSPHERIC_NTCM_GL));
+      return true;
+    }
+
+    if(value = runtime_opt_t::get_value(spec, "SBAS_IGP")){
+      if(dry_run){return true;}
+      if(runtime_opt_t::is_true(value)){
+        std::cerr << "SBAS_IGP: on" << std::endl;
+        option_apply(insert_ionospheric_model(
+            gps_solver_t::options_t::IONOSPHERIC_SBAS));
+      }else{
+        std::cerr << "SBAS_IGP: off" << std::endl;
+        option_apply(remove_ionospheric_model(
+            gps_solver_t::options_t::IONOSPHERIC_SBAS));
+      }
       return true;
     }
 #undef option_apply
