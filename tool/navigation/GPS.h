@@ -1624,7 +1624,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       float_t el(relative_pos.elevation()),
            az(relative_pos.azimuth());
       // Earth's central angle between use pos. and projection of PP.
-      float_t psi_pp(M_PI - el
+      float_t psi_pp(M_PI / 2 - el
           - std::asin(WGS84::R_e / (WGS84::R_e + height_over_ellipsoid) * std::cos(el)));
       float_t phi_pp(
           std::asin(std::sin(usrllh.latitude() * std::cos(psi_pp)
