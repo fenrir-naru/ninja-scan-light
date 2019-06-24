@@ -420,15 +420,15 @@ class INS_GPS2_Tightly : public BaseFINS{
     /**
      * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
      *
-     * @param solver residual calculrator
-     * @param solver_opt residual calculrator option such as applied ionospheric models
+     * @param solver residual calculator
+     * @param solver_opt residual calculator option such as applied ionospheric models
      * @param sat GPS satellite used as target
      * @param x receiver state represented by current position and clock properties
-     * @param range Measured range including all error inclusing user and satellite clock errors
+     * @param range Measured range including all error including user and satellite clock errors
      * @param rate pointer of measured rate, if unavailable, NULL can be specified
      * @param z (output) pointer to be stored with residual
      * @param H (output) pointer to be stored with correlation of state
-     * @param R_diag (output) pointer to be stored with estimated resudual variance
+     * @param R_diag (output) pointer to be stored with estimated residual variance
      * @return (int) number of used rows
      */
     int assign_z_H_R(
