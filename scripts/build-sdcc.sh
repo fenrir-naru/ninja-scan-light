@@ -16,6 +16,53 @@ if [ ! -d sdcc-${SDCC} ]; then
 fi
 
 cd sdcc-${SDCC}
+
+case "${SDCC}" in
+3.[34].*)
+(cd sdas/linksrc && patch -u -N -p1 <<'__PATCH_LINE__' || let "$?<=1")
+diff -uprN linksrc.orig/lkar.c linksrc/lkar.c
+--- linksrc.orig/lkar.c 2019-09-16 03:01:13.278101100 +0900
++++ linksrc/lkar.c      2019-09-16 02:59:47.520475600 +0900
+@@ -47,7 +47,7 @@ along with this program.  If not, see <h
+
+
+ char *
+-strndup (const char *str, size_t len)
++strndup_ (const char *str, size_t len)
+ {
+   char *s = (char *) malloc (len + 1);
+   memcpy (s, str, len);
+@@ -98,7 +98,7 @@ get_long_name (const char *name)
+                 while (*++n != '\n')
+                   assert (n < &str_tab[str_tab_size]);
+
+-              return strndup (name, n - name);
++              return strndup_ (name, n - name);
+             }
+         }
+     }
+@@ -164,7 +164,7 @@ get_member_name (char *name, size_t *p_s
+               while (name[++len] == ' ')
+                 ;
+               if (len == AR_NAME_LEN)
+-                return strndup (name, p - name);
++                return strndup_ (name, p - name);
+             }
+           else
+             {
+@@ -173,7 +173,7 @@ get_member_name (char *name, size_t *p_s
+               p = name + AR_NAME_LEN;
+               while (*--p == ' ' && p >= name)
+                 ;
+-              return strndup (name, p - name + 1);
++              return strndup_ (name, p - name + 1);
+             }
+         }
+
+__PATCH_LINE__
+;;
+esac
+
 case "${SDCC}" in
 3.[34].*)
 patch -u -N -p1 <<'__PATCH_LINE__' || let "$?<=1"
