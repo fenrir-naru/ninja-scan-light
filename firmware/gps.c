@@ -259,7 +259,7 @@ void gps_wakeup(){
 
 void gps_init(){
   // init wait
-  wait_ms(100);
+  wait_ms(500);
   
   // set U-blox configuration
   set_ubx_cfg_prt(config.baudrate.gps);  // baudrate change
