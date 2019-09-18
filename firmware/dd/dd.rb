@@ -23,7 +23,7 @@ end
 
 # set port number
 opt[:port][:num] = proc{
-  res = ARGV[0]
+  res = ARGV.shift
   begin
     res = Integer(res)
     res = "/dev/ttyS#{res}" if ((`uname -a` =~ /cygwin/i) rescue false)
@@ -32,18 +32,23 @@ opt[:port][:num] = proc{
   res
 }.call
 
-ARGV[1..-1].each{|arg|
+ARGV.reject!{|arg|
   next false if arg !~ /--([^=]+)=?/
   k, v = [$1.to_sym, $' == "" ? true : $']
   case opt[k]
   when Integer
-    v = Integer(v) rescue eval(v)
+    v = if (k.to_s =~ /sector/) && (v =~ /(\d+)([GMK])/) then
+      $1.to_i * {:G => 0x40000000, :M => 0x100000, :K => 0x400}[$2.to_sym]
+    else
+      Integer(v) rescue eval(v)
+    end
   when true, false
     v = (v == "true") if v.kind_of?(String)
   end
   opt[k] = v
   true
 }
+$stderr.puts "Error! Unknown args: #{ARGV}" unless ARGV.empty?
 
 opt[:port][:name] = proc{
   next opt[:port][:num] unless opt[:port][:num].kind_of?(Integer)
