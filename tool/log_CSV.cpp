@@ -53,13 +53,17 @@ using namespace std;
 
 struct Options : public GlobalOptions<float_sylph_t> {
   typedef GlobalOptions<float_sylph_t> super_t;
-  bool page_A;
-  bool page_G;
-  bool page_F;
-  bool page_P;
-  bool page_M;
-  bool page_N;
-  bool page_other;
+  enum {
+    PAGE_A, PAGE_G, PAGE_F, PAGE_P, PAGE_M, PAGE_N, PAGE_OTHER,
+    PAGE_KINDS
+  };
+  typedef enum {
+    PAGE_SELECTED_POSITIVE = 1,
+    PAGE_SELECTED_DEFAULT = 0,
+    PAGE_SELECTED_NEGATIVE = -1,
+  } page_selected_t;
+  page_selected_t page_selected[PAGE_KINDS]; // = {PAGE_SELECTED_DEFAULT};
+
   int page_P_mode, page_F_mode, page_M_mode;
   int debug_level;
   typedef CalendarTime<float_sylph_t> calendar_time_t;
@@ -75,9 +79,6 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
   Options() 
       : super_t(),
-      page_A(false), page_G(false), page_F(false), 
-      page_P(false), page_M(false), page_N(false),
-      page_other(false),
       page_P_mode(5),
       page_F_mode(3),
       page_M_mode(0),
@@ -87,6 +88,10 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
     physical_converter.is_active = false;
     super_t::set_typical_calibration_specs(physical_converter.inertial_conv);
+
+    for(int i(0); i < PAGE_KINDS; ++i){
+      page_selected[i] = PAGE_SELECTED_DEFAULT;
+    }
   }
   ~Options(){}
   
@@ -146,8 +151,8 @@ struct Options : public GlobalOptions<float_sylph_t> {
         page_M_mode = atoi(value),
         page_M_mode);
     CHECK_OPTION(page_other, true,
-        page_other = is_true(value),
-        (page_other ? "on" : "off"));
+        page_selected[PAGE_OTHER] = is_true(value) ? PAGE_SELECTED_POSITIVE : PAGE_SELECTED_NEGATIVE,
+        (page_selected[PAGE_OTHER] > PAGE_SELECTED_DEFAULT ? "on" : "off"));
 
     do{ // Change time outputs from gpstime[ms] to calendartime(YY,MM,DD,HH,MM,SS) formats
       const char *value(get_value(spec, "calendar_time"));
@@ -167,18 +172,18 @@ struct Options : public GlobalOptions<float_sylph_t> {
     do{
       const char *value(get_value(spec, "page", false));
       if(!value){break;}
-      bool flag(true);
+      page_selected_t flag(PAGE_SELECTED_POSITIVE);
       if(*value == '-'){
-        flag = false;
+        flag = PAGE_SELECTED_NEGATIVE;
         value++;
       }
       switch(*value){
-        case 'A': page_A = flag; break;
-        case 'G': page_G = flag; break;
-        case 'F': page_F = flag; break;
-        case 'M': page_M = flag; break;
-        case 'N': page_N = flag; break;
-        case 'P': page_P = flag; break;
+        case 'A': page_selected[PAGE_A] = flag; break;
+        case 'G': page_selected[PAGE_G] = flag; break;
+        case 'F': page_selected[PAGE_F] = flag; break;
+        case 'M': page_selected[PAGE_M] = flag; break;
+        case 'N': page_selected[PAGE_N] = flag; break;
+        case 'P': page_selected[PAGE_P] = flag; break;
         default: return false;
       }
       return true;
@@ -343,7 +348,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             break;
         }
         
-        if(!options.page_G){return;}
+        if(options.page_selected[Options::PAGE_G] <= Options::PAGE_SELECTED_DEFAULT){return;}
 
         if(change_itow
             && (itow_ms_0x0102 == itow_ms_0x0112)){
@@ -649,7 +654,8 @@ case mark: if(cnd){ \
       observer_ ## type , previous_seek_next_ ## type, handler_ ## type); \
 } \
 break;
-#define assign_case(type, mark) assign_case_cnd(type, mark, options.page_ ## type)
+#define assign_case(type, mark) \
+    assign_case_cnd(type, mark, options.page_selected[Options::PAGE_ ## type] > Options::PAGE_SELECTED_DEFAULT)
           assign_case(A, 'A');
           assign_case_cnd(G, 'G', true);
           assign_case(F, 'F');
@@ -658,14 +664,14 @@ break;
           assign_case(N, 'N');
 #undef assign_case
 #if 0
-          case 'C': if(options.out_C){
+          case 'C': if(options.page_selected[Options::PAGE_C] > Options::PAGE_SELECTED_DEFAULT){
             super_t::process_packet(
                 buffer, read_count,
                 handler_C, handler_C.previous_seek, handler_C);
           }
           break;
 #endif
-          default: if(options.page_other){
+          default: if(options.page_selected[Options::PAGE_OTHER] > Options::PAGE_SELECTED_DEFAULT){
             if(buffer[0] == 'T'){
               stringstream ss;
               ss << hex;
@@ -695,13 +701,13 @@ int main(int argc, char *argv[]){
   
   // For backward compatibility
   if(strstr(argv[0], "log_AD_CSV") == argv[0]){
-    options.page_A = true;
+    options.page_selected[Options::PAGE_A] = Options::PAGE_SELECTED_POSITIVE;
   }else if(strstr(argv[0], "log_F_CSV") == argv[0]){
-    options.page_F = true;
+    options.page_selected[Options::PAGE_F] = Options::PAGE_SELECTED_POSITIVE;
   }else if(strstr(argv[0], "log_M_CSV") == argv[0]){
-    options.page_M = true;
+    options.page_selected[Options::PAGE_M] = Options::PAGE_SELECTED_POSITIVE;
   }else if(strstr(argv[0], "log_P_CSV") == argv[0]){
-    options.page_P = true;
+    options.page_selected[Options::PAGE_P] = Options::PAGE_SELECTED_POSITIVE;
   }
   
   StreamProcessor processor;
