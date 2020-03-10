@@ -69,6 +69,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   typedef CalendarTime<float_sylph_t> calendar_time_t;
   calendar_time_t::Converter time_gps2local;
   bool use_calendar_time;
+  bool as_filter;
 
   typedef StandardCalibration<float_sylph_t> inertial_conv_t;
 
@@ -84,7 +85,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       page_M_mode(0),
       debug_level(0),
       time_gps2local(),
-      use_calendar_time(false) {
+      use_calendar_time(false), as_filter(false) {
 
     physical_converter.is_active = false;
     super_t::set_typical_calibration_specs(physical_converter.inertial_conv);
@@ -124,6 +125,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
   template <class T>
   bool is_time_in_range(const T &sec) const {
     return super_t::is_time_in_range(sec, time_gps2local.gps_time.wn);
+  }
+  bool is_time_in_range() const {
+    return super_t::is_time_in_range(time_gps2local.gps_time.sec, time_gps2local.gps_time.wn);
   }
 
   /**
@@ -192,6 +196,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
     CHECK_OPTION(debug, false,
         debug_level = atoi(value),
         debug_level);
+    CHECK_OPTION(as_filter, true,
+        as_filter = is_true(value),
+        (as_filter ? "on" : "off"));
 
     CHECK_OPTION(physical, true,
         physical_converter.is_active = is_true(value),
@@ -297,6 +304,35 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       }
       ~HandlerG(){}
       
+      static void update_time(const super_t::G_Observer_t &observer, const bool &packet_check){
+        if(packet_check){
+          super_t::G_Observer_t::packet_type_t packet_type(observer.packet_type());
+          if((packet_type.mclass != 0x01) || (packet_type.mid != 0x20)){return;}
+        }
+
+        // NAV-TIMEGPS
+        float_sylph_t itow(observer.fetch_ITOW());
+        char buf[4];
+        observer.inspect(buf, sizeof(buf), 6 + 8);
+        if((unsigned char)buf[3] & 0x02){ // valid week number
+          int wn(le_char2_2_num<unsigned short>(*buf));
+
+          if((unsigned char)buf[3] & 0x04){ // valid UTC (leap seconds)
+            options.time_gps2local.update(itow, wn, (char)(buf[2]));
+          }else{
+            options.time_gps2local.update(itow, wn);
+          }
+        }else{
+          options.time_gps2local.update(itow);
+        }
+      }
+
+      static void test(const super_t::G_Observer_t &observer){
+        if(!observer.validate()){return;}
+
+        update_time(observer, true);
+      }
+
       void operator()(const super_t::G_Observer_t &observer){
         if(!observer.validate()){return;}
         
@@ -325,20 +361,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                 break;
               }
               case 0x20: { // NAV-TIMEGPS
-                float_sylph_t itow(observer.fetch_ITOW());
-                char buf[4];
-                observer.inspect(buf, sizeof(buf), 6 + 8);
-                if((unsigned char)buf[3] & 0x02){ // valid week number
-                  int wn(le_char2_2_num<unsigned short>(*buf));
-
-                  if((unsigned char)buf[3] & 0x04){ // valid UTC (leap seconds)
-                    options.time_gps2local.update(itow, wn, (char)(buf[2]));
-                  }else{
-                    options.time_gps2local.update(itow, wn);
-                  }
-                }else{
-                  options.time_gps2local.update(itow);
-                }
+                update_time(observer, false);
                 break;
               }
             }
@@ -606,6 +629,74 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     }
     ~StreamProcessor(){}
     
+    void process_pages(char *buf, const int &buf_size){
+      switch(buf[0]){
+#define assign_case_cnd(type, mark, cnd) \
+case mark: if(cnd){ \
+  super_t::process_packet( \
+      buf, buf_size, \
+      observer_ ## type , previous_seek_next_ ## type, handler_ ## type); \
+} \
+break;
+#define assign_case(type, mark) \
+    assign_case_cnd(type, mark, options.page_selected[Options::PAGE_ ## type] > Options::PAGE_SELECTED_DEFAULT)
+        assign_case(A, 'A');
+        assign_case_cnd(G, 'G', true);
+        assign_case(F, 'F');
+        assign_case(P, 'P');
+        assign_case(M, 'M');
+        assign_case(N, 'N');
+#undef assign_case
+#undef assign_case_cnd
+#if 0
+          case 'C': if(options.page_selected[Options::PAGE_C] > Options::PAGE_SELECTED_DEFAULT){
+            super_t::process_packet(
+                buf, buf_size,
+                handler_C, handler_C.previous_seek, handler_C);
+          }
+          break;
+#endif
+        default: if(options.page_selected[Options::PAGE_OTHER] > Options::PAGE_SELECTED_DEFAULT){
+          if(buf[0] == 'T'){
+            stringstream ss;
+            ss << hex;
+            for(int i(0); i < buf_size; i++){
+              ss << setfill('0')
+                  << setw(2)
+                  << (unsigned int)((unsigned char)buf[i]) << ' ';
+            }
+            ss << endl;
+            options.out() << ss.str();
+          }
+        }
+        break;
+      }
+    }
+
+    void filter_pages(char *buf, const int &buf_size){
+      switch(buf[0]){
+#define filter_page(type, mark) \
+case mark: if(options.page_selected[Options::PAGE_ ## type] < Options::PAGE_SELECTED_DEFAULT){return;} break;
+        filter_page(A, 'A');
+        filter_page(F, 'F');
+        filter_page(P, 'P');
+        filter_page(M, 'M');
+        filter_page(N, 'N');
+#undef filter_page
+        case 'G':
+          super_t::process_packet(
+              buf, buf_size,
+              observer_G, previous_seek_next_G, HandlerG::test);
+          if(options.page_selected[Options::PAGE_G] < Options::PAGE_SELECTED_DEFAULT){return;}
+          break;
+        default:
+          if(options.page_selected[Options::PAGE_OTHER] < Options::PAGE_SELECTED_DEFAULT){return;}
+          break;
+      }
+      if(!options.is_time_in_range()){return;}
+      options.out().write(buf, buf_size);
+    }
+
     /**
      * Extract packet from stream until the end of stream is found
      * 
@@ -623,7 +714,12 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             << endl;
       }
 
-        int read_count;
+      void (StreamProcessor::*task)(char *, const int &)(&StreamProcessor::process_pages);
+      if(options.as_filter){
+        task = &StreamProcessor::filter_pages;
+      }
+
+      int read_count;
       while(true){
         in.read(buffer, SYLPHIDE_PAGE_SIZE);
         read_count = in.gcount();
@@ -646,46 +742,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           }
         }
       
-        switch(buffer[0]){
-#define assign_case_cnd(type, mark, cnd) \
-case mark: if(cnd){ \
-  super_t::process_packet( \
-      buffer, read_count, \
-      observer_ ## type , previous_seek_next_ ## type, handler_ ## type); \
-} \
-break;
-#define assign_case(type, mark) \
-    assign_case_cnd(type, mark, options.page_selected[Options::PAGE_ ## type] > Options::PAGE_SELECTED_DEFAULT)
-          assign_case(A, 'A');
-          assign_case_cnd(G, 'G', true);
-          assign_case(F, 'F');
-          assign_case(P, 'P');
-          assign_case(M, 'M');
-          assign_case(N, 'N');
-#undef assign_case
-#if 0
-          case 'C': if(options.page_selected[Options::PAGE_C] > Options::PAGE_SELECTED_DEFAULT){
-            super_t::process_packet(
-                buffer, read_count,
-                handler_C, handler_C.previous_seek, handler_C);
-          }
-          break;
-#endif
-          default: if(options.page_selected[Options::PAGE_OTHER] > Options::PAGE_SELECTED_DEFAULT){
-            if(buffer[0] == 'T'){
-              stringstream ss;
-              ss << hex;
-              for(int i(0); i < read_count; i++){
-                ss << setfill('0') 
-                    << setw(2)
-                    << (unsigned int)((unsigned char)buffer[i]) << ' ';
-              }
-              ss << endl;
-              options.out() << ss.str();
-            }
-          }
-          break;
-        }
+        (this->*task)(buffer, read_count);
       }
     }
 };
