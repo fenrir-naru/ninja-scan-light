@@ -167,13 +167,18 @@ struct Options : public GlobalOptions<float_sylph_t> {
     do{
       const char *value(get_value(spec, "page", false));
       if(!value){break;}
+      bool flag(true);
+      if(*value == '-'){
+        flag = false;
+        value++;
+      }
       switch(*value){
-        case 'A': page_A = true; break;
-        case 'G': page_G = true; break;
-        case 'F': page_F = true; break;
-        case 'M': page_M = true; break;
-        case 'N': page_N = true; break;
-        case 'P': page_P = true; break;
+        case 'A': page_A = flag; break;
+        case 'G': page_G = flag; break;
+        case 'F': page_F = flag; break;
+        case 'M': page_M = flag; break;
+        case 'N': page_N = flag; break;
+        case 'P': page_P = flag; break;
         default: return false;
       }
       return true;
