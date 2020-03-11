@@ -421,7 +421,6 @@ class INS_GPS2_Tightly : public BaseFINS{
      * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
      *
      * @param solver residual calculator
-     * @param solver_opt residual calculator option such as applied ionospheric models
      * @param sat GPS satellite used as target
      * @param x receiver state represented by current position and clock properties
      * @param range Measured range including all error including user and satellite clock errors
@@ -432,7 +431,7 @@ class INS_GPS2_Tightly : public BaseFINS{
      * @return (int) number of used rows
      */
     int assign_z_H_R(
-        const solver_t &solver, const typename solver_t::options_t &solver_opt,
+        const solver_t &solver,
         const typename solver_t::satellite_t &sat,
         const receiver_state_t &x,
         float_t range, const float_t *rate,
@@ -449,8 +448,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       range = solver.range_residual(
           sat, range - x.clock_error, x.t,
           x.pos,
-          residual,
-          solver_opt);
+          residual);
       if(weight <= 0){return 0;} // Intentional exclusion
 
       for(int i(0); i < (rate ? 2 : 1); ++i){ // zero clear
@@ -554,11 +552,11 @@ class INS_GPS2_Tightly : public BaseFINS{
       // check space_node is configured
       if(!gps.solver){return CorrectInfo<float_t>::no_info();}
 
-      typename solver_t::options_t solver_opt(gps.solver->available_options());
+      solver_t solver_latest(gps.solver->update()); // mainly for update solver options based on their availability
 
       typedef typename raw_data_t::measurement_t::const_iterator it_t;
-      typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
 
+      typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
       receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error_shift));
 
       it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
@@ -584,7 +582,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
         int prn(it2_range->first);
-        const typename solver_t::satellite_t *sat(gps.solver->is_available(prn, gps.gpstime));
+        const typename solver_t::satellite_t *sat(solver_latest.is_available(prn, gps.gpstime));
 
         if(!sat){continue;}
 
@@ -604,7 +602,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         /* Intentional exclusion, in which zero will be returned,
          * may be occurred during residual calculation such as elevation mask.
          */
-        z_index += assign_z_H_R(*gps.solver, solver_opt,
+        z_index += assign_z_H_R(solver_latest,
             *sat, x, it2_range->second, rate,
             &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);
       }

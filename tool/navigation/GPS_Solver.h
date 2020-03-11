@@ -93,6 +93,7 @@ class GPS_SinglePositioning {
   private:
     GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
   public:
+    typedef GPS_SinglePositioning<FloatT> self_t;
     typedef FloatT float_t;
     typedef Matrix<float_t> matrix_t;
 
@@ -160,6 +161,10 @@ class GPS_SinglePositioning {
       options_t res(_options);
       filter_ionospheric_models(res.ionospheric_models);
       return res;
+    }
+
+    self_t update() const {
+      return self_t(space_node(), available_options());
     }
 
   protected:
@@ -305,7 +310,7 @@ class GPS_SinglePositioning {
           range, time_arrival,
           usr_pos,
           residual,
-          available_options(),
+          _options,
           is_coarse_mode);
     }
 
