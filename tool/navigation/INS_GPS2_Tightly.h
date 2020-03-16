@@ -503,12 +503,9 @@ class INS_GPS2_Tightly : public BaseFINS{
       if(!rate){return 1;}
 
       // rate residual
-      typename solver_t::xyz_t rel_vel(sat.velocity(x.t, range) - x.vel);
       z[1] = *rate - BaseFINS::m_clock_error_rate[x.clock_index]
-          + los_neg[0] * rel_vel.x()
-          + los_neg[1] * rel_vel.y()
-          + los_neg[2] * rel_vel.z()
-          + sat.clock_error_dot(x.t, range) * space_node_t::light_speed;
+          + solver.rate_relative_neg(sat, range, x.t, x.vel,
+              los_neg[0], los_neg[1], los_neg[2]);
 
       { // setup H matrix
         { // velocity

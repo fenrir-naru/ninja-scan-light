@@ -306,12 +306,46 @@ class GPS_SinglePositioning {
         const pos_t &usr_pos,
         residual_t &residual,
         const bool &is_coarse_mode = false) const {
-      return range_residual(sat,
-          range, time_arrival,
-          usr_pos,
-          residual,
-          _options,
-          is_coarse_mode);
+      return range_residual(sat, range, time_arrival, usr_pos, residual, _options, is_coarse_mode);
+    }
+
+    /**
+     * Get relative rate (negative polarity) in accordance with current status
+     *
+     * @param sat satellite
+     * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
+     * @param time_arrival time when signal arrive at receiver
+     * @param usr_vel (temporal solution of) user velocity
+     * @param los_neg_x line of site X
+     * @param los_neg_y line of site Y
+     * @param los_neg_z line of site Z
+     * @param opt rate calculation options (provisional)
+     * @return (float_t) relative rate.
+     */
+    float_t rate_relative_neg(
+        const satellite_t &sat,
+        const float_t &range,
+        const gps_time_t &time_arrival,
+        const xyz_t &usr_vel,
+        const float_t &los_neg_x, const float_t &los_neg_y, const float_t &los_neg_z,
+        const options_t &opt) const {
+
+      xyz_t rel_vel(sat.velocity(time_arrival, range) - usr_vel); // Calculate velocity
+      return los_neg_x * rel_vel.x()
+          + los_neg_y * rel_vel.y()
+          + los_neg_z * rel_vel.z()
+          + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed; // considering clock rate error
+    }
+
+    float_t rate_relative_neg(
+        const satellite_t &sat,
+        const float_t &range,
+        const gps_time_t &time_arrival,
+        const xyz_t &usr_vel,
+        const float_t &los_neg_x, const float_t &los_neg_y, const float_t &los_neg_z) const {
+      return rate_relative_neg(
+          sat, range, time_arrival, usr_vel,
+          los_neg_x, los_neg_y, los_neg_z, _options);
     }
 
     /**
@@ -556,21 +590,18 @@ class GPS_SinglePositioning {
 
           int i_range(it->first), i_rate(it->second);
 
-          const satellite_t *sat(available_sat_range_corrected[i_range].first.second);
-          float_t range(available_sat_range_corrected[i_range].second);
-
-          // Calculate satellite velocity
-          xyz_t sat_vel(sat->velocity(time_arrival, range));
-
           // copy design matrix
           geomat2.copy_G_W_row(geomat, i);
 
-          // Update range rate by subtracting LOS satellite velocity with design matrix G, and clock rate error
+          // Update range rate by subtracting LOS satellite velocity with design matrix G
           geomat2.delta_r(i, 0) = prn_rate[i_rate].second
-              + geomat2.G(i, 0) * sat_vel.x()
-              + geomat2.G(i, 1) * sat_vel.y()
-              + geomat2.G(i, 2) * sat_vel.z()
-              + (sat->clock_error_dot(time_arrival, range) * space_node_t::light_speed);
+              + rate_relative_neg(
+                  *available_sat_range_corrected[i_range].first.second, // satellite
+                  available_sat_range_corrected[i_range].second, // range
+                  time_arrival,
+                  xyz_t(0, 0, 0), // user velocity to be estimated is temporary zero
+                  geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2), // LOS
+                  opt);
         }
 
         try{
