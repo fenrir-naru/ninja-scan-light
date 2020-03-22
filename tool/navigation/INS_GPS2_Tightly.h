@@ -304,6 +304,9 @@ struct GPS_RawData {
 
   unsigned int clock_index;
 
+  typedef int prn_t;
+  typedef std::vector<std::pair<prn_t, FloatT> > prn_obs_t;
+
   enum measurement_items_t {
     L1_PSEUDORANGE,
     L1_DOPPLER,
@@ -311,16 +314,19 @@ struct GPS_RawData {
     L1_RANGE_RATE,
     MEASUREMENT_ITEMS_PREDEFINED,
   };
-  typedef std::vector<std::pair<int, FloatT> > prn_obs_t;
-  typedef std::map<int, prn_obs_t> measurement_t;
+  typedef std::map<prn_t, std::map<int, FloatT> > measurement_t;
   measurement_t measurement;
 
-  typename measurement_t::mapped_type measurement_of(
-      const typename measurement_t::key_type &key) const {
-    typename measurement_t::const_iterator it(measurement.find(key));
-    return it == measurement.end()
-        ? typename measurement_t::mapped_type()
-        : it->second;
+  prn_obs_t measurement_of(
+      const typename measurement_t::mapped_type::key_type &key) const {
+    prn_obs_t res;
+    for(typename measurement_t::const_iterator it(measurement.begin());
+        it != measurement.end(); ++it){
+      typename measurement_t::mapped_type::const_iterator it2(it->second.find(key));
+      if(it2 == it->second.end()){continue;}
+      res.push_back(std::make_pair(it->first, it2->second));
+    }
+    return res;
   }
 
   static prn_obs_t difference(
@@ -330,7 +336,7 @@ struct GPS_RawData {
     for(typename prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
       for(typename prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
         if(it->first != it2->first){continue;}
-        res.push_back(typename prn_obs_t::value_type(it->first, (it->second - it2->second) * scaling));
+        res.push_back(std::make_pair(it->first, (it->second - it2->second) * scaling));
         break;
       }
     }
@@ -551,16 +557,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       solver_t solver_latest(gps.solver->update()); // mainly for update solver options based on their availability
 
-      typedef typename raw_data_t::measurement_t::const_iterator it_t;
-
-      typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
       receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error_shift));
-
-      it_t it_range(gps.measurement.find(raw_data_t::L1_PSEUDORANGE));
-      if(it_range == gps.measurement.end()){return CorrectInfo<float_t>::no_info();}
-
-      it_t it_rate(gps.measurement.find(raw_data_t::L1_RANGE_RATE));
-      bool has_rates(it_rate != gps.measurement.end());
 
       struct buf_t {
         float_t *z;
@@ -572,35 +569,34 @@ class INS_GPS2_Tightly : public BaseFINS{
         ~buf_t(){
           delete [] z;
         }
-      } buf(it_range->second.size() + (has_rates ? it_rate->second.size() : 0));
+      } buf(gps.measurement.size() * 2); // range + rate
 
       // count up valid measurement, and make observation matrices
       int z_index(0);
 
-      for(it2_t it2_range(it_range->second.begin()); it2_range != it_range->second.end(); ++it2_range){
-        int prn(it2_range->first);
+      typedef typename raw_data_t::measurement_t::const_iterator it_t;
+      typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
+
+      for(it_t it_sat(gps.measurement.begin()); it_sat != gps.measurement.end(); ++it_sat){
+        int prn(it_sat->first);
         const typename solver_t::satellite_t *sat(solver_latest.is_available(prn, gps.gpstime));
 
         if(!sat){continue;}
 
-        // check rate availability
-        const float_t *rate(NULL);
-        if(has_rates){
-          for(it2_t it2_rate(it_rate->second.begin());
-              it2_rate != it_rate->second.end(); ++it2_rate){
-            int prn_rate(it2_rate->first);
-            if(prn == prn_rate){
-              rate = &(it2_rate->second);
-              break;
-            }
-          }
+        it2_t it2_range(it_sat->second.find(raw_data_t::L1_PSEUDORANGE));
+        if(it2_range == it_sat->second.end()){ // No range information
+          continue;
         }
+
+        it2_t it2_rate(it_sat->second.find(raw_data_t::L1_RANGE_RATE));
 
         /* Intentional exclusion, in which zero will be returned,
          * may be occurred during residual calculation such as elevation mask.
          */
         z_index += assign_z_H_R(solver_latest,
-            *sat, x, it2_range->second, rate,
+            *sat, x,
+            it2_range->second,
+            ((it2_rate == it_sat->second.end()) ? NULL : &(it2_rate->second)),
             &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);
       }
 
