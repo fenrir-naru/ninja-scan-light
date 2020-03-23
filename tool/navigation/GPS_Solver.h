@@ -213,7 +213,7 @@ class GPS_SinglePositioning {
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
      * @param time_arrival time when signal arrive at receiver
      * @param usr_pos (temporal solution of) user position
-     * @param residual caluclated residual with line of site vector, and weight;
+     * @param residual calculated residual with line of site vector, and weight;
      * When weight is equal to or less than zero, the calculated results should not be used.
      * @param opt range residual calculation options represented by applied ionospheric model
      * @param is_coarse_mode if true, precise correction will be skipped.
