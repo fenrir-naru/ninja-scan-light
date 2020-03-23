@@ -427,7 +427,7 @@ class INS_GPS2_Tightly : public BaseFINS{
      * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
      *
      * @param solver residual calculator
-     * @param sat GPS satellite used as target
+     * @param prn GNSS satellite number used as target
      * @param x receiver state represented by current position and clock properties
      * @param range Measured range including all error including user and satellite clock errors
      * @param rate pointer of measured rate, if unavailable, NULL can be specified
@@ -438,24 +438,17 @@ class INS_GPS2_Tightly : public BaseFINS{
      */
     int assign_z_H_R(
         const solver_t &solver,
-        const typename solver_t::satellite_t &sat,
+        const typename raw_data_t::prn_t &prn,
         const receiver_state_t &x,
-        float_t range, const float_t *rate,
+        const float_t &range, const float_t *rate,
         float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
 
-      // range residual
-      float_t los_neg[3], weight;
-      typename solver_t::residual_t residual = {
-        z[0],
-        los_neg[0], los_neg[1], los_neg[2],
-        weight,
-      };
+      typename solver_t::relative_property_t prop(
+          solver.relative_property(prn, range - x.clock_error, x.t, x.pos, x.vel));
 
-      range = solver.range_residual(
-          sat, range - x.clock_error, x.t,
-          x.pos,
-          residual);
-      if(weight <= 0){return 0;} // Intentional exclusion
+      if(prop.weight <= 0){return 0;} // Intentional exclusion
+
+      z[0] = prop.range_residual;
 
       for(int i(0); i < (rate ? 2 : 1); ++i){ // zero clear
         for(int j(0); j < P_SIZE; ++j){
@@ -496,37 +489,36 @@ class INS_GPS2_Tightly : public BaseFINS{
 #undef pow2
 
         for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
-          for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-            H[0][k] -= los_neg[i] * H_uh[i][j]; // polarity checked.
+          for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
+            H[0][k] -= prop.los_neg[i] * H_uh[i][j]; // polarity checked.
           }
         }
         H[0][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
       }
 
-      if(weight < 1E-1){weight = 1E-1;}
-      R_diag[0] = std::pow(1.0 / weight, 2); // TODO range error variance [m]
+      if(prop.weight < 1E-1){prop.weight = 1E-1;}
+      R_diag[0] = std::pow(1.0 / prop.weight, 2); // TODO range error variance [m]
 
       if(!rate){return 1;}
 
       // rate residual
       z[1] = *rate - BaseFINS::m_clock_error_rate[x.clock_index]
-          + solver.rate_relative_neg(sat, range, x.t, x.vel,
-              los_neg[0], los_neg[1], los_neg[2]);
+          + prop.rate_relative_neg;
 
       { // setup H matrix
         { // velocity
           mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
           for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
-            for(int i(0); i < sizeof(los_neg) / sizeof(los_neg[0]); ++i){
-              H[1][j] -= los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
+            for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
+              H[1][j] -= prop.los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
             }
           }
         }
         { // position
           const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
-          H[1][3] -= (                   los_neg[1] * -vz + los_neg[2] *  vy) * 2;  // polarity checked.
-          H[1][4] -= (los_neg[0] *  vz                    + los_neg[2] * -vx) * 2;
-          H[1][5] -= (los_neg[0] * -vy + los_neg[1] *  vx                   ) * 2;
+          H[1][3] -= (                        prop.los_neg[1] * -vz + prop.los_neg[2] *  vy) * 2;  // polarity checked.
+          H[1][4] -= (prop.los_neg[0] *  vz                         + prop.los_neg[2] * -vx) * 2;
+          H[1][5] -= (prop.los_neg[0] * -vy + prop.los_neg[1] *  vx                        ) * 2;
         }
         // error rate
         H[1][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
@@ -578,10 +570,7 @@ class INS_GPS2_Tightly : public BaseFINS{
       typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
 
       for(it_t it_sat(gps.measurement.begin()); it_sat != gps.measurement.end(); ++it_sat){
-        int prn(it_sat->first);
-        const typename solver_t::satellite_t *sat(solver_latest.is_available(prn, gps.gpstime));
-
-        if(!sat){continue;}
+        typename raw_data_t::prn_t prn(it_sat->first);
 
         it2_t it2_range(it_sat->second.find(raw_data_t::L1_PSEUDORANGE));
         if(it2_range == it_sat->second.end()){ // No range information
@@ -594,7 +583,7 @@ class INS_GPS2_Tightly : public BaseFINS{
          * may be occurred during residual calculation such as elevation mask.
          */
         z_index += assign_z_H_R(solver_latest,
-            *sat, x,
+            prn, x,
             it2_range->second,
             ((it2_rate == it_sat->second.end()) ? NULL : &(it2_rate->second)),
             &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);

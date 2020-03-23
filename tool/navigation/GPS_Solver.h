@@ -299,16 +299,6 @@ class GPS_SinglePositioning {
       return range;
     }
 
-    float_t range_residual(
-        const satellite_t &sat,
-        const float_t &range,
-        const gps_time_t &time_arrival,
-        const pos_t &usr_pos,
-        residual_t &residual,
-        const bool &is_coarse_mode = false) const {
-      return range_residual(sat, range, time_arrival, usr_pos, residual, _options, is_coarse_mode);
-    }
-
     /**
      * Get relative rate (negative polarity) in accordance with current status
      *
@@ -337,17 +327,6 @@ class GPS_SinglePositioning {
           + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed; // considering clock rate error
     }
 
-    float_t rate_relative_neg(
-        const satellite_t &sat,
-        const float_t &range,
-        const gps_time_t &time_arrival,
-        const xyz_t &usr_vel,
-        const float_t &los_neg_x, const float_t &los_neg_y, const float_t &los_neg_z) const {
-      return rate_relative_neg(
-          sat, range, time_arrival, usr_vel,
-          los_neg_x, los_neg_y, los_neg_z, _options);
-    }
-
     /**
      * Check availability of a satellite with which observation is associated
      *
@@ -368,6 +347,50 @@ class GPS_SinglePositioning {
       }
 
       return &(it_sat->second);
+    }
+
+    struct relative_property_t {
+      float_t weight; ///< How useful this information is. only positive value activates the other values.
+      float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
+      float_t range_residual; ///< residual range
+      float_t rate_relative_neg; /// relative rate
+      float_t los_neg[3]; ///< line of site vector from satellite to user
+    };
+    /**
+     * Calculate relative range and rate information to a satellite
+     *
+     * @param prn satellite number
+     * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
+     * @param time_arrival time when signal arrive at receiver
+     * @param usr_pos (temporal solution of) user position
+     * @param usr_vel (temporal solution of) user velocity
+     * @return (relative_property_t) relative information
+     */
+    relative_property_t relative_property(
+        const typename space_node_t::satellites_t::key_type &prn,
+        const float_t &range,
+        const gps_time_t &time_arrival,
+        const pos_t &usr_pos,
+        const xyz_t &usr_vel) const {
+
+      relative_property_t res = {0};
+
+      const satellite_t *sat(is_available(prn, time_arrival));
+      if(!sat){return res;}
+
+      residual_t residual = {
+        res.range_residual,
+        res.los_neg[0], res.los_neg[1], res.los_neg[2],
+        res.weight,
+      };
+
+      res.range_corrected = range_residual(*sat, range, time_arrival,
+          usr_pos, residual, _options);
+      res.rate_relative_neg = rate_relative_neg(*sat, res.range_corrected, time_arrival, usr_vel,
+          res.los_neg[0], res.los_neg[1], res.los_neg[2], _options);
+
+      return res;
+
     }
 
     struct user_pvt_t {
