@@ -246,7 +246,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool use_egm; ///< True for precise Earth gravity model
 
   INS_GPS_Back_Propagate_Property<float_sylph_t> back_propagate_property;
-  INS_GPS_RealTime_Property realttime_property;
+  INS_GPS_RealTime_Property<float_sylph_t> realttime_property;
 
   // GPS options
   bool gps_fake_lock; ///< true when gps dummy date is used.
@@ -295,7 +295,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   std::ostream *out_raw_pvt;
 
   // Debug
-  INS_GPS_Debug_Property debug_property;
+  INS_GPS_Debug_Property<float_sylph_t> debug_property;
 
   Options()
       : super_t(),
@@ -314,7 +314,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       init_misc_buf(), init_misc(&init_misc_buf),
       out_raw_pvt(NULL),
       debug_property() {
-    realttime_property.rt_mode = INS_GPS_RealTime_Property::RT_LIGHT_WEIGHT;
+    realttime_property.rt_mode = INS_GPS_RealTime_Property<float_sylph_t>::RT_LIGHT_WEIGHT;
   }
   ~Options(){}
 
@@ -1228,11 +1228,12 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   struct Checker {
     template <class Calibration>
     static NAV *check_covariance(const Calibration &calibration){
+      typedef INS_GPS_Debug_Property<float_sylph_t> prop_t;
       switch(options.debug_property.debug_target){
-        case INS_GPS_Debug_Property::DEBUG_KF_P:
-        case INS_GPS_Debug_Property::DEBUG_KF_FULL:
+        case prop_t::DEBUG_KF_P:
+        case prop_t::DEBUG_KF_FULL:
           return INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<T> >::generate(calibration);
-        case INS_GPS_Debug_Property::DEBUG_NONE:
+        case prop_t::DEBUG_NONE:
         default:
           return INS_GPS_NAV_Factory<T>::generate(calibration);
       }
@@ -1258,7 +1259,8 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
 
     template <class Calibration>
     static NAV *check_pure_ins(const Calibration &calibration){
-      return (options.debug_property.debug_target == INS_GPS_Debug_Property::DEBUG_PURE_INERTIAL)
+      typedef INS_GPS_Debug_Property<float_sylph_t> prop_t;
+      return (options.debug_property.debug_target == prop_t::DEBUG_PURE_INERTIAL)
           ? Checker<INS_GPS_Debug_PureInertial<T> >::check_navdata(calibration)
           : check_navdata(calibration);
     }

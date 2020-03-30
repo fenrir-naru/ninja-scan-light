@@ -60,18 +60,20 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
       }
     };
     typedef std::vector<snapshot_content_t> snapshots_t;
+    typedef INS_GPS_Back_Propagate_Property<float_t> prop_t;
   protected:
     snapshots_t snapshots;
   public:
     INS_GPS_Back_Propagate()
-        : INS_GPS(), snapshots() {}
+        : INS_GPS(), snapshots(), prop_t() {}
     INS_GPS_Back_Propagate(
         const INS_GPS_Back_Propagate &orig,
         const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), snapshots(orig.snapshots){}
+        : INS_GPS(orig, deepcopy), snapshots(orig.snapshots),
+        prop_t(orig) {}
     virtual ~INS_GPS_Back_Propagate(){}
-    void setup_back_propagation(const INS_GPS_Back_Propagate_Property<float_t> &property){
-      INS_GPS_Back_Propagate_Property<float_t>::operator=(property);
+    void setup_back_propagation(const prop_t &property){
+      prop_t::operator=(property);
     }
     const snapshots_t &get_snapshots() const {return snapshots;}
 
@@ -129,7 +131,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
               ++it){
             // This statement controls depth of back propagation.
             if(it->elapsedT_from_last_correct
-                < INS_GPS_Back_Propagate_Property<float_t>::back_propagate_depth){
+                < prop_t::back_propagate_depth){
               if(mod_elapsedT > 0.1){ // Skip only when sufficient amount of snapshots are existed.
                 snapshots.erase(snapshots.begin(), it.base());
                 //cerr << "[erase]" << endl;
@@ -155,13 +157,14 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
     }
 };
 
+template <class FloatT>
 struct INS_GPS_RealTime_Property {
   enum rt_mode_t {RT_NORMAL, RT_LIGHT_WEIGHT} rt_mode; ///< Algorithm selection for realtime mode
   INS_GPS_RealTime_Property() : rt_mode(RT_NORMAL) {}
 };
 
 template <class INS_GPS>
-class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
+class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typename INS_GPS::float_t> {
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename INS_GPS::float_t float_t;
@@ -172,6 +175,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
     using typename INS_GPS::vec3_t;
     using typename INS_GPS::mat_t;
 #endif
+    typedef INS_GPS_RealTime_Property<float_t> prop_t;
   protected:
     struct snapshot_content_t {
       INS_GPS ins_gps;
@@ -200,8 +204,8 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
         const bool &deepcopy = false)
         : INS_GPS(orig, deepcopy), snapshots(orig.snapshots){}
     virtual ~INS_GPS_RealTime(){}
-    void setup_realtime(const INS_GPS_RealTime_Property &property){
-      INS_GPS_RealTime_Property::operator=(property);
+    void setup_realtime(const prop_t &property){
+      prop_t::operator=(property);
     }
 
   protected:
@@ -261,8 +265,8 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
      */
     void correct_with_info(CorrectInfo<float_t> &info){
       mat_t &H(info.H), &R(info.R);
-      switch(rt_mode){
-        case RT_LIGHT_WEIGHT:
+      switch(prop_t::rt_mode){
+        case prop_t::RT_LIGHT_WEIGHT:
           if(!snapshots.empty()){
             mat_t sum_A(H.columns(), H.columns());
             mat_t sum_GQGt(sum_A.rows(), sum_A.rows());
@@ -283,7 +287,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property {
             H *= (mat_t::getI(sum_A.rows()) - sum_A * bar_delteT);  // Eq. (4.2.41)
           }
           break;
-        case RT_NORMAL:
+        case prop_t::RT_NORMAL:
         default:
           for(typename snapshots_t::iterator it(snapshots.begin());
               it != snapshots.end();
