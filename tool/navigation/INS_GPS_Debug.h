@@ -40,6 +40,7 @@
 #include "param/matrix.h"
 #include "Filtered_INS2.h"
 
+template <class FloatT>
 struct INS_GPS_Debug_Property {
   enum debug_target_t {DEBUG_NONE, DEBUG_KF_P, DEBUG_KF_FULL, DEBUG_PURE_INERTIAL} debug_target;
   INS_GPS_Debug_Property() : debug_target(DEBUG_NONE) {}
@@ -59,7 +60,7 @@ struct INS_GPS_Debug_Property {
 
   struct show_debug_property_t {
     const INS_GPS_Debug_Property &property;
-    show_debug_property_t(const INS_GPS_Debug_Property &prop) : property(prop) {}
+    show_debug_property_t(const INS_GPS_Debug_Property<FloatT> &prop) : property(prop) {}
     friend std::ostream &operator<<(std::ostream &out, const show_debug_property_t &_this){
       switch(_this.property.debug_target){
         case DEBUG_NONE: break;
@@ -76,22 +77,23 @@ struct INS_GPS_Debug_Property {
 };
 
 template <class INS_GPS>
-class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property {
+class INS_GPS_Debug : public INS_GPS, protected INS_GPS_Debug_Property<typename INS_GPS::float_t> {
   public:
+    typedef INS_GPS_Debug_Property<typename INS_GPS::float_t> prop_t;
     INS_GPS_Debug()
-        : INS_GPS(), INS_GPS_Debug_Property() {}
+        : INS_GPS(), prop_t() {}
     INS_GPS_Debug(
         const INS_GPS_Debug &orig,
         const bool &deepcopy = false)
-        : INS_GPS(orig, deepcopy), INS_GPS_Debug_Property(orig) {}
+        : INS_GPS(orig, deepcopy), prop_t(orig) {}
     INS_GPS_Debug &operator=(const INS_GPS_Debug &another){
       INS_GPS::operator=(another);
-      INS_GPS_Debug_Property::operator=(another);
+      prop_t::operator=(another);
       return *this;
     }
     virtual ~INS_GPS_Debug(){}
-    void setup_debug(const INS_GPS_Debug_Property &property){
-      INS_GPS_Debug_Property::operator=(property);
+    void setup_debug(const prop_t &property){
+      prop_t::operator=(property);
     }
 
     virtual void inspect(std::ostream &out) const {}
