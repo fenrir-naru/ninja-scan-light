@@ -157,6 +157,7 @@ struct GNSS_Data {
     }
 
     bool load(const gps_ephemeris_t &eph){
+      if(!gps){return false;}
       gps->satellite(eph.svid).register_ephemeris(eph);
       return true;
     }
@@ -180,9 +181,9 @@ struct GNSS_Data {
             && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)){
           // Original WN is truncated to 10 bits.
           eph.WN = (week_number - (week_number % 0x400)) + (eph.WN % 0x400);
-          load(eph);
+          bool res(load(eph));
           eph.iodc = eph.iode = eph.iode2 = -1; // invalidate
-          return true;
+          return res;
         }
       }else if((data.subframe.subframe_no == 4) && (data.subframe.sv_or_page_id == 56)){ // IONO UTC parameters
         gps_iono_utc_t iono_utc(fetch_as_GPS_iono_utc(data.subframe));
@@ -190,8 +191,10 @@ struct GNSS_Data {
         int week_number_base(week_number - (week_number % 0x100));
         iono_utc.WN_t = week_number_base + (iono_utc.WN_t % 0x100);
         iono_utc.WN_LSF = week_number_base + (iono_utc.WN_LSF % 0x100);
-        gps->update_iono_utc(iono_utc);
-        return true;
+        if(gps){
+          gps->update_iono_utc(iono_utc);
+          return true;
+        }
       }
 
       return false;
