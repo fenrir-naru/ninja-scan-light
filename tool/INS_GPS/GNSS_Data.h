@@ -156,6 +156,11 @@ struct GNSS_Data {
       out.dot_i0      = in.ephemeris_i_0_dot();
     }
 
+    bool load(const gps_ephemeris_t &eph){
+      gps->satellite(eph.svid).register_ephemeris(eph);
+      return true;
+    }
+
     bool load(const GNSS_Data &data){
       if(data.subframe.sv_number > 32){return false;}
 
@@ -175,7 +180,7 @@ struct GNSS_Data {
             && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)){
           // Original WN is truncated to 10 bits.
           eph.WN = (week_number - (week_number % 0x400)) + (eph.WN % 0x400);
-          gps->satellite(eph.svid).register_ephemeris(eph);
+          load(eph);
           eph.iodc = eph.iode = eph.iode2 = -1; // invalidate
           return true;
         }

@@ -832,8 +832,7 @@ void Updatable::update(const G_Packet_Data &packet){
 
 struct G_Packet_GPS_Ephemeris
     : public BasicPacket<G_Packet_GPS_Ephemeris>, public GNSS_Data<float_sylph_t>::Loader::gps_ephemeris_t {
-  typedef GNSS_Data<float_sylph_t>::Loader::gps_t space_node_t;
-  mutable space_node_t *space_node;
+  mutable GNSS_Data<float_sylph_t>::Loader *loader;
   typedef GNSS_Data<float_sylph_t>::Loader::gps_ephemeris_t ephemeris_t;
 
   G_Packet_GPS_Ephemeris() : ephemeris_t() {
@@ -841,7 +840,7 @@ struct G_Packet_GPS_Ephemeris
   }
 };
 void Updatable::update(const G_Packet_GPS_Ephemeris &packet){
-  packet.space_node->satellite(packet.svid).register_ephemeris(packet);
+  packet.loader->load(packet);
 }
 
 /**
@@ -1534,7 +1533,7 @@ class INS_GPS_NAVData : public INS_GPS {
 using namespace std;
 
 struct G_Packet_GPS_Ephemeris_Extended : public G_Packet_GPS_Ephemeris {
-  space_node_t::uint_t &sv_number; // sv_number is alias.
+  unsigned int &sv_number; // sv_number is alias.
   bool valid;
 
   G_Packet_GPS_Ephemeris_Extended()
@@ -1837,7 +1836,7 @@ class StreamProcessor
         observer.fetch_ephemeris(ephemeris);
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
-          ephemeris.space_node = &gps_space_node;
+          ephemeris.loader = &loader;
           Handler::outer.updatable->update(ephemeris);
         }
       }
