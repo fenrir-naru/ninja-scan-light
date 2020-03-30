@@ -318,13 +318,14 @@ struct GPS_RawData {
   measurement_t measurement;
 
   prn_obs_t measurement_of(
-      const typename measurement_t::mapped_type::key_type &key) const {
+      const typename measurement_t::mapped_type::key_type &key,
+      const FloatT &scaling = FloatT(1)) const {
     prn_obs_t res;
     for(typename measurement_t::const_iterator it(measurement.begin());
         it != measurement.end(); ++it){
       typename measurement_t::mapped_type::const_iterator it2(it->second.find(key));
       if(it2 == it->second.end()){continue;}
-      res.push_back(std::make_pair(it->first, it2->second));
+      res.push_back(std::make_pair(it->first, it2->second * scaling));
     }
     return res;
   }
@@ -577,15 +578,26 @@ class INS_GPS2_Tightly : public BaseFINS{
           continue;
         }
 
+        float_t rate;
+        const float_t *rate_p(NULL);
         it2_t it2_rate(it_sat->second.find(raw_data_t::L1_RANGE_RATE));
+        if(it2_rate != it_sat->second.end()){
+          rate_p = &(it2_rate->second);
+        }else{ // fall back by using doppler
+          it2_t it2_doppler(it_sat->second.find(raw_data_t::L1_DOPPLER));
+          if(it2_doppler != it_sat->second.end()){
+            // calculate range rate derived from doppler
+            rate = -(it2_doppler->second) * space_node_t::L1_WaveLength();
+            rate_p = &rate;
+          }
+        }
 
         /* Intentional exclusion, in which zero will be returned,
          * may be occurred during residual calculation such as elevation mask.
          */
         z_index += assign_z_H_R(solver_latest,
             prn, x,
-            it2_range->second,
-            ((it2_rate == it_sat->second.end()) ? NULL : &(it2_rate->second)),
+            it2_range->second, rate_p,
             &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);
       }
 

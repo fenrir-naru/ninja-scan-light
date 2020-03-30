@@ -719,6 +719,14 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
         .update_all_ephemeris(raw_data.gpstime);
   }
 
+  raw_data_t::prn_obs_t range_rate() const {
+    raw_data_t::prn_obs_t rate(raw_data.measurement_of(raw_data_t::L1_RANGE_RATE));
+    if(!rate.empty()){return rate;}
+    // Fall back by using doppler
+    return raw_data.measurement_of(
+        raw_data_t::L1_DOPPLER, -raw_data_t::space_node_t::L1_WaveLength());
+  }
+
   typedef raw_data_t::solver_t::user_pvt_t pvt_t;
   bool get_pvt(pvt_t &pvt) const {
     while(true){
@@ -729,7 +737,7 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
         }else if(delta_t < 300){ // 300 sec
           pvt = raw_data.solver->solve_user_pvt(
               raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
-              raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
+              range_rate(),
               raw_data.gpstime,
               pvt.user_position,
               pvt.receiver_error);
@@ -738,7 +746,7 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
       }
       pvt = raw_data.solver->solve_user_pvt(
           raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
-          raw_data.measurement_of(raw_data_t::L1_RANGE_RATE),
+          range_rate(),
           raw_data.gpstime);
       break;
     }
@@ -1869,11 +1877,6 @@ class StreamProcessor
               dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, src.pseudo_range));
               dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, src.carrier_phase));
               dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
-
-              // calculate range rate derived from doppler
-              dst.insert(std::make_pair(
-                  raw_data_t::L1_RANGE_RATE,
-                  -src.doppler * gps_space_node_t::L1_WaveLength()));
             }
 
 #if defined(USE_GPS_SINGLE_DIFFERENCE_AS_RATE)
@@ -1941,11 +1944,6 @@ class StreamProcessor
               dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
               dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, doppler));
-
-              // calculate range rate derived from doppler
-              dst.insert(std::make_pair(
-                  raw_data_t::L1_RANGE_RATE,
-                  -doppler * gps_space_node_t::L1_WaveLength()));
             }
 
             update(packet_raw_latest);
@@ -2041,11 +2039,6 @@ class StreamProcessor
               float_sylph_t doppler(
                   (float_sylph_t)le_char4_2_num<G_Observer_t::s32_t>(*(buf + 16)) / (1 << 12));
               dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, doppler));
-
-              // calculate range rate derived from doppler
-              dst.insert(std::make_pair(
-                  raw_data_t::L1_RANGE_RATE,
-                  -doppler * gps_space_node_t::L1_WaveLength()));
             }
 
             if(ranges_valid == 0){return;}
