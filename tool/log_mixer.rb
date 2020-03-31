@@ -202,8 +202,16 @@ $log_mix = proc{|prop|
 
 if $0 == __FILE__ then
 
-$stderr.puts "Log mixer"
-$stderr.puts "Usage: #{__FILE__} [options] gps_data imu_data > log.dat"
+$stderr.puts <<-__STRING__
+Log mixer
+  Usage: #{__FILE__} [options] gps_data imu_data > log.dat
+Default format:
+  gps_data => u-blox ubx
+  imu_data => CSV file which has seven columns; 
+    1st column: GPS time [sec]
+    2nd-4th columns: XYZ acceleration [m/s^2]
+    5th-7th columns: XYZ angular speed [rad/sec]
+__STRING__
 
 options = {}
 ARGV.reject{|arg|
