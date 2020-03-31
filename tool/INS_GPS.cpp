@@ -716,7 +716,7 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
 
   void take_consistency() const {
     // Select most preferable ephemeris
-    const_cast<raw_data_t::space_node_t &>(raw_data.solver->space_node())
+    const_cast<GPS_SpaceNode<float_sylph_t> &>(raw_data.solver->space_node())
         .update_all_ephemeris(raw_data.gpstime);
   }
 
@@ -725,7 +725,7 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
     if(!rate.empty()){return rate;}
     // Fall back by using doppler
     return raw_data.measurement_of(
-        raw_data_t::L1_DOPPLER, -raw_data_t::space_node_t::L1_WaveLength());
+        raw_data_t::L1_DOPPLER, -GPS_SpaceNode<float_sylph_t>::L1_WaveLength());
   }
 
   typedef raw_data_t::solver_t::user_pvt_t pvt_t;
@@ -2128,7 +2128,7 @@ class StreamProcessor
               if(delta_t > 100E-3){continue;} // Remove abnormal time lag (normally, from 67 to 86 ms);
               it->second.insert(std::make_pair(
                   raw_data_t::L1_PSEUDORANGE,
-                  raw_data_t::space_node_t::light_speed * delta_t));
+                  GPS_SpaceNode<float_sylph_t>::light_speed * delta_t));
             }
 
             update(packet_raw_latest);

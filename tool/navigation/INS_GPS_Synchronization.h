@@ -22,6 +22,8 @@
 
 #include "param/matrix.h"
 #include "param/vector3.h"
+
+#include "navigation/GPS.h"
 #include "INS_GPS2_Tightly.h"
 
 template <class FloatT>
@@ -327,7 +329,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
       if((delta_ms >= 0.9) || (delta_ms <= -0.9)){ // 0.9 ms
         std::cerr << "Detect receiver clock jump: " << delta_ms << " [ms] => ";
         float_t clock_error_shift(
-            GPS_RawData<float_t>::space_node_t::light_speed * 1E-3 * std::floor(delta_ms + 0.5));
+            GPS_SpaceNode<float_t>::light_speed * 1E-3 * std::floor(delta_ms + 0.5));
         info = generator(
             snapshots[0].ins_gps, gps,
             clock_error_shift);

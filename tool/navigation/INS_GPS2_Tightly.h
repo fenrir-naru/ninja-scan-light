@@ -300,8 +300,6 @@ struct GPS_RawData {
   typedef GPS_SinglePositioning<FloatT> solver_t;
   solver_t *solver;
 
-  typedef typename solver_t::space_node_t space_node_t;
-
   unsigned int clock_index;
 
   typedef int prn_t;
@@ -344,7 +342,7 @@ struct GPS_RawData {
     return res;
   }
 
-  typedef typename space_node_t::gps_time_t gps_time_t;
+  typedef GPS_Time<FloatT> gps_time_t;
   gps_time_t gpstime;
 
   GPS_RawData(const unsigned int &_clock_index = 0)
@@ -390,7 +388,7 @@ class INS_GPS2_Tightly : public BaseFINS{
     typedef INS_GPS2_Tightly<BaseFINS> self_t;
 
     typedef GPS_RawData<float_t> raw_data_t;
-    typedef typename raw_data_t::space_node_t space_node_t;
+    typedef GPS_SpaceNode<float_t> space_node_t;
     typedef typename raw_data_t::solver_t solver_t;
 
     using BaseFINS::CLOCKS_SUPPORTED;
