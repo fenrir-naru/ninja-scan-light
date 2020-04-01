@@ -147,6 +147,7 @@
 #include <cctype>
 
 #include <vector>
+#include <list>
 #include <utility>
 #include <deque>
 #include <algorithm>
@@ -1684,8 +1685,7 @@ class StreamProcessor
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 64;
 
-typedef vector<StreamProcessor> processors_t;
-processors_t processors;
+list<StreamProcessor> processors;
 
 template <class INS_GPS>
 class INS_GPS_NAV<INS_GPS>::Helper {
