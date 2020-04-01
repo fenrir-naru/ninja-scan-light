@@ -705,26 +705,24 @@ struct G_Packet : public BasicPacket<G_Packet> {
   }
 };
 
-struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
-  typedef GPS_RawData<float_sylph_t> raw_data_t;
-  raw_data_t raw_data;
-  Vector3<float_sylph_t> *lever_arm;
+struct G_Packet_Measurement
+    : public BasicPacket<G_Packet_Measurement>,
+    public GPS_RawData<float_sylph_t> {
 
-  operator const raw_data_t &() const {
-    return raw_data;
-  }
+  typedef GPS_RawData<float_sylph_t> raw_data_t;
+  Vector3<float_sylph_t> *lever_arm;
 
   void take_consistency() const {
     // Select most preferable ephemeris
-    const_cast<GPS_SpaceNode<float_sylph_t> &>(raw_data.solver->space_node())
-        .update_all_ephemeris(raw_data.gpstime);
+    const_cast<GPS_SpaceNode<float_sylph_t> &>(raw_data_t::solver->space_node())
+        .update_all_ephemeris(raw_data_t::gpstime);
   }
 
   raw_data_t::prn_obs_t range_rate() const {
-    raw_data_t::prn_obs_t rate(raw_data.measurement_of(raw_data_t::L1_RANGE_RATE));
+    raw_data_t::prn_obs_t rate(raw_data_t::measurement_of(raw_data_t::L1_RANGE_RATE));
     if(!rate.empty()){return rate;}
     // Fall back by using doppler
-    return raw_data.measurement_of(
+    return raw_data_t::measurement_of(
         raw_data_t::L1_DOPPLER, -GPS_SpaceNode<float_sylph_t>::L1_WaveLength());
   }
 
@@ -732,23 +730,23 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
   bool get_pvt(pvt_t &pvt) const {
     while(true){
       if(pvt.error_code == pvt_t::ERROR_NO){
-        float_sylph_t delta_t(std::abs(raw_data.gpstime - pvt.receiver_time));
+        float_sylph_t delta_t(std::abs(raw_data_t::gpstime - pvt.receiver_time));
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
-          pvt = raw_data.solver->solve_user_pvt(
-              raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
+          pvt = raw_data_t::solver->solve_user_pvt(
+              raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
               range_rate(),
-              raw_data.gpstime,
+              raw_data_t::gpstime,
               pvt.user_position,
               pvt.receiver_error);
           break;
         }
       }
-      pvt = raw_data.solver->solve_user_pvt(
-          raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
+      pvt = raw_data_t::solver->solve_user_pvt(
+          raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
           range_rate(),
-          raw_data.gpstime);
+          raw_data_t::gpstime);
       break;
     }
     return pvt.error_code == pvt_t::ERROR_NO;
@@ -778,7 +776,7 @@ struct G_Packet_Measurement : public BasicPacket<G_Packet_Measurement> {
     return res;
   }
 
-  G_Packet_Measurement() : raw_data(), lever_arm(NULL) {}
+  G_Packet_Measurement() : raw_data_t(), lever_arm(NULL) {}
 };
 
 struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
@@ -1598,7 +1596,7 @@ struct GNSS_Receiver {
   }
 
   void setup(G_Packet_Measurement &packet) const {
-    packet.raw_data.solver = &const_cast<gps_solver_t &>(solver.gps);
+    packet.solver = &const_cast<gps_solver_t &>(solver.gps);
   }
 
   bool check_spec(const char *spec, const bool &dry_run = false){
@@ -1915,23 +1913,23 @@ class StreamProcessor
             typedef G_Packet_Measurement::raw_data_t raw_data_t;
             raw_data_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
 #if defined(USE_GPS_SINGLE_DIFFERENCE_AS_RATE)
-            float_sylph_t delta_t(current - packet_raw_latest.raw_data.gpstime);
+            float_sylph_t delta_t(current - packet_raw_latest.gpstime);
 #endif
-            packet_raw_latest.raw_data.gpstime = current;
+            packet_raw_latest.gpstime = current;
             packet_raw_latest.itow = current.seconds;
 
 #if defined(USE_GPS_SINGLE_DIFFERENCE_AS_RATE)
             raw_data_t::prn_obs_t previous_pseudo_range(
-                packet_raw_latest.raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE));
+                packet_raw_latest.measurement_of(raw_data_t::L1_PSEUDORANGE));
 #endif
-            packet_raw_latest.raw_data.measurement.clear();
+            packet_raw_latest.measurement.clear();
 
             for(int i(0); i < num_of_sv; i++){
 
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
 
               int prn(src.sv_number);
-              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.raw_data.measurement[prn]);
+              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.measurement[prn]);
 
               dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, src.pseudo_range));
               dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, src.carrier_phase));
@@ -1942,12 +1940,12 @@ class StreamProcessor
             { // calculate range rate by using difference between current and previous range.
               raw_data_t::prn_obs_t range_rate(
                   raw_data_t::difference(
-                    packet_raw_latest.raw_data.measurement_of(raw_data_t::L1_PSEUDORANGE),
+                    packet_raw_latest.measurement_of(raw_data_t::L1_PSEUDORANGE),
                     previous_pseudo_range,
                     (1.0 / delta_t)));
               for(raw_data_t::prn_obs_t::const_iterator it(range_rate.begin());
                   it != range_rate.end(); ++it){
-                packet_raw_latest.raw_data.measurement[it->first].insert(
+                packet_raw_latest.measurement[it->first].insert(
                     std::make_pair(raw_data_t::L1_RANGE_RATE, it->second));
               }
             }
@@ -1984,11 +1982,11 @@ class StreamProcessor
               observer.inspect(buf, sizeof(buf), 6);
               raw_data_t::gps_time_t current(
                   le_char2_2_num<G_Observer_t::u16_t>(*(buf + 8)), le_char8_2_num<double>(*buf));
-              packet_raw_latest.raw_data.gpstime = current;
+              packet_raw_latest.gpstime = current;
               packet_raw_latest.itow = current.seconds;
             }
 
-            packet_raw_latest.raw_data.measurement.clear();
+            packet_raw_latest.measurement.clear();
 
             for(int i(0); i < num_of_measurement; i++){
               unsigned int gnssID(observer[6 + 36 + (32 * i)]);
@@ -1999,7 +1997,7 @@ class StreamProcessor
               G_Observer_t::v8_t buf[24];
               observer.inspect(buf, sizeof(buf), 6 + 16 + (32 * i));
 
-              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.raw_data.measurement[prn]);
+              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.measurement[prn]);
 
               dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
               dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
@@ -2048,7 +2046,7 @@ class StreamProcessor
 
             if(ranges == 0){return;} // no measurement
 
-            packet_raw_latest.raw_data.measurement.clear();
+            packet_raw_latest.measurement.clear();
 
             typedef G_Packet_Measurement::raw_data_t raw_data_t;
 
@@ -2084,7 +2082,7 @@ class StreamProcessor
               char buf[20];
               observer.inspect(buf, 20, offset);
 
-              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.raw_data.measurement[prn]);
+              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.measurement[prn]);
 
               float_sylph_t time_of_transmission(1E-3 * le_char8_shift32(&buf[0]));
               dst.insert(std::make_pair(TIME_OF_TRANSMISSION, time_of_transmission));
@@ -2111,16 +2109,16 @@ class StreamProcessor
                 // assume 25 ms alignment, transmission time is assumed to be between
                 // 67ms(20200km, inc90deg) to 86ms(25785km, inc0deg); ref 72ms(21674km, inc45deg)
 
-            packet_raw_latest.raw_data.gpstime.week = week_number;
-            packet_raw_latest.raw_data.gpstime.seconds = est_time_of_reception;
-            if(packet_raw_latest.raw_data.gpstime.seconds >= raw_data_t::gps_time_t::seconds_week){
-              ++(packet_raw_latest.raw_data.gpstime.week);
-              packet_raw_latest.raw_data.gpstime.seconds -= raw_data_t::gps_time_t::seconds_week;
+            packet_raw_latest.gpstime.week = week_number;
+            packet_raw_latest.gpstime.seconds = est_time_of_reception;
+            if(packet_raw_latest.gpstime.seconds >= raw_data_t::gps_time_t::seconds_week){
+              ++(packet_raw_latest.gpstime.week);
+              packet_raw_latest.gpstime.seconds -= raw_data_t::gps_time_t::seconds_week;
             }
-            packet_raw_latest.itow = packet_raw_latest.raw_data.gpstime.seconds;
+            packet_raw_latest.itow = packet_raw_latest.gpstime.seconds;
 
-            for(raw_data_t::measurement_t::iterator it(packet_raw_latest.raw_data.measurement.begin());
-                it != packet_raw_latest.raw_data.measurement.end(); ++it){
+            for(raw_data_t::measurement_t::iterator it(packet_raw_latest.measurement.begin());
+                it != packet_raw_latest.measurement.end(); ++it){
               raw_data_t::measurement_t::mapped_type::const_iterator it2(
                   it->second.find(TIME_OF_TRANSMISSION));
               if(it2 == it->second.end()){continue;}
@@ -2249,7 +2247,7 @@ class StreamProcessor
     void install_receiver(const GNSS_Receiver &receiver, const unsigned int &clock_index = 0){
       receiver.setup(g_handler.loader);
       receiver.setup(g_handler.packet_raw_latest);
-      g_handler.packet_raw_latest.raw_data.clock_index = clock_index;
+      g_handler.packet_raw_latest.clock_index = clock_index;
     }
 
     /**
@@ -2750,8 +2748,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
             gps_raw_pvt.user_velocity_enu.east(),
             -gps_raw_pvt.user_velocity_enu.up());
 
-        ins_gps->clock_error(g_packet.raw_data.clock_index) = gps_raw_pvt.receiver_error;
-        ins_gps->clock_error_rate(g_packet.raw_data.clock_index) = gps_raw_pvt.receiver_error_rate;
+        ins_gps->clock_error(g_packet.clock_index) = gps_raw_pvt.receiver_error;
+        ins_gps->clock_error_rate(g_packet.clock_index) = gps_raw_pvt.receiver_error_rate;
         
         time_update_after_initialization(g_packet);
       }
