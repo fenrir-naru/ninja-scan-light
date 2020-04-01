@@ -665,15 +665,12 @@ struct A_Packet : public BasicPacket<A_Packet> {
 /**
  * GPS data
  */
-struct G_Packet : public BasicPacket<G_Packet> {
-  GPS_Solution<float_sylph_t> solution;
+struct G_Packet
+    : public BasicPacket<G_Packet>,
+    public GPS_Solution<float_sylph_t> {
   Vector3<float_sylph_t> *lever_arm;
 
-  G_Packet() : solution(), lever_arm(NULL) {}
-
-  operator const GPS_Solution<float_sylph_t> &() const {
-    return solution;
-  }
+  G_Packet() : GPS_Solution<float_sylph_t>(), lever_arm(NULL) {}
 };
 
 /**
@@ -1416,11 +1413,11 @@ class StreamProcessor
 
             itow_ms_0x0102 = observer.fetch_ITOW_ms();
 
-            packet_latest.solution.latitude = deg2rad(position.latitude);
-            packet_latest.solution.longitude = deg2rad(position.longitude);
-            packet_latest.solution.height = position.altitude;
-            packet_latest.solution.sigma_2d = position_acc.horizontal;
-            packet_latest.solution.sigma_height = position_acc.vertical;
+            packet_latest.latitude = deg2rad(position.latitude);
+            packet_latest.longitude = deg2rad(position.longitude);
+            packet_latest.height = position.altitude;
+            packet_latest.sigma_2d = position_acc.horizontal;
+            packet_latest.sigma_height = position_acc.vertical;
 
             break;
           }
@@ -1449,10 +1446,10 @@ class StreamProcessor
 
             itow_ms_0x0112 = observer.fetch_ITOW_ms();
 
-            packet_latest.solution.v_n = velocity.north;
-            packet_latest.solution.v_e = velocity.east;
-            packet_latest.solution.v_d = velocity.down;
-            packet_latest.solution.sigma_vel = velocity_acc.acc;
+            packet_latest.v_n = velocity.north;
+            packet_latest.v_e = velocity.east;
+            packet_latest.v_d = velocity.down;
+            packet_latest.sigma_vel = velocity_acc.acc;
 
             break;
           }
@@ -1479,10 +1476,10 @@ class StreamProcessor
         if(itow_ms_0x0102 == itow_ms_0x0112){
           packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
           if(options.gps_fake_lock){
-            packet_latest.solution.latitude = packet_latest.solution.longitude = packet_latest.solution.height = 0;
-            packet_latest.solution.sigma_2d = packet_latest.solution.sigma_height = 1E+1;
-            packet_latest.solution.v_n = packet_latest.solution.v_e = packet_latest.solution.v_d = 0;
-            packet_latest.solution.sigma_vel = 1;
+            packet_latest.latitude = packet_latest.longitude = packet_latest.height = 0;
+            packet_latest.sigma_2d = packet_latest.sigma_height = 1E+1;
+            packet_latest.v_n = packet_latest.v_e = packet_latest.v_d = 0;
+            packet_latest.sigma_vel = 1;
           }
           update(packet_latest);
         }
@@ -1985,7 +1982,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
      */
     void measurement_update(const G_Packet &g_packet){
 
-      if(g_packet.solution.sigma_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
+      if(g_packet.sigma_2d >= options.gps_threshold.cont_acc_2d){ // When estimated accuracy is too big, skip.
         return;
       }
       if(status >= JUST_INITIALIZED){
@@ -2017,7 +2014,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         }
         if(!recent_m.buf.empty()){ // When magnetic sensor is activated, try to perform yaw compensation
           if((options.yaw_correct_with_mag_when_speed_less_than_ms > 0)
-              && (pow(g_packet.solution.v_n, 2) + pow(g_packet.solution.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
+              && (pow(g_packet.v_n, 2) + pow(g_packet.v_e, 2)) < pow(options.yaw_correct_with_mag_when_speed_less_than_ms, 2)){
             nav.correct_yaw(nav.get_mag_delta_yaw(get_mag(g_packet.itow), *(nav.ins_gps)));
           }
         }
@@ -2025,16 +2022,16 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         nav.ins_gps->set_header("MU");
       }else if((recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
-          && (g_packet.solution.sigma_2d <= options.gps_threshold.init_acc_2d)
-          && (g_packet.solution.sigma_height <= options.gps_threshold.init_acc_v)){
+          && (g_packet.sigma_2d <= options.gps_threshold.init_acc_2d)
+          && (g_packet.sigma_height <= options.gps_threshold.init_acc_v)){
 
         /*
          * Filter is activated when the estimate error in horizontal and vertical positions are under 20 and 10 meters, respectively.
          */
         initialize(
             g_packet.itow,
-            g_packet.solution.latitude, g_packet.solution.longitude, g_packet.solution.height,
-            g_packet.solution.v_n, g_packet.solution.v_e, g_packet.solution.v_d);
+            g_packet.latitude, g_packet.longitude, g_packet.height,
+            g_packet.v_n, g_packet.v_e, g_packet.v_d);
         time_update_after_initialization(g_packet);
       }
     }
