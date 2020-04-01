@@ -240,16 +240,11 @@ struct GPS_Time {
       : week(t.week), seconds(t.seconds) {}
   GPS_Time(const int &_week, const float_t &_seconds)
       : week(_week), seconds(_seconds) {}
-  void canonicalize(){
-    if(seconds >= seconds_week){
-      int quot((int)(seconds / seconds_week));
-      week += quot;
-      seconds -= quot * seconds_week;
-    }else if(seconds < 0){
-      int quot((int)(-seconds / seconds_week) + 1);
-      week -= quot;
-      seconds += quot * seconds_week;
-    }
+  GPS_Time &canonicalize(){
+    int quot(std::floor(seconds / seconds_week));
+    week += quot;
+    seconds -= (seconds_week * quot);
+    return *this;
   }
   GPS_Time(const struct tm &t, const float_t &leap_seconds = 0) {
     int days(-6);

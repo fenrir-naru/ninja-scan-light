@@ -2109,12 +2109,8 @@ class StreamProcessor
                 // assume 25 ms alignment, transmission time is assumed to be between
                 // 67ms(20200km, inc90deg) to 86ms(25785km, inc0deg); ref 72ms(21674km, inc45deg)
 
-            packet_raw_latest.gpstime.week = week_number;
-            packet_raw_latest.gpstime.seconds = est_time_of_reception;
-            if(packet_raw_latest.gpstime.seconds >= raw_data_t::gps_time_t::seconds_week){
-              ++(packet_raw_latest.gpstime.week);
-              packet_raw_latest.gpstime.seconds -= raw_data_t::gps_time_t::seconds_week;
-            }
+            packet_raw_latest.gpstime = raw_data_t::gps_time_t(
+                week_number, est_time_of_reception).canonicalize();
             packet_raw_latest.itow = packet_raw_latest.gpstime.seconds;
 
             for(raw_data_t::measurement_t::iterator it(packet_raw_latest.measurement.begin());
