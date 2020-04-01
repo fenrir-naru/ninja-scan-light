@@ -709,12 +709,6 @@ struct G_Packet_Measurement
   typedef GPS_RawData<float_sylph_t> raw_data_t;
   Vector3<float_sylph_t> *lever_arm;
 
-  void take_consistency() const {
-    // Select most preferable ephemeris
-    const_cast<GPS_SpaceNode<float_sylph_t> &>(raw_data_t::solver->space_node())
-        .update_all_ephemeris(raw_data_t::gpstime);
-  }
-
   raw_data_t::prn_obs_t range_rate() const {
     raw_data_t::prn_obs_t rate(raw_data_t::measurement_of(raw_data_t::L1_RANGE_RATE));
     if(!rate.empty()){return rate;}
@@ -1596,6 +1590,11 @@ struct GNSS_Receiver {
     packet.solver = &const_cast<gps_solver_t &>(solver.gps);
   }
 
+  void adjust(const GPS_Time<float_sylph_t> &t){
+    // Select most preferable ephemeris
+    data.gps.space_node.update_all_ephemeris(t);
+  }
+
   bool check_spec(const char *spec, const bool &dry_run = false){
     const char *value;
 
@@ -2332,8 +2331,10 @@ class StreamProcessor
 
 const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 128;
 
-list<StreamProcessor> processors;
-list<GNSS_Receiver> receivers;
+typedef list<StreamProcessor> processors_t;
+processors_t processors;
+typedef list<GNSS_Receiver> receivers_t;
+receivers_t receivers;
 
 template <class INS_GPS>
 class INS_GPS_NAV<INS_GPS>::Helper {
@@ -2719,7 +2720,10 @@ class INS_GPS_NAV<INS_GPS>::Helper {
     void measurement_update(const G_Packet_Measurement &g_packet,
         INS_GPS2_Tightly<BaseFINS> *ins_gps){
 
-      g_packet.take_consistency();
+      for(receivers_t::iterator it(receivers.begin()); it != receivers.end(); ++it){
+        it->adjust(g_packet.gpstime);
+      }
+
       if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
         (*(options.out_raw_pvt))
             << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week) << ","
