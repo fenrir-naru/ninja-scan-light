@@ -298,7 +298,7 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 template <class FloatT>
 struct GPS_RawData {
   typedef GPS_SinglePositioning<FloatT> solver_t;
-  solver_t *solver;
+  const solver_t *solver;
 
   unsigned int clock_index;
 
@@ -546,8 +546,6 @@ class INS_GPS2_Tightly : public BaseFINS{
       // check space_node is configured
       if(!gps.solver){return CorrectInfo<float_t>::no_info();}
 
-      solver_t solver_latest(gps.solver->update()); // mainly for update solver options based on their availability
-
       receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error_shift));
 
       struct buf_t {
@@ -593,7 +591,7 @@ class INS_GPS2_Tightly : public BaseFINS{
         /* Intentional exclusion, in which zero will be returned,
          * may be occurred during residual calculation such as elevation mask.
          */
-        z_index += assign_z_H_R(solver_latest,
+        z_index += assign_z_H_R(*gps.solver,
             prn, x,
             it2_range->second, rate_p,
             &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);

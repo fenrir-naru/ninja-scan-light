@@ -61,6 +61,14 @@ struct GPS_SinglePositioning_Options {
   };
   ionospheric_model_t ionospheric_models[IONOSPHERIC_MODELS]; // lower index means having higher priority
 
+  int count_ionospheric_models() const {
+    int res(0);
+    for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
+      if(ionospheric_models[i] != IONOSPHERIC_SKIP){res++;}
+    }
+    return res;
+  }
+
   FloatT f_10_7;
 
   GPS_SinglePositioning_Options()
@@ -111,16 +119,10 @@ class GPS_SinglePositioning {
 
   protected:
     const space_node_t &_space_node;
-    const options_t &_options;
+    options_t _options;
 
   public:
-    GPS_SinglePositioning(const space_node_t &sn, const options_t &opt = options_t())
-        : _space_node(sn), _options(opt) {}
-
-    ~GPS_SinglePositioning(){}
-
     const space_node_t &space_node() const {return _space_node;}
-    const options_t &options() const {return _options;}
 
     /**
      * Check availability of ionospheric models
@@ -129,43 +131,48 @@ class GPS_SinglePositioning {
      *
      * @return (int) number of (possibly) available models
      */
-    int filter_ionospheric_models(
-        typename options_t::ionospheric_model_t (&out)[options_t::IONOSPHERIC_MODELS]) const {
+    int filter_ionospheric_models(options_t &opt) const {
 
       int available_models(0);
 
-      for(int i(0); i < sizeof(_options.ionospheric_models) / sizeof(_options.ionospheric_models[0]); ++i){
-        switch(_options.ionospheric_models[i]){
+      for(int i(0); i < sizeof(opt.ionospheric_models) / sizeof(opt.ionospheric_models[0]); ++i){
+        switch(opt.ionospheric_models[i]){
           case options_t::IONOSPHERIC_KLOBUCHAR:
-            if(!_space_node.is_valid_iono_utc()){
-              // check whether Klobuchar parameters alpha and beta have been already received
-              out[i] = options_t::IONOSPHERIC_SKIP;
-            }
-            break;
+            // check whether Klobuchar parameters alpha and beta have been already received
+            if(_space_node.is_valid_iono_utc()){break;}
+            opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
+            continue;
           case options_t::IONOSPHERIC_NTCM_GL:
-            if(_options.f_10_7 < 0){
-              // check F10.7 has been already configured
-              out[i] = options_t::IONOSPHERIC_SKIP;
-            }
-            break;
-          default:
-            out[i] = _options.ionospheric_models[i];
+            if(opt.f_10_7 >= 0){break;}
+            // check F10.7 has been already configured
+            opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
+            continue;
+          case options_t::IONOSPHERIC_SKIP:
+            continue;
         }
-        if(out[i] != options_t::IONOSPHERIC_SKIP){available_models++;}
+        available_models++;
       }
 
       return available_models;
     }
 
-    options_t available_options() const {
-      options_t res(_options);
-      filter_ionospheric_models(res.ionospheric_models);
-      return res;
+    const options_t &available_options() const {
+      return _options;
     }
 
-    self_t update() const {
-      return self_t(space_node(), available_options());
+    options_t available_options(options_t opt_wish) const {
+      filter_ionospheric_models(opt_wish);
+      return opt_wish;
     }
+
+    const options_t &update_options(const options_t &opt_wish){
+      return _options = available_options(opt_wish);
+    }
+
+    GPS_SinglePositioning(const space_node_t &sn, const options_t &opt_wish = options_t())
+        : _space_node(sn), _options(available_options(opt_wish)) {}
+
+    ~GPS_SinglePositioning(){}
 
   protected:
     struct geometric_matrices_t {
@@ -215,7 +222,6 @@ class GPS_SinglePositioning {
      * @param usr_pos (temporal solution of) user position
      * @param residual calculated residual with line of site vector, and weight;
      * When weight is equal to or less than zero, the calculated results should not be used.
-     * @param opt range residual calculation options represented by applied ionospheric model
      * @param is_coarse_mode if true, precise correction will be skipped.
      * @return (float_t) corrected range just including delay, and excluding receiver/satellite error.
      */
@@ -225,7 +231,6 @@ class GPS_SinglePositioning {
         const gps_time_t &time_arrival,
         const pos_t &usr_pos,
         residual_t &residual,
-        const options_t &opt,
         const bool &is_coarse_mode = false) const {
 
       // Clock error correction
@@ -252,9 +257,8 @@ class GPS_SinglePositioning {
 
         // Ionospheric model selection, the fall back is no correction
         bool iono_model_hit(false);
-        for(int i(0); i < sizeof(opt.ionospheric_models) / sizeof(opt.ionospheric_models[0]); ++i){
-          iono_model_hit = true;
-          switch(opt.ionospheric_models[i]){
+        for(int i(0); i < sizeof(_options.ionospheric_models) / sizeof(_options.ionospheric_models[0]); ++i){
+          switch(_options.ionospheric_models[i]){
             case options_t::IONOSPHERIC_KLOBUCHAR:
               residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
               break;
@@ -271,9 +275,10 @@ class GPS_SinglePositioning {
             case options_t::IONOSPHERIC_NONE:
               break;
             default:
-              iono_model_hit = false;
+              continue;
           }
-          if(iono_model_hit){break;}
+          iono_model_hit = true;
+          break;
         }
 
         // Tropospheric
@@ -286,7 +291,7 @@ class GPS_SinglePositioning {
         }else{
 
           float_t elv(relative_pos.elevation());
-          if(elv < opt.elevation_mask){
+          if(elv < _options.elevation_mask){
             residual.weight = 0; // exclude it when elevation is less than threshold
           }else{
             // elevation weight based on "GPS実用プログラミング"
@@ -309,7 +314,6 @@ class GPS_SinglePositioning {
      * @param los_neg_x line of site X
      * @param los_neg_y line of site Y
      * @param los_neg_z line of site Z
-     * @param opt rate calculation options (provisional)
      * @return (float_t) relative rate.
      */
     float_t rate_relative_neg(
@@ -317,8 +321,7 @@ class GPS_SinglePositioning {
         const float_t &range,
         const gps_time_t &time_arrival,
         const xyz_t &usr_vel,
-        const float_t &los_neg_x, const float_t &los_neg_y, const float_t &los_neg_z,
-        const options_t &opt) const {
+        const float_t &los_neg_x, const float_t &los_neg_y, const float_t &los_neg_z) const {
 
       xyz_t rel_vel(sat.velocity(time_arrival, range) - usr_vel); // Calculate velocity
       return los_neg_x * rel_vel.x()
@@ -385,9 +388,9 @@ class GPS_SinglePositioning {
       };
 
       res.range_corrected = range_residual(*sat, range, time_arrival,
-          usr_pos, residual, _options);
+          usr_pos, residual);
       res.rate_relative_neg = rate_relative_neg(*sat, res.range_corrected, time_arrival, usr_vel,
-          res.los_neg[0], res.los_neg[1], res.los_neg[2], _options);
+          res.los_neg[0], res.los_neg[1], res.los_neg[2]);
 
       return res;
 
@@ -444,8 +447,7 @@ class GPS_SinglePositioning {
       user_pvt_t res;
       res.receiver_time = receiver_time;
 
-      options_t opt(_options);
-      if(filter_ionospheric_models(opt.ionospheric_models) == 0){
+      if(_options.count_ionospheric_models() == 0){
         res.error_code = user_pvt_t::ERROR_INVALID_IONO_MODEL;
         return res;
       }
@@ -506,7 +508,6 @@ class GPS_SinglePositioning {
               range - res.receiver_error, time_arrival,
               res.user_position,
               residual,
-              opt,
               coarse_estimation);
 
           if(residual.weight <= 0){
@@ -623,8 +624,7 @@ class GPS_SinglePositioning {
                   available_sat_range_corrected[i_range].second, // range
                   time_arrival,
                   xyz_t(0, 0, 0), // user velocity to be estimated is temporary zero
-                  geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2), // LOS
-                  opt);
+                  geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2)); // LOS
         }
 
         try{

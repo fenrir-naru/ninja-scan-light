@@ -1567,16 +1567,16 @@ struct GNSS_Receiver {
     }
   } data;
 
-  struct solver_t {
+  struct solvers_t {
     gps_solver_t gps;
-    solver_t(const GNSS_Receiver &rcv)
+    solvers_t(const GNSS_Receiver &rcv)
         : gps(rcv.data.gps.space_node, rcv.data.gps.solver_options)
         {}
-  } solver;
+  } solvers;
 
-  GNSS_Receiver() : data(), solver(*this) {}
+  GNSS_Receiver() : data(), solvers(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
-      : data(another.data), solver(*this) {}
+      : data(another.data), solvers(*this) {}
   GNSS_Receiver &operator=(const GNSS_Receiver &another){
     data = another.data;
     return *this;
@@ -1586,13 +1586,17 @@ struct GNSS_Receiver {
     loader.gps = &const_cast<gps_space_node_t &>(data.gps.space_node);
   }
 
-  void setup(G_Packet_Measurement &packet) const {
-    packet.solver = &const_cast<gps_solver_t &>(solver.gps);
+  const gps_solver_t &solver() const {
+    return solvers.gps;
   }
 
   void adjust(const GPS_Time<float_sylph_t> &t){
     // Select most preferable ephemeris
     data.gps.space_node.update_all_ephemeris(t);
+
+    // Solver update mainly for preferable ionospheric model selection
+    // based on their availability
+    solvers.gps.update_options(data.gps.solver_options);
   }
 
   bool check_spec(const char *spec, const bool &dry_run = false){
@@ -2238,7 +2242,7 @@ class StreamProcessor
 
     void install_receiver(const GNSS_Receiver &receiver, const unsigned int &clock_index = 0){
       receiver.setup(g_handler.loader);
-      receiver.setup(g_handler.packet_raw_latest);
+      g_handler.packet_raw_latest.solver = &(receiver.solver());
       g_handler.packet_raw_latest.clock_index = clock_index;
     }
 
