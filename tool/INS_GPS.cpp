@@ -1586,7 +1586,7 @@ struct GNSS_Receiver {
     loader.gps = &const_cast<gps_space_node_t &>(data.gps.space_node);
   }
 
-  const gps_solver_t &solver() const {
+  const GPS_Solver_Base<float_sylph_t> &solver() const {
     return solvers.gps;
   }
 

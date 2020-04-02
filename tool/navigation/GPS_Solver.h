@@ -46,6 +46,7 @@
 
 #include "param/matrix.h"
 #include "GPS.h"
+#include "GPS_Solver_Base.h"
 #include "NTCM.h"
 
 template <class FloatT>
@@ -97,25 +98,39 @@ struct GPS_SinglePositioning_Options {
 };
 
 template <class FloatT>
-class GPS_SinglePositioning {
+class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
   private:
     GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
   public:
     typedef GPS_SinglePositioning<FloatT> self_t;
-    typedef FloatT float_t;
+    typedef GPS_Solver_Base<FloatT> base_t;
+
+#if defined(__GNUC__) && (__GNUC__ < 5)
+#define inheritate_type(x) typedef typename base_t::x x;
+#else
+#define inheritate_type(x) using typename base_t::x;
+#endif
+
+    inheritate_type(float_t);
     typedef Matrix<float_t> matrix_t;
 
-    typedef GPS_SpaceNode<float_t> space_node_t;
-    typedef typename space_node_t::gps_time_t gps_time_t;
+    inheritate_type(space_node_t);
+    inheritate_type(gps_time_t);
     typedef typename space_node_t::Satellite satellite_t;
 
-    typedef typename space_node_t::xyz_t xyz_t;
-    typedef typename space_node_t::llh_t llh_t;
-    typedef typename space_node_t::enu_t enu_t;
+    inheritate_type(xyz_t);
+    inheritate_type(llh_t);
+    inheritate_type(enu_t);
 
-    typedef std::vector<std::pair<int, float_t> > prn_obs_t;
+    inheritate_type(pos_t);
+
+    inheritate_type(prn_obs_t);
 
     typedef GPS_SinglePositioning_Options<float_t> options_t;
+
+    inheritate_type(relative_property_t);
+    inheritate_type(user_pvt_t);
+#undef inheritate_type
 
   protected:
     const space_node_t &_space_node;
@@ -170,7 +185,7 @@ class GPS_SinglePositioning {
     }
 
     GPS_SinglePositioning(const space_node_t &sn, const options_t &opt_wish = options_t())
-        : _space_node(sn), _options(available_options(opt_wish)) {}
+        : base_t(), _space_node(sn), _options(available_options(opt_wish)) {}
 
     ~GPS_SinglePositioning(){}
 
@@ -206,11 +221,6 @@ class GPS_SinglePositioning {
       float_t &los_neg_y;
       float_t &los_neg_z;
       float_t &weight;
-    };
-
-    struct pos_t {
-      xyz_t xyz;
-      llh_t llh;
     };
 
     /**
@@ -352,13 +362,6 @@ class GPS_SinglePositioning {
       return &(it_sat->second);
     }
 
-    struct relative_property_t {
-      float_t weight; ///< How useful this information is. only positive value activates the other values.
-      float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
-      float_t range_residual; ///< residual range
-      float_t rate_relative_neg; /// relative rate
-      float_t los_neg[3]; ///< line of site vector from satellite to user
-    };
     /**
      * Calculate relative range and rate information to a satellite
      *
@@ -395,32 +398,6 @@ class GPS_SinglePositioning {
       return res;
 
     }
-
-    struct user_pvt_t {
-      enum {
-        ERROR_NO = 0,
-        ERROR_UNSOLVED,
-        ERROR_INVALID_IONO_MODEL,
-        ERROR_INSUFFICIENT_SATELLITES,
-        ERROR_POSITION_LS,
-        ERROR_POSITION_NOT_CONVERGED,
-        ERROR_DOP,
-        ERROR_VELOCITY_LS,
-      } error_code;
-      gps_time_t receiver_time;
-      pos_t user_position;
-      float_t receiver_error;
-      enu_t user_velocity_enu;
-      float_t receiver_error_rate;
-      float_t gdop, pdop, hdop, vdop, tdop;
-      int used_satellites;
-
-      user_pvt_t()
-          : error_code(ERROR_UNSOLVED),
-            receiver_time(),
-            user_position(), receiver_error(0),
-            user_velocity_enu(), receiver_error_rate(0) {}
-    };
 
     /**
      * Calculate User position/velocity with hint
@@ -616,6 +593,7 @@ class GPS_SinglePositioning {
 
           // copy design matrix
           geomat2.copy_G_W_row(geomat, i);
+          static const xyz_t zero(0, 0, 0);
 
           // Update range rate by subtracting LOS satellite velocity with design matrix G
           geomat2.delta_r(i, 0) = prn_rate[i_rate].second
@@ -623,7 +601,7 @@ class GPS_SinglePositioning {
                   *available_sat_range_corrected[i_range].first.second, // satellite
                   available_sat_range_corrected[i_range].second, // range
                   time_arrival,
-                  xyz_t(0, 0, 0), // user velocity to be estimated is temporary zero
+                  zero, // user velocity to be estimated is temporary zero
                   geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2)); // LOS
         }
 
@@ -631,8 +609,9 @@ class GPS_SinglePositioning {
           // Least square
           matrix_t sol(geomat2.least_square());
 
+          xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
           res.user_velocity_enu = enu_t::relative_rel(
-              xyz_t(sol.partial(3, 1, 0, 0)), res.user_position.llh);
+              vel_xyz, res.user_position.llh);
           res.receiver_error_rate = sol(3, 0);
         }catch(std::exception &e){
           res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
@@ -642,85 +621,6 @@ class GPS_SinglePositioning {
 
       res.error_code = user_pvt_t::ERROR_NO;
       return res;
-    }
-
-    /**
-     * Calculate User position/velocity with hint
-     *
-     * @param prn_range PRN, pseudo-range list
-     * @param prn_rate PRN, pseudo-range rate list
-     * @param receiver_time receiver time at measurement
-     * @param user_position_init_xyz initial solution of user position in meters
-     * @param receiver_error_init initial solution of receiver clock error in meters
-     * @param good_init if true, initial position and clock error are goodly guessed.
-     * @param with_velocity if true, perform velocity estimation.
-     * @return calculation results and matrices used for calculation
-     * @see update_ephemeris(), register_ephemeris
-     */
-    user_pvt_t solve_user_pvt(
-        const prn_obs_t &prn_range,
-        const prn_obs_t &prn_rate,
-        const gps_time_t &receiver_time,
-        const xyz_t &user_position_init_xyz,
-        const float_t &receiver_error_init,
-        const bool &good_init = true,
-        const bool &with_velocity = true) const {
-      pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
-      return solve_user_pvt(
-          prn_range, prn_rate, receiver_time,
-          user_position_init, receiver_error_init,
-          good_init, with_velocity);
-    }
-
-    /**
-     * Calculate User position/velocity without hint
-     *
-     * @param prn_range PRN, pseudo-range list
-     * @param prn_rate PRN, pseudo-range rate list
-     * @param receiver_time receiver time at measurement
-     * @return calculation results and matrices used for calculation
-     */
-    user_pvt_t solve_user_pvt(
-        const prn_obs_t &prn_range,
-        const prn_obs_t &prn_rate,
-        const gps_time_t &receiver_time) const {
-      return solve_user_pvt(prn_range, prn_rate, receiver_time, xyz_t(), 0, false);
-    }
-
-    /**
-     * Calculate User position with hint
-     *
-     * @param prn_range PRN, pseudo-range list
-     * @param receiver_time receiver time at measurement
-     * @param user_position_init initial solution of user position in meters
-     * @param receiver_error_init initial solution of receiver clock error in meters
-     * @param good_init if true, initial position and clock error are goodly guessed.
-     * @return calculation results and matrices used for calculation
-     */
-    user_pvt_t solve_user_position(
-        const prn_obs_t &prn_range,
-        const gps_time_t &receiver_time,
-        const xyz_t &user_position_init,
-        const float_t &receiver_error_init,
-        const bool &good_init = true) const {
-
-      return solve_user_pvt(
-          prn_range, prn_obs_t(), receiver_time,
-          user_position_init, receiver_error_init,
-          good_init, false);
-    }
-
-    /**
-     * Calculate User position without hint
-     *
-     * @param prn_range PRN and pseudo range
-     * @param receiver_time receiver time at measurement
-     * @return calculation results and matrices used for calculation
-     */
-    user_pvt_t solve_user_position(
-            const prn_obs_t &prn_range,
-            const gps_time_t &receiver_time) const {
-      return solve_user_position(prn_range, receiver_time, xyz_t(), 0, false);
     }
 };
 

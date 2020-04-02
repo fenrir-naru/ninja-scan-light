@@ -26,7 +26,7 @@
 #include "INS.h"
 #include "Filtered_INS2.h"
 #include "INS_GPS2.h"
-#include "GPS_Solver.h"
+#include "GPS_Solver_Base.h"
 #include "coordinate.h"
 
 template <typename BaseINS, unsigned int Clocks>
@@ -297,13 +297,13 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
 
 template <class FloatT>
 struct GPS_RawData {
-  typedef GPS_SinglePositioning<FloatT> solver_t;
+  typedef GPS_Solver_Base<FloatT> solver_t;
   const solver_t *solver;
 
   unsigned int clock_index;
 
-  typedef int prn_t;
-  typedef std::vector<std::pair<prn_t, FloatT> > prn_obs_t;
+  typedef typename solver_t::prn_t prn_t;
+  typedef typename solver_t::prn_obs_t prn_obs_t;
 
   enum measurement_items_t {
     L1_PSEUDORANGE,
@@ -342,7 +342,7 @@ struct GPS_RawData {
     return res;
   }
 
-  typedef GPS_Time<FloatT> gps_time_t;
+  typedef typename solver_t::gps_time_t gps_time_t;
   gps_time_t gpstime;
 
   GPS_RawData(const unsigned int &_clock_index = 0)
