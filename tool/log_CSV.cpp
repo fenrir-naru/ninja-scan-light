@@ -624,7 +624,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
     
   public:
     StreamProcessor()
-        : super_t(), invoked(0) {
+        : super_t(SYLPHIDE_PAGE_SIZE * 0x100), invoked(0) {
       
     }
     ~StreamProcessor(){}
