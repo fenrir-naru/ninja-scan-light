@@ -104,7 +104,7 @@ struct GPS_Solver_Base {
     enu_t user_velocity_enu;
     float_t receiver_error_rate;
     float_t gdop, pdop, hdop, vdop, tdop;
-    int used_satellites;
+    unsigned int used_satellites;
 
     user_pvt_t()
         : error_code(ERROR_UNSOLVED),
