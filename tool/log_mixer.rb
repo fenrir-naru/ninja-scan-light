@@ -70,10 +70,13 @@ class GPS_UBX < G_Packet_Converter
       
       data_new = packet.pack('C*')
       itow_new = ((1E-3 * data_new[6..9].unpack('V')[0] + @delay) if {
-        0x01 => [0x01, 0x02, 0x03, 0x04, 0x06, 0x08, 0x11, 0x12, 0x20, 0x21, 0x22, 0x30, 0x31, 0x32], 
-        0x02 => [0x10, 0x20]
+        0x01 => [0x01, 0x02, 0x03, 0x04, 0x06, 0x08, 0x11, 0x12, 0x20, 0x21, 0x22, 0x30, 0x31, 0x32],
+        0x02 => [0x10, 0x20],
       }[packet[2]].include?(packet[3])) rescue nil
-      
+      itow_new ||= ((data_new[6..13].unpack('E')[0] + @delay) if {
+        0x02 => [0x15],
+      }[packet[2]].include?(packet[3])) rescue nil
+
       # when same time stamp data or data without time stamp, append it to current chuck
       if res[:itow] then
         if itow_new and (res[:itow] != itow_new) then
@@ -168,6 +171,7 @@ class IMU_CSV < A_Packet_Converter
       omega = items.values_at(*@gyro_index).zip(@gyro_units).collect{|v, sf| v * sf}
       t, accel, omega = @filter.call(t, accel, omega)
       next unless t
+      t %= (7 * 24 * 60 * 60) # => [0, one_week_sec)
       return {
         :itow => t,
         :data => a_packet({:t_s => t, :accel_ms2 => accel, :omega_rads => omega}),
@@ -208,7 +212,7 @@ Log mixer
 Default format:
   gps_data => u-blox ubx
   imu_data => CSV file which has seven columns; 
-    1st column: GPS time [sec]
+    1st column: GPS time [sec], both cumulative seconds or seconds of week are acceptable.
     2nd-4th columns: XYZ acceleration [m/s^2]
     5th-7th columns: XYZ angular speed [rad/sec]
 __STRING__
@@ -234,8 +238,8 @@ src = {
   :imu => ARGV.shift,
 }
 $log_mix.call({:readers => [
-  IMU_CSV::new(open(src[:imu])),
-  GPS_UBX::new(open(src[:gps])), 
+  IMU_CSV::new(open(src[:imu], 'r')),
+  GPS_UBX::new(open(src[:gps], 'rb')), 
 ]})
 
 end
