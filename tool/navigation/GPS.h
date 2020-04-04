@@ -1553,10 +1553,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     typedef std::map<int, Satellite> satellites_t;
   protected:
     Ionospheric_UTC_Parameters _iono_utc;
-    bool _iono_utc_initialized;
+    bool _iono_initialized, _utc_initialized;
     satellites_t _satellites;
   public:
-    GPS_SpaceNode() : _iono_utc_initialized(false), _satellites() {
+    GPS_SpaceNode()
+        : _iono_initialized(false), _utc_initialized(false),
+        _satellites() {
     }
     ~GPS_SpaceNode(){
       _satellites.clear();
@@ -1564,11 +1566,21 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     const Ionospheric_UTC_Parameters &iono_utc() const {
       return _iono_utc;
     }
-    bool is_valid_iono_utc() const {
-      return _iono_utc_initialized;
+    bool is_valid_iono() const {
+      return _iono_initialized;
     }
-    const Ionospheric_UTC_Parameters &update_iono_utc(const Ionospheric_UTC_Parameters &params) {
-      _iono_utc_initialized = true;
+    bool is_valid_utc() const {
+      return _utc_initialized;
+    }
+    bool is_valid_iono_utc() const {
+      return is_valid_iono() && is_valid_utc();
+    }
+    const Ionospheric_UTC_Parameters &update_iono_utc(
+        const Ionospheric_UTC_Parameters &params,
+        const bool &iono_valid = true,
+        const bool &utc_valid = true) {
+      _iono_initialized = iono_valid;
+      _utc_initialized = utc_valid;
       return (_iono_utc = params);
     }
 
@@ -1593,11 +1605,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           ++it){
         satellite(it->first).merge(it->second, keep_original);
       }
-      if(!_iono_utc_initialized){
+      if((!is_valid_iono_utc()) || (!keep_original)){
         _iono_utc = another._iono_utc;
-        _iono_utc_initialized = another._iono_utc_initialized;
-      }else if((!keep_original) && (!another._iono_utc_initialized)){
-        _iono_utc = another._iono_utc;
+        _iono_initialized = another._iono_initialized;
+        _utc_initialized = another._utc_initialized;
       }
     }
 

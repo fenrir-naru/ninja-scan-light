@@ -154,7 +154,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         switch(opt.ionospheric_models[i]){
           case options_t::IONOSPHERIC_KLOBUCHAR:
             // check whether Klobuchar parameters alpha and beta have been already received
-            if(_space_node.is_valid_iono_utc()){break;}
+            if(_space_node.is_valid_iono()){break;}
             opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
             continue;
           case options_t::IONOSPHERIC_NTCM_GL:
