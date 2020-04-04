@@ -161,7 +161,8 @@ std::stringstream(line_data.size() > offset ? line_data.substr(offset, length) :
             GET_SS(0, 2) >> info.svid;
             info.ephemeris.svid = info.svid;
             struct tm t;
-            GET_SS(3, 2) >> t.tm_year; // year
+            GET_SS(3, 2) >> t.tm_year; // year - 1900
+            if(t.tm_year < 80){t.tm_year += 100;} // greater than 1980
             GET_SS(6, 2) >> t.tm_mon;  // month
             --(t.tm_mon);
             GET_SS(9, 2) >> t.tm_mday; // day of month
@@ -377,7 +378,8 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
           
           // Epoch time
           struct tm t;
-          data >> t.tm_year; // year
+          data >> t.tm_year; // year - 1900
+          if(t.tm_year < 80){t.tm_year += 100;} // greater than 1980
           data >> t.tm_mon;  // month
           --(t.tm_mon);
           data >> t.tm_mday; // day
@@ -680,6 +682,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
         struct tm t(gps_time.c_tm());
         FloatT sec_f(gps_time.seconds), sec_i;
         sec_f = std::modf(sec_f, &sec_i);
+        t.tm_year %= 100;
         buf << (t.tm_year < 10 ? " 0" : " ") << t.tm_year
             << RINEX_Value(t.tm_mon + 1, 3)
             << RINEX_Value(t.tm_mday, 3)
@@ -973,12 +976,9 @@ class RINEX_OBS_Writer : public RINEX_Writer<> {
         struct tm t(data.t_epoc.c_tm());
         FloatT sec_f(data.t_epoc.seconds), sec_i;
         sec_f = std::modf(sec_f, &sec_i);
-        if(t.tm_year < 10){
-          top << " 0" << t.tm_year;
-        }else{
-          top << ' ' << t.tm_year;
-        }
-        top << RINEX_Value(t.tm_mon + 1, 3)
+        t.tm_year %= 100;
+        top << ((t.tm_year < 10) ? " 0" : " ") << t.tm_year
+            << RINEX_Value(t.tm_mon + 1, 3)
             << RINEX_Value(t.tm_mday, 3)
             << RINEX_Value(t.tm_hour, 3)
             << RINEX_Value(t.tm_min, 3)
