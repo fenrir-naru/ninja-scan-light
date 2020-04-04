@@ -26,6 +26,8 @@
 #include "navigation/GPS.h"
 #include "INS_GPS2_Tightly.h"
 
+#include <list>
+
 template <class FloatT>
 struct INS_GPS_Back_Propagate_Property {
   /**
@@ -61,7 +63,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
           elapsedT_from_last_correct(_elapsedT){
       }
     };
-    typedef std::vector<snapshot_content_t> snapshots_t;
+    typedef std::list<snapshot_content_t> snapshots_t;
     typedef INS_GPS_Back_Propagate_Property<float_t> prop_t;
   protected:
     snapshots_t snapshots;
@@ -196,7 +198,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
           elapsedT_from_last_update(_elapsedT){
       }
     };
-    typedef std::vector<snapshot_content_t> snapshots_t;
+    typedef std::list<snapshot_content_t> snapshots_t;
     snapshots_t snapshots;
   public:
     INS_GPS_RealTime()
@@ -273,14 +275,14 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
             mat_t sum_A(H.columns(), H.columns());
             mat_t sum_GQGt(sum_A.rows(), sum_A.rows());
             float_t bar_delteT(0);
+            int n(0);
             for(typename snapshots_t::iterator it(snapshots.begin());
                 it != snapshots.end();
-                ++it){
+                ++it, ++n){
               sum_A += it->A;
               sum_GQGt += it->GQGt;
               bar_delteT += it->elapsedT_from_last_update;
             }
-            int n(snapshots.size());
             bar_delteT /= n;
             mat_t sum_A_GQGt(sum_A * sum_GQGt);
             R += H
@@ -303,7 +305,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
 
     template <class GPS_Packet>
     void correct2(const GPS_Packet &gps, void *){
-      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps));
+      CorrectInfo<float_t> info(snapshots.front().ins_gps.correct_info(gps));
       correct_with_info(info);
     }
 
@@ -312,13 +314,13 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b,
         void *){
-      CorrectInfo<float_t> info(snapshots[0].ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
+      CorrectInfo<float_t> info(snapshots.front().ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
       correct_with_info(info);
     }
 
     template <class Generator>
     void correct2_tightly_generic(const GPS_RawData<float_t> &gps, const Generator &generator){
-      CorrectInfo<float_t> info(generator(snapshots[0].ins_gps, gps));
+      CorrectInfo<float_t> info(generator(snapshots.front().ins_gps, gps));
       if(info.z.rows() < 1){return;}
 
       /*
@@ -331,7 +333,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
         float_t clock_error_shift(
             GPS_SpaceNode<float_t>::light_speed * 1E-3 * std::floor(delta_ms + 0.5));
         info = generator(
-            snapshots[0].ins_gps, gps,
+            snapshots.front().ins_gps, gps,
             clock_error_shift);
         delta_ms = this->range_residual_mean_ms(gps.clock_index, info);
         if((delta_ms < 0.9) && (delta_ms > -0.9)){

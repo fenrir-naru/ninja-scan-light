@@ -41,33 +41,34 @@
 #define max_macro(a, b) ((a > b) ? (a) : (b))
 #endif
 
-struct memcpy_t {
-  template <typename StorageT>
-  memcpy_t(const StorageT *src, StorageT *dist){
-    std::memcpy(dist, src, sizeof(StorageT));
-  }
-  template <typename StorageT, typename SizeT>
-  memcpy_t(const StorageT *src, StorageT *dist, SizeT size){
-    std::memcpy(dist, src, sizeof(StorageT) * size);
-  }
-};
-
-struct operator_eq_t {
-  template <typename StorageT>
-  operator_eq_t(const StorageT *src, StorageT *dist){
-    *dist = *src;
-  }
-  template <typename StorageT, typename SizeT>
-  operator_eq_t(const StorageT *src, StorageT *dist, SizeT size){
-    while(size--){
-      *(dist++) = *(src++);
+template <typename StorageT>
+struct FIFO_Duplicator {
+  struct memcpy_t {
+    memcpy_t(const StorageT *src, StorageT *dist){
+      std::memcpy(dist, src, sizeof(StorageT));
     }
-  }
+    template <typename SizeT>
+    memcpy_t(const StorageT *src, StorageT *dist, SizeT size){
+      std::memcpy(dist, src, sizeof(StorageT) * size);
+    }
+  };
+
+  struct operator_eq_t {
+    operator_eq_t(const StorageT *src, StorageT *dist){
+      *dist = *src;
+    }
+    template <typename SizeT>
+    operator_eq_t(const StorageT *src, StorageT *dist, SizeT size){
+      while(size--){
+        *(dist++) = *(src++);
+      }
+    }
+  };
 };
 
 template <
   typename StorageT,
-  typename DuplicatorT = memcpy_t
+  typename DuplicatorT = typename FIFO_Duplicator<StorageT>::memcpy_t
 >
 class FIFO {
   public:
