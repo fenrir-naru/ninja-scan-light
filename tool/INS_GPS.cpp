@@ -2333,7 +2333,7 @@ class StreamProcessor
     }
 };
 
-const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 128;
+const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 0x100;
 
 typedef list<StreamProcessor> processors_t;
 processors_t processors;

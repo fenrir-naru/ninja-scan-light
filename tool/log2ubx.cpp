@@ -99,7 +99,7 @@ using namespace std;
 typedef SylphideProcessor<> Processor_t;
 typedef Processor_t::G_Observer_t G_Observer_t;
 
-#define OBSERVER_SIZE (SYLPHIDE_PAGE_SIZE * 64) // 2048
+#define OBSERVER_SIZE (SYLPHIDE_PAGE_SIZE * 0x100) // 8192
 
 int good_packet(0);
 int bad_packet(0);
