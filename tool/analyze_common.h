@@ -537,18 +537,6 @@ struct CalendarTime {
           subsec + t->tm_sec};
       return res;
     }
-    CalendarTime convert(const float_t &itow) const {
-      float_t itow_corrected(roll_over_monitor(itow));
-      if(roll_over_monitor.abnormal_jump_detected){
-        itow_corrected = itow;
-      }else if(gps_time.wn != gps_time_t::WN_INVALID){
-        float_t gap(itow_corrected - gps_time.sec);
-        int gap_sec(std::floor(gap));
-        return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
-      }
-      CalendarTime res = {0, 0, 0, 0, 0, itow_corrected};
-      return res;
-    }
     static int estimate_leap_sec(const std::time_t &t_gps){
       static const struct {
         std::time_t t;
@@ -585,7 +573,7 @@ struct CalendarTime {
     }
 
     void update(const float_t &gps_sec, const int &gps_wn, const int &leap_sec){
-      gps_time.sec = gps_sec;
+      gps_time.sec = std::floor(gps_sec); // corresponding to utc_time, which is integer(time_t)
       leap_seconds = LEAP_SECONDS_UNKNOWN;
 
       do{
@@ -620,24 +608,39 @@ struct CalendarTime {
       update(gps_sec, gps_time_t::WN_INVALID);
     }
 
-    CalendarTime convert(const float_t &itow, const int &wn) const {
+    CalendarTime convert(float_t itow, int wn = gps_time_t::WN_INVALID) const {
+
+      std::time_t t_base;
+      float_t gap;
+
       if(wn == gps_time_t::WN_INVALID){
-        CalendarTime res = {0, 0, 0, 0, 0, roll_over_monitor(itow)};
-        return res;
+        while(true){
+          float_t itow_corrected(roll_over_monitor(itow));
+          if(!roll_over_monitor.abnormal_jump_detected){
+            itow = itow_corrected;
+            if(gps_time.wn != gps_time_t::WN_INVALID){
+              t_base = utc_time;
+              gap = itow - gps_time.sec;
+              break;
+            }
+          }
+          CalendarTime res = {0, 0, 0, 0, 0, itow};
+          return res;
+        }
       }else if(gps_time.wn == gps_time_t::WN_INVALID){
         // use estimated leap seconds
-        float_t gap(gps_time_zero + wn * roll_over_monitor_t::one_week + itow);
+        t_base = 0;
+        gap = gps_time_zero + wn * roll_over_monitor_t::one_week + itow;
         gap -= estimate_leap_sec(std::time_t(gap));
-        int gap_sec(std::floor(gap));
-        return convert(std::time_t(gap_sec + correction_sec), gap - gap_sec);
       }else{
         // use internal correction value for leap seconds
-        float_t gap(
-            (wn - gps_time.wn) * roll_over_monitor_t::one_week
-              + (itow - gps_time.sec));
-        int gap_sec(std::floor(gap));
-        return convert(std::time_t(utc_time + gap_sec + correction_sec), gap - gap_sec);
+        t_base = utc_time;
+        gap = (wn - gps_time.wn) * roll_over_monitor_t::one_week
+              + (itow - gps_time.sec);
       }
+
+      int gap_sec(std::floor(gap));
+      return convert(std::time_t(t_base + gap_sec + correction_sec), gap - gap_sec);
     }
     CalendarTime convert(const gps_time_t &current_gps) const {
       return convert(current_gps.sec, current_gps.wn);
