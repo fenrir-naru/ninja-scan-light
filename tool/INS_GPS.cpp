@@ -1984,6 +1984,18 @@ class StreamProcessor
                   le_char2_2_num<G_Observer_t::u16_t>(*(buf + 8)), le_char8_2_num<double>(*buf));
               packet_raw_latest.gpstime = current;
               packet_raw_latest.itow = current.seconds;
+
+              if(status.time_stamp == status_t::TIME_STAMP_INVALID){
+                status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
+              }
+              if(observer[6 + 12] & 0x01){ // recStat.leapSec
+                TimePacket packet_time;
+                packet_time.week_num = current.week;
+                packet_time.itow = current.seconds;
+                packet_time.leap_sec = (G_Observer_t::s8_t)(observer[6 + 10]);
+                packet_time.valid_week_num = packet_time.valid_leap_sec = true;
+                Handler::outer.updatable->update(packet_time);
+              }
             }
 
             packet_raw_latest.measurement.clear();
