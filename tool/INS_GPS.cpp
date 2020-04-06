@@ -180,8 +180,6 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 #include "navigation/INS_GPS_Synchronization.h"
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/GPS.h"
-#include "navigation/GPS_Solver.h"
-#include "navigation/RINEX.h"
 
 #include "navigation/MagneticField.h"
 
@@ -189,6 +187,7 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 #include "calibration.h"
 
 #include "INS_GPS/GNSS_Data.h"
+#include "INS_GPS/GNSS_Receiver.h"
 
 struct Options : public GlobalOptions<float_sylph_t> {
   typedef GlobalOptions<float_sylph_t> super_t;
@@ -1549,97 +1548,6 @@ void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
   GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe3(*this, ephemeris);
 }
 
-struct GNSS_Receiver {
-  typedef GPS_SpaceNode<float_sylph_t> gps_space_node_t;
-  typedef GPS_SinglePositioning<float_sylph_t> gps_solver_t;
-
-  struct data_t {
-    struct {
-      gps_space_node_t space_node;
-      gps_solver_t::options_t solver_options;
-    } gps;
-    ostream *out_rinex_nav;
-    data_t() : gps(), out_rinex_nav(NULL) {}
-    ~data_t(){
-      if(out_rinex_nav){
-        RINEX_NAV_Writer<float_sylph_t>::write_all(*out_rinex_nav, gps.space_node);
-      }
-    }
-  } data;
-
-  struct solvers_t {
-    gps_solver_t gps;
-    solvers_t(const GNSS_Receiver &rcv)
-        : gps(rcv.data.gps.space_node, rcv.data.gps.solver_options)
-        {}
-  } solvers;
-
-  GNSS_Receiver() : data(), solvers(*this) {}
-  GNSS_Receiver(const GNSS_Receiver &another)
-      : data(another.data), solvers(*this) {}
-  GNSS_Receiver &operator=(const GNSS_Receiver &another){
-    data = another.data;
-    return *this;
-  }
-
-  void setup(GNSS_Data<float_sylph_t>::Loader &loader) const {
-    loader.gps = &const_cast<gps_space_node_t &>(data.gps.space_node);
-  }
-
-  const GPS_Solver_Base<float_sylph_t> &solver() const {
-    return solvers.gps;
-  }
-
-  void adjust(const GPS_Time<float_sylph_t> &t){
-    // Select most preferable ephemeris
-    data.gps.space_node.update_all_ephemeris(t);
-
-    // Solver update mainly for preferable ionospheric model selection
-    // based on their availability
-    solvers.gps.update_options(data.gps.solver_options);
-  }
-
-  bool check_spec(const char *spec, const bool &dry_run = false){
-    const char *value;
-
-    if(value = Options::get_value(spec, "rinex_nav", false)){
-      if(dry_run){return true;}
-      cerr << "RINEX Navigation file (" << value << ") reading..." << endl;
-      istream &in(options.spec2istream(value));
-      int ephemeris(RINEX_NAV_Reader<float_sylph_t>::read_all(
-          in, data.gps.space_node));
-      if(ephemeris < 0){
-        cerr << "(error!) Invalid format!" << endl;
-        return false;
-      }else{
-        cerr << "rinex_nav: " << ephemeris << " items captured." << endl;
-      }
-      return true;
-    }
-    if(value = Options::get_value(spec, "out_rinex_nav", false)){
-      if(dry_run){return true;}
-      data.out_rinex_nav = &options.spec2ostream(value);
-      cerr << "out_rinex_nav: " << value << endl;
-      return true;
-    }
-
-    if(value = Options::get_value(spec, "F10.7", false)){
-      if(dry_run){return true;}
-      float_sylph_t f_10_7(atof(value));
-      if((f_10_7 <= 0) || (f_10_7 > 1E3)){
-        cerr << "(error!) Abnormal F10.7!" << value << endl;
-        return false;
-      }
-      cerr << "F10.7: " << f_10_7 << endl;
-      data.gps.solver_options.f_10_7 = f_10_7;
-      data.gps.solver_options.insert_ionospheric_model(
-          gps_solver_t::options_t::IONOSPHERIC_NTCM_GL);
-      return true;
-    }
-    return false;
-  }
-};
-
 class StreamProcessor
     : public AbstractSylphideProcessor<float_sylph_t> {
 
@@ -2252,7 +2160,7 @@ class StreamProcessor
       return in;
     }
 
-    void install_receiver(const GNSS_Receiver &receiver, const unsigned int &clock_index = 0){
+    void install_receiver(const GNSS_Receiver<float_sylph_t> &receiver, const unsigned int &clock_index = 0){
       receiver.setup(g_handler.loader);
       g_handler.packet_raw_latest.solver = &(receiver.solver());
       g_handler.packet_raw_latest.clock_index = clock_index;
@@ -2349,7 +2257,7 @@ const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 0x100;
 
 typedef list<StreamProcessor> processors_t;
 processors_t processors;
-typedef list<GNSS_Receiver> receivers_t;
+typedef list<GNSS_Receiver<float_sylph_t> > receivers_t;
 receivers_t receivers;
 
 template <class INS_GPS>
@@ -2899,7 +2807,7 @@ int main(int argc, char *argv[]){
     StreamProcessor stream_processor;
     args_t args_proc(args_proc_common);
 
-    GNSS_Receiver receiver;
+    GNSS_Receiver<float_sylph_t> receiver;
 
     bool flag_common(false);
     for(; arg_index < argc; arg_index++){
@@ -2918,7 +2826,7 @@ int main(int argc, char *argv[]){
       }
 
       if(stream_processor.check_spec(argv[arg_index], true)
-          || receiver.check_spec(argv[arg_index], true)){
+          || receiver.check_spec(options, argv[arg_index], true)){
         args_proc.push_back(arg_index);
         if(flag_common_current){args_proc_common.push_back(arg_index);}
         continue;
@@ -2934,7 +2842,7 @@ int main(int argc, char *argv[]){
       for(args_t::const_iterator it(args_proc.begin());
           it != args_proc.end(); ++it){
         if(stream_processor.check_spec(argv[*it])){continue;}
-        if(receiver.check_spec(argv[*it])){continue;}
+        if(receiver.check_spec(options, argv[*it])){continue;}
         exit(-1); // some error occurred
       }
       args_proc.clear();
