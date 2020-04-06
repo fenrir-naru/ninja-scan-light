@@ -47,6 +47,7 @@
 #include <iomanip>
 #include <ctime>
 #include <exception>
+#include <algorithm>
 
 #include "GPS.h"
 
@@ -579,7 +580,7 @@ class RINEX_Writer {
     template <class FloatT>
     static std::string RINEX_FloatD(
         const FloatT &value, const int width = 19, const int precision = 12){
-      int w(std::max(width, precision + 6));
+      int w((std::max)(width, precision + 6)); // parentheses of std::max mitigates error C2589 under Windows VC
       
       std::stringstream ss;
       ss << std::setprecision(precision - 1) << std::scientific
