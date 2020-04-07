@@ -716,6 +716,11 @@ case mark: if(options.page_selected[Options::PAGE_ ## type] < Options::PAGE_SELE
 
       void (StreamProcessor::*task)(char *, const int &)(&StreamProcessor::process_pages);
       if(options.as_filter){
+#if defined(_MSC_VER) || defined(__CYGWIN__)
+        if(&(options.out()) == &(std::cout)){
+          setmode(fileno(stdout), O_BINARY); // change binary mode explicitly
+        }
+#endif
         task = &StreamProcessor::filter_pages;
       }
 
