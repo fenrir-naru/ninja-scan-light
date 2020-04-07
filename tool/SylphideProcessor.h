@@ -911,11 +911,7 @@ class G_Packet_Observer : public Packet_Observer<>{
     subframe_t &fetch_subframe(subframe_t &subframe) const {
       //if(!packet_type().equals(0x02, 0x11)){}
 
-      {
-        v8_t buf;
-        this->inspect(&buf, sizeof(buf), 6 + 1); // SVID
-        subframe.sv_number = buf;
-      }
+      subframe.sv_number = (u8_t)((*this)[6 + 1]); // SVID
       this->inspect(subframe.buffer, sizeof(subframe.buffer), 6 + 2); // buffer
       subframe.update_properties();
 
