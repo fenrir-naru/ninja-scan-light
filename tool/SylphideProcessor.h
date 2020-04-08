@@ -871,42 +871,6 @@ class G_Packet_Observer : public Packet_Observer<>{
 #undef bits2u8_align
 #undef bits2s8
 #undef bits2uchar
-      template <class EpemerisT>
-      void fetch_as_subframe1(EpemerisT &ephemeris) const {
-        ephemeris.wn = ephemeris_wn();
-        ephemeris.ura = ephemeris_ura();
-        ephemeris.sv_health = ephemeris_sv_health();
-        ephemeris.iodc = ephemeris_iodc();
-        ephemeris.t_gd = ephemeris_t_gd();
-        ephemeris.t_oc = ephemeris_t_oc();
-        ephemeris.a_f2 = ephemeris_a_f2();
-        ephemeris.a_f1 = ephemeris_a_f1();
-        ephemeris.a_f0 = ephemeris_a_f0();
-      }
-      template <class EpemerisT>
-      void fetch_as_subframe2(EpemerisT &ephemeris) const {
-        ephemeris.iode = ephemeris_iode_subframe2();
-        ephemeris.c_rs = ephemeris_c_rs();
-        ephemeris.delta_n = ephemeris_delta_n();
-        ephemeris.m_0 = ephemeris_m_0();
-        ephemeris.c_uc = ephemeris_c_uc();
-        ephemeris.e = ephemeris_e();
-        ephemeris.c_us = ephemeris_c_us();
-        ephemeris.root_a = ephemeris_root_a();
-        ephemeris.t_oe = ephemeris_t_oe();
-        ephemeris.fit = ephemeris_fit();
-      }
-      template <class EpemerisT>
-      void fetch_as_subframe3(EpemerisT &ephemeris) const {
-        ephemeris.c_ic = ephemeris_c_ic();
-        ephemeris.omega_0 = ephemeris_omega_0();
-        ephemeris.c_is = ephemeris_c_is();
-        ephemeris.i_0 = ephemeris_i_0();
-        ephemeris.c_rc = ephemeris_c_rc();
-        ephemeris.omega = ephemeris_omega();
-        ephemeris.omega_0_dot = ephemeris_omega_0_dot();
-        ephemeris.i_0_dot = ephemeris_i_0_dot();
-      }
     };
     subframe_t &fetch_subframe(subframe_t &subframe) const {
       //if(!packet_type().equals(0x02, 0x11)){}
@@ -940,6 +904,40 @@ class G_Packet_Observer : public Packet_Observer<>{
       FloatType c_ic, omega_0, c_is, i_0, c_rc, omega, omega_0_dot, i_0_dot;
 
       ephemeris_t() : valid(false) {}
+
+      void fetch_as_subframe1(const subframe_t &buf){
+        wn = buf.ephemeris_wn();
+        ura = buf.ephemeris_ura();
+        sv_health = buf.ephemeris_sv_health();
+        iodc = buf.ephemeris_iodc();
+        t_gd = buf.ephemeris_t_gd();
+        t_oc = buf.ephemeris_t_oc();
+        a_f2 = buf.ephemeris_a_f2();
+        a_f1 = buf.ephemeris_a_f1();
+        a_f0 = buf.ephemeris_a_f0();
+      }
+      void fetch_as_subframe2(const subframe_t &buf){
+        iode = buf.ephemeris_iode_subframe2();
+        c_rs = buf.ephemeris_c_rs();
+        delta_n = buf.ephemeris_delta_n();
+        m_0 = buf.ephemeris_m_0();
+        c_uc = buf.ephemeris_c_uc();
+        e = buf.ephemeris_e();
+        c_us = buf.ephemeris_c_us();
+        root_a = buf.ephemeris_root_a();
+        t_oe = buf.ephemeris_t_oe();
+        fit = buf.ephemeris_fit();
+      }
+      void fetch_as_subframe3(const subframe_t &buf){
+        c_ic = buf.ephemeris_c_ic();
+        omega_0 = buf.ephemeris_omega_0();
+        c_is = buf.ephemeris_c_is();
+        i_0 = buf.ephemeris_i_0();
+        c_rc = buf.ephemeris_c_rc();
+        omega = buf.ephemeris_omega();
+        omega_0_dot = buf.ephemeris_omega_0_dot();
+        i_0_dot = buf.ephemeris_i_0_dot();
+      }
     };
     template <class EphemerisT>
     void fetch_ephemeris(EphemerisT &ephemeris) const {
@@ -957,13 +955,13 @@ class G_Packet_Observer : public Packet_Observer<>{
 
 #define get_subframe(n) (this->inspect(&(subframe.buffer[8]), 32, 6 + 8 + n * 32))
         get_subframe(0); // Subframe 1
-        subframe.fetch_as_subframe1(ephemeris);
+        ephemeris.fetch_as_subframe1(subframe);
 
         get_subframe(1); // Subframe 2
-        subframe.fetch_as_subframe2(ephemeris);
+        ephemeris.fetch_as_subframe2(subframe);
 
         get_subframe(2); // Subframe 3
-        subframe.fetch_as_subframe3(ephemeris);
+        ephemeris.fetch_as_subframe3(subframe);
 #undef get_subframe
       }
     }
