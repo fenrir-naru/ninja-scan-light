@@ -489,6 +489,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
         sat_range_corrected.clear();
         unsigned int j(0);
+        res.used_satellite_mask = 0;
 
         const bool coarse_estimation(i <= 0);
         for(typename sat_obs_t::const_iterator it(sat_range.begin());
@@ -517,6 +518,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
           if(residual.weight <= 0){
             continue; // intentionally excluded satellite
+          }else if(it->first.first <= user_pvt_t::satellite_mask_t::PRN_MAX){
+            res.used_satellite_mask |= user_pvt_t::satellite_mask[it->first.first];
           }
 
           ++j;

@@ -153,6 +153,7 @@
 #include <utility>
 #include <deque>
 #include <algorithm>
+#include <bitset>
 
 #define IS_LITTLE_ENDIAN 1
 #include "SylphideStream.h"
@@ -786,7 +787,8 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
         << ',' << "v_north"
         << ',' << "v_east"
         << ',' << "v_down"
-        << ',' << "used_satellites";
+        << ',' << "used_satellites"
+        << ',' << "PRN";
   }
 
   friend std::ostream &operator<<(std::ostream &out, const gps_pvt_t &pvt){
@@ -804,7 +806,11 @@ struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
         << ',' << pvt.user_velocity_enu.north()
         << ',' << pvt.user_velocity_enu.east()
         << ',' << -pvt.user_velocity_enu.up()
-        << ',' << pvt.used_satellites;
+        << ',' << pvt.used_satellites
+        << "," << std::bitset<8>((pvt.used_satellite_mask >> 24) & 0xFF)
+          << "_" << std::bitset<8>((pvt.used_satellite_mask >> 16) & 0xFF)
+          << "_" << std::bitset<8>((pvt.used_satellite_mask >> 8) & 0xFF)
+          << "_" << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
     return out;
   }
 };

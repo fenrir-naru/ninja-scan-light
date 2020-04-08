@@ -105,6 +105,21 @@ struct GPS_Solver_Base {
     float_t receiver_error_rate;
     float_t gdop, pdop, hdop, vdop, tdop;
     unsigned int used_satellites;
+    unsigned long long used_satellite_mask; ///< bit pattern(use=1, otherwise=0), PRN 1(LSB) to 32 for GPS
+
+    struct satellite_mask_t {
+      static const int PRN_MAX = 32;
+      typename space_node_t::u32_t pattern[PRN_MAX + 1]; // +1 for padding(PRN=0)
+      satellite_mask_t() {
+        for(int prn(1), shift(0); prn <= PRN_MAX; prn++, shift++){
+          pattern[prn] = ((typename space_node_t::u32_t)1) << shift;
+        }
+      }
+      const typename space_node_t::u32_t &operator[](const int &prn) const {
+        return pattern[prn];
+      }
+    };
+    static satellite_mask_t satellite_mask;
 
     user_pvt_t()
         : error_code(ERROR_UNSOLVED),
@@ -214,5 +229,10 @@ struct GPS_Solver_Base {
     return solve_user_position(prn_range, receiver_time, xyz_t(), 0, false);
   }
 };
+
+template <class FloatT>
+typename GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask_t
+    GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask
+      = typename GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask_t();
 
 #endif /* __GPS_SOLVER_BASE_H__ */
