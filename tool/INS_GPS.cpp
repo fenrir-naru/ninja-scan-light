@@ -1527,33 +1527,6 @@ class INS_GPS_NAVData : public INS_GPS {
 
 using namespace std;
 
-struct G_Packet_GPS_Ephemeris_Extended : public G_Packet_GPS_Ephemeris {
-  unsigned int &sv_number; // sv_number is alias.
-  bool valid;
-
-  G_Packet_GPS_Ephemeris_Extended()
-      : G_Packet_GPS_Ephemeris(),
-      sv_number(ephemeris_t::svid), valid(false) {}
-};
-
-template <> template <>
-void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe1(
-    G_Packet_GPS_Ephemeris_Extended &ephemeris) const {
-  GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe1(*this, ephemeris);
-}
-
-template <> template <>
-void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe2(
-    G_Packet_GPS_Ephemeris_Extended &ephemeris) const {
-  GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe2(*this, ephemeris);
-}
-
-template <> template <>
-void G_Packet_Observer<float_sylph_t>::subframe_t::fetch_as_subframe3(
-    G_Packet_GPS_Ephemeris_Extended &ephemeris) const {
-  GNSS_Data<float_sylph_t>::Loader::fetch_as_GPS_subframe3(*this, ephemeris);
-}
-
 class StreamProcessor
     : public AbstractSylphideProcessor<float_sylph_t> {
 
@@ -1803,7 +1776,7 @@ class StreamProcessor
       }
 
       void check_ephemeris(const G_Observer_t &observer){
-        G_Packet_GPS_Ephemeris_Extended ephemeris;
+        GNSS_Data<float_sylph_t>::Loader::gps_ephemeris_extended_t<G_Packet_GPS_Ephemeris> ephemeris;
         observer.fetch_ephemeris(ephemeris);
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.

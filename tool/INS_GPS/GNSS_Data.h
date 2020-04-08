@@ -156,6 +156,25 @@ struct GNSS_Data {
       out.dot_i0      = in.ephemeris_i_0_dot();
     }
 
+    template <class Base>
+    struct gps_ephemeris_extended_t : public Base {
+      unsigned int &sv_number; // sv_number is alias.
+      bool valid;
+      gps_ephemeris_extended_t()
+          : Base(),
+          sv_number(Base::svid), valid(false){}
+
+      void fetch_as_subframe1(const subframe_t &buf){
+        fetch_as_GPS_subframe1(buf, *this);
+      }
+      void fetch_as_subframe2(const subframe_t &buf){
+        fetch_as_GPS_subframe2(buf, *this);
+      }
+      void fetch_as_subframe3(const subframe_t &buf){
+        fetch_as_GPS_subframe3(buf, *this);
+      }
+    };
+
     bool load(const gps_ephemeris_t &eph){
       if(!gps){return false;}
       gps->satellite(eph.svid).register_ephemeris(eph);
