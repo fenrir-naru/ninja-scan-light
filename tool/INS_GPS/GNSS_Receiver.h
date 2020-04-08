@@ -121,6 +121,14 @@ struct GNSS_Receiver {
       return true;
     }
 
+    if(value = runtime_opt_t::get_value(spec, "GNSS_elv_mask_deg", false)){
+      if(dry_run){return true;}
+      FloatT mask_deg(atof(value));
+      std::cerr << "GNSS_elv_mask: " << mask_deg << " [deg]" << std::endl;
+      data.gps.solver_options.elevation_mask = deg2rad(mask_deg);
+      return true;
+    }
+
     if(value = runtime_opt_t::get_value(spec, "F10.7", false)){
       if(dry_run){return true;}
       FloatT f_10_7(atof(value));
