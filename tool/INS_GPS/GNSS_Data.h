@@ -126,7 +126,6 @@ struct GNSS_Data {
       out.a_f2      = in.ephemeris_a_f2();
       out.a_f1      = in.ephemeris_a_f1();
       out.a_f0      = in.ephemeris_a_f0();
-      out.how       = in.how();
     }
 
     static void fetch_as_GPS_subframe2(const subframe_t &in, gps_ephemeris_t &out){
@@ -192,7 +191,10 @@ struct GNSS_Data {
       if(data.subframe.subframe_no <= 3){
         gps_ephemeris_t &eph(gps_ephemeris[data.subframe.sv_number - 1]);
         switch(data.subframe.subframe_no){
-          case 1: fetch_as_GPS_subframe1(data.subframe, eph); break;
+          case 1:
+            fetch_as_GPS_subframe1(data.subframe, eph);
+            eph.how = data.subframe.how();
+            break;
           case 2: fetch_as_GPS_subframe2(data.subframe, eph); break;
           case 3: fetch_as_GPS_subframe3(data.subframe, eph); break;
         }
