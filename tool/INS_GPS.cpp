@@ -453,24 +453,27 @@ struct CalendarTimeStamp : public CalendarTime<FloatT> {
     operator=(t);
   }
   operator float_t() const {return itow;}
-  static void label(std::ostream &out){
-    out << "year" << ','
-        << "month" << ','
-        << "day" << ','
-        << "hour" << ','
-        << "min" << ','
-        << "sec";
-  }
+  static struct label_t {
+    friend std::ostream &operator<<(std::ostream &out, const label_t &){
+      return out << "year" << ','
+          << "month" << ','
+          << "day" << ','
+          << "hour" << ','
+          << "min" << ','
+          << "sec";
+    }
+  } label;
   friend std::ostream &operator<<(std::ostream &out, const CalendarTimeStamp &time){
-    out << time.year << ','
+    return out << time.year << ','
         << time.month << ','
         << time.mday << ','
         << time.hour << ','
         << time.min << ','
         << time.sec;
-    return out;
   }
 };
+template <class FloatT>
+typename CalendarTimeStamp<FloatT>::label_t CalendarTimeStamp<FloatT>::label;
 
 struct A_Packet;
 struct G_Packet;
@@ -1277,28 +1280,23 @@ typename PureINS::float_t fname() const {return PureINS::fname();}
       itow = _itow;
     }
 
-  protected:
-    template <class T>
-    struct label_time_t {
-      static void print(std::ostream &out){
-        out << "itow";
+    static struct label_time_t {
+      template <class T>
+      static std::ostream &label(std::ostream &out, T){
+        return out << "itow";
       }
-    };
-    template <class FloatT>
-    struct label_time_t<CalendarTimeStamp<FloatT> > {
-      static void print(std::ostream &out){
-        CalendarTimeStamp<FloatT>::label(out);
+      template <class FloatT>
+      static std::ostream &label(std::ostream &out, const CalendarTimeStamp<FloatT> &){
+        return out << CalendarTimeStamp<FloatT>::label;
       }
-    };
+      friend std::ostream &operator<<(std::ostream &out, const label_time_t &){
+        return label(out, time_stamp_t());
+      }
+    } label_time;
 
-  public:
-    static void label_time(std::ostream &out){
-      label_time_t<time_stamp_t>::print(out);
-    }
     void label(std::ostream &out) const {
-      out << "mode" << ',';
-      label_time(out);
-      out << ',';
+      out << "mode" << ','
+          << label_time << ',';
       super_data_t::label(out);
     }
     void dump(std::ostream &out) const {
@@ -1307,6 +1305,9 @@ typename PureINS::float_t fname() const {return PureINS::fname();}
       super_data_t::dump(out);
     }
 };
+template <class PureINS, class TimeStamp>
+typename INS_NAVData<PureINS, TimeStamp>::label_time_t
+    INS_NAVData<PureINS, TimeStamp>::label_time;
 
 template <class INS_GPS>
 class INS_GPS_NAVData : public INS_GPS {
@@ -2299,9 +2300,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         t_stamp_generator() {
 
       if(options.out_raw_pvt){
-        INS_GPS::label_time(*options.out_raw_pvt);
-        (*options.out_raw_pvt) << ","
-            << GNSS_Receiver<float_sylph_t>::pvt_t::label << endl;
+        (*options.out_raw_pvt) << INS_GPS::label_time
+            << ',' << GNSS_Receiver<float_sylph_t>::pvt_t::label
+            << endl;
         options.out_raw_pvt->precision(12);
       }
     }
