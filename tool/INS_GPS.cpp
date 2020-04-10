@@ -770,51 +770,6 @@ struct G_Packet_Measurement
   G_Packet_Measurement() : raw_data_t(), lever_arm(NULL) {}
 };
 
-struct gps_pvt_t : public G_Packet_Measurement::pvt_t {
-  gps_pvt_t() : G_Packet_Measurement::pvt_t() {}
-  static void label(std::ostream &out) {
-    out << "week"
-        << ',' << "itow_rcv"
-        << ',' << "receiver_clock_error_meter"
-        << ',' << "longitude"
-        << ',' << "latitude"
-        << ',' << "height"
-        << ',' << "gdop"
-        << ',' << "pdop"
-        << ',' << "hdop"
-        << ',' << "vdop"
-        << ',' << "tdop"
-        << ',' << "v_north"
-        << ',' << "v_east"
-        << ',' << "v_down"
-        << ',' << "used_satellites"
-        << ',' << "PRN";
-  }
-
-  friend std::ostream &operator<<(std::ostream &out, const gps_pvt_t &pvt){
-    out << pvt.receiver_time.week
-        << ',' << pvt.receiver_time.seconds
-        << ',' << pvt.receiver_error
-        << ',' << rad2deg(pvt.user_position.llh.longitude())
-        << ',' << rad2deg(pvt.user_position.llh.latitude())
-        << ',' << pvt.user_position.llh.height()
-        << ',' << pvt.gdop
-        << ',' << pvt.pdop
-        << ',' << pvt.hdop
-        << ',' << pvt.vdop
-        << ',' << pvt.tdop
-        << ',' << pvt.user_velocity_enu.north()
-        << ',' << pvt.user_velocity_enu.east()
-        << ',' << -pvt.user_velocity_enu.up()
-        << ',' << pvt.used_satellites
-        << "," << std::bitset<8>((pvt.used_satellite_mask >> 24) & 0xFF)
-          << "_" << std::bitset<8>((pvt.used_satellite_mask >> 16) & 0xFF)
-          << "_" << std::bitset<8>((pvt.used_satellite_mask >> 8) & 0xFF)
-          << "_" << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
-    return out;
-  }
-};
-
 struct G_Packet_Data
     : public BasicPacket<G_Packet_Data>, public GNSS_Data<float_sylph_t> {
   G_Packet_Data() : GNSS_Data<float_sylph_t>() {
@@ -2294,7 +2249,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
 
-    gps_pvt_t gps_raw_pvt;
+    typename GNSS_Receiver<float_sylph_t>::pvt_t gps_raw_pvt;
   public:
     template <class TimeStamp>
     struct TimeStampGenerator {
@@ -2345,9 +2300,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       if(options.out_raw_pvt){
         INS_GPS::label_time(*options.out_raw_pvt);
-        (*options.out_raw_pvt) << ",";
-        gps_pvt_t::label(*options.out_raw_pvt);
-        (*options.out_raw_pvt) << endl;
+        (*options.out_raw_pvt) << ","
+            << GNSS_Receiver<float_sylph_t>::pvt_t::label << endl;
         options.out_raw_pvt->precision(12);
       }
     }

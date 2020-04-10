@@ -144,6 +144,55 @@ struct GNSS_Receiver {
     }
     return false;
   }
+
+  struct pvt_t : public GPS_Solver_Base<FloatT>::user_pvt_t {
+    static struct label_t {
+      friend std::ostream &operator<<(std::ostream &out, const label_t &label){
+        return out << "week"
+            << ',' << "itow_rcv"
+            << ',' << "receiver_clock_error_meter"
+            << ',' << "longitude"
+            << ',' << "latitude"
+            << ',' << "height"
+            << ',' << "gdop"
+            << ',' << "pdop"
+            << ',' << "hdop"
+            << ',' << "vdop"
+            << ',' << "tdop"
+            << ',' << "v_north"
+            << ',' << "v_east"
+            << ',' << "v_down"
+            << ',' << "used_satellites"
+            << ',' << "PRN";
+      }
+    } label;
+
+    friend std::ostream &operator<<(std::ostream &out, const pvt_t &pvt){
+      return out << pvt.receiver_time.week
+          << ',' << pvt.receiver_time.seconds
+          << ',' << pvt.receiver_error
+          << ',' << rad2deg(pvt.user_position.llh.longitude())
+          << ',' << rad2deg(pvt.user_position.llh.latitude())
+          << ',' << pvt.user_position.llh.height()
+          << ',' << pvt.gdop
+          << ',' << pvt.pdop
+          << ',' << pvt.hdop
+          << ',' << pvt.vdop
+          << ',' << pvt.tdop
+          << ',' << pvt.user_velocity_enu.north()
+          << ',' << pvt.user_velocity_enu.east()
+          << ',' << -pvt.user_velocity_enu.up()
+          << ',' << pvt.used_satellites
+          << "," << std::bitset<8>((pvt.used_satellite_mask >> 24) & 0xFF)
+            << "_" << std::bitset<8>((pvt.used_satellite_mask >> 16) & 0xFF)
+            << "_" << std::bitset<8>((pvt.used_satellite_mask >> 8) & 0xFF)
+            << "_" << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
+    }
+  };
 };
+
+template <class FloatT>
+typename GNSS_Receiver<FloatT>::pvt_t::label_t GNSS_Receiver<FloatT>::pvt_t::label
+    = typename GNSS_Receiver<FloatT>::pvt_t::label_t();
 
 #endif /* __GNSS_RECEIVER_H__ */
