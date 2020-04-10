@@ -206,16 +206,13 @@ struct GNSS_Receiver {
       }
     } label;
 
-    friend std::ostream &operator<<(std::ostream &out, const raw_data_t &raw){
-      out << raw.clock_index;
-      for(int i(1); i <= 32; ++i){
-        typedef typename super_t::measurement_t msr_t;
-        typename msr_t::const_iterator it(raw.measurement.find(i));
-        if(it == raw.measurement.end()){
-          out << ",,";
-          continue;
-        }
-        out << ',';
+    struct print_t {
+      typedef typename super_t::measurement_t msr_t;
+      const msr_t &msr;
+      const int &prn;
+      friend std::ostream &operator<<(std::ostream &out, const print_t &target){
+        typename msr_t::const_iterator it(target.msr.find(target.prn));
+        if(it == target.msr.end()){return out << ',';}
         { // range
           typename msr_t::mapped_type::const_iterator it2(
               it->second.find(super_t::L1_PSEUDORANGE));
@@ -234,6 +231,17 @@ struct GNSS_Receiver {
             out << it2->second * -gps_space_node_t::L1_WaveLength();
           }
         }
+        return out;
+      }
+    };
+    print_t operator[](const int &prn) const {
+      print_t res = {this->measurement, prn};
+      return res;
+    }
+    friend std::ostream &operator<<(std::ostream &out, const raw_data_t &raw){
+      out << raw.clock_index;
+      for(int i(1); i <= 32; ++i){
+        out << ',' << raw[i];
       }
       return out;
     }
@@ -241,11 +249,9 @@ struct GNSS_Receiver {
 };
 
 template <class FloatT>
-typename GNSS_Receiver<FloatT>::pvt_t::label_t GNSS_Receiver<FloatT>::pvt_t::label
-    = typename GNSS_Receiver<FloatT>::pvt_t::label_t();
+typename GNSS_Receiver<FloatT>::pvt_t::label_t GNSS_Receiver<FloatT>::pvt_t::label;
 
 template <class FloatT>
-typename GNSS_Receiver<FloatT>::raw_data_t::label_t GNSS_Receiver<FloatT>::raw_data_t::label
-    = typename GNSS_Receiver<FloatT>::raw_data_t::label_t();
+typename GNSS_Receiver<FloatT>::raw_data_t::label_t GNSS_Receiver<FloatT>::raw_data_t::label;
 
 #endif /* __GNSS_RECEIVER_H__ */
