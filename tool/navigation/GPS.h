@@ -449,8 +449,9 @@ class GPS_SpaceNode {
     typedef FloatT float_t;
     static const float_t light_speed;
     static const float_t L1_Frequency;
-    static inline const float_t L1_WaveLength() {
-      return light_speed / L1_Frequency;
+    static const float_t &L1_WaveLength() {
+      static const float_t res(light_speed / L1_Frequency);
+      return res;
     }
     static const float_t SC2RAD;
     
