@@ -2192,7 +2192,8 @@ const unsigned int StreamProcessor::buffer_size = SYLPHIDE_PAGE_SIZE * 0x100;
 
 typedef list<StreamProcessor> processors_t;
 processors_t processors;
-typedef list<GNSS_Receiver<float_sylph_t> > receivers_t;
+typedef GNSS_Receiver<float_sylph_t> receiver_t;
+typedef list<receiver_t> receivers_t;
 receivers_t receivers;
 
 template <class INS_GPS>
@@ -2250,7 +2251,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
 
-    typename GNSS_Receiver<float_sylph_t>::pvt_t gps_raw_pvt;
+    receiver_t::pvt_t gps_raw_pvt;
   public:
     template <class TimeStamp>
     struct TimeStampGenerator {
@@ -2301,7 +2302,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       if(options.out_raw_pvt){
         (*options.out_raw_pvt) << INS_GPS::label_time
-            << ',' << GNSS_Receiver<float_sylph_t>::pvt_t::label
+            << ',' << receiver_t::pvt_t::label
+            << ',' << receiver_t::raw_data_t::label
             << endl;
         options.out_raw_pvt->precision(12);
       }
@@ -2584,8 +2586,10 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
         (*(options.out_raw_pvt))
-            << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week) << ","
-            << gps_raw_pvt << std::endl;
+            << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week)
+            << ',' << gps_raw_pvt
+            << ',' << receiver_t::raw_data_t(g_packet)
+            << std::endl;
       }
 
       if(status >= JUST_INITIALIZED){
@@ -2741,7 +2745,7 @@ int main(int argc, char *argv[]){
     StreamProcessor stream_processor;
     args_t args_proc(args_proc_common);
 
-    GNSS_Receiver<float_sylph_t> receiver;
+    receiver_t receiver;
 
     bool flag_common(false);
     for(; arg_index < argc; arg_index++){

@@ -38,6 +38,8 @@
 #include "navigation/GPS_Solver.h"
 #include "navigation/RINEX.h"
 
+#include "navigation/INS_GPS2_Tightly.h"
+
 #include "INS_GPS/GNSS_Data.h"
 
 #include "analyze_common.h"
@@ -189,10 +191,61 @@ struct GNSS_Receiver {
             << "_" << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
     }
   };
+
+  struct raw_data_t : public GPS_RawData<FloatT> {
+    typedef GPS_RawData<FloatT> super_t;
+    raw_data_t(const super_t &raw) : super_t(raw) {}
+    static struct label_t {
+      friend std::ostream &operator<<(std::ostream &out, const label_t &label){
+        out << "clock_index";
+        for(int i(1); i <= 32; ++i){
+          out << ',' << "range(" << i << ')'
+              << ',' << "rate(" << i << ')';
+        }
+        return out;
+      }
+    } label;
+
+    friend std::ostream &operator<<(std::ostream &out, const raw_data_t &raw){
+      out << raw.clock_index;
+      for(int i(1); i <= 32; ++i){
+        typedef typename super_t::measurement_t msr_t;
+        typename msr_t::const_iterator it(raw.measurement.find(i));
+        if(it == raw.measurement.end()){
+          out << ",,";
+          continue;
+        }
+        out << ',';
+        { // range
+          typename msr_t::mapped_type::const_iterator it2(
+              it->second.find(super_t::L1_PSEUDORANGE));
+          if(it2 != it->second.end()){
+            out << it2->second;
+          }
+        }
+        out << ',';
+        { // rate
+          typename msr_t::mapped_type::const_iterator it2(
+              it->second.find(super_t::L1_RANGE_RATE));
+          if(it2 != it->second.end()){
+            out << it2->second;
+          }else if((it2 = it->second.find(super_t::L1_DOPPLER)) != it->second.end()){
+            // fallback to using doppler
+            out << it2->second * -gps_space_node_t::L1_WaveLength();
+          }
+        }
+      }
+      return out;
+    }
+  };
 };
 
 template <class FloatT>
 typename GNSS_Receiver<FloatT>::pvt_t::label_t GNSS_Receiver<FloatT>::pvt_t::label
     = typename GNSS_Receiver<FloatT>::pvt_t::label_t();
+
+template <class FloatT>
+typename GNSS_Receiver<FloatT>::raw_data_t::label_t GNSS_Receiver<FloatT>::raw_data_t::label
+    = typename GNSS_Receiver<FloatT>::raw_data_t::label_t();
 
 #endif /* __GNSS_RECEIVER_H__ */
