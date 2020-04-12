@@ -151,9 +151,9 @@ class IMU_CSV < A_Packet_Converter
     :t_offset => 0,
     :filter => proc{|t, accel, omega| [t, accel, omega]},
     :acc_index => [1, 2, 3],
-    :acc_units => [1.0] * 3, # m/s^2
+    :acc_units => [1.0] * 3, # m/s^2 => m/s^2
     :gyro_index => [4, 5, 6],
-    :gyro_units => [Math::PI / 180] * 3, # rad/s
+    :gyro_units => [Math::PI / 180] * 3, # deg/s => rad/s
   }
   def initialize(io, opt = {})
     super(opt)
@@ -214,7 +214,7 @@ Default format:
   imu_data => CSV file which has seven columns; 
     1st column: GPS time [sec], both cumulative seconds or seconds of week are acceptable.
     2nd-4th columns: XYZ acceleration [m/s^2]
-    5th-7th columns: XYZ angular speed [rad/sec]
+    5th-7th columns: XYZ angular speed [deg/sec]
 __STRING__
 
 options = {}
