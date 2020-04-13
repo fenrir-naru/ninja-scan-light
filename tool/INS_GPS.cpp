@@ -782,27 +782,51 @@ struct G_Packet_Measurement
       const raw_data_t::gps_time_t &t,
       const raw_data_t::measurement_t &meas) {
 
-#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE)
+#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE) \
+|| defined(CHECK_GNSS_DOPPLER_CONSISTENCY)
     float_sylph_t delta_t(t - raw_data_t::gpstime);
-    raw_data_t::prn_obs_t previous_pseudo_range(
-        raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE));
+    raw_data_t::prn_obs_t previous_pseudo_range;
+    if(delta_t <= 5){
+      previous_pseudo_range = raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE);
+    }
 #endif
     raw_data_t::gpstime = t;
     BasicPacket<G_Packet_Measurement>::itow = raw_data_t::gpstime.seconds;
 
     raw_data_t::measurement = meas;
-#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE)
+#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE) \
+|| defined(CHECK_GNSS_DOPPLER_CONSISTENCY)
     { // calculate range rate by using difference between current and previous range.
       raw_data_t::prn_obs_t range_rate(
           raw_data_t::difference(
             raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
             previous_pseudo_range,
             (1.0 / delta_t)));
+#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE)
       for(raw_data_t::prn_obs_t::const_iterator it(range_rate.begin());
           it != range_rate.end(); ++it){
         raw_data_t::measurement[it->first].insert(
             std::make_pair(raw_data_t::L1_RANGE_RATE, it->second));
       }
+#elif defined(CHECK_GNSS_DOPPLER_CONSISTENCY)
+      for(raw_data_t::measurement_t::iterator it(raw_data_t::measurement.begin());
+          it != raw_data_t::measurement.end(); ++it){
+        raw_data_t::measurement_t::mapped_type::const_iterator it2(
+            it->second.find(raw_data_t::L1_DOPPLER));
+        if(it2 == it->second.end()){continue;} // No doppler entry
+        bool checked(false);
+        for(raw_data_t::prn_obs_t::const_iterator it3(range_rate.begin());
+            it3 != range_rate.end(); ++it3){
+          if(it3->first != it->first){continue;} // check PRN
+          checked = ((std::abs(it3->second
+                - (it2->second * -GPS_SpaceNode<float_sylph_t>::L1_WaveLength())))
+              <= 10); // Is difference in threshold [m/s] ?
+          break;
+        }
+        if(checked){continue;}
+        it->second.erase(it2); // Drop soppler entry
+      }
+#endif
     }
 #endif
   }
