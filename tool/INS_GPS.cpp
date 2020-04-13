@@ -2275,7 +2275,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       return (it_a->mag * weight_a) + (it_b->mag * weight_b);
     }
 
-    receiver_t::pvt_t gps_raw_pvt;
+    G_Packet_Measurement::pvt_t gps_raw_pvt;
   public:
     template <class TimeStamp>
     struct TimeStampGenerator {
@@ -2326,8 +2326,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       if(options.out_raw_pvt){
         (*options.out_raw_pvt) << INS_GPS::label_time
-            << ',' << receiver_t::pvt_t::label
-            << ',' << receiver_t::raw_data_t::label
+            << ',' << receiver_t::pvt_printer_t::label
+            << ',' << receiver_t::raw_data_printer_t::label
             << endl;
         options.out_raw_pvt->precision(12);
       }
@@ -2612,8 +2612,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         g_packet.get_pvt(gps_raw_pvt);
         (*(options.out_raw_pvt))
             << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week)
-            << ',' << gps_raw_pvt
-            << ',' << receiver_t::raw_data_t(g_packet)
+            << ',' << receiver_t::pvt_printer_t(gps_raw_pvt)
+            << ',' << receiver_t::raw_data_printer_t(g_packet)
             << std::endl;
       }
 

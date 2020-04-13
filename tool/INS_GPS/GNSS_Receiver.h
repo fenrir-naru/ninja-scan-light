@@ -147,7 +147,9 @@ struct GNSS_Receiver {
     return false;
   }
 
-  struct pvt_t : public GPS_Solver_Base<FloatT>::user_pvt_t {
+  struct pvt_printer_t : public GPS_Solver_Base<FloatT>::user_pvt_t {
+    typedef typename GPS_Solver_Base<FloatT>::user_pvt_t super_t;
+    pvt_printer_t(const super_t &pvt) : super_t(pvt) {}
     static struct label_t {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         return out << "week"
@@ -169,7 +171,7 @@ struct GNSS_Receiver {
       }
     } label;
 
-    friend std::ostream &operator<<(std::ostream &out, const pvt_t &pvt){
+    friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &pvt){
       out << pvt.receiver_time.week
           << ',' << pvt.receiver_time.seconds;
       if(pvt.position_solved()){
@@ -205,9 +207,9 @@ struct GNSS_Receiver {
     }
   };
 
-  struct raw_data_t : public GPS_RawData<FloatT> {
+  struct raw_data_printer_t : public GPS_RawData<FloatT> {
     typedef GPS_RawData<FloatT> super_t;
-    raw_data_t(const super_t &raw) : super_t(raw) {}
+    raw_data_printer_t(const super_t &raw) : super_t(raw) {}
     static struct label_t {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         out << "clock_index";
@@ -251,7 +253,7 @@ struct GNSS_Receiver {
       print_t res = {this->measurement, prn};
       return res;
     }
-    friend std::ostream &operator<<(std::ostream &out, const raw_data_t &raw){
+    friend std::ostream &operator<<(std::ostream &out, const raw_data_printer_t &raw){
       out << raw.clock_index;
       for(int i(1); i <= 32; ++i){
         out << ',' << raw[i];
@@ -262,9 +264,9 @@ struct GNSS_Receiver {
 };
 
 template <class FloatT>
-typename GNSS_Receiver<FloatT>::pvt_t::label_t GNSS_Receiver<FloatT>::pvt_t::label;
+typename GNSS_Receiver<FloatT>::pvt_printer_t::label_t GNSS_Receiver<FloatT>::pvt_printer_t::label;
 
 template <class FloatT>
-typename GNSS_Receiver<FloatT>::raw_data_t::label_t GNSS_Receiver<FloatT>::raw_data_t::label;
+typename GNSS_Receiver<FloatT>::raw_data_printer_t::label_t GNSS_Receiver<FloatT>::raw_data_printer_t::label;
 
 #endif /* __GNSS_RECEIVER_H__ */
