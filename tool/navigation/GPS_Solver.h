@@ -230,11 +230,12 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         return (Gpt_Wp * Gp_).inverse() * Gpt_Wp * delta_rp(size);
       }
 
-      void copy_G_W_row(const geometric_matrices_t &another, const unsigned int &row){
+      void copy_G_W_row(const geometric_matrices_t &src,
+          const unsigned int &i_src, const unsigned int &i_dst){
         for(unsigned int j(0); j < 4; ++j){
-          G(row, j) = another.G(row, j);
+          G(i_dst, j) = src.G(i_src, j);
         }
-        W(row, row) = another.W(row, row);
+        W(i_dst, i_dst) = src.W(i_src, i_src);
       }
     };
 
@@ -619,7 +620,6 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         }
 
         // 4. Calculate velocity
-
         i = 0;
         geometric_matrices_t geomat2(index_table.size());
         for(typename index_table_t::const_iterator it(index_table.begin());
@@ -629,7 +629,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           int i_range(it->first), i_rate(it->second);
 
           // copy design matrix
-          geomat2.copy_G_W_row(geomat, i);
+          geomat2.copy_G_W_row(geomat, i_range, i);
           static const xyz_t zero(0, 0, 0);
 
           // Update range rate by subtracting LOS satellite velocity with design matrix G
