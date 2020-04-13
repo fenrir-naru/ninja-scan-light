@@ -729,7 +729,7 @@ struct G_Packet_Measurement
   typedef raw_data_t::solver_t::user_pvt_t pvt_t;
   bool get_pvt(pvt_t &pvt) const {
     while(true){
-      if(pvt.error_code == pvt_t::ERROR_NO){
+      if(pvt.position_solved()){
         float_sylph_t delta_t(std::abs(raw_data_t::gpstime - pvt.receiver_time));
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
@@ -2584,7 +2584,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         it->adjust(g_packet.gpstime);
       }
 
-      if(options.out_raw_pvt && g_packet.get_pvt(gps_raw_pvt)){
+      if(options.out_raw_pvt){
+        g_packet.get_pvt(gps_raw_pvt);
         (*(options.out_raw_pvt))
             << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week)
             << ',' << gps_raw_pvt
