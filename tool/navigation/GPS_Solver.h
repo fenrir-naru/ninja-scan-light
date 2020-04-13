@@ -597,63 +597,70 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         return res;
       }
 
-      if(with_velocity){
-        // 3. Check consistency between range and rate for velocity calculation
+      if(!with_velocity){
+        res.error_code = user_pvt_t::ERROR_VELOCITY_SKIPPED;
+        return res;
+      }
 
-        typedef std::vector<std::pair<int, int> > index_table_t;
-        index_table_t index_table; // [index_of_range_used_for_position, index_of_rate]
-        index_table.reserve(sat_range_corrected.size());
+      // 3. Check consistency between range and rate for velocity calculation
+      typedef std::vector<std::pair<int, int> > index_table_t;
+      index_table_t index_table; // [index_of_range_used_for_position, index_of_rate]
+      index_table.reserve(sat_range_corrected.size());
 
-        int i(0);
-        for(typename sat_obs_t::const_iterator it(sat_range_corrected.begin());
-            it != sat_range_corrected.end();
-            ++it, ++i){
-          int j(0);
-          for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
-              it2 != prn_rate.end();
-              ++it2, ++j){
-            if(it->first.first == it2->first){
-              index_table.push_back(std::make_pair(i, j));
-              break;
-            }
+      int i(0);
+      for(typename sat_obs_t::const_iterator it(sat_range_corrected.begin());
+          it != sat_range_corrected.end();
+          ++it, ++i){
+        int j(0);
+        for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
+            it2 != prn_rate.end();
+            ++it2, ++j){
+          if(it->first.first == it2->first){
+            index_table.push_back(std::make_pair(i, j));
+            break;
           }
         }
+      }
 
-        // 4. Calculate velocity
-        i = 0;
-        geometric_matrices_t geomat2(index_table.size());
-        for(typename index_table_t::const_iterator it(index_table.begin());
-            it != index_table.end();
-            ++it, ++i){
+      if(index_table.size() < 4){
+        res.error_code = user_pvt_t::ERROR_VELOCITY_INSUFFICIENT_SATELLITES;
+        return res;
+      }
 
-          int i_range(it->first), i_rate(it->second);
+      // 4. Calculate velocity
+      i = 0;
+      geometric_matrices_t geomat2(index_table.size());
+      for(typename index_table_t::const_iterator it(index_table.begin());
+          it != index_table.end();
+          ++it, ++i){
 
-          // copy design matrix
-          geomat2.copy_G_W_row(geomat, i_range, i);
-          static const xyz_t zero(0, 0, 0);
+        int i_range(it->first), i_rate(it->second);
 
-          // Update range rate by subtracting LOS satellite velocity with design matrix G
-          geomat2.delta_r(i, 0) = prn_rate[i_rate].second
-              + rate_relative_neg(
-                  *sat_range_corrected[i_range].first.second, // satellite
-                  sat_range_corrected[i_range].second, // range
-                  time_arrival,
-                  zero, // user velocity to be estimated is temporary zero
-                  geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2)); // LOS
-        }
+        // copy design matrix
+        geomat2.copy_G_W_row(geomat, i_range, i);
+        static const xyz_t zero(0, 0, 0);
 
-        try{
-          // Least square
-          matrix_t sol(geomat2.least_square());
+        // Update range rate by subtracting LOS satellite velocity with design matrix G
+        geomat2.delta_r(i, 0) = prn_rate[i_rate].second
+            + rate_relative_neg(
+                *sat_range_corrected[i_range].first.second, // satellite
+                sat_range_corrected[i_range].second, // range
+                time_arrival,
+                zero, // user velocity to be estimated is temporary zero
+                geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2)); // LOS
+      }
 
-          xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
-          res.user_velocity_enu = enu_t::relative_rel(
-              vel_xyz, res.user_position.llh);
-          res.receiver_error_rate = sol(3, 0);
-        }catch(std::exception &e){
-          res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
-          return res;
-        }
+      try{
+        // Least square
+        matrix_t sol(geomat2.least_square());
+
+        xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
+        res.user_velocity_enu = enu_t::relative_rel(
+            vel_xyz, res.user_position.llh);
+        res.receiver_error_rate = sol(3, 0);
+      }catch(std::exception &e){
+        res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
+        return res;
       }
 
       res.error_code = user_pvt_t::ERROR_NO;

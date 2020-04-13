@@ -170,25 +170,38 @@ struct GNSS_Receiver {
     } label;
 
     friend std::ostream &operator<<(std::ostream &out, const pvt_t &pvt){
-      return out << pvt.receiver_time.week
-          << ',' << pvt.receiver_time.seconds
-          << ',' << pvt.receiver_error
-          << ',' << rad2deg(pvt.user_position.llh.longitude())
-          << ',' << rad2deg(pvt.user_position.llh.latitude())
-          << ',' << pvt.user_position.llh.height()
-          << ',' << pvt.gdop
-          << ',' << pvt.pdop
-          << ',' << pvt.hdop
-          << ',' << pvt.vdop
-          << ',' << pvt.tdop
-          << ',' << pvt.user_velocity_enu.north()
-          << ',' << pvt.user_velocity_enu.east()
-          << ',' << -pvt.user_velocity_enu.up()
-          << ',' << pvt.used_satellites
-          << "," << std::bitset<8>((pvt.used_satellite_mask >> 24) & 0xFF)
-            << "_" << std::bitset<8>((pvt.used_satellite_mask >> 16) & 0xFF)
-            << "_" << std::bitset<8>((pvt.used_satellite_mask >> 8) & 0xFF)
-            << "_" << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
+      out << pvt.receiver_time.week
+          << ',' << pvt.receiver_time.seconds;
+      if(pvt.position_solved()){
+        out << ',' << pvt.receiver_error
+            << ',' << rad2deg(pvt.user_position.llh.longitude())
+            << ',' << rad2deg(pvt.user_position.llh.latitude())
+            << ',' << pvt.user_position.llh.height()
+            << ',' << pvt.gdop
+            << ',' << pvt.pdop
+            << ',' << pvt.hdop
+            << ',' << pvt.vdop
+            << ',' << pvt.tdop;
+      }else{
+        out << ",,,,,,,,,";
+      }
+      if(pvt.velocity_solved()){
+        out << ',' << pvt.user_velocity_enu.north()
+            << ',' << pvt.user_velocity_enu.east()
+            << ',' << -pvt.user_velocity_enu.up();
+      }else{
+        out << ",,,";
+      }
+      if(pvt.position_solved()){
+        out << ',' << pvt.used_satellites
+            << ',' << std::bitset<8>((pvt.used_satellite_mask >> 24) & 0xFF)
+              << '_' << std::bitset<8>((pvt.used_satellite_mask >> 16) & 0xFF)
+              << '_' << std::bitset<8>((pvt.used_satellite_mask >> 8) & 0xFF)
+              << '_' << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
+      }else{
+        out << ",,";
+      }
+      return out;
     }
   };
 

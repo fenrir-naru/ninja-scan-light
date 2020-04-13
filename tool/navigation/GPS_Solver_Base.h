@@ -96,6 +96,8 @@ struct GPS_Solver_Base {
       ERROR_POSITION_LS,
       ERROR_POSITION_NOT_CONVERGED,
       ERROR_DOP,
+      ERROR_VELOCITY_SKIPPED,
+      ERROR_VELOCITY_INSUFFICIENT_SATELLITES,
       ERROR_VELOCITY_LS,
     } error_code;
     gps_time_t receiver_time;
@@ -126,6 +128,20 @@ struct GPS_Solver_Base {
           receiver_time(),
           user_position(), receiver_error(0),
           user_velocity_enu(), receiver_error_rate(0) {}
+
+    bool position_solved() const {
+      switch(error_code){
+        case ERROR_NO:
+        case ERROR_VELOCITY_SKIPPED:
+        case ERROR_VELOCITY_INSUFFICIENT_SATELLITES:
+        case ERROR_VELOCITY_LS:
+          return true;
+      }
+      return false;
+    }
+    bool velocity_solved() const {
+      return error_code == ERROR_NO;
+    }
   };
 
   /**
