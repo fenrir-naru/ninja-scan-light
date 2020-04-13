@@ -710,6 +710,12 @@ struct G_Packet_Measurement
     public GPS_RawData<float_sylph_t> {
 
   typedef GPS_RawData<float_sylph_t> raw_data_t;
+
+  enum {
+    TIME_OF_TRANSMISSION = raw_data_t::MEASUREMENT_ITEMS_PREDEFINED,
+    MEASUREMENT_ITEMS,
+  };
+
   Vector3<float_sylph_t> *lever_arm;
 
   raw_data_t::prn_obs_t range_rate() const {
@@ -771,6 +777,35 @@ struct G_Packet_Measurement
   }
 
   G_Packet_Measurement() : raw_data_t(), lever_arm(NULL) {}
+
+  void update_measurement(
+      const raw_data_t::gps_time_t &t,
+      const raw_data_t::measurement_t &meas) {
+
+#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE)
+    float_sylph_t delta_t(t - raw_data_t::gpstime);
+    raw_data_t::prn_obs_t previous_pseudo_range(
+        raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE));
+#endif
+    raw_data_t::gpstime = t;
+    BasicPacket<G_Packet_Measurement>::itow = raw_data_t::gpstime.seconds;
+
+    raw_data_t::measurement = meas;
+#if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE)
+    { // calculate range rate by using difference between current and previous range.
+      raw_data_t::prn_obs_t range_rate(
+          raw_data_t::difference(
+            raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
+            previous_pseudo_range,
+            (1.0 / delta_t)));
+      for(raw_data_t::prn_obs_t::const_iterator it(range_rate.begin());
+          it != range_rate.end(); ++it){
+        raw_data_t::measurement[it->first].insert(
+            std::make_pair(raw_data_t::L1_RANGE_RATE, it->second));
+      }
+    }
+#endif
+  }
 };
 
 struct G_Packet_Data
@@ -1748,52 +1783,24 @@ class StreamProcessor
        * {class, id} = {0x02, 0x31} : ephemeris
        */
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
+        typedef G_Packet_Measurement raw_data_t;
         switch(packet_type.mid){
           case 0x10: { // RXM-RAW
             const unsigned int num_of_sv(observer[6 + 6]);
             if(num_of_sv == 0){return;}
 
-            typedef G_Packet_Measurement::raw_data_t raw_data_t;
             raw_data_t::gps_time_t current(observer.fetch_WN(), observer.fetch_ITOW());
-#if defined(USE_GPS_SINGLE_DIFFERENCE_AS_RATE)
-            float_sylph_t delta_t(current - packet_raw_latest.gpstime);
-#endif
-            packet_raw_latest.gpstime = current;
-            packet_raw_latest.itow = current.seconds;
-
-#if defined(USE_GPS_SINGLE_DIFFERENCE_AS_RATE)
-            raw_data_t::prn_obs_t previous_pseudo_range(
-                packet_raw_latest.measurement_of(raw_data_t::L1_PSEUDORANGE));
-#endif
-            packet_raw_latest.measurement.clear();
+            raw_data_t::measurement_t measurement;
 
             for(int i(0); i < num_of_sv; i++){
-
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
-
-              int prn(src.sv_number);
-              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.measurement[prn]);
-
+              raw_data_t::measurement_t::mapped_type &dst(measurement[src.sv_number]);
               dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, src.pseudo_range));
               dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, src.carrier_phase));
               dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
             }
 
-#if defined(USE_GPS_SINGLE_DIFFERENCE_AS_RATE)
-            { // calculate range rate by using difference between current and previous range.
-              raw_data_t::prn_obs_t range_rate(
-                  raw_data_t::difference(
-                    packet_raw_latest.measurement_of(raw_data_t::L1_PSEUDORANGE),
-                    previous_pseudo_range,
-                    (1.0 / delta_t)));
-              for(raw_data_t::prn_obs_t::const_iterator it(range_rate.begin());
-                  it != range_rate.end(); ++it){
-                packet_raw_latest.measurement[it->first].insert(
-                    std::make_pair(raw_data_t::L1_RANGE_RATE, it->second));
-              }
-            }
-#endif
-
+            packet_raw_latest.update_measurement(current, measurement);
             update(packet_raw_latest);
             return;
           }
@@ -1818,15 +1825,12 @@ class StreamProcessor
             const unsigned int num_of_measurement(observer[6 + 11]);
             if(num_of_measurement == 0){return;}
 
-            typedef G_Packet_Measurement::raw_data_t raw_data_t;
-
+            raw_data_t::gps_time_t current;
             {
               G_Observer_t::v8_t buf[10];
               observer.inspect(buf, sizeof(buf), 6);
-              raw_data_t::gps_time_t current(
+              current = raw_data_t::gps_time_t(
                   le_char2_2_num<G_Observer_t::u16_t>(*(buf + 8)), le_char8_2_num<double>(*buf));
-              packet_raw_latest.gpstime = current;
-              packet_raw_latest.itow = current.seconds;
 
               if(status.time_stamp == status_t::TIME_STAMP_INVALID){
                 status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
@@ -1841,25 +1845,24 @@ class StreamProcessor
               }
             }
 
-            packet_raw_latest.measurement.clear();
-
+            raw_data_t::measurement_t measurement;
             for(int i(0); i < num_of_measurement; i++){
               unsigned int gnssID(observer[6 + 36 + (32 * i)]);
               if((gnssID != G_Observer_t::gnss_svid_t::GPS)
                   && (gnssID != G_Observer_t::gnss_svid_t::SBAS)){continue;} // TODO GNSS
               int prn(observer[6 + 37 + (32 * i)]); // svID
 
-              G_Observer_t::v8_t buf[24];
+              G_Observer_t::v8_t buf[20];
               observer.inspect(buf, sizeof(buf), 6 + 16 + (32 * i));
 
-              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.measurement[prn]);
-
+              raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
               dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
               dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
               dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, doppler));
             }
 
+            packet_raw_latest.update_measurement(current, measurement);
             update(packet_raw_latest);
             return;
           }
@@ -1901,13 +1904,11 @@ class StreamProcessor
 
             if(ranges == 0){return;} // no measurement
 
-            packet_raw_latest.measurement.clear();
-
-            typedef G_Packet_Measurement::raw_data_t raw_data_t;
+            typedef G_Packet_Measurement raw_data_t;
+            raw_data_t::measurement_t measurement;
 
             float_sylph_t last_time_of_transmission(0);
             int ranges_valid(0);
-            static const int TIME_OF_TRANSMISSION(raw_data_t::MEASUREMENT_ITEMS_PREDEFINED);
 
             for(int i(ranges); i > 0; --i, offset += length_per_range){
               int qi((G_Observer_t::u8_t)observer[offset + 41] & 0x07); // quality indicator
@@ -1937,10 +1938,10 @@ class StreamProcessor
               char buf[20];
               observer.inspect(buf, 20, offset);
 
-              raw_data_t::measurement_t::mapped_type &dst(packet_raw_latest.measurement[prn]);
+              raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
 
               float_sylph_t time_of_transmission(1E-3 * le_char8_shift32(&buf[0]));
-              dst.insert(std::make_pair(TIME_OF_TRANSMISSION, time_of_transmission));
+              dst.insert(std::make_pair(raw_data_t::TIME_OF_TRANSMISSION, time_of_transmission));
               if(time_of_transmission > last_time_of_transmission){
                 last_time_of_transmission = time_of_transmission;
               }
@@ -1964,14 +1965,10 @@ class StreamProcessor
                 // assume 25 ms alignment, transmission time is assumed to be between
                 // 67ms(20200km, inc90deg) to 86ms(25785km, inc0deg); ref 72ms(21674km, inc45deg)
 
-            packet_raw_latest.gpstime = raw_data_t::gps_time_t(
-                week_number, est_time_of_reception).canonicalize();
-            packet_raw_latest.itow = packet_raw_latest.gpstime.seconds;
-
-            for(raw_data_t::measurement_t::iterator it(packet_raw_latest.measurement.begin());
-                it != packet_raw_latest.measurement.end(); ++it){
+            for(raw_data_t::measurement_t::iterator it(measurement.begin());
+                it != measurement.end(); ++it){
               raw_data_t::measurement_t::mapped_type::const_iterator it2(
-                  it->second.find(TIME_OF_TRANSMISSION));
+                  it->second.find(raw_data_t::TIME_OF_TRANSMISSION));
               if(it2 == it->second.end()){continue;}
               float_sylph_t delta_t(est_time_of_reception - it2->second);
               if(delta_t > 100E-3){continue;} // Remove abnormal time lag (normally, from 67 to 86 ms);
@@ -1980,6 +1977,9 @@ class StreamProcessor
                   GPS_SpaceNode<float_sylph_t>::light_speed * delta_t));
             }
 
+            packet_raw_latest.update_measurement(
+                raw_data_t::gps_time_t(week_number, est_time_of_reception).canonicalize(),
+                measurement);
             update(packet_raw_latest);
             return;
           }
