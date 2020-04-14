@@ -1868,20 +1868,41 @@ class StreamProcessor
                 Handler::outer.updatable->update(packet_time);
               }
             }
+            unsigned int version(observer[6 + 13]);
 
             raw_data_t::measurement_t measurement;
             for(int i(0); i < num_of_measurement; i++){
               unsigned int gnssID(observer[6 + 36 + (32 * i)]);
-              if((gnssID != G_Observer_t::gnss_svid_t::GPS)
-                  && (gnssID != G_Observer_t::gnss_svid_t::SBAS)){continue;} // TODO GNSS
+              unsigned int sigid((version == 0x01)
+                  ? observer[6 + 38 + (32 * i)] // sigID @see UBX-18010854 - R07 Appendix.B
+                  : 0);
+              switch(gnssID){
+                case G_Observer_t::gnss_svid_t::GPS:
+                  switch(sigid){
+                    case 0x03:
+                    case 0x04:
+                      continue; // TODO currently GPS L2 CL/CM is rejected
+                  }
+                  break;
+                case G_Observer_t::gnss_svid_t::SBAS:
+                  break;
+                default:
+                  continue; // TODO support other GNSS
+              }
+
               int prn(observer[6 + 37 + (32 * i)]); // svID
+              unsigned int trkstat(observer[6 + 46 + (32 * i)]); // tracking status
 
               G_Observer_t::v8_t buf[20];
               observer.inspect(buf, sizeof(buf), 6 + 16 + (32 * i));
 
               raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
-              dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
-              dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
+              if(trkstat & 0x01){
+                dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
+              }
+              if(trkstat & 0x02){
+                dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
+              }
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
               dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, doppler));
             }
