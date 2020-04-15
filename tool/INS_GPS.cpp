@@ -721,14 +721,6 @@ struct G_Packet_Measurement
 
   Vector3<float_sylph_t> *lever_arm;
 
-  solver_t::prn_obs_t range_rate() const {
-    solver_t::prn_obs_t rate(raw_data_t::measurement_of(items_t::L1_RANGE_RATE));
-    if(!rate.empty()){return rate;}
-    // Fall back by using doppler
-    return raw_data_t::measurement_of(
-        items_t::L1_DOPPLER, -GPS_SpaceNode<float_sylph_t>::L1_WaveLength());
-  }
-
   typedef solver_t::user_pvt_t pvt_t;
   bool get_pvt(pvt_t &pvt) const {
     while(true){
@@ -738,8 +730,7 @@ struct G_Packet_Measurement
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
           pvt = raw_data_t::solver->solve_user_pvt(
-              raw_data_t::measurement_of(items_t::L1_PSEUDORANGE),
-              range_rate(),
+              raw_data_t::measurement,
               raw_data_t::gpstime,
               pvt.user_position,
               pvt.receiver_error);
@@ -747,8 +738,7 @@ struct G_Packet_Measurement
         }
       }
       pvt = raw_data_t::solver->solve_user_pvt(
-          raw_data_t::measurement_of(items_t::L1_PSEUDORANGE),
-          range_rate(),
+          raw_data_t::measurement,
           raw_data_t::gpstime);
       break;
     }
