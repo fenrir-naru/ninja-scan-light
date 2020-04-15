@@ -710,23 +710,26 @@ struct G_Packet_Measurement
     public GPS_RawData<float_sylph_t> {
 
   typedef GPS_RawData<float_sylph_t> raw_data_t;
+  typedef raw_data_t::solver_t solver_t;
 
-  enum {
-    TIME_OF_TRANSMISSION = raw_data_t::MEASUREMENT_ITEMS_PREDEFINED,
-    MEASUREMENT_ITEMS,
+  struct items_t : public solver_t::measurement_items_t {
+    enum {
+      TIME_OF_TRANSMISSION = solver_t::measurement_items_t::MEASUREMENT_ITEMS_PREDEFINED,
+      MEASUREMENT_ITEMS,
+    };
   };
 
   Vector3<float_sylph_t> *lever_arm;
 
-  raw_data_t::prn_obs_t range_rate() const {
-    raw_data_t::prn_obs_t rate(raw_data_t::measurement_of(raw_data_t::L1_RANGE_RATE));
+  solver_t::prn_obs_t range_rate() const {
+    solver_t::prn_obs_t rate(raw_data_t::measurement_of(items_t::L1_RANGE_RATE));
     if(!rate.empty()){return rate;}
     // Fall back by using doppler
     return raw_data_t::measurement_of(
-        raw_data_t::L1_DOPPLER, -GPS_SpaceNode<float_sylph_t>::L1_WaveLength());
+        items_t::L1_DOPPLER, -GPS_SpaceNode<float_sylph_t>::L1_WaveLength());
   }
 
-  typedef raw_data_t::solver_t::user_pvt_t pvt_t;
+  typedef solver_t::user_pvt_t pvt_t;
   bool get_pvt(pvt_t &pvt) const {
     while(true){
       if(pvt.position_solved()){
@@ -735,7 +738,7 @@ struct G_Packet_Measurement
           return true; // already updated
         }else if(delta_t < 300){ // 300 sec
           pvt = raw_data_t::solver->solve_user_pvt(
-              raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
+              raw_data_t::measurement_of(items_t::L1_PSEUDORANGE),
               range_rate(),
               raw_data_t::gpstime,
               pvt.user_position,
@@ -744,7 +747,7 @@ struct G_Packet_Measurement
         }
       }
       pvt = raw_data_t::solver->solve_user_pvt(
-          raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
+          raw_data_t::measurement_of(items_t::L1_PSEUDORANGE),
           range_rate(),
           raw_data_t::gpstime);
       break;
@@ -785,9 +788,9 @@ struct G_Packet_Measurement
 #if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE) \
 || defined(CHECK_GNSS_DOPPLER_CONSISTENCY)
     float_sylph_t delta_t(t - raw_data_t::gpstime);
-    raw_data_t::prn_obs_t previous_pseudo_range;
+    solver_t::prn_obs_t previous_pseudo_range;
     if(delta_t <= 5){
-      previous_pseudo_range = raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE);
+      previous_pseudo_range = raw_data_t::measurement_of(items_t::L1_PSEUDORANGE);
     }
 #endif
     raw_data_t::gpstime = t;
@@ -797,25 +800,25 @@ struct G_Packet_Measurement
 #if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE) \
 || defined(CHECK_GNSS_DOPPLER_CONSISTENCY)
     { // calculate range rate by using difference between current and previous range.
-      raw_data_t::prn_obs_t range_rate(
-          raw_data_t::difference(
-            raw_data_t::measurement_of(raw_data_t::L1_PSEUDORANGE),
+      solver_t::prn_obs_t range_rate(
+          solver_t::difference(
+            raw_data_t::measurement_of(items_t::L1_PSEUDORANGE),
             previous_pseudo_range,
             (1.0 / delta_t)));
 #if defined(USE_GNSS_RANGE_TIME_DIFFERENCE_AS_RATE)
-      for(raw_data_t::prn_obs_t::const_iterator it(range_rate.begin());
+      for(solver_t::prn_obs_t::const_iterator it(range_rate.begin());
           it != range_rate.end(); ++it){
         raw_data_t::measurement[it->first].insert(
-            std::make_pair(raw_data_t::L1_RANGE_RATE, it->second));
+            std::make_pair(items_t::L1_RANGE_RATE, it->second));
       }
 #elif defined(CHECK_GNSS_DOPPLER_CONSISTENCY)
       for(raw_data_t::measurement_t::iterator it(raw_data_t::measurement.begin());
           it != raw_data_t::measurement.end(); ++it){
         raw_data_t::measurement_t::mapped_type::const_iterator it2(
-            it->second.find(raw_data_t::L1_DOPPLER));
+            it->second.find(items_t::L1_DOPPLER));
         if(it2 == it->second.end()){continue;} // No doppler entry
         bool checked(false);
-        for(raw_data_t::prn_obs_t::const_iterator it3(range_rate.begin());
+        for(solver_t::prn_obs_t::const_iterator it3(range_rate.begin());
             it3 != range_rate.end(); ++it3){
           if(it3->first != it->first){continue;} // check PRN
           checked = ((std::abs(it3->second
@@ -1808,6 +1811,7 @@ class StreamProcessor
        */
       void check_rxm(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
         typedef G_Packet_Measurement raw_data_t;
+        typedef raw_data_t::items_t items_t;
         switch(packet_type.mid){
           case 0x10: { // RXM-RAW
             const unsigned int num_of_sv(observer[6 + 6]);
@@ -1819,9 +1823,9 @@ class StreamProcessor
             for(int i(0); i < num_of_sv; i++){
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
               raw_data_t::measurement_t::mapped_type &dst(measurement[src.sv_number]);
-              dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, src.pseudo_range));
-              dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, src.carrier_phase));
-              dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
+              dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, src.pseudo_range));
+              dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, src.carrier_phase));
+              dst.insert(std::make_pair(items_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
             }
 
             packet_raw_latest.update_measurement(current, measurement);
@@ -1898,13 +1902,13 @@ class StreamProcessor
 
               raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
               if(trkstat & 0x01){
-                dst.insert(std::make_pair(raw_data_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
+                dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
               }
               if(trkstat & 0x02){
-                dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
+                dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
               }
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
-              dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, doppler));
+              dst.insert(std::make_pair(items_t::L1_DOPPLER, doppler));
             }
 
             packet_raw_latest.update_measurement(current, measurement);
@@ -1950,6 +1954,7 @@ class StreamProcessor
             if(ranges == 0){return;} // no measurement
 
             typedef G_Packet_Measurement raw_data_t;
+            typedef raw_data_t::items_t items_t;
             raw_data_t::measurement_t measurement;
 
             float_sylph_t last_time_of_transmission(0);
@@ -1986,7 +1991,7 @@ class StreamProcessor
               raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
 
               float_sylph_t time_of_transmission(1E-3 * le_char8_shift32(&buf[0]));
-              dst.insert(std::make_pair(raw_data_t::TIME_OF_TRANSMISSION, time_of_transmission));
+              dst.insert(std::make_pair(items_t::TIME_OF_TRANSMISSION, time_of_transmission));
               if(time_of_transmission > last_time_of_transmission){
                 last_time_of_transmission = time_of_transmission;
               }
@@ -1995,12 +2000,12 @@ class StreamProcessor
               if(qi > 6){
                 float_sylph_t carrier(le_char8_shift32(&buf[8]));
                 if(flag & 0x01){carrier += 0.5;}
-                dst.insert(std::make_pair(raw_data_t::L1_CARRIER_PHASE, -carrier));
+                dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, -carrier));
               }
 
               float_sylph_t doppler(
                   (float_sylph_t)le_char4_2_num<G_Observer_t::s32_t>(*(buf + 16)) / (1 << 12));
-              dst.insert(std::make_pair(raw_data_t::L1_DOPPLER, doppler));
+              dst.insert(std::make_pair(items_t::L1_DOPPLER, doppler));
             }
 
             if(ranges_valid == 0){return;}
@@ -2013,12 +2018,12 @@ class StreamProcessor
             for(raw_data_t::measurement_t::iterator it(measurement.begin());
                 it != measurement.end(); ++it){
               raw_data_t::measurement_t::mapped_type::const_iterator it2(
-                  it->second.find(raw_data_t::TIME_OF_TRANSMISSION));
+                  it->second.find(items_t::TIME_OF_TRANSMISSION));
               if(it2 == it->second.end()){continue;}
               float_sylph_t delta_t(est_time_of_reception - it2->second);
               if(delta_t > 100E-3){continue;} // Remove abnormal time lag (normally, from 67 to 86 ms);
               it->second.insert(std::make_pair(
-                  raw_data_t::L1_PSEUDORANGE,
+                  items_t::L1_PSEUDORANGE,
                   GPS_SpaceNode<float_sylph_t>::light_speed * delta_t));
             }
 

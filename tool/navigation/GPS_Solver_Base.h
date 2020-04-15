@@ -36,6 +36,7 @@
 #define __GPS_SOLVER_BASE_H__
 
 #include <vector>
+#include <map>
 #include <utility>
 
 #include "GPS.h"
@@ -61,6 +62,56 @@ struct GPS_Solver_Base {
   };
 
   typedef std::vector<std::pair<prn_t, float_t> > prn_obs_t;
+
+  static prn_obs_t difference(
+      const prn_obs_t &operand, const prn_obs_t &argument,
+      const FloatT &scaling = FloatT(1)) {
+    prn_obs_t res;
+    for(typename prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
+      for(typename prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
+        if(it->first != it2->first){continue;}
+        res.push_back(std::make_pair(it->first, (it->second - it2->second) * scaling));
+        break;
+      }
+    }
+    return res;
+  }
+
+  struct measurement_items_t {
+    enum {
+      L1_PSEUDORANGE,
+      L1_DOPPLER,
+      L1_CARRIER_PHASE,
+      L1_RANGE_RATE,
+      MEASUREMENT_ITEMS_PREDEFINED,
+    };
+  };
+  typedef std::map<prn_t, std::map<int, float_t> > measurement_t;
+
+  struct measurement_util_t {
+    static prn_obs_t gather(
+        const measurement_t &measurement,
+        const typename measurement_t::mapped_type::key_type &key,
+        const FloatT &scaling = FloatT(1)){
+      prn_obs_t res;
+      for(typename measurement_t::const_iterator it(measurement.begin());
+          it != measurement.end(); ++it){
+        typename measurement_t::mapped_type::const_iterator it2(it->second.find(key));
+        if(it2 == it->second.end()){continue;}
+        res.push_back(std::make_pair(it->first, it2->second * scaling));
+      }
+      return res;
+    }
+    static void merge(
+        measurement_t &measurement,
+        const prn_obs_t &new_item,
+        const typename measurement_t::mapped_type::key_type &key) {
+      for(typename prn_obs_t::const_iterator it(new_item.begin());
+          it != new_item.end(); ++it){
+        measurement[it->first].insert(std::make_pair(key, it->second));
+      }
+    }
+  };
 
   struct relative_property_t {
     float_t weight; ///< How useful this information is. only positive value activates the other values.

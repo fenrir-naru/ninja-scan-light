@@ -21,7 +21,6 @@
 
 #include <cmath>
 #include <iostream>
-#include <map>
 
 #include "INS.h"
 #include "Filtered_INS2.h"
@@ -302,44 +301,13 @@ struct GPS_RawData {
 
   unsigned int clock_index;
 
-  typedef typename solver_t::prn_t prn_t;
-  typedef typename solver_t::prn_obs_t prn_obs_t;
-
-  enum measurement_items_t {
-    L1_PSEUDORANGE,
-    L1_DOPPLER,
-    L1_CARRIER_PHASE,
-    L1_RANGE_RATE,
-    MEASUREMENT_ITEMS_PREDEFINED,
-  };
-  typedef std::map<prn_t, std::map<int, FloatT> > measurement_t;
+  typedef typename solver_t::measurement_t measurement_t;
   measurement_t measurement;
 
-  prn_obs_t measurement_of(
+  typename solver_t::prn_obs_t measurement_of(
       const typename measurement_t::mapped_type::key_type &key,
       const FloatT &scaling = FloatT(1)) const {
-    prn_obs_t res;
-    for(typename measurement_t::const_iterator it(measurement.begin());
-        it != measurement.end(); ++it){
-      typename measurement_t::mapped_type::const_iterator it2(it->second.find(key));
-      if(it2 == it->second.end()){continue;}
-      res.push_back(std::make_pair(it->first, it2->second * scaling));
-    }
-    return res;
-  }
-
-  static prn_obs_t difference(
-      const prn_obs_t &operand, const prn_obs_t &argument,
-      const FloatT &scaling = FloatT(1)) {
-    prn_obs_t res;
-    for(typename prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
-      for(typename prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
-        if(it->first != it2->first){continue;}
-        res.push_back(std::make_pair(it->first, (it->second - it2->second) * scaling));
-        break;
-      }
-    }
-    return res;
+    return solver_t::measurement_util_t::gather(measurement, key, scaling);
   }
 
   typedef typename solver_t::gps_time_t gps_time_t;
@@ -388,8 +356,8 @@ class INS_GPS2_Tightly : public BaseFINS{
     typedef INS_GPS2_Tightly<BaseFINS> self_t;
 
     typedef GPS_RawData<float_t> raw_data_t;
-    typedef GPS_SpaceNode<float_t> space_node_t;
     typedef typename raw_data_t::solver_t solver_t;
+    typedef typename solver_t::space_node_t space_node_t;
 
     using BaseFINS::CLOCKS_SUPPORTED;
     using BaseFINS::P_SIZE;
@@ -437,7 +405,7 @@ class INS_GPS2_Tightly : public BaseFINS{
      */
     int assign_z_H_R(
         const solver_t &solver,
-        const typename raw_data_t::prn_t &prn,
+        const typename solver_t::prn_t &prn,
         const receiver_state_t &x,
         const float_t &range, const float_t *rate,
         float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
@@ -563,24 +531,25 @@ class INS_GPS2_Tightly : public BaseFINS{
       // count up valid measurement, and make observation matrices
       int z_index(0);
 
-      typedef typename raw_data_t::measurement_t::const_iterator it_t;
-      typedef typename raw_data_t::measurement_t::mapped_type::const_iterator it2_t;
+      typedef typename solver_t::measurement_items_t items_t;
+      typedef typename solver_t::measurement_t::const_iterator it_t;
+      typedef typename solver_t::measurement_t::mapped_type::const_iterator it2_t;
 
       for(it_t it_sat(gps.measurement.begin()); it_sat != gps.measurement.end(); ++it_sat){
-        typename raw_data_t::prn_t prn(it_sat->first);
+        typename solver_t::prn_t prn(it_sat->first);
 
-        it2_t it2_range(it_sat->second.find(raw_data_t::L1_PSEUDORANGE));
+        it2_t it2_range(it_sat->second.find(items_t::L1_PSEUDORANGE));
         if(it2_range == it_sat->second.end()){ // No range information
           continue;
         }
 
         float_t rate;
         const float_t *rate_p(NULL);
-        it2_t it2_rate(it_sat->second.find(raw_data_t::L1_RANGE_RATE));
+        it2_t it2_rate(it_sat->second.find(items_t::L1_RANGE_RATE));
         if(it2_rate != it_sat->second.end()){
           rate_p = &(it2_rate->second);
         }else{ // fall back by using doppler
-          it2_t it2_doppler(it_sat->second.find(raw_data_t::L1_DOPPLER));
+          it2_t it2_doppler(it_sat->second.find(items_t::L1_DOPPLER));
           if(it2_doppler != it_sat->second.end()){
             // calculate range rate derived from doppler
             rate = -(it2_doppler->second) * space_node_t::L1_WaveLength();
