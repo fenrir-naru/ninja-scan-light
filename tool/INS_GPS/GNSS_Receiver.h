@@ -70,6 +70,8 @@ struct GNSS_Receiver {
         {}
   } solvers;
 
+  typedef gps_solver_t solver_t; // TODO for GNSS extension
+
   GNSS_Receiver() : data(), solvers(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
       : data(another.data), solvers(*this) {}
