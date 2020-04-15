@@ -616,17 +616,25 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
         const typename measurement_t::mapped_type &meas_prn(
             measurement.find(it->first.first)->second); // const version of measurement[PRN]
-        typename measurement_t::mapped_type::const_iterator it2(
-            meas_prn.find(measurement_items_t::L1_RANGE_RATE));
 
-        if(it2 == meas_prn.end()){continue;} // No rate entry
+        float_t rate;
+        typename measurement_t::mapped_type::const_iterator it2;
+        if((it2 = meas_prn.find(measurement_items_t::L1_RANGE_RATE))
+            != meas_prn.end()){
+          rate = it2->second;
+        }else if((it2 = meas_prn.find(measurement_items_t::L1_DOPPLER))
+            != meas_prn.end()){ // No rate entry, fall back to doppler
+          rate = it2->second * -space_node_t::L1_WaveLength(); // approaching is treated as positive doppler
+        }else{
+          continue;
+        }
 
         // Copy design matrix
         geomat2.copy_G_W_row(geomat, i_range, i_rate);
         static const xyz_t zero(0, 0, 0);
 
         // Update range rate by subtracting LOS satellite velocity with design matrix G
-        geomat2.delta_r(i_rate, 0) = it2->second
+        geomat2.delta_r(i_rate, 0) = rate
             + rate_relative_neg(
                 *(it->first.second), // satellite
                 it->second, // range
