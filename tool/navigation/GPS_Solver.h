@@ -125,6 +125,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     inheritate_type(pos_t);
 
     inheritate_type(prn_obs_t);
+    inheritate_type(measurement_t);
+    inheritate_type(measurement_items_t);
 
     typedef GPS_SinglePositioning_Options<float_t> options_t;
 
@@ -427,8 +429,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     /**
      * Calculate User position/velocity with hint
      *
-     * @param prn_range PRN, pseudo-range list
-     * @param prn_rate PRN, pseudo-range rate list
+     * @param measurement PRN, pseudo-range, pseudo-range rate information
      * @param receiver_time receiver time at measurement
      * @param user_position_init initial solution of user position in XYZ meters and LLH
      * @param receiver_error_init initial solution of receiver clock error in meters
@@ -438,8 +439,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
      * @see update_ephemeris(), register_ephemeris
      */
     user_pvt_t solve_user_pvt(
-        const prn_obs_t &prn_range,
-        const prn_obs_t &prn_rate,
+        const measurement_t &measurement,
         const gps_time_t &receiver_time,
         const pos_t &user_position_init,
         const float_t &receiver_error_init,
@@ -454,22 +454,25 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         return res;
       }
 
-      // 1. Check satellite availability for range. The results will be used as cache.
+      // 1. Check satellite availability for range. The results will be cached.
 
       typedef std::vector<std::pair<
           std::pair<typename prn_obs_t::value_type::first_type, const satellite_t *>,
           typename prn_obs_t::value_type::second_type> > sat_obs_t;
       sat_obs_t sat_range; // [[prn, *sat_GPS], range]
-      sat_range.reserve(prn_range.size());
+      sat_range.reserve(measurement.size());
 
-      for(typename prn_obs_t::const_iterator it(prn_range.begin());
-          it != prn_range.end();
+      for(typename measurement_t::const_iterator it(measurement.begin());
+          it != measurement.end();
           ++it){
 
+        typename measurement_t::mapped_type::const_iterator it2(
+            it->second.find(measurement_items_t::L1_PSEUDORANGE));
+        if(it2 == it->second.end()){continue;} // No range entry
+
         sat_range.push_back(typename sat_obs_t::value_type(
-            typename sat_obs_t::value_type::first_type(
-              it->first, is_available(it->first, receiver_time)),
-            it->second));
+            std::make_pair(it->first, is_available(it->first, receiver_time)),
+            it2->second));
       }
 
       // 2. Position calculation
@@ -602,57 +605,47 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         return res;
       }
 
-      // 3. Check consistency between range and rate for velocity calculation
-      typedef std::vector<std::pair<int, int> > index_table_t;
-      index_table_t index_table; // [index_of_range_used_for_position, index_of_rate]
-      index_table.reserve(sat_range_corrected.size());
+      // 3. Check consistency between range and rate for velocity calculation,
+      // then, assign design and weight matrices
+      geometric_matrices_t geomat2(sat_range_corrected.size());
+      int i_range(0), i_rate(0);
 
-      int i(0);
       for(typename sat_obs_t::const_iterator it(sat_range_corrected.begin());
           it != sat_range_corrected.end();
-          ++it, ++i){
-        int j(0);
-        for(typename prn_obs_t::const_iterator it2(prn_rate.begin());
-            it2 != prn_rate.end();
-            ++it2, ++j){
-          if(it->first.first == it2->first){
-            index_table.push_back(std::make_pair(i, j));
-            break;
-          }
-        }
+          ++it, ++i_range){
+
+        const typename measurement_t::mapped_type &meas_prn(
+            measurement.find(it->first.first)->second); // const version of measurement[PRN]
+        typename measurement_t::mapped_type::const_iterator it2(
+            meas_prn.find(measurement_items_t::L1_RANGE_RATE));
+
+        if(it2 == meas_prn.end()){continue;} // No rate entry
+
+        // Copy design matrix
+        geomat2.copy_G_W_row(geomat, i_range, i_rate);
+        static const xyz_t zero(0, 0, 0);
+
+        // Update range rate by subtracting LOS satellite velocity with design matrix G
+        geomat2.delta_r(i_rate, 0) = it2->second
+            + rate_relative_neg(
+                *(it->first.second), // satellite
+                it->second, // range
+                time_arrival,
+                zero, // user velocity to be estimated is temporary zero
+                geomat2.G(i_rate, 0), geomat2.G(i_rate, 1), geomat2.G(i_rate, 2)); // LOS
+
+        ++i_rate;
       }
 
-      if(index_table.size() < 4){
+      if(i_rate < 4){
         res.error_code = user_pvt_t::ERROR_VELOCITY_INSUFFICIENT_SATELLITES;
         return res;
       }
 
       // 4. Calculate velocity
-      i = 0;
-      geometric_matrices_t geomat2(index_table.size());
-      for(typename index_table_t::const_iterator it(index_table.begin());
-          it != index_table.end();
-          ++it, ++i){
-
-        int i_range(it->first), i_rate(it->second);
-
-        // copy design matrix
-        geomat2.copy_G_W_row(geomat, i_range, i);
-        static const xyz_t zero(0, 0, 0);
-
-        // Update range rate by subtracting LOS satellite velocity with design matrix G
-        geomat2.delta_r(i, 0) = prn_rate[i_rate].second
-            + rate_relative_neg(
-                *sat_range_corrected[i_range].first.second, // satellite
-                sat_range_corrected[i_range].second, // range
-                time_arrival,
-                zero, // user velocity to be estimated is temporary zero
-                geomat2.G(i, 0), geomat2.G(i, 1), geomat2.G(i, 2)); // LOS
-      }
-
       try{
         // Least square
-        matrix_t sol(geomat2.least_square());
+        matrix_t sol(geomat2.least_square(i_rate));
 
         xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
         res.user_velocity_enu = enu_t::relative_rel(
