@@ -1893,12 +1893,15 @@ class StreamProcessor
               raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
               if(trkstat & 0x01){
                 dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
+                dst.insert(std::make_pair(items_t::L1_PSEUDORANGE_SIGMA, 1E-2 * (1 << (0xF & observer[6 + 43 + (32 * i)]))));
               }
               if(trkstat & 0x02){
                 dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
+                dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE_SIGMA, 4E-3 * (1 << (0xF & observer[6 + 44 + (32 * i)]))));
               }
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
               dst.insert(std::make_pair(items_t::L1_DOPPLER, doppler));
+              dst.insert(std::make_pair(items_t::L1_DOPPLER_SIGMA, 2E-3 * (1 << (0xF & observer[6 + 45 + (32 * i)]))));
             }
 
             packet_raw_latest.update_measurement(current, measurement);

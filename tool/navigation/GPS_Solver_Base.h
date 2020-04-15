@@ -83,6 +83,10 @@ struct GPS_Solver_Base {
       L1_DOPPLER,
       L1_CARRIER_PHASE,
       L1_RANGE_RATE,
+      L1_PSEUDORANGE_SIGMA, // standard deviation(sigma)
+      L1_DOPPLER_SIGMA,
+      L1_CARRIER_PHASE_SIGMA,
+      L1_RANGE_RATE_SIGMA,
       MEASUREMENT_ITEMS_PREDEFINED,
     };
   };
