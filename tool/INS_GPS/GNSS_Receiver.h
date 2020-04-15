@@ -70,6 +70,8 @@ struct GNSS_Receiver {
         {}
   } solvers;
 
+  typedef gps_solver_t solver_t; // TODO for GNSS extension
+
   GNSS_Receiver() : data(), solvers(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
       : data(another.data), solvers(*this) {}
@@ -223,6 +225,7 @@ struct GNSS_Receiver {
 
     struct print_t {
       typedef typename super_t::measurement_t msr_t;
+      typedef typename gps_solver_t::measurement_items_t items_t;
       const msr_t &msr;
       const int &prn;
       friend std::ostream &operator<<(std::ostream &out, const print_t &target){
@@ -230,7 +233,7 @@ struct GNSS_Receiver {
         if(it == target.msr.end()){return out << ',';}
         { // range
           typename msr_t::mapped_type::const_iterator it2(
-              it->second.find(super_t::L1_PSEUDORANGE));
+              it->second.find(items_t::L1_PSEUDORANGE));
           if(it2 != it->second.end()){
             out << it2->second;
           }
@@ -238,10 +241,10 @@ struct GNSS_Receiver {
         out << ',';
         { // rate
           typename msr_t::mapped_type::const_iterator it2(
-              it->second.find(super_t::L1_RANGE_RATE));
+              it->second.find(items_t::L1_RANGE_RATE));
           if(it2 != it->second.end()){
             out << it2->second;
-          }else if((it2 = it->second.find(super_t::L1_DOPPLER)) != it->second.end()){
+          }else if((it2 = it->second.find(items_t::L1_DOPPLER)) != it->second.end()){
             // fallback to using doppler
             out << it2->second * -gps_space_node_t::L1_WaveLength();
           }

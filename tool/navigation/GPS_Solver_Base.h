@@ -36,6 +36,7 @@
 #define __GPS_SOLVER_BASE_H__
 
 #include <vector>
+#include <map>
 #include <utility>
 
 #include "GPS.h"
@@ -61,6 +62,56 @@ struct GPS_Solver_Base {
   };
 
   typedef std::vector<std::pair<prn_t, float_t> > prn_obs_t;
+
+  static prn_obs_t difference(
+      const prn_obs_t &operand, const prn_obs_t &argument,
+      const FloatT &scaling = FloatT(1)) {
+    prn_obs_t res;
+    for(typename prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
+      for(typename prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
+        if(it->first != it2->first){continue;}
+        res.push_back(std::make_pair(it->first, (it->second - it2->second) * scaling));
+        break;
+      }
+    }
+    return res;
+  }
+
+  struct measurement_items_t {
+    enum {
+      L1_PSEUDORANGE,
+      L1_DOPPLER,
+      L1_CARRIER_PHASE,
+      L1_RANGE_RATE,
+      MEASUREMENT_ITEMS_PREDEFINED,
+    };
+  };
+  typedef std::map<prn_t, std::map<int, float_t> > measurement_t;
+
+  struct measurement_util_t {
+    static prn_obs_t gather(
+        const measurement_t &measurement,
+        const typename measurement_t::mapped_type::key_type &key,
+        const FloatT &scaling = FloatT(1)){
+      prn_obs_t res;
+      for(typename measurement_t::const_iterator it(measurement.begin());
+          it != measurement.end(); ++it){
+        typename measurement_t::mapped_type::const_iterator it2(it->second.find(key));
+        if(it2 == it->second.end()){continue;}
+        res.push_back(std::make_pair(it->first, it2->second * scaling));
+      }
+      return res;
+    }
+    static void merge(
+        measurement_t &measurement,
+        const prn_obs_t &new_item,
+        const typename measurement_t::mapped_type::key_type &key) {
+      for(typename prn_obs_t::const_iterator it(new_item.begin());
+          it != new_item.end(); ++it){
+        measurement[it->first].insert(std::make_pair(key, it->second));
+      }
+    }
+  };
 
   struct relative_property_t {
     float_t weight; ///< How useful this information is. only positive value activates the other values.
@@ -147,6 +198,65 @@ struct GPS_Solver_Base {
   /**
    * Calculate User position/velocity with hint
    *
+   * @param measurement PRN, pseudo-range, and pseudo-range rate information
+   * @param receiver_time receiver time at measurement
+   * @param user_position_init initial solution of user position in XYZ meters and LLH
+   * @param receiver_error_init initial solution of receiver clock error in meters
+   * @param good_init if true, initial position and clock error are goodly guessed.
+   * @param with_velocity if true, perform velocity estimation.
+   * @return calculation results and matrices used for calculation
+   * @see update_ephemeris(), register_ephemeris
+   */
+  virtual user_pvt_t solve_user_pvt(
+      const measurement_t &measurement,
+      const gps_time_t &receiver_time,
+      const pos_t &user_position_init,
+      const float_t &receiver_error_init,
+      const bool &good_init = true,
+      const bool &with_velocity = true) const = 0;
+
+  /**
+   * Calculate User position/velocity with hint
+   *
+   * @param measurement PRN, pseudo-range, and pseudo-range rate information
+   * @param receiver_time receiver time at measurement
+   * @param user_position_init_xyz initial solution of user position in meters
+   * @param receiver_error_init initial solution of receiver clock error in meters
+   * @param good_init if true, initial position and clock error are goodly guessed.
+   * @param with_velocity if true, perform velocity estimation.
+   * @return calculation results and matrices used for calculation
+   * @see update_ephemeris(), register_ephemeris
+   */
+  user_pvt_t solve_user_pvt(
+      const measurement_t &measurement,
+      const gps_time_t &receiver_time,
+      const xyz_t &user_position_init_xyz,
+      const float_t &receiver_error_init,
+      const bool &good_init = true,
+      const bool &with_velocity = true) const {
+    pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
+    return solve_user_pvt(
+        measurement, receiver_time,
+        user_position_init, receiver_error_init,
+        good_init, with_velocity);
+  }
+
+  /**
+   * Calculate User position/velocity without hint
+   *
+   * @param measurement PRN, pseudo-range, and pseudo-range rate information
+   * @param receiver_time receiver time at measurement
+   * @return calculation results and matrices used for calculation
+   */
+  user_pvt_t solve_user_pvt(
+      const measurement_t &measurement,
+      const gps_time_t &receiver_time) const {
+    return solve_user_pvt(measurement, receiver_time, xyz_t(), 0, false);
+  }
+
+  /**
+   * Calculate User position/velocity with hint
+   *
    * @param prn_range PRN, pseudo-range list
    * @param prn_rate PRN, pseudo-range rate list
    * @param receiver_time receiver time at measurement
@@ -164,7 +274,15 @@ struct GPS_Solver_Base {
       const pos_t &user_position_init,
       const float_t &receiver_error_init,
       const bool &good_init = true,
-      const bool &with_velocity = true) const = 0;
+      const bool &with_velocity = true) const {
+    measurement_t measurement;
+    measurement_util_t::merge(measurement, prn_range, measurement_items_t::L1_PSEUDORANGE);
+    measurement_util_t::merge(measurement, prn_rate, measurement_items_t::L1_RANGE_RATE);
+    return solve_user_pvt(
+        measurement, receiver_time,
+        user_position_init, receiver_error_init,
+        good_init, with_velocity);
+  }
 
   /**
    * Calculate User position/velocity with hint
