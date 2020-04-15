@@ -149,9 +149,10 @@ struct GNSS_Receiver {
     return false;
   }
 
-  struct pvt_printer_t : public GPS_Solver_Base<FloatT>::user_pvt_t {
-    typedef typename GPS_Solver_Base<FloatT>::user_pvt_t super_t;
-    pvt_printer_t(const super_t &pvt) : super_t(pvt) {}
+  struct pvt_printer_t {
+    typedef typename GPS_Solver_Base<FloatT>::user_pvt_t pvt_t;
+    const pvt_t &pvt;
+    pvt_printer_t(const pvt_t &_pvt) : pvt(_pvt) {}
     static struct label_t {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         return out << "week"
@@ -173,35 +174,35 @@ struct GNSS_Receiver {
       }
     } label;
 
-    friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &pvt){
-      out << pvt.receiver_time.week
-          << ',' << pvt.receiver_time.seconds;
-      if(pvt.position_solved()){
-        out << ',' << pvt.receiver_error
-            << ',' << rad2deg(pvt.user_position.llh.longitude())
-            << ',' << rad2deg(pvt.user_position.llh.latitude())
-            << ',' << pvt.user_position.llh.height()
-            << ',' << pvt.gdop
-            << ',' << pvt.pdop
-            << ',' << pvt.hdop
-            << ',' << pvt.vdop
-            << ',' << pvt.tdop;
+    friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &p){
+      out << p.pvt.receiver_time.week
+          << ',' << p.pvt.receiver_time.seconds;
+      if(p.pvt.position_solved()){
+        out << ',' << p.pvt.receiver_error
+            << ',' << rad2deg(p.pvt.user_position.llh.longitude())
+            << ',' << rad2deg(p.pvt.user_position.llh.latitude())
+            << ',' << p.pvt.user_position.llh.height()
+            << ',' << p.pvt.gdop
+            << ',' << p.pvt.pdop
+            << ',' << p.pvt.hdop
+            << ',' << p.pvt.vdop
+            << ',' << p.pvt.tdop;
       }else{
         out << ",,,,,,,,,";
       }
-      if(pvt.velocity_solved()){
-        out << ',' << pvt.user_velocity_enu.north()
-            << ',' << pvt.user_velocity_enu.east()
-            << ',' << -pvt.user_velocity_enu.up();
+      if(p.pvt.velocity_solved()){
+        out << ',' << p.pvt.user_velocity_enu.north()
+            << ',' << p.pvt.user_velocity_enu.east()
+            << ',' << -p.pvt.user_velocity_enu.up();
       }else{
         out << ",,,";
       }
-      if(pvt.position_solved()){
-        out << ',' << pvt.used_satellites
-            << ',' << std::bitset<8>((pvt.used_satellite_mask >> 24) & 0xFF)
-              << '_' << std::bitset<8>((pvt.used_satellite_mask >> 16) & 0xFF)
-              << '_' << std::bitset<8>((pvt.used_satellite_mask >> 8) & 0xFF)
-              << '_' << std::bitset<8>(pvt.used_satellite_mask & 0xFF);
+      if(p.pvt.position_solved()){
+        out << ',' << p.pvt.used_satellites
+            << ',' << std::bitset<8>((p.pvt.used_satellite_mask >> 24) & 0xFF)
+              << '_' << std::bitset<8>((p.pvt.used_satellite_mask >> 16) & 0xFF)
+              << '_' << std::bitset<8>((p.pvt.used_satellite_mask >> 8) & 0xFF)
+              << '_' << std::bitset<8>(p.pvt.used_satellite_mask & 0xFF);
       }else{
         out << ",,";
       }
@@ -209,9 +210,10 @@ struct GNSS_Receiver {
     }
   };
 
-  struct raw_data_printer_t : public GPS_RawData<FloatT> {
-    typedef GPS_RawData<FloatT> super_t;
-    raw_data_printer_t(const super_t &raw) : super_t(raw) {}
+  struct raw_data_printer_t {
+    typedef GPS_RawData<FloatT> raw_t;
+    const raw_t &raw;
+    raw_data_printer_t(const raw_t &_raw) : raw(_raw) {}
     static struct label_t {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         out << "clock_index";
@@ -224,7 +226,7 @@ struct GNSS_Receiver {
     } label;
 
     struct print_t {
-      typedef typename super_t::measurement_t msr_t;
+      typedef typename raw_t::measurement_t msr_t;
       typedef typename gps_solver_t::measurement_items_t items_t;
       const msr_t &msr;
       const int &prn;
@@ -253,13 +255,13 @@ struct GNSS_Receiver {
       }
     };
     print_t operator[](const int &prn) const {
-      print_t res = {this->measurement, prn};
+      print_t res = {raw.measurement, prn};
       return res;
     }
-    friend std::ostream &operator<<(std::ostream &out, const raw_data_printer_t &raw){
-      out << raw.clock_index;
+    friend std::ostream &operator<<(std::ostream &out, const raw_data_printer_t &p){
+      out << p.raw.clock_index;
       for(int i(1); i <= 32; ++i){
-        out << ',' << raw[i];
+        out << ',' << p[i];
       }
       return out;
     }
