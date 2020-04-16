@@ -466,13 +466,12 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           it != measurement.end();
           ++it){
 
-        typename measurement_t::mapped_type::const_iterator it2(
-            it->second.find(measurement_items_t::L1_PSEUDORANGE));
-        if(it2 == it->second.end()){continue;} // No range entry
+        float_t range;
+        if(!this->range(it->second, range)){continue;} // No range entry
 
         sat_range.push_back(typename sat_obs_t::value_type(
             std::make_pair(it->first, is_available(it->first, receiver_time)),
-            it2->second));
+            range));
       }
 
       // 2. Position calculation
@@ -614,20 +613,10 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           it != sat_range_corrected.end();
           ++it, ++i_range){
 
-        const typename measurement_t::mapped_type &meas_prn(
-            measurement.find(it->first.first)->second); // const version of measurement[PRN]
-
         float_t rate;
-        typename measurement_t::mapped_type::const_iterator it2;
-        if((it2 = meas_prn.find(measurement_items_t::L1_RANGE_RATE))
-            != meas_prn.end()){
-          rate = it2->second;
-        }else if((it2 = meas_prn.find(measurement_items_t::L1_DOPPLER))
-            != meas_prn.end()){ // No rate entry, fall back to doppler
-          rate = it2->second * -space_node_t::L1_WaveLength(); // approaching is treated as positive doppler
-        }else{
-          continue;
-        }
+        if(!this->rate(
+            measurement.find(it->first.first)->second, // const version of measurement[PRN]
+            rate)){continue;}
 
         // Copy design matrix
         geomat2.copy_G_W_row(geomat, i_range, i_rate);

@@ -117,6 +117,61 @@ struct GPS_Solver_Base {
     }
   };
 
+  /**
+   * Find value corresponding to key from key-value map
+   * of measurement_t::mapped_type
+   * @param values key-value map
+   * @param key key
+   * @param buf buffer into which found value is stored
+   * @return (float_t *) When value is found, pointer of buf will be returned.
+   * Otherwise, NULL is returned.
+   */
+  static const float_t *find_value(
+      const typename measurement_t::mapped_type &values,
+      const typename measurement_t::mapped_type::key_type &key,
+      float_t &buf) {
+    typename measurement_t::mapped_type::const_iterator it;
+    if((it = values.find(key)) != values.end()){
+      return &(buf = it->second);
+    }
+    return NULL;
+  }
+
+  // TODO These range and rate functions will be overridden in subclass to support multi-frequency
+  virtual const float_t *range(
+      const typename measurement_t::mapped_type &values, float_t &buf) const {
+    return find_value(values, measurement_items_t::L1_PSEUDORANGE, buf);
+  }
+
+  virtual const float_t *range_sigma(
+      const typename measurement_t::mapped_type &values, float_t &buf) const {
+    return find_value(values, measurement_items_t::L1_PSEUDORANGE_SIGMA, buf);
+  }
+
+  virtual const float_t *rate(
+      const typename measurement_t::mapped_type &values, float_t &buf) const {
+    const float_t *res;
+    if(res = find_value(values, measurement_items_t::L1_RANGE_RATE, buf)){
+
+    }else if(res = find_value(values, measurement_items_t::L1_DOPPLER, buf)){
+      // Fall back to doppler
+      buf *= -space_node_t::L1_WaveLength();
+    }
+    return res;
+  }
+
+  virtual const float_t *rate_sigma(
+      const typename measurement_t::mapped_type &values, float_t &buf) const {
+    const float_t *res;
+    if(res = find_value(values, measurement_items_t::L1_RANGE_RATE_SIGMA, buf)){
+
+    }else if(res = find_value(values, measurement_items_t::L1_DOPPLER_SIGMA, buf)){
+      // Fall back to doppler
+      buf *= space_node_t::L1_WaveLength();
+    }
+    return res;
+  }
+
   struct relative_property_t {
     float_t weight; ///< How useful this information is. only positive value activates the other values.
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error

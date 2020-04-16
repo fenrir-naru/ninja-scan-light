@@ -538,53 +538,26 @@ class INS_GPS2_Tightly : public BaseFINS{
       for(it_t it_sat(gps.measurement.begin()); it_sat != gps.measurement.end(); ++it_sat){
         typename solver_t::prn_t prn(it_sat->first);
 
-        it2_t it2_range(it_sat->second.find(items_t::L1_PSEUDORANGE));
-        if(it2_range == it_sat->second.end()){ // No range information
-          continue;
-        }
-
-        float_t rate, rate_sigma;
-        const float_t *rate_p(NULL), *rate_sigma_p(NULL);
-        it2_t it2_rate(it_sat->second.find(items_t::L1_RANGE_RATE));
-        if(it2_rate != it_sat->second.end()){
-          rate_p = &(it2_rate->second);
-          // additionally check deviation
-          it2_t it2_rate_sigma(it_sat->second.find(items_t::L1_RANGE_RATE_SIGMA));
-          if(it2_rate_sigma != it_sat->second.end()){
-            rate_sigma_p = &(it2_rate_sigma->second);
-          }
-        }else{ // fall back by using doppler
-          it2_t it2_doppler(it_sat->second.find(items_t::L1_DOPPLER));
-          if(it2_doppler != it_sat->second.end()){
-            // calculate range rate derived from doppler
-            rate = -(it2_doppler->second) * space_node_t::L1_WaveLength();
-            rate_p = &rate;
-            // additionally check deviation
-            it2_t it2_doppler_sigma(it_sat->second.find(items_t::L1_DOPPLER_SIGMA));
-            if(it2_doppler_sigma != it_sat->second.end()){
-              rate_sigma = it2_doppler_sigma->second * space_node_t::L1_WaveLength();
-              rate_sigma_p = &rate_sigma;
-            }
-          }
-        }
+        float_t range, rate;
+        if(!gps.solver->range(it_sat->second, range)){continue;} // No range information
 
         /* Intentional exclusion, in which zero is returned,
          * may occur during residual calculation due to elevation mask etc.
          */
         int z_index_added(assign_z_H_R(*gps.solver,
             prn, x,
-            it2_range->second, rate_p,
+            range, gps.solver->rate(it_sat->second, rate),
             &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]));
 
         if(z_index_added > 0){ // effective range
-          it2_t it2_range_sigma(it_sat->second.find(items_t::L1_PSEUDORANGE_SIGMA));
-          if(it2_range_sigma != it_sat->second.end()){
+          float_t sigma;
+          if(gps.solver->range_sigma(it_sat->second, sigma)){
             // range variance is overwritten with receiver's value
-            buf.R_diag[z_index] = std::pow(it2_range_sigma->second, 2);
+            buf.R_diag[z_index] = std::pow(sigma, 2);
           }
-          if((z_index_added > 1) && rate_sigma_p){ // effective rate
+          if((z_index_added > 1) && gps.solver->rate_sigma(it_sat->second, sigma)){ // effective rate
             // rate variance is overwritten with receiver's value
-            buf.R_diag[z_index + 1] = std::pow(*rate_sigma_p, 2);
+            buf.R_diag[z_index + 1] = std::pow(sigma, 2);
           }
         }
 
