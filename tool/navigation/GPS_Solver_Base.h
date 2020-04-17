@@ -137,9 +137,30 @@ struct GPS_Solver_Base {
     return NULL;
   }
 
+  enum range_error_t {
+    RANGE_ERROR_RECEIVER_CLOCK = 0x01,
+    RANGE_ERROR_SATELLITE_CLOCK = 0x02,
+    RANGE_ERROR_IONOSPHERIC = 0x04,
+    RANGE_ERROR_TROPOSPHERIC = 0x08,
+  };
+
   // TODO These range and rate functions will be overridden in subclass to support multi-frequency
+  /**
+   * Extract range information from measurement per satellite
+   * @param values measurement[prn]
+   * @param buf buffer into which range is stored
+   * @param errors optional argument in which error components of range will be returned
+   * @return If valid range information is found, the pointer of buf will be returned; otherwise NULL
+   */
   virtual const float_t *range(
-      const typename measurement_t::mapped_type &values, float_t &buf) const {
+      const typename measurement_t::mapped_type &values, float_t &buf,
+      int *errors = NULL) const {
+    if(errors){
+      *errors = (RANGE_ERROR_RECEIVER_CLOCK
+          | RANGE_ERROR_SATELLITE_CLOCK
+          | RANGE_ERROR_IONOSPHERIC
+          | RANGE_ERROR_TROPOSPHERIC);
+    }
     return find_value(values, measurement_items_t::L1_PSEUDORANGE, buf);
   }
 
@@ -184,18 +205,20 @@ struct GPS_Solver_Base {
    * Calculate relative range and rate information to a satellite
    *
    * @param prn satellite number
-   * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
+   * @param measurement measurement (per satellite) containing pseudo range
+   * @param receiver_error (temporal solution of) receiver clock error in meter
    * @param time_arrival time when signal arrive at receiver
    * @param usr_pos (temporal solution of) user position
    * @param usr_vel (temporal solution of) user velocity
    * @return (relative_property_t) relative information
    */
   virtual relative_property_t relative_property(
-          const prn_t &prn,
-          const float_t &range,
-          const gps_time_t &time_arrival,
-          const pos_t &usr_pos,
-          const xyz_t &usr_vel) const = 0;
+      const prn_t &prn,
+      const typename measurement_t::mapped_type &measurement,
+      const float_t &receiver_error,
+      const gps_time_t &time_arrival,
+      const pos_t &usr_pos,
+      const xyz_t &usr_vel) const = 0;
 
   struct user_pvt_t {
     enum {

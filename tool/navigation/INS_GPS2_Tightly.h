@@ -395,9 +395,8 @@ class INS_GPS2_Tightly : public BaseFINS{
      *
      * @param solver residual calculator
      * @param prn GNSS satellite number used as target
+     * @param measurement Measurement per satellite containg pseudorange and range rate
      * @param x receiver state represented by current position and clock properties
-     * @param range Measured range including all error including user and satellite clock errors
-     * @param rate pointer of measured rate, if unavailable, NULL can be specified
      * @param z (output) pointer to be stored with residual
      * @param H (output) pointer to be stored with correlation of state
      * @param R_diag (output) pointer to be stored with estimated residual variance
@@ -406,18 +405,21 @@ class INS_GPS2_Tightly : public BaseFINS{
     int assign_z_H_R(
         const solver_t &solver,
         const typename solver_t::prn_t &prn,
+        const typename solver_t::measurement_t::mapped_type &measurement,
         const receiver_state_t &x,
-        const float_t &range, const float_t *rate,
         float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
 
       typename solver_t::relative_property_t prop(
-          solver.relative_property(prn, range - x.clock_error, x.t, x.pos, x.vel));
+          solver.relative_property(prn, measurement, x.clock_error, x.t, x.pos, x.vel));
 
       if(prop.weight <= 0){return 0;} // Intentional exclusion
 
       z[0] = prop.range_residual;
 
-      for(int i(0); i < (rate ? 2 : 1); ++i){ // zero clear
+      float_t rate;
+      const float_t *rate_p(solver.rate(measurement, rate));
+
+      for(int i(0); i < (rate_p ? 2 : 1); ++i){ // zero clear
         for(int j(0); j < P_SIZE; ++j){
           H[i][j] = 0;
         }
@@ -463,13 +465,19 @@ class INS_GPS2_Tightly : public BaseFINS{
         H[0][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
       }
 
-      if(prop.weight < 1E-1){prop.weight = 1E-1;}
-      R_diag[0] = std::pow(1.0 / prop.weight, 2); // TODO range error variance [m]
+      float_t sigma;
+      if(solver.range_sigma(measurement, sigma)){
+        // receiver's range variance is applied if exist
+        R_diag[0] = std::pow(sigma, 2);
+      }else{
+        if(prop.weight < 1E-1){prop.weight = 1E-1;}
+        R_diag[0] = std::pow(1.0 / prop.weight, 2); // TODO range error variance [m]
+      }
 
-      if(!rate){return 1;}
+      if(!rate_p){return 1;}
 
       // rate residual
-      z[1] = *rate - BaseFINS::m_clock_error_rate[x.clock_index]
+      z[1] = rate - BaseFINS::m_clock_error_rate[x.clock_index]
           + prop.rate_relative_neg;
 
       { // setup H matrix
@@ -491,7 +499,12 @@ class INS_GPS2_Tightly : public BaseFINS{
         H[1][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
       }
 
-      R_diag[1] = R_diag[0] * 1E-3; // TODO rate error variance
+      if(solver.rate_sigma(measurement, sigma)){
+        // receiver's rate variance is applied if exist
+        R_diag[1] = std::pow(sigma, 2);
+      }else{
+        R_diag[1] = R_diag[0] * 1E-3; // TODO rate error variance
+      }
 
       return 2;
     }
@@ -531,37 +544,16 @@ class INS_GPS2_Tightly : public BaseFINS{
       // count up valid measurement, and make observation matrices
       int z_index(0);
 
-      typedef typename solver_t::measurement_items_t items_t;
-      typedef typename solver_t::measurement_t::const_iterator it_t;
-      typedef typename solver_t::measurement_t::mapped_type::const_iterator it2_t;
-
-      for(it_t it_sat(gps.measurement.begin()); it_sat != gps.measurement.end(); ++it_sat){
-        typename solver_t::prn_t prn(it_sat->first);
-
-        float_t range, rate;
-        if(!gps.solver->range(it_sat->second, range)){continue;} // No range information
+      for(typename solver_t::measurement_t::const_iterator it(gps.measurement.begin());
+          it != gps.measurement.end(); ++it){
 
         /* Intentional exclusion, in which zero is returned,
-         * may occur during residual calculation due to elevation mask etc.
+         * may occur during residual calculation due to no range entry,
+         * elevation mask, ... etc.
          */
-        int z_index_added(assign_z_H_R(*gps.solver,
-            prn, x,
-            range, gps.solver->rate(it_sat->second, rate),
-            &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]));
-
-        if(z_index_added > 0){ // effective range
-          float_t sigma;
-          if(gps.solver->range_sigma(it_sat->second, sigma)){
-            // range variance is overwritten with receiver's value
-            buf.R_diag[z_index] = std::pow(sigma, 2);
-          }
-          if((z_index_added > 1) && gps.solver->rate_sigma(it_sat->second, sigma)){ // effective rate
-            // rate variance is overwritten with receiver's value
-            buf.R_diag[z_index + 1] = std::pow(sigma, 2);
-          }
-        }
-
-        z_index += z_index_added;
+        z_index += assign_z_H_R(*gps.solver,
+            it->first, it->second, x,
+            &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);
       }
 
       if(z_index <= 0){return CorrectInfo<float_t>::no_info();}
