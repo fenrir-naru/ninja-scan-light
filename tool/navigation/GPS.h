@@ -455,6 +455,13 @@ class GPS_SpaceNode {
     }
     static const float_t SC2RAD;
     
+    static const float_t L2_Frequency;
+    static const float_t &L2_WaveLength() {
+      static const float_t res(light_speed / L2_Frequency);
+      return res;
+    }
+    static const float_t gamma_L1_L2;
+
   protected:
     static float_t rad2sc(const float_t &rad) {return rad / M_PI;}
     static float_t sc2rad(const float_t &sc)  {return sc * M_PI;}
@@ -1853,6 +1860,12 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::L1_Frequenc
 #define GPS_SC2RAD 3.1415926535898
 template <class FloatT>
 const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SC2RAD = GPS_SC2RAD;
+
+template <class FloatT>
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::L2_Frequency = 1227.6E6;
+
+template <class FloatT>
+const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::gamma_L1_L2 = (FloatT)(77 * 77) / (60 * 60);
 
 #define POWER_2(n) \
 (((n) >= 0) \
