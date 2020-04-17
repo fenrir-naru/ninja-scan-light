@@ -687,6 +687,72 @@ class G_Packet_Observer : public Packet_Observer<>{
       }
     };
 
+    struct gnss_signal_t {
+      enum {
+        UNKNOWN = -1,
+        GPS_L1CA,
+        GPS_L2CL,
+        GPS_L2CM,
+        SBAS_L1CA = GPS_L1CA,
+        QZSS_L1CA = GPS_L1CA,
+        QZSS_L2CL = GPS_L2CL,
+        QZSS_L2CM = GPS_L2CM,
+        Galileo_E1C,
+        Galileo_E1B,
+        Galileo_E5bI,
+        Galileo_E5bQ,
+        BeiDou_B1I_D1,
+        BeiDou_B1I_D2,
+        BeiDou_B2I_D1,
+        BeiDou_B2I_D2,
+        GLONASS_L1_OF,
+        GLONASS_L2_OF,
+        GNSS_SIGNAL_TYPES,
+      };
+      static int decode(const unsigned int &gnss, const unsigned int &signal = 0){
+        switch(gnss){
+          case gnss_svid_t::GPS:
+            switch(signal){
+              case 0: return GPS_L1CA;
+              case 3: return GPS_L2CL;
+              case 4: return GPS_L2CM;
+            }
+            break;
+          case gnss_svid_t::SBAS:
+            return SBAS_L1CA;
+          case gnss_svid_t::Galileo:
+            switch(signal){
+              case 0: return Galileo_E1C;
+              case 1: return Galileo_E1B;
+              case 5: return Galileo_E5bI;
+              case 6: return Galileo_E5bQ;
+            }
+            break;
+          case gnss_svid_t::BeiDou:
+            switch(signal){
+              case 0: return BeiDou_B1I_D1;
+              case 1: return BeiDou_B1I_D2;
+              case 2: return BeiDou_B2I_D1;
+              case 3: return BeiDou_B2I_D2;
+            }
+            break;
+          case gnss_svid_t::QZSS:
+            switch(signal){
+              case 0: return QZSS_L1CA;
+              case 4: return QZSS_L2CM;
+              case 5: return QZSS_L2CL;
+            }
+            break;
+          case gnss_svid_t::GLONASS:
+            switch(signal){
+              case 0: return GLONASS_L1_OF;
+              case 2: return GLONASS_L2_OF;
+            }
+            break;
+        }
+        return UNKNOWN;
+      }
+    };
 
     struct raw_measurement_t {
       FloatType carrier_phase, pseudo_range, doppler;
