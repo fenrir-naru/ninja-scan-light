@@ -36,6 +36,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/GPS_Solver.h"
+#include "navigation/GPS_Solver_MultiFrequency.h"
 #include "navigation/RINEX.h"
 
 #include "navigation/INS_GPS2_Tightly.h"
@@ -48,7 +49,7 @@
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
-  typedef GPS_SinglePositioning<FloatT> gps_solver_t;
+  typedef GPS_SinglePositioning_MultiFrequency<FloatT> gps_solver_t;
 
   struct data_t {
     struct {
@@ -137,6 +138,10 @@ struct GNSS_Receiver {
       case decorder_t::gnss_signal_t::GPS_L1CA:
         // GPS L1 C/A (SBAS and QZSS are included because of same signal)
         return &(solver_t::L1CA);
+      case decorder_t::gnss_signal_t::GPS_L2CM:
+        return &(solver_t::L2CM);
+      case decorder_t::gnss_signal_t::GPS_L2CL:
+        return &(solver_t::L2CL);
     }
     return NULL; // TODO support other GNSS, signals
   }
