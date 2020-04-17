@@ -137,9 +137,30 @@ struct GPS_Solver_Base {
     return NULL;
   }
 
+  enum range_error_t {
+    RANGE_ERROR_RECEIVER_CLOCK = 0x01,
+    RANGE_ERROR_SATELLITE_CLOCK = 0x02,
+    RANGE_ERROR_IONOSPHERIC = 0x04,
+    RANGE_ERROR_TROPOSPHERIC = 0x08,
+  };
+
   // TODO These range and rate functions will be overridden in subclass to support multi-frequency
+  /**
+   * Extract range information from measurement per satellite
+   * @param values measurement[prn]
+   * @param buf buffer into which range is stored
+   * @param errors optional argument in which error components of range will be returned
+   * @return If valid range information is found, the pointer of buf will be returned; otherwise NULL
+   */
   virtual const float_t *range(
-      const typename measurement_t::mapped_type &values, float_t &buf) const {
+      const typename measurement_t::mapped_type &values, float_t &buf,
+      int *errors = NULL) const {
+    if(errors){
+      *errors = (RANGE_ERROR_RECEIVER_CLOCK
+          | RANGE_ERROR_SATELLITE_CLOCK
+          | RANGE_ERROR_IONOSPHERIC
+          | RANGE_ERROR_TROPOSPHERIC);
+    }
     return find_value(values, measurement_items_t::L1_PSEUDORANGE, buf);
   }
 
