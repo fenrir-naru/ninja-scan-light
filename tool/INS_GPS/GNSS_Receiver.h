@@ -41,6 +41,7 @@
 #include "navigation/INS_GPS2_Tightly.h"
 
 #include "INS_GPS/GNSS_Data.h"
+#include "SylphideProcessor.h"
 
 #include "analyze_common.h"
 
@@ -95,6 +96,26 @@ struct GNSS_Receiver {
     // Solver update mainly for preferable ionospheric model selection
     // based on their availability
     solvers.gps.update_options(data.gps.solver_options);
+  }
+
+  /**
+   * Check whether combination of GNSS and signal is supported
+   * @param gnss_id GNSS ID defined in UBX protocol
+   * @param signal_id Signal ID defined in UBX protocol
+   * @return If a combination is supported, the corresponding pointer of
+   * measurement_item_set_t, which contains indices of measurement items,
+   * is returned. Otherwise, NULL.
+   */
+  static const typename solver_t::measurement_item_set_t *is_supported(
+      const unsigned int &gnss_id,
+      const unsigned int &signal_id){
+    typedef G_Packet_Observer<FloatT> decorder_t;
+    switch(decorder_t::gnss_signal_t::decode(gnss_id, signal_id)){
+      case decorder_t::gnss_signal_t::GPS_L1CA:
+        // GPS L1 C/A (SBAS and QZSS are included because of same signal)
+        return &(solver_t::L1CA);
+    }
+    return NULL; // TODO support other GNSS, signals
   }
 
   typedef GlobalOptions<FloatT> runtime_opt_t;

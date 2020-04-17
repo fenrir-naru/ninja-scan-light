@@ -1870,13 +1870,9 @@ class StreamProcessor
               unsigned int sigID((version == 0x01)
                   ? observer[6 + 38 + (32 * i)] // sigID @see UBX-18010854 - R07 Appendix.B
                   : 0);
-              switch(G_Observer_t::gnss_signal_t::decode(gnssID, sigID)){
-                case G_Observer_t::gnss_signal_t::GPS_L1CA:
-                  // GPS L1 C/A (SBAS and QZSS are included because of same signal)
-                  break;
-                default:
-                  continue; // TODO support other GNSS
-              }
+              const raw_data_t::solver_t::measurement_item_set_t *signal(
+                  GNSS_Receiver<float_sylph_t>::is_supported(gnssID, sigID));
+              if(!signal){continue;} // skip when unsupported signal
 
               int prn(observer[6 + 37 + (32 * i)]); // svID
               unsigned int trkstat(observer[6 + 46 + (32 * i)]); // tracking status
@@ -1886,16 +1882,16 @@ class StreamProcessor
 
               raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
               if(trkstat & 0x01){
-                dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, le_char8_2_num<double>(*buf)));
-                dst.insert(std::make_pair(items_t::L1_PSEUDORANGE_SIGMA, 1E-2 * (1 << (0xF & observer[6 + 43 + (32 * i)]))));
+                dst.insert(std::make_pair(signal->pseudorange.i, le_char8_2_num<double>(*buf)));
+                dst.insert(std::make_pair(signal->pseudorange.i_sigma, 1E-2 * (1 << (0xF & observer[6 + 43 + (32 * i)]))));
               }
               if(trkstat & 0x02){
-                dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, le_char8_2_num<double>(*(buf + 8))));
-                dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE_SIGMA, 4E-3 * (1 << (0xF & observer[6 + 44 + (32 * i)]))));
+                dst.insert(std::make_pair(signal->carrier_phase.i, le_char8_2_num<double>(*(buf + 8))));
+                dst.insert(std::make_pair(signal->carrier_phase.i_sigma, 4E-3 * (1 << (0xF & observer[6 + 44 + (32 * i)]))));
               }
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
-              dst.insert(std::make_pair(items_t::L1_DOPPLER, doppler));
-              dst.insert(std::make_pair(items_t::L1_DOPPLER_SIGMA, 2E-3 * (1 << (0xF & observer[6 + 45 + (32 * i)]))));
+              dst.insert(std::make_pair(signal->doppler.i, doppler));
+              dst.insert(std::make_pair(signal->doppler.i_sigma, 2E-3 * (1 << (0xF & observer[6 + 45 + (32 * i)]))));
             }
 
             packet_raw_latest.update_measurement(current, measurement);
