@@ -92,6 +92,13 @@ struct GPS_Solver_Base {
   };
   typedef std::map<prn_t, std::map<int, float_t> > measurement_t;
 
+  struct measurement_item_set_t {
+    struct {
+      int i, i_sigma;
+    } pseudorange, doppler, carrier_phase, range_rate;
+  };
+  static const measurement_item_set_t L1CA;
+
   struct measurement_util_t {
     static prn_obs_t gather(
         const measurement_t &measurement,
@@ -447,8 +454,20 @@ struct GPS_Solver_Base {
 };
 
 template <class FloatT>
+const typename GPS_Solver_Base<FloatT>::measurement_item_set_t
+    GPS_Solver_Base<FloatT>::L1CA = {
+#define make_entry(key) { \
+    GPS_Solver_Base<FloatT>::measurement_items_t::L1_ ## key, \
+    GPS_Solver_Base<FloatT>::measurement_items_t::L1_ ## key ## _SIGMA}
+      make_entry(PSEUDORANGE),
+      make_entry(DOPPLER),
+      make_entry(CARRIER_PHASE),
+      make_entry(RANGE_RATE),
+#undef make_entry
+    };
+
+template <class FloatT>
 typename GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask_t
-    GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask
-      = typename GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask_t();
+    GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask;
 
 #endif /* __GPS_SOLVER_BASE_H__ */
