@@ -205,18 +205,20 @@ struct GPS_Solver_Base {
    * Calculate relative range and rate information to a satellite
    *
    * @param prn satellite number
-   * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
+   * @param measurement measurement (per satellite) containing pseudo range
+   * @param receiver_error (temporal solution of) receiver clock error in meter
    * @param time_arrival time when signal arrive at receiver
    * @param usr_pos (temporal solution of) user position
    * @param usr_vel (temporal solution of) user velocity
    * @return (relative_property_t) relative information
    */
   virtual relative_property_t relative_property(
-          const prn_t &prn,
-          const float_t &range,
-          const gps_time_t &time_arrival,
-          const pos_t &usr_pos,
-          const xyz_t &usr_vel) const = 0;
+      const prn_t &prn,
+      const typename measurement_t::mapped_type &measurement,
+      const float_t &receiver_error,
+      const gps_time_t &time_arrival,
+      const pos_t &usr_pos,
+      const xyz_t &usr_vel) const = 0;
 
   struct user_pvt_t {
     enum {

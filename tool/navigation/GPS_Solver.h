@@ -112,6 +112,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 #endif
 
     inheritate_type(float_t);
+    inheritate_type(prn_t);
     typedef Matrix<float_t> matrix_t;
 
     inheritate_type(space_node_t);
@@ -395,23 +396,31 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
      * Calculate relative range and rate information to a satellite
      *
      * @param prn satellite number
-     * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
-     * @param time_arrival time when signal arrive at receiver
+     * @param measurement measurement (per satellite) containing pseudo range
+   *   @param receiver_error (temporal solution of) receiver clock error in meter
+   *   @param time_arrival time when signal arrive at receiver
      * @param usr_pos (temporal solution of) user position
      * @param usr_vel (temporal solution of) user velocity
      * @return (relative_property_t) relative information
      */
     relative_property_t relative_property(
-        const typename space_node_t::satellites_t::key_type &prn,
-        const float_t &range,
+        const prn_t &prn,
+        const typename measurement_t::mapped_type &measurement,
+        const float_t &receiver_error,
         const gps_time_t &time_arrival,
         const pos_t &usr_pos,
         const xyz_t &usr_vel) const {
 
       relative_property_t res = {0};
 
+      float_t range;
+      int range_errors;
+      if(!this->range(measurement, range, &range_errors)){
+        return res; // If no range entry, return with weight = 0
+      }
+
       const satellite_t *sat(is_available(prn, time_arrival));
-      if(!sat){return res;}
+      if(!sat){return res;} // If satellite is unavailable, return with weight = 0
 
       residual_t residual = {
         res.range_residual,
@@ -419,8 +428,9 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         res.weight,
       };
 
-      res.range_corrected = range_corrected(*sat, range, time_arrival,
-          usr_pos, residual);
+      res.range_corrected = range_corrected(
+          *sat, range - receiver_error, time_arrival,
+          usr_pos, residual, range_errors);
       res.rate_relative_neg = rate_relative_neg(*sat, res.range_corrected, time_arrival, usr_vel,
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
 
@@ -487,7 +497,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
       geometric_matrices_t geomat(sat_range_cache.size());
       typedef std::vector<std::pair<
-          sat_range_cache_t::value_type::first_type, float_t> > sat_range_t;
+          typename sat_range_cache_t::value_type::first_type,
+          float_t> > sat_range_t;
       sat_range_t sat_range_corrected;
       sat_range_corrected.reserve(sat_range_cache.size());
 
