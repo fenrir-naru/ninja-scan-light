@@ -1867,18 +1867,12 @@ class StreamProcessor
             raw_data_t::measurement_t measurement;
             for(int i(0); i < num_of_measurement; i++){
               unsigned int gnssID(observer[6 + 36 + (32 * i)]);
-              unsigned int sigid((version == 0x01)
+              unsigned int sigID((version == 0x01)
                   ? observer[6 + 38 + (32 * i)] // sigID @see UBX-18010854 - R07 Appendix.B
                   : 0);
-              switch(gnssID){
-                case G_Observer_t::gnss_svid_t::GPS:
-                  switch(sigid){
-                    case 0x03:
-                    case 0x04:
-                      continue; // TODO currently GPS L2 CL/CM is rejected
-                  }
-                  break;
-                case G_Observer_t::gnss_svid_t::SBAS:
+              switch(G_Observer_t::gnss_signal_t::decode(gnssID, sigID)){
+                case G_Observer_t::gnss_signal_t::GPS_L1CA:
+                  // GPS L1 C/A (SBAS and QZSS are included because of same signal)
                   break;
                 default:
                   continue; // TODO support other GNSS
