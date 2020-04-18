@@ -1874,13 +1874,14 @@ class StreamProcessor
                   GNSS_Receiver<float_sylph_t>::is_supported(gnssID, sigID));
               if(!signal){continue;} // skip when unsupported signal
 
-              int prn(observer[6 + 37 + (32 * i)]); // svID
               unsigned int trkstat(observer[6 + 46 + (32 * i)]); // tracking status
 
               G_Observer_t::v8_t buf[20];
               observer.inspect(buf, sizeof(buf), 6 + 16 + (32 * i));
 
-              raw_data_t::measurement_t::mapped_type &dst(measurement[prn]);
+              raw_data_t::measurement_t::mapped_type &dst(
+                  measurement[GNSS_Receiver<float_sylph_t>::id_prn(
+                    gnssID, observer[6 + 37 + (32 * i)])]); // (GNSS, SV) => PRN
               if(trkstat & 0x01){
                 dst.insert(std::make_pair(signal->pseudorange.i, le_char8_2_num<double>(*buf)));
                 dst.insert(std::make_pair(signal->pseudorange.i_sigma, 1E-2 * (1 << (0xF & observer[6 + 43 + (32 * i)]))));

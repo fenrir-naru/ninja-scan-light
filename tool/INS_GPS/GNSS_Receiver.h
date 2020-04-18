@@ -99,6 +99,29 @@ struct GNSS_Receiver {
   }
 
   /**
+   * Generate satellite unique (PRN) ID from UBX GNSS ID and SV ID
+   * @param gnss_id GNSS ID defined in UBX protocol
+   * @param sv_id Space vehicle ID defined in UBX protocol
+   * @return unique ID. If a satellite system uses PRN such as GPS and SBAS,
+   * the return value is identical to PRN code.
+   */
+  static typename solver_t::prn_t id_prn(
+      const unsigned int &gnss_id,
+      const unsigned int &sv_id){
+    typedef G_Packet_Observer<FloatT> decorder_t;
+    switch(gnss_id){
+      case decorder_t::gnss_svid_t::GPS:
+      case decorder_t::gnss_svid_t::SBAS:
+      case decorder_t::gnss_svid_t::QZSS:
+        // Legacy SVID is identical to PRN code
+        return (typename solver_t::prn_t)(unsigned int)
+            (typename decorder_t::gnss_svid_t(gnss_id, sv_id));
+      default:
+        return ((gnss_id << 8) | (sv_id & 0xFF));
+    }
+  }
+
+  /**
    * Check whether combination of GNSS and signal is supported
    * @param gnss_id GNSS ID defined in UBX protocol
    * @param signal_id Signal ID defined in UBX protocol
