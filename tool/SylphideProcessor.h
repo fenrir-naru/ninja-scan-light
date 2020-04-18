@@ -615,8 +615,8 @@ class G_Packet_Observer : public Packet_Observer<>{
     }
 
     struct gnss_svid_t {
-      // @see UBX-13003221 Appendix.A Satellite Numbering
-      enum {
+      // @see UBX-18010854-R07 Appendix.A Satellite Numbering
+      enum gnss_t {
         UNKNOWN = -1,
         GPS = 0,
         SBAS = 1,
@@ -635,7 +635,7 @@ class G_Packet_Observer : public Packet_Observer<>{
           svid = svid_legacy;
         }else if(svid_legacy <= 64){
           gnss = BeiDou;
-          svid = svid_legacy - (64 - 37); // ? TODO
+          svid = svid_legacy - (64 - 37);
         }else if(svid_legacy <= 96){
           gnss = GLONASS;
           svid = svid_legacy - (65 - 1);
@@ -646,7 +646,7 @@ class G_Packet_Observer : public Packet_Observer<>{
           svid = svid_legacy;
         }else if(svid_legacy <= 163){
           gnss = BeiDou;
-          svid = svid_legacy - (159 - 1); // ? TODO
+          svid = svid_legacy - (159 - 1);
         }else if(svid_legacy < 173){
 
         }else if(svid_legacy <= 182){
@@ -666,6 +666,24 @@ class G_Packet_Observer : public Packet_Observer<>{
           gnss = GLONASS;
           svid = 255;
         }
+      }
+      gnss_svid_t(
+          const unsigned int &_gnss, const unsigned int &_svid,
+          const bool &do_check = false)
+          : gnss((gnss_t)_gnss), svid(_svid) {
+        if(!do_check){return;}
+        static const struct {
+          unsigned int lower, upper;
+        } id_bound[GNSS_TYPES] = {
+          {1, 32}, {120, 158}, {1, 36}, {1, 37}, {0, 0xFF}, {1, 10}, {1, 32}
+        };
+        if((gnss < GNSS_TYPES)
+            && (svid >= id_bound[gnss].lower)
+            && ((svid <= id_bound[gnss].upper)
+              || ((svid == 255) && (gnss == GLONASS)))){
+          return;
+        }
+        gnss = UNKNOWN;
       }
       operator unsigned int () const { ///< cast to svid_legacy
         switch(gnss){
