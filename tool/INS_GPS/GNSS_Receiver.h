@@ -267,8 +267,8 @@ struct GNSS_Receiver {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         out << "clock_index";
         for(int i(1); i <= 32; ++i){
-          out << ',' << "range(" << i << ')'
-              << ',' << "rate(" << i << ')';
+          out << ',' << "L1_range(" << i << ')'
+              << ',' << "L1_rate(" << i << ')';
         }
         return out;
       }
