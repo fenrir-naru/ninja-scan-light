@@ -49,7 +49,7 @@
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
-  typedef GPS_SinglePositioning_MultiFrequency<FloatT> gps_solver_t;
+  typedef GPS_Solver_MultiFrequency<FloatT, GPS_SinglePositioning> gps_solver_t;
 
   struct data_t {
     struct {

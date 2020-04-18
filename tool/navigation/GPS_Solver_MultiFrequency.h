@@ -39,11 +39,11 @@
 
 #include "GPS_Solver.h"
 
-template <class FloatT>
-class GPS_SinglePositioning_MultiFrequency : public GPS_SinglePositioning<FloatT> {
+template <class FloatT, template <class> class BaseSolver = GPS_SinglePositioning>
+class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
   public:
-    typedef GPS_SinglePositioning_MultiFrequency<FloatT> self_t;
-    typedef GPS_SinglePositioning<FloatT> super_t;
+    typedef GPS_Solver_MultiFrequency<FloatT, BaseSolver> self_t;
+    typedef BaseSolver<FloatT> super_t;
   private:
     self_t &operator=(const self_t &);
   public:
@@ -53,23 +53,18 @@ class GPS_SinglePositioning_MultiFrequency : public GPS_SinglePositioning<FloatT
 #else
 #define inheritate_type(x) using typename super_t::x;
 #endif
-
-    inheritate_type(options_t);
-
     inheritate_type(float_t);
-
     inheritate_type(space_node_t);
-
-    inheritate_type(measurement_t);
+    inheritate_type(options_t);
     inheritate_type(measurement_item_set_t);
 #undef inheritate_type
 
   public:
-    GPS_SinglePositioning_MultiFrequency(
+    GPS_Solver_MultiFrequency(
         const space_node_t &sn, const options_t &opt_wish = options_t())
         : super_t(sn, opt_wish) {}
 
-    ~GPS_SinglePositioning_MultiFrequency(){}
+    ~GPS_Solver_MultiFrequency(){}
 
     struct measurement_items_t : public super_t::measurement_items_t {
       enum {
@@ -96,7 +91,7 @@ class GPS_SinglePositioning_MultiFrequency : public GPS_SinglePositioning<FloatT
      * @return If valid range information is found, the pointer of buf will be returned; otherwise NULL
      */
     virtual const float_t *range(
-        const typename measurement_t::mapped_type &values, float_t &buf,
+        const typename super_t::measurement_t::mapped_type &values, float_t &buf,
         int *errors) const {
       float_t l1, l2;
       const float_t
@@ -141,12 +136,12 @@ class GPS_SinglePositioning_MultiFrequency : public GPS_SinglePositioning<FloatT
     static const measurement_item_set_t L2CM, L2CL;
 };
 
-template <class FloatT>
-const typename GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_item_set_t
-    GPS_SinglePositioning_MultiFrequency<FloatT>::L2CM = {
+template <class FloatT, template <class> class BaseSolver>
+const typename GPS_Solver_MultiFrequency<FloatT, BaseSolver>::measurement_item_set_t
+    GPS_Solver_MultiFrequency<FloatT, BaseSolver>::L2CM = {
 #define make_entry(key) { \
-    GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_items_t::L2CM_ ## key, \
-    GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_items_t::L2CM_ ## key ## _SIGMA}
+    GPS_Solver_MultiFrequency<FloatT, BaseSolver>::measurement_items_t::L2CM_ ## key, \
+    GPS_Solver_MultiFrequency<FloatT, BaseSolver>::measurement_items_t::L2CM_ ## key ## _SIGMA}
       make_entry(PSEUDORANGE),
       make_entry(DOPPLER),
       make_entry(CARRIER_PHASE),
@@ -154,12 +149,12 @@ const typename GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_item_se
 #undef make_entry
     };
 
-template <class FloatT>
-const typename GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_item_set_t
-    GPS_SinglePositioning_MultiFrequency<FloatT>::L2CL = {
+template <class FloatT, template <class> class BaseSolver>
+const typename GPS_Solver_MultiFrequency<FloatT, BaseSolver>::measurement_item_set_t
+    GPS_Solver_MultiFrequency<FloatT, BaseSolver>::L2CL = {
 #define make_entry(key) { \
-    GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_items_t::L2CL_ ## key, \
-    GPS_SinglePositioning_MultiFrequency<FloatT>::measurement_items_t::L2CL_ ## key ## _SIGMA}
+    GPS_Solver_MultiFrequency<FloatT, BaseSolver>::measurement_items_t::L2CL_ ## key, \
+    GPS_Solver_MultiFrequency<FloatT, BaseSolver>::measurement_items_t::L2CL_ ## key ## _SIGMA}
       make_entry(PSEUDORANGE),
       make_entry(DOPPLER),
       make_entry(CARRIER_PHASE),
