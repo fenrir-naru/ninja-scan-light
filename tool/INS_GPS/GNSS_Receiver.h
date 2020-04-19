@@ -45,10 +45,18 @@
 
 #include "analyze_common.h"
 
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+#include "navigation/GPS_Solver_MultiFrequency.h"
+#endif
+
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+  typedef GPS_Solver_MultiFrequency<FloatT, GPS_SinglePositioning> gps_solver_t;
+#else
   typedef GPS_SinglePositioning<FloatT> gps_solver_t;
+#endif
 
   struct data_t {
     struct {
@@ -137,6 +145,12 @@ struct GNSS_Receiver {
       case decorder_t::gnss_signal_t::GPS_L1CA:
         // GPS L1 C/A (SBAS and QZSS are included because of same signal)
         return &(solver_t::L1CA);
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+      case decorder_t::gnss_signal_t::GPS_L2CM:
+        return &(solver_t::L2CM);
+      case decorder_t::gnss_signal_t::GPS_L2CL:
+        return &(solver_t::L2CL);
+#endif
     }
     return NULL; // TODO support other GNSS, signals
   }
@@ -190,6 +204,17 @@ struct GNSS_Receiver {
           gps_solver_t::options_t::IONOSPHERIC_NTCM_GL);
       return true;
     }
+
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+    if(value = runtime_opt_t::get_value(spec, "GNSS_L2", true)){
+    if(dry_run){return true;}
+    bool use(runtime_opt_t::is_true(value));
+    std::cerr << "GNSS_L2: " << (use ? "on" : "off") << std::endl;
+    data.gps.solver_options.exclude_L2C = !use;
+    return true;
+  }
+#endif
+
     return false;
   }
 
@@ -262,8 +287,8 @@ struct GNSS_Receiver {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         out << "clock_index";
         for(int i(1); i <= 32; ++i){
-          out << ',' << "range(" << i << ')'
-              << ',' << "rate(" << i << ')';
+          out << ',' << "L1_range(" << i << ')'
+              << ',' << "L1_rate(" << i << ')';
         }
         return out;
       }
