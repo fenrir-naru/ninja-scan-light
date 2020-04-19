@@ -204,6 +204,17 @@ struct GNSS_Receiver {
           gps_solver_t::options_t::IONOSPHERIC_NTCM_GL);
       return true;
     }
+
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+    if(value = runtime_opt_t::get_value(spec, "GNSS_L2", true)){
+    if(dry_run){return true;}
+    bool use(runtime_opt_t::is_true(value));
+    std::cerr << "GNSS_L2: " << (use ? "on" : "off") << std::endl;
+    data.gps.solver_options.exclude_L2C = !use;
+    return true;
+  }
+#endif
+
     return false;
   }
 
