@@ -39,6 +39,12 @@
 
 #include "GPS_Solver.h"
 
+template <class FloatT>
+struct GPS_Solver_MultiFrequency_Options {
+  bool exclude_L2C;
+  GPS_Solver_MultiFrequency_Options() : exclude_L2C(false) {}
+};
+
 template <class FloatT, template <class> class BaseSolver = GPS_SinglePositioning>
 class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
   public:
@@ -47,6 +53,10 @@ class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
   private:
     self_t &operator=(const self_t &);
   public:
+    struct options_t
+        : public super_t::options_t,
+        public GPS_Solver_MultiFrequency_Options<FloatT> {};
+    GPS_Solver_MultiFrequency_Options<FloatT> options_frequency;
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename super_t::x x;
@@ -55,14 +65,13 @@ class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
 #endif
     inheritate_type(float_t);
     inheritate_type(space_node_t);
-    inheritate_type(options_t);
     inheritate_type(measurement_item_set_t);
 #undef inheritate_type
 
   public:
     GPS_Solver_MultiFrequency(
         const space_node_t &sn, const options_t &opt_wish = options_t())
-        : super_t(sn, opt_wish) {}
+        : super_t(sn, opt_wish), options_frequency(opt_wish) {}
 
     ~GPS_Solver_MultiFrequency(){}
 
@@ -96,10 +105,10 @@ class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
       float_t l1, l2;
       const float_t
           *l1_p(super_t::find_value(values, measurement_items_t::L1_PSEUDORANGE, l1)),
-          *l2_p;
-      if(!(l2_p = super_t::find_value(values, measurement_items_t::L2CM_PSEUDORANGE, l2))){
-        l2_p = super_t::find_value(values, measurement_items_t::L2CL_PSEUDORANGE, l2);
-      }
+          *l2_p(NULL);
+      options_frequency.exclude_L2C // if false then look for L2CM and L2CL. L2CM is higher priority than L2CL
+          || (l2_p = super_t::find_value(values, measurement_items_t::L2CM_PSEUDORANGE, l2))
+          || (l2_p = super_t::find_value(values, measurement_items_t::L2CL_PSEUDORANGE, l2));
 
       if(errors){
         *errors = (super_t::RANGE_ERROR_RECEIVER_CLOCK
