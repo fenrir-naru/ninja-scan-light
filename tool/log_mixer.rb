@@ -120,7 +120,7 @@ class A_Packet_Converter
   end
   def A_Packet_Converter.packN24(v)
     (v.kind_of?(Array) ? v : [v]).collect{|num|
-      [[[num.to_i, 0].max, ((1 << 24) - 1)].min].pack('N')[1..3]
+      [[[num.round, 0].max, ((1 << 24) - 1)].min].pack('N')[1..3]
     }.join
   end
   def a_packet(info = {})
