@@ -723,8 +723,8 @@ struct G_Packet_Measurement
 
   typedef solver_t::user_pvt_t pvt_t;
   bool get_pvt(pvt_t &pvt) const {
-    while(true){
-      if(pvt.position_solved()){
+    do{
+      if(pvt.error_code == pvt_t::ERROR_NO){
         float_sylph_t delta_t(std::abs(raw_data_t::gpstime - pvt.receiver_time));
         if(delta_t < 5E-3){ // 5 ms
           return true; // already updated
@@ -740,33 +740,52 @@ struct G_Packet_Measurement
       pvt = raw_data_t::solver->solve_user_pvt(
           raw_data_t::measurement,
           raw_data_t::gpstime);
-      break;
-    }
+    }while(false);
     return pvt.error_code == pvt_t::ERROR_NO;
   }
 
-  operator G_Packet() const {
-    G_Packet res;
-    res.itow = this->itow;
-    res.lever_arm = this->lever_arm;
-    pvt_t pvt;
+  /**
+   * Get solution by using measurement
+   * @param pvt buffer of PVT solution. If PVT result sufficiently corresponds to measurement,
+   * it will be used as solution cache.
+   * @return solution
+   */
+  GPS_Solution<float_sylph_t> get_solution(pvt_t &pvt) const {
+    GPS_Solution<float_sylph_t> res;
     if(get_pvt(pvt)){
-      // TODO calculation of estimated accuracy
       res.v_n = pvt.user_velocity_enu.north();
       res.v_e = pvt.user_velocity_enu.east();
       res.v_d = -pvt.user_velocity_enu.up();
-      //res.sigma_vel;
       res.latitude = pvt.user_position.llh.latitude();
       res.longitude = pvt.user_position.llh.longitude();
       res.height = pvt.user_position.llh.height();
-      //res.sigma_2d;
-      //res.sigma_height;
+      // Calculation of estimated accuracy
+      /* Position standard deviation is roughly estimated as (DOP * 2 meters)
+       * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
+       */
+      res.sigma_2d = pvt.hdop * 2;
+      res.sigma_height = pvt.vdop * 2;
+      // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
+      res.sigma_vel = pvt.pdop * 0.1;
     }else{
       res.sigma_vel = 1E4; // 10 km/s
       res.sigma_2d = 1E6; // 1000 km
       res.sigma_height = 1E6; // 1000 km
     }
     return res;
+  }
+
+  G_Packet get_G_packet(pvt_t &pvt) const {
+    G_Packet res;
+    res.itow = this->itow;
+    res.lever_arm = this->lever_arm;
+    (GPS_Solution<float_sylph_t> &)res = get_solution(pvt);
+    return res;
+  }
+
+  operator G_Packet() const {
+    pvt_t pvt;
+    return get_G_packet(pvt);
   }
 
   G_Packet_Measurement() : raw_data_t(), lever_arm(NULL) {}
