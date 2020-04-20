@@ -397,8 +397,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
      *
      * @param prn satellite number
      * @param measurement measurement (per satellite) containing pseudo range
-   *   @param receiver_error (temporal solution of) receiver clock error in meter
-   *   @param time_arrival time when signal arrive at receiver
+     * @param receiver_error (temporal solution of) receiver clock error in meter
+     * @param time_arrival time when signal arrive at receiver
      * @param usr_pos (temporal solution of) user position
      * @param usr_vel (temporal solution of) user velocity
      * @return (relative_property_t) relative information

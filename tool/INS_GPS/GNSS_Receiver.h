@@ -75,7 +75,7 @@ struct GNSS_Receiver {
   struct solvers_t {
     gps_solver_t gps;
     solvers_t(const GNSS_Receiver &rcv)
-        : gps(rcv.data.gps.space_node, rcv.data.gps.solver_options)
+        : gps(rcv.data.gps.space_node)
         {}
   } solvers;
 
