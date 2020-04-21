@@ -128,6 +128,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     inheritate_type(prn_obs_t);
     inheritate_type(measurement_t);
     inheritate_type(measurement_items_t);
+    inheritate_type(range_error_t);
 
     typedef GPS_SinglePositioning_Options<float_t> options_t;
 
@@ -260,7 +261,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
      * @param usr_pos (temporal solution of) user position
      * @param residual calculated residual with line of site vector, and weight;
      * When weight is equal to or less than zero, the calculated results should not be used.
-     * @param errors Some correction can be skipped. If zero, corrections will be skipped as possible. @see range_errors_t
+     * @param error Some correction can be overwritten. If its unknown_flag is zero,
+     * corrections will be skipped as possible. @see range_errors_t
      * @return (float_t) corrected range just including delay, and excluding receiver/satellite error.
      */
     float_t range_corrected(
@@ -269,10 +271,12 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         const gps_time_t &time_arrival,
         const pos_t &usr_pos,
         residual_t &residual,
-        const int &errors = 0) const {
+        const range_error_t &error = range_error_t::not_corrected) const {
 
       // Clock error correction
-      range += sat.clock_error(time_arrival, range) * space_node_t::light_speed;
+      range += ((error.unknown_flag & range_error_t::SATELLITE_CLOCK)
+          ? (sat.clock_error(time_arrival, range) * space_node_t::light_speed)
+          : error.value[range_error_t::SATELLITE_CLOCK]);
 
       // Calculate satellite position
       xyz_t sat_pos(sat.position(time_arrival, range));
@@ -288,7 +292,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
       enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
-      if(errors & base_t::RANGE_ERROR_IONOSPHERIC){
+      if(error.unknown_flag & range_error_t::MASK_IONOSPHERIC){
         // Ionospheric model selection, the fall back is no correction
         bool iono_model_hit(false);
         for(int i(0); i < sizeof(_options.ionospheric_models) / sizeof(_options.ionospheric_models[0]); ++i){
@@ -314,31 +318,29 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           iono_model_hit = true;
           break;
         }
-      }
-
-      if(errors & base_t::RANGE_ERROR_TROPOSPHERIC){
-        // Tropospheric
-        residual.residual += _space_node.tropo_correction(relative_pos, usr_pos.llh);
-      }
-
-      if(errors){
-        // Setup weight
-        if(std::abs(residual.residual) > 30.0){
-          // If residual is too big, gently exclude it by decreasing its weight.
-          residual.weight = 1E-8;
-        }else{
-
-          float_t elv(relative_pos.elevation());
-          if(elv < _options.elevation_mask){
-            residual.weight = 0; // exclude it when elevation is less than threshold
-          }else{
-            // elevation weight based on "GPS実用プログラミング"
-            residual.weight = std::pow(sin(elv)/0.8, 2);
-            if(residual.weight < 1E-3){residual.weight = 1E-3;}
-          }
-        }
       }else{
-        residual.weight = 1;
+        residual.residual += error.value[range_error_t::IONOSPHERIC];
+      }
+
+      // Tropospheric
+      residual.residual += (error.unknown_flag & range_error_t::MASK_TROPOSPHERIC)
+          ? _space_node.tropo_correction(relative_pos, usr_pos.llh)
+          : error.value[range_error_t::TROPOSPHERIC];
+
+      // Setup weight
+      if(std::abs(residual.residual) > 30.0){
+        // If residual is too big, gently exclude it by decreasing its weight.
+        residual.weight = 1E-8;
+      }else{
+
+        float_t elv(relative_pos.elevation());
+        if(elv < _options.elevation_mask){
+          residual.weight = 0; // exclude it when elevation is less than threshold
+        }else{
+          // elevation weight based on "GPS実用プログラミング"
+          residual.weight = std::pow(sin(elv)/0.8, 2);
+          if(residual.weight < 1E-3){residual.weight = 1E-3;}
+        }
       }
 
       return range;
@@ -414,8 +416,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       relative_property_t res = {0};
 
       float_t range;
-      int range_errors;
-      if(!this->range(measurement, range, &range_errors)){
+      range_error_t range_error;
+      if(!this->range(measurement, range, &range_error)){
         return res; // If no range entry, return with weight = 0
       }
 
@@ -430,7 +432,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
       res.range_corrected = range_corrected(
           *sat, range - receiver_error, time_arrival,
-          usr_pos, residual, range_errors);
+          usr_pos, residual, range_error);
       res.rate_relative_neg = rate_relative_neg(*sat, res.range_corrected, time_arrival, usr_vel,
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
 
@@ -470,8 +472,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
       typedef std::vector<std::pair<
           std::pair<prn_t, const satellite_t *>,
-          std::pair<float_t, int> > > sat_range_cache_t;
-      sat_range_cache_t sat_range_cache; // [[prn, *sat_GPS], [range, range_errors]]
+          std::pair<float_t, range_error_t> > > sat_range_cache_t;
+      sat_range_cache_t sat_range_cache; // [[prn, *sat_GPS], [range, range_error]]
       sat_range_cache.reserve(measurement.size());
 
       for(typename measurement_t::const_iterator it(measurement.begin());
@@ -479,12 +481,12 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           ++it){
 
         float_t range;
-        int range_errors;
-        if(!this->range(it->second, range, &range_errors)){continue;} // No range entry
+        range_error_t range_error;
+        if(!this->range(it->second, range, &range_error)){continue;} // No range entry
 
         sat_range_cache.push_back(std::make_pair(
             std::make_pair(it->first, is_available(it->first, receiver_time)),
-            std::make_pair(range, range_errors)));
+            std::make_pair(range, range_error)));
       }
 
       // 2. Position calculation
@@ -525,11 +527,13 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           float_t range(it->second.first);
 
           if(sat){
+            static const range_error_t coarse_mode = {
+                range_error_t::MASK_SATELLITE_CLOCK, {0}};
             range = range_corrected(*sat,
                 range - res.receiver_error, time_arrival,
                 res.user_position,
                 residual,
-                (coarse_estimation ? 0 : it->second.second));
+                (coarse_estimation ? coarse_mode : it->second.second));
           }else{
             // TODO placeholder for non-GPS satellites
             residual.weight = 0;
@@ -543,7 +547,9 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
           ++j;
 
-          if(!coarse_estimation){
+          if(coarse_estimation){
+            residual.weight = 1;
+          }else{
             sat_range_corrected.push_back(std::make_pair(it->first, range));
           }
         }

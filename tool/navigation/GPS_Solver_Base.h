@@ -144,11 +144,22 @@ struct GPS_Solver_Base {
     return NULL;
   }
 
-  enum range_error_t {
-    RANGE_ERROR_RECEIVER_CLOCK = 0x01,
-    RANGE_ERROR_SATELLITE_CLOCK = 0x02,
-    RANGE_ERROR_IONOSPHERIC = 0x04,
-    RANGE_ERROR_TROPOSPHERIC = 0x08,
+  struct range_error_t {
+    enum {
+#define make_entry(name) \
+  name, \
+  MASK_ ## name = (1 << name), \
+  DUMMY_ ## name = name
+      make_entry(RECEIVER_CLOCK),
+      make_entry(SATELLITE_CLOCK),
+      make_entry(IONOSPHERIC),
+      make_entry(TROPOSPHERIC),
+#undef make_entry
+      NUM_OF_ERRORS,
+    };
+    int unknown_flag;
+    float_t value[NUM_OF_ERRORS];
+    static const range_error_t not_corrected;
   };
 
   // TODO These range and rate functions will be overridden in subclass to support multi-frequency
@@ -156,17 +167,14 @@ struct GPS_Solver_Base {
    * Extract range information from measurement per satellite
    * @param values measurement[prn]
    * @param buf buffer into which range is stored
-   * @param errors optional argument in which error components of range will be returned
+   * @param error optional argument in which error components of range will be returned
    * @return If valid range information is found, the pointer of buf will be returned; otherwise NULL
    */
   virtual const float_t *range(
       const typename measurement_t::mapped_type &values, float_t &buf,
-      int *errors = NULL) const {
-    if(errors){
-      *errors = (RANGE_ERROR_RECEIVER_CLOCK
-          | RANGE_ERROR_SATELLITE_CLOCK
-          | RANGE_ERROR_IONOSPHERIC
-          | RANGE_ERROR_TROPOSPHERIC);
+      range_error_t *error = NULL) const {
+    if(error){
+      *error = range_error_t::not_corrected;
     }
     return find_value(values, measurement_items_t::L1_PSEUDORANGE, buf);
   }
@@ -261,7 +269,7 @@ struct GPS_Solver_Base {
         return pattern[prn];
       }
     };
-    static satellite_mask_t satellite_mask;
+    static const satellite_mask_t satellite_mask;
 
     user_pvt_t()
         : error_code(ERROR_UNSOLVED),
@@ -467,7 +475,14 @@ const typename GPS_Solver_Base<FloatT>::measurement_item_set_t
     };
 
 template <class FloatT>
-typename GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask_t
+const typename GPS_Solver_Base<FloatT>::range_error_t
+    GPS_Solver_Base<FloatT>::range_error_t::not_corrected = {
+      MASK_RECEIVER_CLOCK | MASK_SATELLITE_CLOCK | MASK_IONOSPHERIC | MASK_TROPOSPHERIC,
+      {0},
+    };
+
+template <class FloatT>
+const typename GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask_t
     GPS_Solver_Base<FloatT>::user_pvt_t::satellite_mask;
 
 #endif /* __GPS_SOLVER_BASE_H__ */

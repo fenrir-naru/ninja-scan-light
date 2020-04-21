@@ -74,6 +74,7 @@ class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
 #endif
     inheritate_type(float_t);
     inheritate_type(space_node_t);
+    inheritate_type(range_error_t);
     inheritate_type(measurement_item_set_t);
 #undef inheritate_type
 
@@ -119,12 +120,12 @@ class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
      * Extract range information from measurement per satellite
      * @param values measurement[prn]
      * @param buf buffer into which range is stored
-     * @param errors optional argument in which error components of range will be returned
+     * @param error optional argument in which error components of range will be returned
      * @return If valid range information is found, the pointer of buf will be returned; otherwise NULL
      */
     virtual const float_t *range(
         const typename super_t::measurement_t::mapped_type &values, float_t &buf,
-        int *errors) const {
+        range_error_t *error) const {
       float_t l1, l2;
       const float_t
           *l1_p(super_t::find_value(values, measurement_items_t::L1_PSEUDORANGE, l1)),
@@ -133,24 +134,21 @@ class GPS_Solver_MultiFrequency : public BaseSolver<FloatT> {
           || (l2_p = super_t::find_value(values, measurement_items_t::L2CM_PSEUDORANGE, l2))
           || (l2_p = super_t::find_value(values, measurement_items_t::L2CL_PSEUDORANGE, l2));
 
-      if(errors){
-        *errors = (super_t::RANGE_ERROR_RECEIVER_CLOCK
-            | super_t::RANGE_ERROR_SATELLITE_CLOCK
-            | super_t::RANGE_ERROR_IONOSPHERIC
-            | super_t::RANGE_ERROR_TROPOSPHERIC);
+      if(error){
+        *error = range_error_t::not_corrected;
       }
 
       if(l1_p){
-        if(l2_p){ // L1 and L2
-          if(errors){
-            *errors &= ~(super_t::RANGE_ERROR_IONOSPHERIC);
-          }
-          return &(buf
-              = (space_node_t::gamma_L1_L2 * l1 - l2)
-                / (space_node_t::gamma_L1_L2 - 1));
-        }else{ // L1 only
-          return &(buf = l1);
+        if(l2_p && error){ // L1 and L2
+          error->unknown_flag &= ~(range_error_t::MASK_IONOSPHERIC);
+          error->value[range_error_t::IONOSPHERIC]
+              = (l2 - l1) / (space_node_t::gamma_L1_L2 - 1);
+          /* @see IS-GPS-200H 20.3.3.3.3.3
+           * PR = PR_L1 + (PR_L2 - PR_L1)/(1 - gamma), and PR + error = PR_L1.
+           * Therefore, error = (PR_L2 - PR_L1)/(gamma - 1)
+           */
         }
+        return &(buf = l1);
       }
 #if 0
       /* TODO L2 only, because rate and deviation without L2 has not
