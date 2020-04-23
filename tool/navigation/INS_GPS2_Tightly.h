@@ -317,6 +317,63 @@ struct GPS_RawData {
       : solver(NULL),
       clock_index(_clock_index), measurement(), gpstime() {}
   ~GPS_RawData(){}
+
+  struct pvt_t : public solver_t::user_pvt_t {
+    unsigned int clock_index;
+    /**
+     * PVT Converter for loosely integration
+     * @return solution
+     */
+    operator GPS_Solution<FloatT> () const {
+      GPS_Solution<FloatT> res;
+      res.v_n = this->user_velocity_enu.north();
+      res.v_e = this->user_velocity_enu.east();
+      res.v_d = -this->user_velocity_enu.up();
+      res.latitude = this->user_position.llh.latitude();
+      res.longitude = this->user_position.llh.longitude();
+      res.height = this->user_position.llh.height();
+      // Calculation of estimated accuracy
+      /* Position standard deviation is roughly estimated as (DOP * 2 meters)
+       * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
+       */
+      res.sigma_2d = this->hdop * 2;
+      res.sigma_height = this->vdop * 2;
+      // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
+      res.sigma_vel = this->pdop * 0.1;
+      return res;
+    }
+  };
+
+  pvt_t pvt(const pvt_t &hint = pvt_t()) const {
+    pvt_t res;
+    res.clock_index = clock_index;
+    do{
+      if(hint.error_code == pvt_t::ERROR_NO){
+        FloatT delta_t(std::abs(gpstime - hint.receiver_time));
+        if(delta_t < 5E-3){
+          // already updated
+          (typename solver_t::user_pvt_t &)res = hint;
+          break;
+        }else if(!solver){
+          break;
+        }else if(delta_t < 300){
+          // Use hint, because solution may not be changed extremely in short time
+          (typename solver_t::user_pvt_t &)res = solver->solve_user_pvt(
+              measurement,
+              gpstime,
+              hint.user_position,
+              hint.receiver_error);
+          break;
+        }
+      }else if(!solver){
+        break;
+      }
+      (typename solver_t::user_pvt_t &)res = solver->solve_user_pvt(
+          measurement,
+          gpstime);
+    }while(false);
+    return res;
+  }
 };
 
 /**
