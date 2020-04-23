@@ -292,6 +292,13 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
     void correct_primitive(const mat_t &H, const mat_t &z, const mat_t &R){
       BaseFINS::correct_primitive(H, z, R);
     }
+
+    /*
+     * Dummy function in case there is no correct function.
+     * This is for "using super_class::correct" in the following INS_GPS2_Tightly
+     */
+    void correct_info();
+    void correct();
 };
 
 template <class FloatT>
@@ -388,37 +395,38 @@ template <
   class BaseFINS = Filtered_INS_ClockErrorEstimated<Filtered_INS2<
       INS_ClockErrorEstimated<INS<> > > >
 >
-class INS_GPS2_Tightly : public BaseFINS{
+class INS_GPS2_Tightly : public BaseFINS {
   public:
+    typedef BaseFINS super_t;
 #if defined(__GNUC__) && (__GNUC__ < 5)
-    typedef typename BaseFINS::float_t float_t;
-    typedef typename BaseFINS::vec3_t vec3_t;
-    typedef typename BaseFINS::quat_t quat_t;
-    typedef typename BaseFINS::mat_t mat_t;
+    typedef typename super_t::float_t float_t;
+    typedef typename super_t::vec3_t vec3_t;
+    typedef typename super_t::quat_t quat_t;
+    typedef typename super_t::mat_t mat_t;
 #else
-    using typename BaseFINS::float_t;
-    using typename BaseFINS::vec3_t;
-    using typename BaseFINS::quat_t;
-    using typename BaseFINS::mat_t;
+    using typename super_t::float_t;
+    using typename super_t::vec3_t;
+    using typename super_t::quat_t;
+    using typename super_t::mat_t;
 #endif
   public:
-    INS_GPS2_Tightly() : BaseFINS() {}
+    INS_GPS2_Tightly() : super_t() {}
 
     INS_GPS2_Tightly(const INS_GPS2_Tightly &orig, const bool &deepcopy = false)
-        : BaseFINS(orig, deepcopy) {
+        : super_t(orig, deepcopy) {
     }
 
     ~INS_GPS2_Tightly(){}
     
-    typedef INS_GPS2_Tightly<BaseFINS> self_t;
+    typedef INS_GPS2_Tightly<super_t> self_t;
 
     typedef GPS_RawData<float_t> raw_data_t;
     typedef typename raw_data_t::solver_t solver_t;
     typedef typename solver_t::space_node_t space_node_t;
 
-    using BaseFINS::CLOCKS_SUPPORTED;
-    using BaseFINS::P_SIZE;
-    using BaseFINS::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
+    using super_t::CLOCKS_SUPPORTED;
+    using super_t::P_SIZE;
+    using super_t::property_t::P_SIZE_WITHOUT_CLOCK_ERROR;
 
   protected:
     struct receiver_state_t {
@@ -433,16 +441,16 @@ class INS_GPS2_Tightly : public BaseFINS{
         const unsigned int &clock_index,
         const float_t &clock_error_shift = 0) const {
       float_t clock_error(
-          BaseFINS::m_clock_error[clock_index] + clock_error_shift);
+          super_t::m_clock_error[clock_index] + clock_error_shift);
       receiver_state_t res = {
         t - clock_error / space_node_t::light_speed,
         clock_index,
         clock_error,
         {
-          BaseFINS::template position_xyz<typename solver_t::xyz_t>(),
-          typename solver_t::llh_t(BaseFINS::phi, BaseFINS::lambda, BaseFINS::h),
+          super_t::template position_xyz<typename solver_t::xyz_t>(),
+          typename solver_t::llh_t(super_t::phi, super_t::lambda, super_t::h),
         },
-        BaseFINS::template velocity_xyz<typename solver_t::xyz_t>(),
+        super_t::template velocity_xyz<typename solver_t::xyz_t>(),
       };
       return res;
     }
@@ -484,16 +492,16 @@ class INS_GPS2_Tightly : public BaseFINS{
 
       { // setup H matrix
 #define pow2(x) ((x) * (x))
-#define q_e2n(i) BaseFINS::q_e2n.get(i)
+#define q_e2n(i) super_t::q_e2n.get(i)
         float_t H_uh[3][4] = {{0}};
         const float_t
             q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
             q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
             q_gamma((q_e2n(0) * q_e2n(2) + q_e2n(1) * q_e2n(3)) * 2);
-        static const float_t &e(BaseFINS::Earth::epsilon_Earth);
-        const float_t n(BaseFINS::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
+        static const float_t &e(super_t::Earth::epsilon_Earth);
+        const float_t n(super_t::Earth::R_e / std::sqrt(1.0 - pow2(e * q_alpha)));
         const float_t sf(n * pow2(e) * q_alpha * -2 / (1.0 - pow2(e) * pow2(q_alpha)));
-        const float_t n_h((n + BaseFINS::h) * 2);
+        const float_t n_h((n + super_t::h) * 2);
 #undef q_e2n
         H_uh[0][0] = -q_gamma * q_beta * sf;
         H_uh[0][1] = -pow2(q_gamma) * sf - n_h * q_alpha;
@@ -507,7 +515,7 @@ class INS_GPS2_Tightly : public BaseFINS{
 
         {
           const float_t sf2(sf * -(1.0 - pow2(e)));
-          const float_t n_h2((n * (1.0 - pow2(e)) + BaseFINS::h) * 2);
+          const float_t n_h2((n * (1.0 - pow2(e)) + super_t::h) * 2);
           H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
           H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
           H_uh[2][3] = -q_alpha;
@@ -534,12 +542,12 @@ class INS_GPS2_Tightly : public BaseFINS{
       if(!rate_p){return 1;}
 
       // rate residual
-      z[1] = rate - BaseFINS::m_clock_error_rate[x.clock_index]
+      z[1] = rate - super_t::m_clock_error_rate[x.clock_index]
           + prop.rate_relative_neg;
 
       { // setup H matrix
         { // velocity
-          mat_t dcm_q_e2n_star(BaseFINS::q_e2n.conj().getDCM());
+          mat_t dcm_q_e2n_star(super_t::q_e2n.conj().getDCM());
           for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
             for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
               H[1][j] -= prop.los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
@@ -567,6 +575,8 @@ class INS_GPS2_Tightly : public BaseFINS{
     }
 
   public:
+    using super_t::correct_info;
+
     /**
      * Calculate information required for measurement update
      *
@@ -689,17 +699,19 @@ class INS_GPS2_Tightly : public BaseFINS{
         if((delta_ms < 0.9) && (delta_ms > -0.9)){
           std::cerr << "Fixed." << std::endl;
           // correct internal clock error
-          BaseFINS::m_clock_error[gps.clock_index] += clock_error_shift;
+          super_t::m_clock_error[gps.clock_index] += clock_error_shift;
         }else{
           std::cerr << "Skipped." << std::endl;
           return; // unknown error!
         }
       }
 
-      BaseFINS::correct_primitive(info);
+      super_t::correct_primitive(info);
     }
 
   public:
+    using super_t::correct;
+
     /**
      * Measurement update with GPS raw measurement
      *
