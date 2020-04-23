@@ -304,17 +304,12 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
     }
 
     template <class GPS_Packet>
-    void correct2(const GPS_Packet &gps, void *){
-      CorrectInfo<float_t> info(snapshots.front().ins_gps.correct_info(gps));
-      correct_with_info(info);
-    }
-
-    template <class GPS_Packet>
     void correct2(const GPS_Packet &gps,
-        const vec3_t &lever_arm_b,
-        const vec3_t &omega_b2i_4b,
-        void *){
-      CorrectInfo<float_t> info(snapshots.front().ins_gps.correct_info(gps, lever_arm_b, omega_b2i_4b));
+        const vec3_t *lever_arm_b,
+        const vec3_t *omega_b2i_4b){
+      CorrectInfo<float_t> info(lever_arm_b
+          ? snapshots.front().ins_gps.correct_info(gps, *lever_arm_b, *omega_b2i_4b)
+          : snapshots.front().ins_gps.correct_info(gps));
       correct_with_info(info);
     }
 
@@ -354,42 +349,31 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
       correct_with_info(info);
     }
 
-    template <
-        class GPS_Packet,
-        typename BaseFINS>
     void correct2(
-        const GPS_Packet &gps,
-        INS_GPS2_Tightly<BaseFINS> *){
-
-      correct2_tightly_generic(gps,
-          typename INS_GPS2_Tightly<BaseFINS>::CorrectInfoGenerator1());
-    }
-
-    template <
-        class GPS_Packet,
-        typename BaseFINS>
-    void correct2(
-        const GPS_Packet &gps,
-        const vec3_t &lever_arm_b,
-        const vec3_t &omega_b2i_4b,
-        INS_GPS2_Tightly<BaseFINS> *){
-
-      correct2_tightly_generic(gps,
-          typename INS_GPS2_Tightly<BaseFINS>::CorrectInfoGenerator2(
-            lever_arm_b, omega_b2i_4b));
+        const GPS_RawData<float_t> &gps,
+        const vec3_t *lever_arm_b,
+        const vec3_t *omega_b2i_4b){
+      if(lever_arm_b){
+        correct2_tightly_generic(gps,
+            typename INS_GPS::CorrectInfoGenerator2(
+              *lever_arm_b, *omega_b2i_4b));
+      }else{
+        correct2_tightly_generic(gps,
+            typename INS_GPS::CorrectInfoGenerator1());
+      }
     }
 
   public:
     template <class GPS_Packet>
     void correct(const GPS_Packet &gps){
-      correct2(gps, this);
+      correct2(gps, NULL, NULL);
     }
 
     template <class GPS_Packet>
     void correct(const GPS_Packet &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      correct2(gps, lever_arm_b, omega_b2i_4b, this);
+      correct2(gps, &lever_arm_b, &omega_b2i_4b);
     }
 };
 
