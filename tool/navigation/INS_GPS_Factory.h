@@ -264,8 +264,25 @@ struct INS_GPS_Factory {
     };
     template <class FINS_Type>
     struct ins_gps_t {
+      template <class FINS_Type2>
+      struct check_loosely_base_t {
+        typedef FINS_Type2 res_t;
+      };
+#if 0
+      /* If 1, tightly coupled can only accept raw data;
+       * otherwise, loosely-coupled(INS_GPS2) may be still included.
+       * (INS_GPS2 will be a direct super class of INS_GPS2_Tightly,
+       * because of priority order in INS_GPS_Factory_Options.
+       */
+      template <class FINS_Type2>
+      struct check_loosely_base_t<INS_GPS2<FINS_Type2> > {
+        typedef FINS_Type2 res_t;
+      };
+#endif
       typedef INS_GPS2_Tightly<
-          typename option_t<T>::template ins_gps_t<FINS_Type>::res_t> res_t;
+          typename check_loosely_base_t<
+            typename option_t<T>::template ins_gps_t<FINS_Type>::res_t
+          >::res_t > res_t;
     };
   };
   template <unsigned int Clocks = 1>
