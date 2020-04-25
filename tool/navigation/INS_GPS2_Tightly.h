@@ -660,28 +660,24 @@ class INS_GPS2_Tightly : public BaseFINS {
       return range_residual_sum / z_ranges / space_node_t::light_speed / 1E-3;
     }
 
-    struct CorrectInfoGenerator1 {
-      CorrectInfo<float_t> operator()(
-          const self_t &self, const raw_data_t &gps,
-          const float_t &clock_error_shift = 0) const {
-        return self.correct_info(gps, clock_error_shift);
-      }
-    };
-
-    struct CorrectInfoGenerator2 {
-      const vec3_t &lever_arm_b;
-      const vec3_t &omega_b2i_4b;
-      CorrectInfoGenerator2(const vec3_t &lever, const vec3_t &omega)
+    struct CorrectInfoGenerator {
+      const vec3_t *lever_arm_b;
+      const vec3_t *omega_b2i_4b;
+      CorrectInfoGenerator(const vec3_t *lever = NULL, const vec3_t *omega = NULL)
           : lever_arm_b(lever), omega_b2i_4b(omega) {}
+      template <class ObservationT>
       CorrectInfo<float_t> operator()(
-          const self_t &self, const raw_data_t &gps,
+          const self_t &self, const ObservationT &gps,
           const float_t &clock_error_shift = 0) const {
-        return self.correct_info(gps, lever_arm_b, omega_b2i_4b, clock_error_shift);
+        return lever_arm_b
+            ? self.correct_info(gps, *lever_arm_b, *omega_b2i_4b, clock_error_shift)
+            : self.correct_info(gps, clock_error_shift);
       }
     };
 
-    template <class Generator>
-    void correct_generic(const raw_data_t &gps, const Generator &generator){
+    template <class ObservationT>
+    void correct_with_clock_jump_check(
+        const ObservationT &gps, const CorrectInfoGenerator &generator){
       CorrectInfo<float_t> info(generator(*this, gps));
       if(info.z.rows() < 1){return;}
 
@@ -718,7 +714,7 @@ class INS_GPS2_Tightly : public BaseFINS {
      * @param gps GPS measurement
      */
     void correct(const raw_data_t &gps){
-      correct_generic(gps, CorrectInfoGenerator1());
+      correct_with_clock_jump_check(gps, CorrectInfoGenerator());
     }
 
     /**
@@ -731,7 +727,7 @@ class INS_GPS2_Tightly : public BaseFINS {
     void correct(const raw_data_t &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
-      correct_generic(gps, CorrectInfoGenerator2(lever_arm_b, omega_b2i_4b));
+      correct_with_clock_jump_check(gps, CorrectInfoGenerator(&lever_arm_b, &omega_b2i_4b));
     }
 };
 

@@ -314,7 +314,9 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
     }
 
     template <class Generator>
-    void correct2_tightly_generic(const GPS_RawData<float_t> &gps, const Generator &generator){
+    void correct2_tightly(
+        const GPS_RawData<float_t> &gps,
+        const Generator &generator){
       CorrectInfo<float_t> info(generator(snapshots.front().ins_gps, gps));
       if(info.z.rows() < 1){return;}
 
@@ -353,14 +355,8 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
         const GPS_RawData<float_t> &gps,
         const vec3_t *lever_arm_b,
         const vec3_t *omega_b2i_4b){
-      if(lever_arm_b){
-        correct2_tightly_generic(gps,
-            typename INS_GPS::CorrectInfoGenerator2(
-              *lever_arm_b, *omega_b2i_4b));
-      }else{
-        correct2_tightly_generic(gps,
-            typename INS_GPS::CorrectInfoGenerator1());
-      }
+      correct2_tightly(gps,
+          typename INS_GPS::CorrectInfoGenerator(lever_arm_b, omega_b2i_4b));
     }
 
   public:
