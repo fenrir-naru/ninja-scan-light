@@ -120,7 +120,7 @@
  *      and continual measurement update threshold for GPS 2D estimated error, respectively.
  *      These default values are 20, 10, and 100, respectively.
  *
- * The followings are advanced (i.e., very experimental) options;
+ * The followings are advanced (in other words, experimental :-) options;
  *   --back_propagate
  *      apply Kalman filter smoothing to previously time-updated data
  *      (exclusive with --realtime)
@@ -128,7 +128,21 @@
  *      change GPS synchronization strategy to support realtime applications.
  *      It processes data without sorting and outputs calculation results as quick as possible.
  *      (exclusive with --back_propagate)
- *
+ *   --loosely / --tightly / --loosely=<self_pv|self_pvt>
+ *      changes INS/GPS integration method. The default is "--loosely", which integrates
+ *      INS and GPS with position and velocity provided by a GPS receiver. "--tightly" integrates
+ *      them with raw measurement represented by pseudo-range of a GPS receiver.
+ *      "--loosely=self_pv(t)" are methods to use the raw measurement, but solve position, and
+ *      velocity (and clock in "self_pvt") with them by using a built-in solver instead of
+ *      a GPS receiver.
+ *   --out_raw_pvt=file
+ *      generates outputs of PVT solution to the specified file.
+ *      This option is active when the integration method is other than "--loosely".
+ *   --rinex_nav=file
+ *      assists built-in GNSS solver by using ephemeris data in the specified file.
+ *   --GNSS_elv_mask_deg=(angle [deg])
+ *      excludes observation of GNSS satellites which locates under the specified angle.
+ *      The default mask angle is zero.
  */
 
 // Comment-In when QNAN DEBUG
