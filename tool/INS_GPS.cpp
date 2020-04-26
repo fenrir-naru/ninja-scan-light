@@ -236,6 +236,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   enum {
     INS_GPS_INTEGRATION_LOOSELY,
     INS_GPS_INTEGRATION_LOOSELY_SELF_PV,
+    INS_GPS_INTEGRATION_LOOSELY_SELF_PVT,
     INS_GPS_INTEGRATION_TIGHTLY,
     INS_GPS_INTEGRATION_METHODS,
   } ins_gps_integration; ///< integration style.
@@ -367,7 +368,7 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
         }, time_stamp.calendar_spec_parse());
 
     static const char *integration_method[INS_GPS_INTEGRATION_METHODS] = {
-      "receiver_pv", "self_pv", "tightly"
+      "receiver_pv", "self_pv", "self_pvt", "tightly"
     };
     CHECK_ALIAS(tight);
     CHECK_OPTION(tightly, true,
@@ -376,6 +377,7 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_OPTION(loosely, true,
         if(is_true(value)){ins_gps_integration = INS_GPS_INTEGRATION_LOOSELY;}
         else if(std::strcmp(value, "self_pv") == 0){ins_gps_integration = INS_GPS_INTEGRATION_LOOSELY_SELF_PV;}
+        else if(std::strcmp(value, "self_pvt") == 0){ins_gps_integration = INS_GPS_INTEGRATION_LOOSELY_SELF_PVT;}
         else{return false;},
         integration_method[ins_gps_integration]);
 
@@ -786,6 +788,11 @@ struct G_Packet_Measurement
     }
 #endif
   }
+
+  struct PVT_Packet : public Packet, public raw_data_t::pvt_t {
+    Vector3<float_sylph_t> *lever_arm;
+    void apply(NAV &nav) const {}
+  };
 
   template <class PacketT, class U = void>
   struct convert_t {
@@ -2618,6 +2625,11 @@ class INS_GPS_NAV<INS_GPS>::Helper {
                 .error_code != G_Packet_Measurement::pvt_t::ERROR_NO){break;}
             measurement_update_common(g_packet.convert<G_Packet>(&gps_raw_pvt));
             break;
+          case Options::INS_GPS_INTEGRATION_LOOSELY_SELF_PVT:
+            measurement_update_common(
+                g_packet.convert<G_Packet_Measurement::PVT_Packet>(
+                    &(gps_raw_pvt = g_packet.pvt(gps_raw_pvt))));
+            break;
         }
       }else if((recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
@@ -2661,6 +2673,7 @@ class NAV_Generator {
       switch(options.ins_gps_integration){
         case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
         case Options::INS_GPS_INTEGRATION_LOOSELY_SELF_PV: // Loosely with built-in GNSS PV solver
+        case Options::INS_GPS_INTEGRATION_LOOSELY_SELF_PVT: // Loosely with built-in GNSS PVT solver
           return check_bias<typename T::template tightly<> >();
         case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
         default:

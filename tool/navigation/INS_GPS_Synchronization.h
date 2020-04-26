@@ -358,6 +358,13 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
       correct2_tightly(gps,
           typename INS_GPS::CorrectInfoGenerator(lever_arm_b, omega_b2i_4b));
     }
+    void correct2(
+        const typename GPS_RawData<float_t>::pvt_t &gps,
+        const vec3_t *lever_arm_b,
+        const vec3_t *omega_b2i_4b){
+      correct2_tightly(gps,
+          typename INS_GPS::CorrectInfoGenerator(lever_arm_b, omega_b2i_4b));
+    }
 
   public:
     template <class GPS_Packet>

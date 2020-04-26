@@ -657,7 +657,9 @@ class INS_GPS2_Tightly : public BaseFINS {
         z_ranges++;
       }
 
-      return range_residual_sum / z_ranges / space_node_t::light_speed / 1E-3;
+      return (z_ranges > 0)
+          ? (range_residual_sum / z_ranges / space_node_t::light_speed / 1E-3)
+          : 0;
     }
 
     struct CorrectInfoGenerator {
@@ -729,6 +731,77 @@ class INS_GPS2_Tightly : public BaseFINS {
         const vec3_t &omega_b2i_4b){
       correct_with_clock_jump_check(gps, CorrectInfoGenerator(&lever_arm_b, &omega_b2i_4b));
     }
+
+    // { // PVT (loosely) interface
+    CorrectInfo<float_t> correct_info_pvt(
+        const typename raw_data_t::pvt_t &,
+        const float_t &,
+        void *,
+        const vec3_t * = NULL, const vec3_t * = NULL) const {
+      return CorrectInfo<float_t>::no_info();
+    }
+    template <class BaseFINS2>
+    CorrectInfo<float_t> correct_info_pvt(
+        const typename raw_data_t::pvt_t &pvt,
+        const float_t &clock_error_shift,
+        const INS_GPS2<BaseFINS2> *,
+        const vec3_t *lever_arm_b = NULL, const vec3_t *omega_b2i_4b = NULL) const {
+      if((pvt.error_code != raw_data_t::pvt_t::ERROR_NO)
+          || (pvt.clock_index >= CLOCKS_SUPPORTED)){
+        return CorrectInfo<float_t>::no_info();
+      }
+      // If super class has loosely-coupled interface, PVT input is acceptable.
+      CorrectInfo<float_t> info_loosely(lever_arm_b
+          ? super_t::correct_info((GPS_Solution<float_t>)pvt, *lever_arm_b, *omega_b2i_4b)
+          : super_t::correct_info((GPS_Solution<float_t>)pvt));
+
+      // expand H, z, R rows to include clock and clock rate residual
+      unsigned int rows_orig(info_loosely.z.rows()), rows_new(rows_orig + 2);
+      mat_t H(rows_new, info_loosely.H.columns()), z(rows_new, 1), R(rows_new, rows_new);
+      H.pivotMerge(0, 0, info_loosely.H);
+      z.pivotMerge(0, 0, info_loosely.z);
+      R.pivotMerge(0, 0, info_loosely.R);
+
+      // fill clock (H = -1 because of correspondence of tightly)
+      H(rows_new - 2, P_SIZE_WITHOUT_CLOCK_ERROR + (pvt.clock_index * 2)) = -1;
+      z(rows_new - 2, 0)
+          = pvt.receiver_error
+            - (super_t::m_clock_error[pvt.clock_index] + clock_error_shift);
+      R(rows_new - 2, rows_new - 2) = 1E1; // TODO
+
+      // fill clock rate (H = -1 because of correspondence of tightly)
+      H(rows_new - 1, P_SIZE_WITHOUT_CLOCK_ERROR + (pvt.clock_index * 2) + 1) = -1;
+      z(rows_new - 1, 0)
+          = pvt.receiver_error_rate
+            - super_t::m_clock_error_rate[pvt.clock_index];
+      R(rows_new - 1, rows_new - 1) = 1E-1; // TODO
+
+      return CorrectInfo<float_t>(H, z, R);
+    }
+    CorrectInfo<float_t> correct_info(
+        const typename raw_data_t::pvt_t &pvt,
+        const float_t &clock_error_shift = 0) const {
+      return correct_info_pvt(pvt, clock_error_shift, this);
+    }
+    CorrectInfo<float_t> correct_info(
+        const typename raw_data_t::pvt_t &pvt,
+        const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b,
+        const float_t &clock_error_shift = 0) const {
+      return correct_info_pvt(pvt, clock_error_shift, this,
+          &lever_arm_b, &omega_b2i_4b);
+    }
+    void correct(
+        const typename raw_data_t::pvt_t &pvt){
+      correct_with_clock_jump_check(
+          pvt, CorrectInfoGenerator());
+    }
+    void correct(
+        const typename raw_data_t::pvt_t &pvt,
+        const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b){
+      correct_with_clock_jump_check(
+          pvt, CorrectInfoGenerator(&lever_arm_b, &omega_b2i_4b));
+    }
+    // } // PVT (loosely) interface
 };
 
 #endif /* __INS_GPS2_TIGHTLY_H__ */
