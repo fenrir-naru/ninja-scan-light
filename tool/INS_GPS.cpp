@@ -235,7 +235,9 @@ struct Options : public GlobalOptions<float_sylph_t> {
   // Navigation strategies
   enum {
     INS_GPS_INTEGRATION_LOOSELY,
+    INS_GPS_INTEGRATION_LOOSELY_SELF_PV,
     INS_GPS_INTEGRATION_TIGHTLY,
+    INS_GPS_INTEGRATION_METHODS,
   } ins_gps_integration; ///< integration style.
   enum {
     INS_GPS_SYNC_OFFLINE,
@@ -364,10 +366,19 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
           time_stamp.spec = value;
         }, time_stamp.calendar_spec_parse());
 
+    static const char *integration_method[INS_GPS_INTEGRATION_METHODS] = {
+      "receiver_pv", "self_pv", "tightly"
+    };
     CHECK_ALIAS(tight);
     CHECK_OPTION(tightly, true,
         if(is_true(value)){ins_gps_integration = INS_GPS_INTEGRATION_TIGHTLY;},
         (ins_gps_integration == INS_GPS_INTEGRATION_TIGHTLY ? "on" : "off"));
+    CHECK_OPTION(loosely, true,
+        if(is_true(value)){ins_gps_integration = INS_GPS_INTEGRATION_LOOSELY;}
+        else if(std::strcmp(value, "self_pv") == 0){ins_gps_integration = INS_GPS_INTEGRATION_LOOSELY_SELF_PV;}
+        else{return false;},
+        integration_method[ins_gps_integration]);
+
     CHECK_OPTION(back_propagate, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
         (ins_gps_sync_strategy == INS_GPS_SYNC_BACK_PROPAGATION ? "on" : "off"));
@@ -775,6 +786,24 @@ struct G_Packet_Measurement
     }
 #endif
   }
+
+  template <class PacketT, class U = void>
+  struct convert_t {
+    typedef raw_data_t::pvt_t data_t;
+  };
+  template <class U>
+  struct convert_t<G_Packet, U> {
+    typedef GPS_Solution<float_sylph_t> data_t;
+  };
+  template <class PacketT>
+  PacketT convert(const raw_data_t::pvt_t *pvt_cache = NULL) const {
+    PacketT res;
+    res.itow = this->itow;
+    res.lever_arm = this->lever_arm;
+    (typename convert_t<PacketT>::data_t &)res = pvt_cache ? *pvt_cache : this->pvt();
+    return res;
+  }
+
 };
 
 struct G_Packet_Data
@@ -2580,7 +2609,16 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
 
       if(status >= JUST_INITIALIZED){
-        measurement_update_common(g_packet);
+        switch(options.ins_gps_integration){
+          case Options::INS_GPS_INTEGRATION_TIGHTLY:
+            measurement_update_common(g_packet);
+            break;
+          case Options::INS_GPS_INTEGRATION_LOOSELY_SELF_PV:
+            if((gps_raw_pvt = g_packet.pvt(gps_raw_pvt))
+                .error_code != G_Packet_Measurement::pvt_t::ERROR_NO){break;}
+            measurement_update_common(g_packet.convert<G_Packet>(&gps_raw_pvt));
+            break;
+        }
       }else if((recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && ((gps_raw_pvt = g_packet.pvt(gps_raw_pvt))
@@ -2622,6 +2660,7 @@ class NAV_Generator {
     static NAV *check_coupling(){
       switch(options.ins_gps_integration){
         case Options::INS_GPS_INTEGRATION_TIGHTLY: // Tightly
+        case Options::INS_GPS_INTEGRATION_LOOSELY_SELF_PV: // Loosely with built-in GNSS PV solver
           return check_bias<typename T::template tightly<> >();
         case Options::INS_GPS_INTEGRATION_LOOSELY: // Loosely
         default:
