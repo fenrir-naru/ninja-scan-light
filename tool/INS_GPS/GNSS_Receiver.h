@@ -238,6 +238,7 @@ struct GNSS_Receiver {
             << ',' << "v_north"
             << ',' << "v_east"
             << ',' << "v_down"
+            << ',' << "receiver_clock_error_dot_ms"
             << ',' << "used_satellites"
             << ',' << "PRN";
       }
@@ -262,9 +263,10 @@ struct GNSS_Receiver {
       if(p.pvt.velocity_solved()){
         out << ',' << p.pvt.user_velocity_enu.north()
             << ',' << p.pvt.user_velocity_enu.east()
-            << ',' << -p.pvt.user_velocity_enu.up();
+            << ',' << -p.pvt.user_velocity_enu.up()
+            << ',' << p.pvt.receiver_error_rate;
       }else{
-        out << ",,,";
+        out << ",,,,";
       }
       if(p.pvt.position_solved()){
         out << ',' << p.pvt.used_satellites
