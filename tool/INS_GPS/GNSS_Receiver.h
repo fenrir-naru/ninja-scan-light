@@ -244,6 +244,34 @@ struct GNSS_Receiver {
       }
     } label;
 
+    struct mask_printer_t {
+      const typename pvt_t::satellite_mask_t &mask;
+      const int prn_lsb, prn_msb;
+      mask_printer_t(
+          const typename pvt_t::satellite_mask_t &_mask,
+          const int &_prn_lsb, const int &_prn_msb)
+          : mask(_mask), prn_lsb(_prn_lsb), prn_msb(_prn_msb) {}
+      friend std::ostream &operator<<(std::ostream &out, const mask_printer_t &p){
+        if(p.prn_msb < p.prn_lsb){return out;}
+        int prn(p.prn_lsb % 8);
+        prn = ((p.prn_msb - prn) / 8) * 8 + prn; // first prn_lsb is aligned to input prn_lsb modulo
+        out << std::bitset<8>(
+#if defined(_MSC_VER) && (_MSC_VER >= 1600) && (_MSC_VER < 1700) // work around of C2668
+              (unsigned long long)
+#endif
+              p.mask.pattern(prn, p.prn_msb));
+        for(int i((prn - p.prn_lsb) / 8); i > 0; --i){
+          prn -= 8;
+          out << '_' << std::bitset<8>(
+#if defined(_MSC_VER) && (_MSC_VER >= 1600) && (_MSC_VER < 1700) // work around of C2668
+              (unsigned long long)
+#endif
+                p.mask.pattern(prn, prn + 7));
+        }
+        return out;
+      }
+    };
+
     friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &p){
       out << p.pvt.receiver_time.week
           << ',' << p.pvt.receiver_time.seconds;
@@ -270,10 +298,7 @@ struct GNSS_Receiver {
       }
       if(p.pvt.position_solved()){
         out << ',' << p.pvt.used_satellites
-            << ',' << std::bitset<8>((p.pvt.used_satellite_mask >> 24) & 0xFF)
-              << '_' << std::bitset<8>((p.pvt.used_satellite_mask >> 16) & 0xFF)
-              << '_' << std::bitset<8>((p.pvt.used_satellite_mask >> 8) & 0xFF)
-              << '_' << std::bitset<8>(p.pvt.used_satellite_mask & 0xFF);
+            << ',' << mask_printer_t(p.pvt.used_satellite_mask, 1, 32);
       }else{
         out << ",,";
       }
