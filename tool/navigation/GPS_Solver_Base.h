@@ -39,6 +39,9 @@
 #include <map>
 #include <utility>
 
+#include <cmath>
+
+#include "param/matrix.h"
 #include "GPS.h"
 
 template <class FloatT>
@@ -46,6 +49,7 @@ struct GPS_Solver_Base {
   virtual ~GPS_Solver_Base() {}
 
   typedef FloatT float_t;
+  typedef Matrix<float_t> matrix_t;
 
   typedef int prn_t;
 
@@ -290,8 +294,68 @@ struct GPS_Solver_Base {
     bool velocity_solved() const {
       return error_code == ERROR_NO;
     }
+
+    void update_DOP(const matrix_t &C){
+      // Calculate DOP
+      gdop = std::sqrt(C.trace());
+      pdop = std::sqrt(C.partial(3, 3, 0, 0).trace());
+      hdop = std::sqrt(C.partial(2, 2, 0, 0).trace());
+      vdop = std::sqrt(C(2, 2));
+      tdop = std::sqrt(C(3, 3));
+    }
   };
 
+protected:
+  struct geometric_matrices_t {
+    matrix_t G; ///< Design matrix
+    matrix_t W; ///< Weight (diagonal) matrix
+    matrix_t delta_r; ///< Residual vector
+    geometric_matrices_t(const unsigned int &size)
+        : G(size, 4), W(size, size), delta_r(size, 1) {
+      for(unsigned int i(0); i < size; ++i){
+        G(i, 3) = 1;
+      }
+    }
+
+    typename matrix_t::partial_t Gp(const unsigned int &size) const {
+      return G.partial(size, 4, 0, 0);
+    }
+    typename matrix_t::partial_t Wp(const unsigned int &size) const {
+      return W.partial(size, size, 0, 0);
+    }
+    typename matrix_t::partial_t delta_rp(const unsigned int &size) const {
+      return delta_r.partial(size, 1, 0, 0);
+    }
+
+    matrix_t C() const {
+      return (G.transpose() * G).inverse();
+    }
+    matrix_t C(const unsigned int &size) const {
+      typename matrix_t::partial_t Gp_(Gp(size));
+      return (Gp_.transpose() * Gp_).inverse();
+    }
+
+    matrix_t least_square() const {
+      matrix_t Gt_W(G.transpose() * W);
+      return (Gt_W * G).inverse() * Gt_W * delta_r;
+    }
+    matrix_t least_square(const unsigned int &size) const {
+      if(size >= G.rows()){return least_square();}
+      typename matrix_t::partial_t Gp_(Gp(size));
+      matrix_t Gpt_Wp(Gp_.transpose() * Wp(size));
+      return (Gpt_Wp * Gp_).inverse() * Gpt_Wp * delta_rp(size);
+    }
+
+    void copy_G_W_row(const geometric_matrices_t &src,
+        const unsigned int &i_src, const unsigned int &i_dst){
+      for(unsigned int j(0); j < 4; ++j){
+        G(i_dst, j) = src.G(i_src, j);
+      }
+      W(i_dst, i_dst) = src.W(i_src, i_src);
+    }
+  };
+
+public:
   /**
    * Calculate User position/velocity with hint
    *
@@ -310,7 +374,154 @@ struct GPS_Solver_Base {
       const pos_t &user_position_init,
       const float_t &receiver_error_init,
       const bool &good_init = true,
-      const bool &with_velocity = true) const = 0;
+      const bool &with_velocity = true) const {
+
+    // Reference implementation (to be hidden by optimized one in sub class)
+
+    user_pvt_t res;
+    res.receiver_time = receiver_time;
+
+    // 1. Position calculation
+
+    res.user_position = user_position_init;
+    res.receiver_error = receiver_error_init;
+
+    gps_time_t time_arrival(
+        receiver_time - (res.receiver_error / space_node_t::light_speed));
+
+    geometric_matrices_t geomat(measurement.size());
+    typedef std::vector<std::pair<prn_t, float_t> > sat_range_t;
+    sat_range_t sat_rate_rel;
+    sat_rate_rel.reserve(measurement.size());
+
+    // If initialization is not appropriate, more iteration will be performed.
+    bool converged(false);
+    for(int i(good_init ? 0 : -2); i < 10; i++){
+
+      sat_rate_rel.clear();
+      unsigned int j(0);
+      res.used_satellite_mask = 0;
+
+      const bool coarse_estimation(i <= 0);
+      for(typename measurement_t::const_iterator it(measurement.begin());
+          it != measurement.end();
+          ++it){
+
+        static const xyz_t zero(0, 0, 0);
+        relative_property_t prop(relative_property(
+            it->first, it->second,
+            res.receiver_error, time_arrival,
+            res.user_position, zero));
+
+        if(prop.weight <= 0){
+          continue; // intentionally excluded satellite
+        }else if(it->first <= user_pvt_t::satellite_mask_t::PRN_MAX){
+          res.used_satellite_mask |= user_pvt_t::satellite_mask[it->first];
+        }
+
+        if(coarse_estimation){
+          prop.weight = 1;
+        }else{
+          sat_rate_rel.push_back(std::make_pair(it->first, prop.rate_relative_neg));
+        }
+
+        geomat.delta_r(j, 0) = prop.range_residual;
+        geomat.G(j, 0) = prop.los_neg[0];
+        geomat.G(j, 1) = prop.los_neg[1];
+        geomat.G(j, 2) = prop.los_neg[2];
+        geomat.W(j, j) = prop.weight;
+
+        ++j;
+      }
+
+      if((res.used_satellites = j) < 4){
+        res.error_code = user_pvt_t::ERROR_INSUFFICIENT_SATELLITES;
+        return res;
+      }
+
+      try{
+        // Least square
+        matrix_t delta_x(geomat.least_square(res.used_satellites));
+
+        xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
+        res.user_position.xyz += delta_user_position;
+        res.user_position.llh = res.user_position.xyz.llh();
+
+        const float_t &delta_receiver_error(delta_x(3, 0));
+        res.receiver_error += delta_receiver_error;
+        time_arrival -= (delta_receiver_error / space_node_t::light_speed);
+
+        if((!coarse_estimation) && (delta_user_position.dist() <= 1E-6)){
+          converged = true;
+          break;
+        }
+      }catch(std::exception &e){
+        res.error_code = user_pvt_t::ERROR_POSITION_LS;
+        return res;
+      }
+    }
+
+    if(!converged){
+      res.error_code = user_pvt_t::ERROR_POSITION_NOT_CONVERGED;
+      return res;
+    }
+
+    try{
+      res.update_DOP(geomat.C(res.used_satellites));
+    }catch(std::exception &e){
+      res.error_code = user_pvt_t::ERROR_DOP;
+      return res;
+    }
+
+    if(!with_velocity){
+      res.error_code = user_pvt_t::ERROR_VELOCITY_SKIPPED;
+      return res;
+    }
+
+    /* 2. Calculate velocity
+     * Check consistency between range and rate for velocity calculation,
+     * then, assign design and weight matrices
+     */
+    geometric_matrices_t geomat2(res.used_satellites);
+    int i_range(0), i_rate(0);
+
+    for(typename sat_range_t::const_iterator it(sat_rate_rel.begin());
+        it != sat_rate_rel.end();
+        ++it, ++i_range){
+
+      float_t rate;
+      if(!this->rate(
+          measurement.find(it->first)->second, // const version of measurement[PRN]
+          rate)){continue;}
+
+      // Copy design matrix and set rate
+      geomat2.copy_G_W_row(geomat, i_range, i_rate);
+      geomat2.delta_r(i_rate, 0) = rate + it->second;
+
+      ++i_rate;
+    }
+
+    if(i_rate < 4){
+      res.error_code = user_pvt_t::ERROR_VELOCITY_INSUFFICIENT_SATELLITES;
+      return res;
+    }
+
+    try{
+      // Least square
+      matrix_t sol(geomat2.least_square(i_rate));
+
+      xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
+      res.user_velocity_enu = enu_t::relative_rel(
+          vel_xyz, res.user_position.llh);
+      res.receiver_error_rate = sol(3, 0);
+    }catch(std::exception &e){
+      res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
+      return res;
+    }
+
+    res.error_code = user_pvt_t::ERROR_NO;
+    return res;
+  }
 
   /**
    * Calculate User position/velocity with hint

@@ -44,7 +44,6 @@
 
 #include <cmath>
 
-#include "param/matrix.h"
 #include "GPS.h"
 #include "GPS_Solver_Base.h"
 #include "NTCM.h"
@@ -112,8 +111,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 #endif
 
     inheritate_type(float_t);
+    inheritate_type(matrix_t);
     inheritate_type(prn_t);
-    typedef Matrix<float_t> matrix_t;
 
     inheritate_type(space_node_t);
     inheritate_type(gps_time_t);
@@ -133,6 +132,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     typedef GPS_SinglePositioning_Options<float_t> options_t;
 
     inheritate_type(relative_property_t);
+    inheritate_type(geometric_matrices_t);
     inheritate_type(user_pvt_t);
 #undef inheritate_type
 
@@ -193,57 +193,6 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
     ~GPS_SinglePositioning(){}
 
-  protected:
-    struct geometric_matrices_t {
-      matrix_t G; ///< Design matrix
-      matrix_t W; ///< Weight (diagonal) matrix
-      matrix_t delta_r; ///< Residual vector
-      geometric_matrices_t(const unsigned int &size)
-          : G(size, 4), W(size, size), delta_r(size, 1) {
-        for(unsigned int i(0); i < size; ++i){
-          G(i, 3) = 1;
-        }
-      }
-
-      typename matrix_t::partial_t Gp(const unsigned int &size) const {
-        return G.partial(size, 4, 0, 0);
-      }
-      typename matrix_t::partial_t Wp(const unsigned int &size) const {
-        return W.partial(size, size, 0, 0);
-      }
-      typename matrix_t::partial_t delta_rp(const unsigned int &size) const {
-        return delta_r.partial(size, 1, 0, 0);
-      }
-
-      matrix_t C() const {
-        return (G.transpose() * G).inverse();
-      }
-      matrix_t C(const unsigned int &size) const {
-        typename matrix_t::partial_t Gp_(Gp(size));
-        return (Gp_.transpose() * Gp_).inverse();
-      }
-
-      matrix_t least_square() const {
-        matrix_t Gt_W(G.transpose() * W);
-        return (Gt_W * G).inverse() * Gt_W * delta_r;
-      }
-      matrix_t least_square(const unsigned int &size) const {
-        if(size >= G.rows()){return least_square();}
-        typename matrix_t::partial_t Gp_(Gp(size));
-        matrix_t Gpt_Wp(Gp_.transpose() * Wp(size));
-        return (Gpt_Wp * Gp_).inverse() * Gpt_Wp * delta_rp(size);
-      }
-
-      void copy_G_W_row(const geometric_matrices_t &src,
-          const unsigned int &i_src, const unsigned int &i_dst){
-        for(unsigned int j(0); j < 4; ++j){
-          G(i_dst, j) = src.G(i_src, j);
-        }
-        W(i_dst, i_dst) = src.W(i_src, i_src);
-      }
-    };
-
-  public:
     struct residual_t {
       float_t &residual;
       float_t &los_neg_x;
@@ -608,14 +557,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       }
 
       try{
-        matrix_t C(geomat.C(res.used_satellites));
-
-        // Calculate DOP
-        res.gdop = std::sqrt(C.trace());
-        res.pdop = std::sqrt(C.partial(3, 3, 0, 0).trace());
-        res.hdop = std::sqrt(C.partial(2, 2, 0, 0).trace());
-        res.vdop = std::sqrt(C(2, 2));
-        res.tdop = std::sqrt(C(3, 3));
+        res.update_DOP(geomat.C(res.used_satellites));
       }catch(std::exception &e){
         res.error_code = user_pvt_t::ERROR_DOP;
         return res;
