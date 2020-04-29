@@ -321,36 +321,49 @@ struct GNSS_Receiver {
       }
     } label;
 
+    struct cmd_t {
+      int item;
+      bool anchor;
+      FloatT sf;
+    };
     struct print_t {
       typedef typename raw_t::measurement_t msr_t;
-      typedef typename gps_solver_t::measurement_items_t items_t;
       const msr_t &msr;
       const int &prn;
+      const cmd_t *cmd;
+      const int cmd_length;
       friend std::ostream &operator<<(std::ostream &out, const print_t &target){
         typename msr_t::const_iterator it(target.msr.find(target.prn));
-        if(it == target.msr.end()){return out << ',';}
+        bool has_info(it != target.msr.end()), value_found(false);
         FloatT v;
-        if(solver_t::find_value(it->second, items_t::L1_PSEUDORANGE, v)){ // range
-          out << v;
-        }
-        out << ',';
-        if(solver_t::find_value(it->second, items_t::L1_RANGE_RATE, v)){ // rate
-          out << v;
-        }else if(solver_t::find_value(it->second, items_t::L1_DOPPLER, v)){
-          // fallback to using doppler
-          out << v * -gps_space_node_t::L1_WaveLength();
+        for(int i(0); i < target.cmd_length; ++i){
+          if(has_info && (!value_found)
+              && solver_t::find_value(it->second, target.cmd[i].item, v)){
+            out << v * target.cmd[i].sf;
+            value_found = true;
+          }
+          if(!target.cmd[i].anchor){continue;}
+          out << ',';
+          value_found = false;
         }
         return out;
       }
     };
-    print_t operator[](const int &prn) const {
-      print_t res = {raw.measurement, prn};
+    template <int N>
+    print_t operator()(const int &prn, const cmd_t (&cmd)[N]) const {
+      print_t res = {raw.measurement, prn, cmd, N};
       return res;
     }
     friend std::ostream &operator<<(std::ostream &out, const raw_data_printer_t &p){
+      typedef typename solver_t::measurement_items_t items_t;
+      static const cmd_t cmd_gps[] = {
+        {items_t::L1_PSEUDORANGE, true,  1}, // range
+        {items_t::L1_RANGE_RATE,  false, 1}, // rate
+        {items_t::L1_DOPPLER,     false, -gps_space_node_t::L1_WaveLength()}, // fallback to using doppler
+      };
       out << p.raw.clock_index;
       for(int i(1); i <= 32; ++i){
-        out << ',' << p[i];
+        out << ',' << p(i, cmd_gps);
       }
       return out;
     }
