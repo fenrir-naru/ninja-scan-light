@@ -329,23 +329,16 @@ struct GNSS_Receiver {
       friend std::ostream &operator<<(std::ostream &out, const print_t &target){
         typename msr_t::const_iterator it(target.msr.find(target.prn));
         if(it == target.msr.end()){return out << ',';}
-        { // range
-          typename msr_t::mapped_type::const_iterator it2(
-              it->second.find(items_t::L1_PSEUDORANGE));
-          if(it2 != it->second.end()){
-            out << it2->second;
-          }
+        FloatT v;
+        if(solver_t::find_value(it->second, items_t::L1_PSEUDORANGE, v)){ // range
+          out << v;
         }
         out << ',';
-        { // rate
-          typename msr_t::mapped_type::const_iterator it2(
-              it->second.find(items_t::L1_RANGE_RATE));
-          if(it2 != it->second.end()){
-            out << it2->second;
-          }else if((it2 = it->second.find(items_t::L1_DOPPLER)) != it->second.end()){
-            // fallback to using doppler
-            out << it2->second * -gps_space_node_t::L1_WaveLength();
-          }
+        if(solver_t::find_value(it->second, items_t::L1_RANGE_RATE, v)){ // rate
+          out << v;
+        }else if(solver_t::find_value(it->second, items_t::L1_DOPPLER, v)){
+          // fallback to using doppler
+          out << v * -gps_space_node_t::L1_WaveLength();
         }
         return out;
       }
