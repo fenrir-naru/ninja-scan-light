@@ -315,6 +315,9 @@ struct GNSS_Receiver {
         out << "clock_index";
         for(int i(1); i <= 32; ++i){
           out << ',' << "L1_range(" << i << ')'
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+              << ',' << "L2_range(" << i << ')'
+#endif
               << ',' << "L1_rate(" << i << ')';
         }
         return out;
@@ -358,6 +361,10 @@ struct GNSS_Receiver {
       typedef typename solver_t::measurement_items_t items_t;
       static const cmd_t cmd_gps[] = {
         {items_t::L1_PSEUDORANGE, true,  1}, // range
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+        {items_t::L2CM_PSEUDORANGE, false, 1}, // range(L2C)
+        {items_t::L2CL_PSEUDORANGE, true,  1},
+#endif
         {items_t::L1_RANGE_RATE,  false, 1}, // rate
         {items_t::L1_DOPPLER,     false, -gps_space_node_t::L1_WaveLength()}, // fallback to using doppler
       };
