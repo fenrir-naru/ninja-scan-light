@@ -205,7 +205,7 @@ class System_XYZ : public System_3D<FloatT> {
         return System_LLH<FloatT, Earth>(0, 0, -a0);
       }
 
-      FloatT h(pow2(a0) - pow2(b0));
+      static const FloatT h(pow2(a0) - pow2(b0));
       FloatT p(std::sqrt(pow2(x()) + pow2(y())));
       //cout << "p => " << p << endl;
       FloatT t(std::atan2(z()*a0, p*b0));
