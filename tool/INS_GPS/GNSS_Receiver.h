@@ -39,6 +39,7 @@
 #include "navigation/GPS.h"
 #include "navigation/SBAS.h"
 #include "navigation/GPS_Solver.h"
+#include "navigation/SBAS_Solver.h"
 #include "navigation/RINEX.h"
 
 #include "navigation/INS_GPS2_Tightly.h"
@@ -81,6 +82,7 @@ struct GNSS_Receiver {
 #endif
 
   typedef SBAS_SpaceNode<FloatT> sbas_space_node_t;
+  typedef SBAS_SinglePositioning<FloatT, solver_base_t> sbas_solver_t;
 
   struct system_t;
 
@@ -91,6 +93,7 @@ struct GNSS_Receiver {
     } gps;
     struct {
       sbas_space_node_t space_node;
+      typename sbas_solver_t::options_t solver_options;
     } sbas;
     std::ostream *out_rinex_nav;
     data_t() : gps(), sbas(), out_rinex_nav(NULL) {}
@@ -104,20 +107,24 @@ struct GNSS_Receiver {
   struct solver_t : public solver_base_t {
     typedef solver_base_t base_t;
     gps_solver_t gps;
+    sbas_solver_t sbas;
     struct measurement_items_t : public gps_solver_t::measurement_items_t {
       // TODO
     };
     solver_t(const GNSS_Receiver &rcv)
         : base_t(),
-        gps(rcv.data.gps.space_node)
+        gps(rcv.data.gps.space_node),
+        sbas(rcv.data.sbas.space_node)
         {
       gps.space_node_sbas = &rcv.data.sbas.space_node;
+      sbas.space_node_gps = &rcv.data.gps.space_node;
     }
 
     // Proxy functions
     const base_t &select(const typename base_t::prn_t &serial) const {
       switch(system_t::serial2system(serial)){
-        case system_t::GPS: return gps;
+        case system_t::GPS: 	return gps;
+        case system_t::SBAS:	return sbas;
       }
       return *this;
     }
@@ -147,10 +154,12 @@ struct GNSS_Receiver {
   void adjust(const GPS_Time<FloatT> &t){
     // Select most preferable ephemeris
     data.gps.space_node.update_all_ephemeris(t);
+    data.sbas.space_node.update_all_ephemeris(t);
 
     // Solver update mainly for preferable ionospheric model selection
     // based on their availability
     solver_GNSS.gps.update_options(data.gps.solver_options);
+    solver_GNSS.sbas.update_options(data.sbas.solver_options);
   }
 
   struct system_t {
@@ -308,7 +317,8 @@ struct GNSS_Receiver {
     }
 
 #define option_apply(expr) \
-data.gps.solver_options. expr
+data.gps.solver_options. expr; \
+data.sbas.solver_options. expr
     if(value = runtime_opt_t::get_value(spec, "GNSS_elv_mask_deg", false)){
       if(dry_run){return true;}
       FloatT mask_deg(std::atof(value));
