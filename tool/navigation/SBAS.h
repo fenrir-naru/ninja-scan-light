@@ -1767,7 +1767,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
            * @see 2.1.1.4.9, A.4.5.1.3.3
            */
           bool is_valid(const gps_time_t &t) const {
-            return true;
+            return ((WN > 0) || (t_0 >= 0));
           }
 
           /**
@@ -2066,7 +2066,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           // setup first ephemeris as invalid one
           eph_t &eph_current(const_cast<eph_t &>(eph_history.current()));
           eph_current.WN = 0;
-          eph_current.t_0 = 0;
+          eph_current.t_0 = -1;
         }
 
         void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
