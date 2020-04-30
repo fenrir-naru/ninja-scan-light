@@ -1744,13 +1744,15 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             // roll over check
             float_t delta(sec_of_a_day - t_0_orig);
             if(delta > (gps_time_t::seconds_day / 4 * 3)){
-              t_0 += gps_time_t::seconds_day;
+              // 0 --> t_0 ---------(3/4)---------> current --> day
+              t_0 += gps_time_t::seconds_day; // probably, current --> t_0
               if(t_0 >= gps_time_t::seconds_week){
                 WN++;
                 t_0 -= gps_time_t::seconds_week;
               }
             }else if(-delta > (gps_time_t::seconds_day / 4 * 3)){
-              t_0 -= gps_time_t::seconds_day;
+              // 0 --> current ---------(3/4)---------> t_0 --> day
+              t_0 -= gps_time_t::seconds_day; // probably, t_0 --> current
               if(t_0 < 0){
                 WN--;
                 t_0 += gps_time_t::seconds_week;
