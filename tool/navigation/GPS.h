@@ -716,10 +716,10 @@ class GPS_SpaceNode {
             float_t Ek(eccentric_anomaly(tk));
 
             // Relativistic correction term
-            float_t dt_r(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
-                * e * sqrt_A * sin(Ek));
+            static const float_t F(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed));
+            float_t dt_r(F * e * sqrt_A * sin(Ek));
 
-            float_t dt_sv(a_f0 + a_f1 * tk + a_f2 * pow2(tk) + dt_r);
+            float_t dt_sv(a_f0 + a_f1 * tk + a_f2 * pow2(tk) + dt_r); // ICD 20.3.3.3.1 Eq.(2)
 
             return dt_sv - (gamma * t_GD);
           }
@@ -732,8 +732,8 @@ class GPS_SpaceNode {
             float_t Ek_dot(eccentric_anomaly_dot(Ek));
 
             // Derivative of Relativistic correction term
-            float_t dt_r_dot(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed)
-                * e * sqrt_A * Ek_dot * cos(Ek));
+            static const float_t F(-2.0 * std::sqrt(WGS84::mu_Earth) / pow2(light_speed));
+            float_t dt_r_dot(F * e * sqrt_A * Ek_dot * cos(Ek));
 
             float_t dt_sv_dot(a_f1 + a_f2 * 2 * tk + dt_r_dot);
 
