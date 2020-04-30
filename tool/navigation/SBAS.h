@@ -2123,6 +2123,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
     bool has_satellite(const int &prn) const {
       return _satellites.find(prn) !=  _satellites.end();
     }
+    void update_all_ephemeris(const gps_time_t &target_time) {
+      for(typename satellites_t::iterator it(_satellites.begin());
+          it != _satellites.end(); ++it){
+        it->second.select_ephemeris(target_time);
+      }
+    }
 
     typedef std::vector<std::pair<int, const Satellite *> > available_satellites_t;
     /**
