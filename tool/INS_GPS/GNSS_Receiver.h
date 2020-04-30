@@ -72,18 +72,50 @@ struct GNSS_Receiver {
     }
   } data;
 
-  struct solvers_t {
+  struct solver_t : public GPS_Solver_Base<FloatT> {
+    typedef GPS_Solver_Base<FloatT> base_t;
     gps_solver_t gps;
-    solvers_t(const GNSS_Receiver &rcv)
-        : gps(rcv.data.gps.space_node)
+    struct measurement_items_t : public gps_solver_t::measurement_items_t {
+      // TODO
+    };
+    solver_t(const GNSS_Receiver &rcv)
+        : base_t(),
+        gps(rcv.data.gps.space_node)
         {}
-  } solvers;
 
-  typedef gps_solver_t solver_t; // TODO for GNSS extension
+#if defined(__GNUC__) && (__GNUC__ < 5)
+#define inheritate_type(x) typedef typename base_t::x x;
+#else
+#define inheritate_type(x) using typename base_t::x;
+#endif
+    inheritate_type(float_t);
+    inheritate_type(prn_t);
+    inheritate_type(gps_time_t);
+    inheritate_type(xyz_t);
+    inheritate_type(pos_t);
+    inheritate_type(measurement_t);
+    inheritate_type(relative_property_t);
+#undef inheritate_type
 
-  GNSS_Receiver() : data(), solvers(*this) {}
+    // Proxy functions
+    const base_t &select(const prn_t &prn) const {
+      return gps; // TODO
+    }
+    relative_property_t relative_property(
+        const prn_t &prn,
+        const typename measurement_t::mapped_type &measurement,
+        const float_t &receiver_error,
+        const gps_time_t &time_arrival,
+        const pos_t &usr_pos,
+        const xyz_t &usr_vel) const {
+      static const relative_property_t invalid = {0};
+      return invalid;
+    }
+  } solver_GNSS;
+
+  GNSS_Receiver() : data(), solver_GNSS(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
-      : data(another.data), solvers(*this) {}
+      : data(another.data), solver_GNSS(*this) {}
   GNSS_Receiver &operator=(const GNSS_Receiver &another){
     data = another.data;
     return *this;
@@ -94,7 +126,7 @@ struct GNSS_Receiver {
   }
 
   const GPS_Solver_Base<FloatT> &solver() const {
-    return solvers.gps;
+    return solver_GNSS.gps; // TODO for GNSS, return solver_GNSS
   }
 
   void adjust(const GPS_Time<FloatT> &t){
@@ -103,7 +135,7 @@ struct GNSS_Receiver {
 
     // Solver update mainly for preferable ionospheric model selection
     // based on their availability
-    solvers.gps.update_options(data.gps.solver_options);
+    solver_GNSS.gps.update_options(data.gps.solver_options);
   }
 
   /**
@@ -144,12 +176,12 @@ struct GNSS_Receiver {
     switch(decorder_t::gnss_signal_t::decode(gnss_id, signal_id)){
       case decorder_t::gnss_signal_t::GPS_L1CA:
         // GPS L1 C/A (SBAS and QZSS are included because of same signal)
-        return &(solver_t::L1CA);
+        return &(gps_solver_t::L1CA);
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
       case decorder_t::gnss_signal_t::GPS_L2CM:
-        return &(solver_t::L2CM);
+        return &(gps_solver_t::L2CM);
       case decorder_t::gnss_signal_t::GPS_L2CL:
-        return &(solver_t::L2CL);
+        return &(gps_solver_t::L2CL);
 #endif
     }
     return NULL; // TODO support other GNSS, signals

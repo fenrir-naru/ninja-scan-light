@@ -474,15 +474,16 @@ class INS_GPS2_Tightly : public BaseFINS {
         const receiver_state_t &x,
         float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
 
+      const solver_t &solver_selected(solver.select(prn));
       typename solver_t::relative_property_t prop(
-          solver.relative_property(prn, measurement, x.clock_error, x.t, x.pos, x.vel));
+          solver_selected.relative_property(prn, measurement, x.clock_error, x.t, x.pos, x.vel));
 
       if(prop.weight <= 0){return 0;} // Intentional exclusion
 
       z[0] = prop.range_residual;
 
       float_t rate;
-      const float_t *rate_p(solver.rate(measurement, rate));
+      const float_t *rate_p(solver_selected.rate(measurement, rate));
 
       for(int i(0); i < (rate_p ? 2 : 1); ++i){ // zero clear
         for(int j(0); j < P_SIZE; ++j){
@@ -531,7 +532,7 @@ class INS_GPS2_Tightly : public BaseFINS {
       }
 
       float_t sigma;
-      if(solver.range_sigma(measurement, sigma)){
+      if(solver_selected.range_sigma(measurement, sigma)){
         // receiver's range variance is applied if exist
         R_diag[0] = std::pow(sigma, 2);
       }else{
@@ -564,7 +565,7 @@ class INS_GPS2_Tightly : public BaseFINS {
         H[1][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
       }
 
-      if(solver.rate_sigma(measurement, sigma)){
+      if(solver_selected.rate_sigma(measurement, sigma)){
         // receiver's rate variance is applied if exist
         R_diag[1] = std::pow(sigma, 2);
       }else{

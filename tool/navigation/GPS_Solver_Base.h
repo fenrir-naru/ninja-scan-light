@@ -214,6 +214,15 @@ struct GPS_Solver_Base {
     return res;
   }
 
+  /**
+   * Select appropriate solver, this is provision for GNSS extension
+   * @param prn satellite number
+   * @return self, however, it will be overridden by a subclass
+   */
+  virtual const GPS_Solver_Base<FloatT> &select(const prn_t &prn) const {
+    return *this;
+  }
+
   struct relative_property_t {
     float_t weight; ///< How useful this information is. only positive value activates the other values.
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
@@ -451,7 +460,7 @@ public:
           ++it){
 
         static const xyz_t zero(0, 0, 0);
-        relative_property_t prop(relative_property(
+        relative_property_t prop(select(it->first).relative_property(
             it->first, it->second,
             res.receiver_error, time_arrival,
             res.user_position, zero));
@@ -533,7 +542,7 @@ public:
         ++it, ++i_range){
 
       float_t rate;
-      if(!this->rate(
+      if(!select(it->first).rate(
           measurement.find(it->first)->second, // const version of measurement[PRN]
           rate)){continue;}
 
