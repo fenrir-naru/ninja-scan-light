@@ -233,6 +233,7 @@ struct GPS_Solver_Base {
 
   /**
    * Calculate relative range and rate information to a satellite
+   * This function will be overridden by a subclass to provide appropriate implementation
    *
    * @param prn satellite number
    * @param measurement measurement (per satellite) containing pseudo range
@@ -248,7 +249,10 @@ struct GPS_Solver_Base {
       const float_t &receiver_error,
       const gps_time_t &time_arrival,
       const pos_t &usr_pos,
-      const xyz_t &usr_vel) const = 0;
+      const xyz_t &usr_vel) const {
+    static const relative_property_t invalid = {0};
+    return invalid;
+  }
 
   struct user_pvt_t {
     enum {

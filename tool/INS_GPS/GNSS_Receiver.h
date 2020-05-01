@@ -83,33 +83,9 @@ struct GNSS_Receiver {
         gps(rcv.data.gps.space_node)
         {}
 
-#if defined(__GNUC__) && (__GNUC__ < 5)
-#define inheritate_type(x) typedef typename base_t::x x;
-#else
-#define inheritate_type(x) using typename base_t::x;
-#endif
-    inheritate_type(float_t);
-    inheritate_type(prn_t);
-    inheritate_type(gps_time_t);
-    inheritate_type(xyz_t);
-    inheritate_type(pos_t);
-    inheritate_type(measurement_t);
-    inheritate_type(relative_property_t);
-#undef inheritate_type
-
     // Proxy functions
-    const base_t &select(const prn_t &prn) const {
+    const base_t &select(const typename base_t::prn_t &prn) const {
       return gps; // TODO
-    }
-    relative_property_t relative_property(
-        const prn_t &prn,
-        const typename measurement_t::mapped_type &measurement,
-        const float_t &receiver_error,
-        const gps_time_t &time_arrival,
-        const pos_t &usr_pos,
-        const xyz_t &usr_vel) const {
-      static const relative_property_t invalid = {0};
-      return invalid;
     }
   } solver_GNSS;
 
