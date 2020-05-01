@@ -1814,7 +1814,10 @@ class StreamProcessor
 
             for(int i(0); i < num_of_sv; i++){
               G_Observer_t::raw_measurement_t src(observer.fetch_raw(i));
-              raw_data_t::measurement_t::mapped_type &dst(measurement[src.sv_number]);
+              G_Observer_t::gnss_svid_t id(src.sv_number);
+              if(id.gnss == G_Observer_t::gnss_svid_t::UNKNOWN){continue;}
+              raw_data_t::measurement_t::mapped_type &dst(
+                  measurement[GNSS_Receiver<float_sylph_t>::id_prn(id.gnss, id.svid)]);
               dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, src.pseudo_range));
               dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, src.carrier_phase));
               dst.insert(std::make_pair(items_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
