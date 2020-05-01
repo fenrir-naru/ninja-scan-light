@@ -58,6 +58,8 @@ struct GNSS_Receiver {
   typedef GPS_SinglePositioning<FloatT> gps_solver_t;
 #endif
 
+  struct system_t;
+
   struct data_t {
     struct {
       gps_space_node_t space_node;
@@ -85,7 +87,10 @@ struct GNSS_Receiver {
 
     // Proxy functions
     const base_t &select(const typename base_t::prn_t &prn) const {
-      return gps; // TODO
+      switch(system_t::prn2system(prn)){
+        case system_t::GPS: return gps;
+      }
+      return *this;
     }
   } solver_GNSS;
 
@@ -102,7 +107,11 @@ struct GNSS_Receiver {
   }
 
   const GPS_Solver_Base<FloatT> &solver() const {
-    return solver_GNSS.gps; // TODO for GNSS, return solver_GNSS
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+    return solver_GNSS;
+#else
+    return solver_GNSS.gps;
+#endif
   }
 
   void adjust(const GPS_Time<FloatT> &t){
@@ -113,6 +122,37 @@ struct GNSS_Receiver {
     // based on their availability
     solver_GNSS.gps.update_options(data.gps.solver_options);
   }
+
+  struct system_t {
+    enum type_t {
+#define make_entry(key) dummy_ ## key, key = ((dummy_ ## key + 0xFF) & ~0xFF), \
+  key ## _SHIFT = key >> 8, dummy2_ ## key = key
+      make_entry(GPS),      // 0x000
+      SBAS,                 // 0x001
+      QZSS,                 // 0x002
+      make_entry(GLONASS),  // 0x100
+      make_entry(Galileo),  // 0x200
+      make_entry(Beido),    // 0x300
+      make_entry(Unknown),  // 0x400
+#undef make_entry
+    };
+    static type_t prn2system(const typename solver_t::prn_t &id_prn){
+      if(id_prn <= 0){return Unknown;}
+      switch(id_prn >> 8){
+        case GPS_SHIFT:
+          if(id_prn <= 32){return GPS;}
+          else if(id_prn < 120){break;}
+          else if(id_prn <= 158){return SBAS;}
+          else if(id_prn < 193){break;}
+          else if(id_prn <= 202){return QZSS;}
+          else {break;}
+        case GLONASS_SHIFT: return GLONASS;
+        case Galileo_SHIFT: return Galileo;
+        case Beido_SHIFT:   return Beido;
+      }
+      return Unknown;
+    }
+  };
 
   /**
    * Generate satellite unique (PRN) ID from UBX GNSS ID and SV ID
@@ -125,16 +165,16 @@ struct GNSS_Receiver {
       const unsigned int &gnss_id,
       const unsigned int &sv_id){
     typedef G_Packet_Observer<FloatT> decorder_t;
+    typename system_t::type_t type(system_t::Unknown);
     switch(gnss_id){
-      case decorder_t::gnss_svid_t::GPS:
-      case decorder_t::gnss_svid_t::SBAS:
-      case decorder_t::gnss_svid_t::QZSS:
-        // Legacy SVID is identical to PRN code
-        return (typename solver_t::prn_t)(unsigned int)
-            (typename decorder_t::gnss_svid_t(gnss_id, sv_id));
-      default:
-        return ((gnss_id << 8) | (sv_id & 0xFF));
+      case decorder_t::gnss_svid_t::GPS:      type = system_t::GPS;     break;
+      case decorder_t::gnss_svid_t::SBAS:     type = system_t::SBAS;    break;
+      case decorder_t::gnss_svid_t::QZSS:     type = system_t::QZSS;    break;
+      case decorder_t::gnss_svid_t::Galileo:  type = system_t::Galileo; break;
+      case decorder_t::gnss_svid_t::BeiDou:   type = system_t::Beido;   break;
+      case decorder_t::gnss_svid_t::GLONASS:  type = system_t::GLONASS; break;
     }
+    return ((type & ~0xFF) | (sv_id & 0xFF)); // 0x(GNSS_type)_(8bits:SVID)
   }
 
   /**
