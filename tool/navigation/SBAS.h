@@ -2209,6 +2209,7 @@ typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
     {135,  359, 01216, -133,   "WAAS (Intelsat Galaxy 15)"},
     {136,  595, 00740,    5,   "EGNOS (ASTRA 4B)"},
     {137,   68, 01007,  145,   "MSAS (MTSAT-2)"},
+    // {137,   68, 01007,  127,   "MSAS (QZSS QZS-3 L1Sb)"}, // From 2020? @see https://qzss.go.jp/overview/services/sv03_signals.html
     {138,  386, 00450,  107.3, "WAAS (ANIK-F1R)"},
     {140,  456, 01653,   95,   "SDCM (Luch-5B)"},
     {141,  499, 01411,  167,   "SDCM (Luch-4)"},
