@@ -518,7 +518,7 @@ BOOST_AUTO_TEST_CASE(data_block_type18){
 BOOST_AUTO_TEST_CASE(known_satellites){
   {
     int prn(0);
-    for(space_node_t::KnownSatellites::res_t::const_iterator it(
+    for(space_node_t::KnownSatellites::list_t::const_iterator it(
           space_node_t::KnownSatellites::prn_ordered.begin());
         it != space_node_t::KnownSatellites::prn_ordered.end();
         ++it){
@@ -529,7 +529,7 @@ BOOST_AUTO_TEST_CASE(known_satellites){
   }
   {
     double lng_deg(-180);
-    for(space_node_t::KnownSatellites::res_t::const_iterator it(
+    for(space_node_t::KnownSatellites::list_t::const_iterator it(
           space_node_t::KnownSatellites::longitude_ordered.begin());
         it != space_node_t::KnownSatellites::longitude_ordered.end();
         ++it){
@@ -540,9 +540,9 @@ BOOST_AUTO_TEST_CASE(known_satellites){
   }
   for(double base_lng_deg(-180); base_lng_deg < 180; base_lng_deg += 10){
     double delta_lng_deg(0);
-    space_node_t::KnownSatellites::res_t sats(
+    space_node_t::KnownSatellites::list_t sats(
         space_node_t::KnownSatellites::nearest_ordered(base_lng_deg));
-    for(space_node_t::KnownSatellites::res_t::const_iterator it(sats.begin());
+    for(space_node_t::KnownSatellites::list_t::const_iterator it(sats.begin());
         it != sats.end();
         ++it){
       BOOST_TEST_MESSAGE("near(" << base_lng_deg << "): " << (*it)->lng_deg);

@@ -39,6 +39,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <cstring>
 #include <map>
 #include <algorithm>
 
@@ -123,15 +124,22 @@ typedef typename gps_space_node_t::type type
           return (delta_l < delta_r);
         }
       };
+      struct name_sorter_t {
+        bool operator()(const RangingCode *left, const RangingCode *right) const {
+          int cmp(std::strcmp(left->name, right->name));
+          return cmp != 0 ? (cmp < 0) : (left->prn < right->prn);
+        }
+      };
     };
 
     struct KnownSatellites {
-      typedef std::vector<const RangingCode *> res_t;
+      typedef std::vector<const RangingCode *> list_t;
       template <typename T>
-      static res_t sort(T sorter);
-      static const res_t prn_ordered;
-      static const res_t longitude_ordered;
-      static res_t nearest_ordered(const float_t &lng_deg){
+      static list_t sort(T sorter);
+      static const list_t prn_ordered;
+      static const list_t longitude_ordered;
+      static const list_t name_ordered;
+      static list_t nearest_ordered(const float_t &lng_deg){
         return sort(typename RangingCode::lng_sorter2_t(lng_deg));
       }
     };
@@ -2138,8 +2146,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
      */
     available_satellites_t available_satellites(const float_t &lng_deg) const {
       available_satellites_t res;
-      typename KnownSatellites::res_t nearest(KnownSatellites::nearest_ordered(lng_deg));
-      for(typename KnownSatellites::res_t::const_iterator it(nearest.begin());
+      typename KnownSatellites::list_t nearest(KnownSatellites::nearest_ordered(lng_deg));
+      for(typename KnownSatellites::list_t::const_iterator it(nearest.begin());
           it != nearest.end();
           ++it){
         int prn((*it)->prn);
@@ -2188,7 +2196,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
 
 template <class FloatT>
 template <typename T>
-typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
+typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
     SBAS_SpaceNode<FloatT>::KnownSatellites::sort(T sorter){
   static const typename SBAS_SpaceNode<FloatT>::RangingCode codes[] = {
     {121,  175, 01241,    5,   "EGNOS (Eutelsat 5WB)"},
@@ -2216,7 +2224,8 @@ typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
     {147,  118, 00355,   42.5, "NSAS (NIGCOMSAT-1R)"},
     {148,  163, 00335,  -24.8, "ASAL (ALCOMSAT-1)"},
   }; ///< @see https://www.gps.gov/technical/prn-codes/L1-CA-PRN-code-assignments-2020-Apr.pdf
-  res_t res;
+  list_t res;
+  res.reserve(sizeof(codes) / sizeof(codes[0]));
   for(int i(0); i < sizeof(codes) / sizeof(codes[0]); ++i){
     res.push_back(&codes[i]);
   }
@@ -2225,16 +2234,22 @@ typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
 }
 
 template <class FloatT>
-const typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
+const typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
     SBAS_SpaceNode<FloatT>::KnownSatellites::prn_ordered
       = SBAS_SpaceNode<FloatT>::KnownSatellites::sort(
         typename SBAS_SpaceNode<FloatT>::RangingCode::prn_sorter_t());
 
 template <class FloatT>
-const typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
+const typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
     SBAS_SpaceNode<FloatT>::KnownSatellites::longitude_ordered
       = SBAS_SpaceNode<FloatT>::KnownSatellites::sort(
         typename SBAS_SpaceNode<FloatT>::RangingCode::lng_sorter_t());
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
+    SBAS_SpaceNode<FloatT>::KnownSatellites::name_ordered
+      = SBAS_SpaceNode<FloatT>::KnownSatellites::sort(
+        typename SBAS_SpaceNode<FloatT>::RangingCode::name_sorter_t());
 
 
 template <class FloatT>
