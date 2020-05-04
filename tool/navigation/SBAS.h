@@ -2191,33 +2191,31 @@ template <typename T>
 typename SBAS_SpaceNode<FloatT>::KnownSatellites::res_t
     SBAS_SpaceNode<FloatT>::KnownSatellites::sort(T sorter){
   static const typename SBAS_SpaceNode<FloatT>::RangingCode codes[] = {
-    {120,  145, 01106,  -15.5, "EGNOS (INMARSAT 3F2)"},
-    {121,  175, 01241,   25,   "EGNOS (INMARSAT 3F5)"},
-    {122,   52, 00267,  143.5, "AUS-NZ (INMARSAT 4F1)"},
+    {121,  175, 01241,    5,   "EGNOS (Eutelsat 5WB)"},
+    {122,   52, 00267,  143.5, "SPAN (INMARSAT 4F1)"},
     {123,   21, 00232,   31.5, "EGNOS (ASTRA 5B)"},
     {124,  237, 01617,    0,   "EGNOS (Reserved)"},
     {125,  235, 01076,  -16,   "SDCM (Luch-5A)"},
-    {126,  886, 01764,   25,   "EGNOS (INMARSAT 4F2)"},
+    {126,  886, 01764,   63.9, "EGNOS (INMARSAT 4F2)"},
     {127,  657, 00717,   55,   "GAGAN (GSAT-8)"},
     {128,  634, 01532,   83,   "GAGAN (GSAT-10)"},
-    {129,  762, 01250,  145,   "MSAS (MTSAT-2)"},
-    {130,  355, 00341,   80,   "BDSBAS (G6)"},
-    {131, 1012, 00551, -117,   "WAAS (Eutelsat 117WB)"},
+    {129,  762, 01250,  127,   "MSAS (QZS-3)"},
+    {130,  355, 00341,  140,   "BDSBAS (G6)"},
+    {131, 1012, 00551, -117,   "WAAS (Eutelsat 117West B)"},
     {132,  176, 00520,   93.5, "GAGAN (GSAT-15)"},
-    {133,  603, 01731,  -98,   "WAAS (INMARSAT 4F3)"},
-    {134,  130, 00706,  178,   "KAAS (INMARSAT 5F3)"},
-    {135,  359, 01216, -133,   "WAAS (Intelsat Galaxy 15)"},
-    {136,  595, 00740,    5,   "EGNOS (ASTRA 4B)"},
-    {137,   68, 01007,  145,   "MSAS (MTSAT-2)"},
-    // {137,   68, 01007,  127,   "MSAS (QZSS QZS-3 L1Sb)"}, // From 2020? @see https://qzss.go.jp/overview/services/sv03_signals.html
-    {138,  386, 00450,  107.3, "WAAS (ANIK-F1R)"},
-    {140,  456, 01653,   95,   "SDCM (Luch-5B)"},
-    {141,  499, 01411,  167,   "SDCM (Luch-4)"},
+    {133,  603, 01731, -129,   "WAAS (SES-15)"},
+    {134,  130, 00706,   91.5, "KASS (MEASAT-3D)"},
+    {135,  359, 01216, -125,   "WAAS (Intelsat Galaxy 30)"},
+    {136,  595, 00740,    5,   "EGNOS (SES-5)"},
+    {137,   68, 01007,  127,   "MSAS (QZS-3)"},
+    {138,  386, 00450,  107.3, "WAAS (ANIK F1R)"},
+    {140,  456, 01653,   95,   "SDCM (Luch-5V)"},
+    {141,  499, 01411,  167,   "SDCM (Luch-5A)"},
     {143,  307, 01312,  110.5, "BDSBAS (G3)"},
-    {144,  127, 01060,  140,   "BDSBAS (G1)"},
+    {144,  127, 01060,   80,   "BDSBAS (G2)"},
     {147,  118, 00355,   42.5, "NSAS (NIGCOMSAT-1R)"},
-    {148,  163, 00335,  -24.8, "ALCOMSAT-1"},
-  }; ///< @see https://media.defense.gov/2018/Aug/07/2001951699/-1/-1/1/L1%20CA%20PRN%20CODE%20ASSIGNMENTS%20JULY%202018.PDF
+    {148,  163, 00335,  -24.8, "ASAL (ALCOMSAT-1)"},
+  }; ///< @see https://www.gps.gov/technical/prn-codes/L1-CA-PRN-code-assignments-2020-Apr.pdf
   res_t res;
   for(int i(0); i < sizeof(codes) / sizeof(codes[0]); ++i){
     res.push_back(&codes[i]);
