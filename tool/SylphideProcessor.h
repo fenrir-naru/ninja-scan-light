@@ -852,7 +852,7 @@ class G_Packet_Observer : public Packet_Observer<>{
         return bits2u8_align(76, 6);
       }
       u16_t ephemeris_iodc() const {
-        return (((u16_t)bits2u8_align(82, 2)) << 2) | bits2u8(210);
+        return bytes2u16(bits2u8_align(82, 2), bits2u8(210));
       }
       FloatType ephemeris_t_gd() const {
         return (FloatType)bits2s8(196) * DIV_POWER_2(31);
