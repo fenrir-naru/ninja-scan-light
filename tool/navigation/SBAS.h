@@ -192,75 +192,33 @@ typedef typename gps_space_node_t::type type
       static const values_t values[NUM_OF_TIMING_ITEMS];
     }; ///< @see Table A-25;
 
-    struct DataBlock {
-      template <
-          class OutputT, class InputT,
-          bool output_is_smaller_than_input = (sizeof(InputT) >= sizeof(OutputT))>
-      struct bits2num_t {
-        static OutputT run(const InputT *buf, const uint_t &index){
-          // ex.1) I_8 0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5
-          //       O_8         0*1*2*3* *4*5*6*7
-          // ex.2) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
-          //       O_8        0*1*2*3*4*5*6*7
-          // ex.3) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
-          //       O_8                          0*1*2*3* *4*5*6*7
-          std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
-          OutputT res((buf[aligned.quot] << aligned.rem) >> ((sizeof(InputT) - sizeof(OutputT)) * 8));
-          if(aligned.rem > (sizeof(InputT) - sizeof(OutputT)) * 8){
-            res |= (OutputT)(buf[++aligned.quot] >> ((sizeof(InputT) * 2 - sizeof(OutputT)) * 8 - aligned.rem));
-          }
-          return res;
-        }
-      };
-      template <class OutputT, class InputT>
-      struct bits2num_t<OutputT, InputT, false> {
-        static OutputT run(const InputT *buf, const uint_t &index){
-          // When sizeof(OutputT) > sizeof(InputT)
-          // ex.4) I_8  0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
-          //       O_16         0*1*2*3* *4*5*6*7*8*9*0*1* *2*3*4*5
-          std::div_t aligned(std::div(index, (int)(sizeof(InputT) * 8)));
-          OutputT res(buf[aligned.quot]);
-          for(int i(sizeof(OutputT) / sizeof(InputT)); i > 1; --i){
-            res <<= (sizeof(InputT) * 8);
-            res |= buf[++aligned.quot];
-          }
-          if(aligned.rem > 0){
-            res <<= aligned.rem;
-            res |= (buf[++aligned.quot] >> (sizeof(InputT) * 8 - aligned.rem));
-          }
-          return res;
-        }
-      };
-
-      template <class OutputT, class InputT>
-      static OutputT bits2num(const InputT *buf, const uint_t &index){
-        return bits2num_t<OutputT, InputT>::run(buf, index);
-      }
-      template <class OutputT, class InputT>
-      static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
-        return (bits2num<OutputT, InputT>(buf, index) >> ((sizeof(OutputT) * 8) - length));
-      }
+    struct DataBlock : public gps_space_node_t::DataParser {
+      typedef typename gps_space_node_t::DataParser parser_t;
 
 #define convert_u(bits, offset_bits, length, name) \
 template <class InputT> \
 static u ## bits ## _t name(const InputT *buf){ \
-  return bits2num<u ## bits ## _t, InputT>(buf, offset_bits, length); \
+  return parser_t::template bits2num<u ## bits ## _t, InputT>( \
+      buf, offset_bits, length); \
 }
 #define convert_s(bits, offset_bits, length, name) \
 template <class InputT> \
 static s ## bits ## _t name(const InputT *buf){ \
-  return (s ## bits ## _t)bits2num<u ## bits ## _t, InputT>(buf, offset_bits) \
+  return (s ## bits ## _t)parser_t::template bits2num<u ## bits ## _t, InputT>( \
+        buf, offset_bits) \
       >> (bits - length); \
 }
-#define convert_u_ch(bits, offset_bits, length, ch_offset_bits, name) \
+#define convert_u_ch(bits, offset_bits, length, bits_per_ch, name) \
 template <class InputT> \
 static u ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
-  return bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch), length); \
+  return parser_t::template bits2num<u ## bits ## _t>( \
+      buf, offset_bits + (bits_per_ch * ch), length); \
 }
-#define convert_s_ch(bits, offset_bits, length, ch_offset_bits, name) \
+#define convert_s_ch(bits, offset_bits, length, bits_per_ch, name) \
 template <class InputT> \
 static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
-  return (s ## bits ## _t)bits2num<u ## bits ## _t>(buf, offset_bits + (ch_offset_bits * ch)) \
+  return (s ## bits ## _t)parser_t::template bits2num<u ## bits ## _t>( \
+        buf, offset_bits + (bits_per_ch * ch)) \
       >> (bits - length); \
 }
 

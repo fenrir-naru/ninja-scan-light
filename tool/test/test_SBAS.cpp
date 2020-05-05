@@ -477,6 +477,13 @@ BOOST_AUTO_TEST_CASE(data_block_decorder){
       BOOST_TEST_MESSAGE( "Calling (i,j)=(" << i << "," << j << ")");
       unsigned char buf[] = {(unsigned char)i, (unsigned char)j, (unsigned char)i};
       boost::uint16_t buf2[] = {(boost::uint16_t)((i << 8) + j)};
+      unsigned char buf3[] = { // (padding 2, effective 4, padding 2)
+          (unsigned char)((i & 0xF0) >> 2), (unsigned char)((i & 0xF) << 2),
+          (unsigned char)((j & 0xF0) >> 2), (unsigned char)((j & 0xF) << 2),
+          (unsigned char)((i & 0xF0) >> 2), (unsigned char)((i & 0xF) << 2),};
+      boost::uint16_t buf4[] = { // (padding 2, effective 12, padding 2)
+          (boost::uint16_t)((((i << 8) + j) & 0xFFF0) >> 2),
+          (boost::uint16_t)((((i << 8) + j) & 0x000F) << (16 - 2 - 4)),};
       bitset<24> b((unsigned long long)((i << 16) + (j << 8) + i));
       for(unsigned int offset(0); offset <= 8; offset++){
         unsigned char res(space_node_t::DataBlock::bits2num<unsigned char>(buf, offset)); // in == out
@@ -486,6 +493,10 @@ BOOST_AUTO_TEST_CASE(data_block_decorder){
         BOOST_REQUIRE_EQUAL(((b2 & 0xFF0000) >> 16), res);
         BOOST_REQUIRE_EQUAL(((b2 & 0xFF0000) >> 16), res2);
         BOOST_REQUIRE_EQUAL(((b2 & 0xFFFF00) >> 8), res3);
+        unsigned char res4(space_node_t::DataBlock::bits2num<unsigned char, 4, 2>(buf3, offset)); // in < out
+        unsigned char res5(space_node_t::DataBlock::bits2num<unsigned char, 12, 2>(buf4, offset)); // in > out
+        BOOST_REQUIRE_EQUAL(((b2 & 0xFF0000) >> 16), res4);
+        BOOST_REQUIRE_EQUAL(((b2 & 0xFF0000) >> 16), res5);
       }
     }
   }
