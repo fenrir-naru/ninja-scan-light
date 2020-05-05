@@ -483,6 +483,90 @@ class GPS_SpaceNode {
     typedef int int_t;
     typedef unsigned int uint_t;
 
+    struct DataParser {
+      template <
+          class OutputT, class InputT,
+          int EffectiveBits_in_InputT = sizeof(InputT) * 8,
+          int PaddingBits_in_InputT_MSB = sizeof(InputT) * 8 - EffectiveBits_in_InputT,
+          bool output_is_smaller_than_input
+            = (EffectiveBits_in_InputT >= (sizeof(OutputT) * 8))>
+      struct bits2num_t {
+        static OutputT run(const InputT *buf, const uint_t &index){
+          // ex.1) I_8 0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5
+          //       O_8         0*1*2*3* *4*5*6*7
+          // ex.2) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
+          //       O_8        0*1*2*3*4*5*6*7
+          // ex.3) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
+          //       O_8                          0*1*2*3* *4*5*6*7
+          std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
+          OutputT res(
+              (buf[aligned.quot] << (aligned.rem + PaddingBits_in_InputT_MSB))
+                >> ((sizeof(InputT) - sizeof(OutputT)) * 8));
+          if(aligned.rem > (EffectiveBits_in_InputT - (sizeof(OutputT) * 8))){
+            // in case of overrun; ex.1 and ex.3
+            res |= (OutputT)(
+                (buf[++aligned.quot] << PaddingBits_in_InputT_MSB)
+                  // left shift to remove padding
+                  >> (EffectiveBits_in_InputT
+                     + (sizeof(InputT) - sizeof(OutputT)) * 8 - aligned.rem));
+                  // right shift to fill remaining;
+                  // shift = input - [require_bits = output - (effective - rem)]
+          }
+          return res;
+        }
+      };
+      template <class OutputT, class InputT,
+          int EffectiveBits_in_InputT, int PaddingBits_in_InputT_MSB>
+      struct bits2num_t<OutputT, InputT,
+          EffectiveBits_in_InputT, PaddingBits_in_InputT_MSB, false> {
+        static OutputT run(const InputT *buf, const uint_t &index){
+          // When sizeof(OutputT) > sizeof(InputT)
+          // ex.4) I_8  0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
+          //       O_16         0*1*2*3* *4*5*6*7*8*9*0*1* *2*3*4*5
+          static const int padding_bits_LSB(
+              sizeof(InputT) * 8 - EffectiveBits_in_InputT - PaddingBits_in_InputT_MSB);
+          static const InputT effective_mask((~(InputT)0) >> PaddingBits_in_InputT_MSB);
+          std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
+          OutputT res((buf[aligned.quot] & effective_mask) >> padding_bits_LSB);
+          for(int i(sizeof(OutputT) * 8 / EffectiveBits_in_InputT); i > 1; --i){
+            res <<= EffectiveBits_in_InputT;
+            res |= ((buf[++aligned.quot] & effective_mask) >> padding_bits_LSB);
+          }
+          if(aligned.rem > 0){
+            res <<= aligned.rem;
+            res |= ((buf[++aligned.quot] & effective_mask)
+                >> (EffectiveBits_in_InputT + padding_bits_LSB - aligned.rem));
+          }
+          return res;
+        }
+      };
+
+      template <class OutputT, class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index){
+        return bits2num_t<OutputT, InputT>::run(buf, index);
+      }
+      template <class OutputT, class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
+        return (bits2num<OutputT, InputT>(buf, index) >> ((sizeof(OutputT) * 8) - length));
+      }
+
+      template <class OutputT,
+          int EffectiveBits_in_InputT, int PaddingBits_in_InputT_MSB,
+          class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index){
+        return bits2num_t<OutputT, InputT,
+            EffectiveBits_in_InputT, PaddingBits_in_InputT_MSB>::run(buf, index);
+      }
+      template <class OutputT,
+          int EffectiveBits_in_InputT, int PaddingBits_in_InputT_MSB,
+          class InputT>
+      static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
+        return (bits2num<OutputT, InputT,
+              EffectiveBits_in_InputT, PaddingBits_in_InputT_MSB>(buf, index)
+            >> ((sizeof(OutputT) * 8) - length));
+      }
+    };
+
     /**
      * GPS Ionospheric correction and UTC parameters
      * 
