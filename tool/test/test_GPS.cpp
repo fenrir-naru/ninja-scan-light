@@ -22,15 +22,19 @@ typedef GPS_SpaceNode<double> space_node_t;
 
 BOOST_AUTO_TEST_SUITE(GPS)
 
-template <int Padding, size_t N_bitset, class BufferT, size_t N>
+template <int PaddingMSB, int PaddingLSB,
+    size_t N_bitset, class BufferT, size_t N>
 void fill(const bitset<N_bitset> &b, BufferT (&buf)[N]){
   int b_index(0);
   for(int i(0); i < (N - 1); ++i){
     //buf[i] = 0;
-    for(int j(0); j < (sizeof(BufferT) * 8 - Padding); ++j){
+    for(int j(0);
+        j < (sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB);
+        ++j){
       buf[i] <<= 1;
       buf[i] |= (b[b_index++] ? 1 : 0);
     }
+    buf[i] <<= PaddingLSB;
   }
   // Last
   {
@@ -40,14 +44,16 @@ void fill(const bitset<N_bitset> &b, BufferT (&buf)[N]){
       buf[N - 1] <<= 1;
       buf[N - 1] |= (b[b_index++] ? 1 : 0);
     }
-    buf[N - 1] <<= (sizeof(BufferT) * 8 - Padding - j);
+    buf[N - 1] <<= (
+        (sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB) - j + PaddingLSB);
   }
 }
 
-template <int Padding, size_t N_bitset, class BufferT>
+template <int PaddingMSB, int PaddingLSB,
+    size_t N_bitset, class BufferT>
 void check(const bitset<N_bitset> &b, const BufferT *buf){
   typedef space_node_t::BroadcastedMessage<
-      BufferT, sizeof(BufferT) * 8 - Padding, Padding> msg_t;
+      BufferT, sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB, PaddingMSB> msg_t;
 
 #define each2(offset, bits, shift, func) { \
   boost::uint32_t res((boost::uint32_t)msg_t::func(buf)); \
@@ -151,7 +157,7 @@ BOOST_AUTO_TEST_CASE(data_parse){
     }
     string b_str(b.to_string());
     reverse(b_str.begin(), b_str.end());
-    BOOST_TEST_MESSAGE("Origin => ");
+    BOOST_TEST_MESSAGE(format("Origin(%d) => ") % loop);
     for(int i(0); i < 300; i += 30){
       BOOST_TEST_MESSAGE(format("%3d ") % i << b_str.substr(i, 24) << ' ' << b_str.substr(i + 24, 6));
     }
@@ -159,26 +165,50 @@ BOOST_AUTO_TEST_CASE(data_parse){
     {
       BOOST_TEST_MESSAGE("u8_t container without padding");
       u8_t buf[(300 + sizeof(u8_t) * 8 - 1) / (sizeof(u8_t) * 8)];
-      fill<0>(b, buf);
-      check<0>(b, buf);
+      fill<0, 0>(b, buf);
+      check<0, 0>(b, buf);
     }
     {
-      BOOST_TEST_MESSAGE("u8_t container with padding 2");
+      BOOST_TEST_MESSAGE("u8_t container with padding (2, 0)");
       u8_t buf[(300 + sizeof(u8_t) * 8 - 2 - 1) / (sizeof(u8_t) * 8 - 2)];
-      fill<2>(b, buf);
-      check<2>(b, buf);
+      fill<2, 0>(b, buf);
+      check<2, 0>(b, buf);
+    }
+    {
+      BOOST_TEST_MESSAGE("u8_t container with padding (0, 2)");
+      u8_t buf[(300 + sizeof(u8_t) * 8 - 2 - 1) / (sizeof(u8_t) * 8 - 2)];
+      fill<0, 2>(b, buf);
+      check<0, 2>(b, buf);
+    }
+    {
+      BOOST_TEST_MESSAGE("u8_t container with padding (2, 2)");
+      u8_t buf[(300 + sizeof(u8_t) * 8 - 4 - 1) / (sizeof(u8_t) * 8 - 4)];
+      fill<2, 2>(b, buf);
+      check<2, 2>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container without padding");
       u32_t buf[(300 + sizeof(u32_t) * 8 - 1) / (sizeof(u32_t) * 8)];
-      fill<0>(b, buf);
-      check<0>(b, buf);
+      fill<0, 0>(b, buf);
+      check<0, 0>(b, buf);
     }
     {
-      BOOST_TEST_MESSAGE("u32_t container with padding 2");
+      BOOST_TEST_MESSAGE("u32_t container with padding (2, 0)");
       u32_t buf[(300 + sizeof(u32_t) * 8 - 2 - 1) / (sizeof(u32_t) * 8 - 2)];
-      fill<2>(b, buf);
-      check<2>(b, buf);
+      fill<2, 0>(b, buf);
+      check<2, 0>(b, buf);
+    }
+    {
+      BOOST_TEST_MESSAGE("u32_t container with padding (0, 2)");
+      u32_t buf[(300 + sizeof(u32_t) * 8 - 2 - 1) / (sizeof(u32_t) * 8 - 2)];
+      fill<0, 2>(b, buf);
+      check<0, 2>(b, buf);
+    }
+    {
+      BOOST_TEST_MESSAGE("u32_t container with padding (2, 2)");
+      u32_t buf[(300 + sizeof(u32_t) * 8 - 4 - 1) / (sizeof(u32_t) * 8 - 4)];
+      fill<2, 2>(b, buf);
+      check<2, 2>(b, buf);
     }
   }
 }
