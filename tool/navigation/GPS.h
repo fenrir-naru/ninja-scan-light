@@ -525,17 +525,20 @@ class GPS_SpaceNode {
           //       O_16         0*1*2*3* *4*5*6*7*8*9*0*1* *2*3*4*5
           static const int padding_bits_LSB(
               sizeof(InputT) * 8 - EffectiveBits_in_InputT - PaddingBits_in_InputT_MSB);
-          static const InputT effective_mask((~(InputT)0) >> PaddingBits_in_InputT_MSB);
+          static const InputT effective_mask((PaddingBits_in_InputT_MSB == 0)
+              ? (~(InputT)0)
+              : ((((InputT)1) << (sizeof(InputT) * 8 - PaddingBits_in_InputT_MSB)) - 1));
           std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
           OutputT res((buf[aligned.quot] & effective_mask) >> padding_bits_LSB);
           for(int i(sizeof(OutputT) * 8 / EffectiveBits_in_InputT); i > 1; --i){
             res <<= EffectiveBits_in_InputT;
             res |= ((buf[++aligned.quot] & effective_mask) >> padding_bits_LSB);
           }
-          if(aligned.rem > 0){
-            res <<= aligned.rem;
+          int last_shift(aligned.rem + ((sizeof(OutputT) * 8) % EffectiveBits_in_InputT));
+          if(last_shift > 0){
+            res <<= last_shift;
             res |= ((buf[++aligned.quot] & effective_mask)
-                >> (EffectiveBits_in_InputT + padding_bits_LSB - aligned.rem));
+                >> (EffectiveBits_in_InputT + padding_bits_LSB - last_shift));
           }
           return res;
         }
@@ -561,10 +564,126 @@ class GPS_SpaceNode {
           int EffectiveBits_in_InputT, int PaddingBits_in_InputT_MSB,
           class InputT>
       static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
-        return (bits2num<OutputT, InputT,
-              EffectiveBits_in_InputT, PaddingBits_in_InputT_MSB>(buf, index)
+        return (bits2num<OutputT,
+              EffectiveBits_in_InputT, PaddingBits_in_InputT_MSB,
+              InputT>(buf, index)
             >> ((sizeof(OutputT) * 8) - length));
       }
+    };
+
+    template <class InputT,
+        int EffectiveBits = sizeof(InputT) * 8,
+        int PaddingBits_MSB = sizeof(InputT) * 8 - EffectiveBits>
+    struct BroadcastedMessage : public DataParser {
+#define convert_u(bits, offset_bits, length, name) \
+static u ## bits ## _t name(const InputT *buf){ \
+  return \
+      DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
+        buf, offset_bits, length); \
+}
+#define convert_s(bits, offset_bits, length, name) \
+static s ## bits ## _t name(const InputT *buf){ \
+  return ((s ## bits ## _t) \
+      DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
+        buf, offset_bits)) \
+      >> (bits - length); \
+}
+#define convert_u_2(bits, offset_bits1, length1, offset_bits2, length2, name) \
+static u ## bits ## _t name(const InputT *buf){ \
+  return \
+      (DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
+        buf, offset_bits1, length1) << length2) \
+      | DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
+          buf, offset_bits2, length2); \
+}
+#define convert_s_2(bits, offset_bits1, length1, offset_bits2, length2, name) \
+static s ## bits ## _t name(const InputT *buf){ \
+  return ((s ## bits ## _t) \
+      ((DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
+          buf, offset_bits1, length1) << (bits - length1)) \
+        | (DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
+            buf, offset_bits2, length2) << (bits - length1 - length2)))) \
+      >> (bits - length1 - length2); \
+}
+      convert_u( 8,  0,  8, preamble);
+      convert_u(32, 30, 24, how);
+      convert_u( 8, 49,  3, subframe_id);
+
+      struct SubFrame1 {
+        convert_u(16, 60, 10, WN);
+        convert_u( 8, 72,  4, URA);
+        convert_u( 8, 76,  6, SV_health);
+        convert_u_2(16, 82,  2, 210,  8, iodc);
+        convert_s( 8, 196,  8, t_GD);
+        convert_u(16, 218, 16, t_oc);
+        convert_s( 8, 240,  8, a_f2);
+        convert_s(16, 248, 16, a_f1);
+        convert_s(32, 270, 22, a_f0);
+      };
+
+      struct SubFrame2 {
+        convert_u( 8, 60,  8, iode);
+        convert_s(16, 68, 16, c_rs);
+        convert_s(16, 90, 16, delta_n);
+        convert_s_2(32, 106,  8, 120, 24, M0);
+        convert_s(16, 150, 16, c_uc);
+        convert_u_2(32, 166,  8, 180, 24, e);
+        convert_s(16, 210, 16, c_us);
+        convert_u_2(32, 226,  8, 240, 24, sqrt_A);
+        convert_u(16, 270, 16, t_oe);
+        convert_u( 8, 286,  1, fit);
+      };
+
+      struct SubFrame3 {
+        convert_s(16, 60, 16, c_ic);
+        convert_s_2(32,  76,  8,  90, 24, Omega0);
+        convert_s(16, 120, 16, c_is);
+        convert_s_2(32, 136,  8, 150, 24, i0);
+        convert_s(16, 180, 16, c_rc);
+        convert_s_2(32, 196,  8, 210, 24, omega);
+        convert_s(32, 240, 24, dot_Omega0);
+        convert_u( 8, 270,  8, iode);
+        convert_s(16, 278, 14, dot_i0);
+      };
+
+      convert_u( 8,  62,  6, sv_page_id);
+
+      struct SubFrame4_5_Alnamac {
+        convert_u(16,  68, 16, e);
+        convert_u( 8,  90,  8, t_oa);
+        convert_s(16,  98, 16, delta_i);
+        convert_s(16, 120, 16, dot_Omega0);
+        convert_u( 8, 128,  8, SV_health);
+        convert_u(32, 150, 24, sqrt_A);
+        convert_s(32, 180, 24, Omega0);
+        convert_s(32, 210, 24, omega);
+        convert_s(32, 240, 24, M0);
+        convert_s_2(16, 270,  8, 289,  3, a_f0);
+        convert_s(16, 278, 11, a_f1);
+      };
+
+      struct SubFrame4_Page18 {
+        convert_s( 8,  68,  8, alpha0);
+        convert_s( 8,  76,  8, alpha1);
+        convert_s( 8,  90,  8, alpha2);
+        convert_s( 8,  98,  8, alpha3);
+        convert_s( 8, 106,  8, beta0);
+        convert_s( 8, 120,  8, beta1);
+        convert_s( 8, 128,  8, beta2);
+        convert_s( 8, 136,  8, beta3);
+        convert_s(32, 150, 24, A1);
+        convert_s_2(32, 180, 24, 210,  8, A0);
+        convert_u( 8, 218,  8, t_ot);
+        convert_s( 8, 240,  8, delta_t_LS);
+        convert_u( 8, 226,  8, WN_t);
+        convert_u( 8, 248,  8, WN_LSF);
+        convert_u( 8, 256,  8, DN);
+        convert_s( 8, 270,  8, delta_t_LSF);
+      };
+#undef convert_s_2
+#undef convert_u_2
+#undef convert_s
+#undef convert_u
     };
 
     /**

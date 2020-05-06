@@ -1,6 +1,8 @@
 ﻿
-Microsoft Visual Studio Solution File, Format Version 11.00
-# Visual C++ Express 2010
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30011.22
+MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log2ubx", "log2ubx.vcxproj", "{855BC1B5-DB8C-4D69-9AEA-A85194620608}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "log_CSV", "log_CSV.vcxproj", "{D5B410B6-719A-4ABC-ACE2-1304143B7A17}"
@@ -14,6 +16,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ruby_tools", "ruby_tools.vcxproj", "{3503DACF-2EA9-4617-9381-BD40B42A4DA1}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_common", "test\test_common.vcxproj", "{FFBB9244-30EC-4B88-9190-D1560EBE93D7}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_GPS", "test\test_GPS.vcxproj", "{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -64,8 +68,17 @@ Global
 		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Debug|Win32.Build.0 = Debug|Win32
 		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Release|Win32.ActiveCfg = Release|Win32
 		{FFBB9244-30EC-4B88-9190-D1560EBE93D7}.Release|Win32.Build.0 = Release|Win32
+		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
+		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Debug|Win32.ActiveCfg = Debug|Win32
+		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Debug|Win32.Build.0 = Debug|Win32
+		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Release|Win32.ActiveCfg = Release|Win32
+		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {211B1F25-DAB3-4726-93ED-C76737965480}
 	EndGlobalSection
 EndGlobal
