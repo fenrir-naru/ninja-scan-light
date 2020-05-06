@@ -677,7 +677,7 @@ class GPS_SpaceNode {
           int_t iode;           ///< Issue of ephemeris data
           float_t c_rs;         ///< Sine correction, orbit (m)
           float_t delta_n;      ///< Mean motion difference (rad/s)
-          float_t m0;           ///< Mean anomaly (rad)
+          float_t M0;           ///< Mean anomaly (rad)
           float_t c_uc;         ///< Cosine correction, latitude (rad)
           float_t e;            ///< Eccentricity
           float_t c_us;         ///< Sine correction, latitude (rad)
@@ -757,7 +757,7 @@ class GPS_SpaceNode {
 
             // Kepler's Equation for Eccentric Anomaly M(Mk)
             float_t n0(std::sqrt(WGS84::mu_Earth) / pow3(sqrt_A));
-            float_t Mk(m0
+            float_t Mk(M0
                 + (n0 + delta_n) * period_from_toe);
 
             // Eccentric Anomaly E(Ek)
@@ -937,12 +937,12 @@ class GPS_SpaceNode {
             u16_t t_oc;         ///< Clock data reference time
             s8_t  a_f2;         ///< Clock correction parameter (-55, s/s^2)
             s16_t a_f1;         ///< Clock correction parameter (-43, s/s)
-            s16_t a_f0;         ///< Clock correction parameter (-31, s)
+            s32_t a_f0;         ///< Clock correction parameter (-31, s)
             
             u8_t  iode;         ///< Issue of eph. data
             s16_t c_rs;         ///< Sin. correction, orbit ( -5, m)
             s16_t delta_n;      ///< Mean motion difference (-43, sc/s)
-            s32_t m0;           ///< Mean anomaly           (-31, sc)
+            s32_t M0;           ///< Mean anomaly           (-31, sc)
             s16_t c_uc;         ///< Cos. correction, lat.  (-29, rad)
             u32_t e;            ///< Eccentricity           (-33)
             s16_t c_us;         ///< Sin. correction, lat.  (-29, rad)
@@ -997,7 +997,7 @@ class GPS_SpaceNode {
 
               SF_c_rs,
               SF_delta_n,
-              SF_m0,
+              SF_M0,
               SF_c_uc,
               SF_e,
               SF_c_us,
@@ -1036,7 +1036,7 @@ class GPS_SpaceNode {
               converted.iode = iode;
               CONVERT(c_rs);
               CONVERT(delta_n);
-              CONVERT(m0);
+              CONVERT(M0);
               CONVERT(c_uc);
               CONVERT(e);
               CONVERT(c_us);
@@ -1075,7 +1075,7 @@ class GPS_SpaceNode {
               iode = eph.iode;
               CONVERT(c_rs);
               CONVERT(delta_n);
-              CONVERT(m0);
+              CONVERT(M0);
               CONVERT(c_uc);
               CONVERT(e);
               CONVERT(c_us);
@@ -1113,7 +1113,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
               CHECK(c_rs);
               CHECK(delta_n);
-              CHECK(m0);
+              CHECK(M0);
               CHECK(c_uc);
               CHECK(e);
               CHECK(c_us);
@@ -1183,7 +1183,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             converted.iode          = -1;         // Issue of ephemeris data
             converted.c_rs          = 0;          // Sine correction, orbit (m)
             converted.delta_n       = 0;          // Mean motion difference (rad/s)
-            converted.m0            = M0;         // Mean anomaly (rad)
+            converted.M0            = M0;         // Mean anomaly (rad)
             converted.c_uc          = 0;          // Cosine correction, latitude (rad)
             converted.e             = e;          // Eccentricity
             converted.c_us          = 0;          // Sine correction, latitude (rad)
@@ -1209,15 +1209,15 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             
             u16_t e;            ///< Eccentricity       (-21)
             u8_t  t_oa;         ///< Almanac ref. time  ( 12, s)
-            u16_t delta_i;      ///< Correction to inc. (-19, sc)
-            u16_t dot_Omega0;   ///< Omega0 rate        (-38, sc/s)
+            s16_t delta_i;      ///< Correction to inc. (-19, sc)
+            s16_t dot_Omega0;   ///< Omega0 rate        (-38, sc/s)
             u8_t  SV_health;    ///< Health status
             u32_t sqrt_A;       ///< Semi-major axis    (-11, sqrt(m))
-            u32_t Omega0;       ///< Long. of asc. node (-23, sc)
-            u32_t omega;        ///< Arg. of perigee    (-23, sc)
-            u32_t M0;           ///< Mean anomaly       (-23, sc)
-            u16_t a_f0;         ///< Clock corr. param. (-20, s)
-            u16_t a_f1;         ///< Clock corr. param. (-38, s)
+            s32_t Omega0;       ///< Long. of asc. node (-23, sc)
+            s32_t omega;        ///< Arg. of perigee    (-23, sc)
+            s32_t M0;           ///< Mean anomaly       (-23, sc)
+            s16_t a_f0;         ///< Clock corr. param. (-20, s)
+            s16_t a_f1;         ///< Clock corr. param. (-38, s)
             
             enum {
               SF_e,
@@ -1980,7 +1980,7 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SatellitePr
 
   POWER_2(-5),                // c_rs
   GPS_SC2RAD * POWER_2(-43),  // delta_n
-  GPS_SC2RAD * POWER_2(-31),  // m0
+  GPS_SC2RAD * POWER_2(-31),  // M0
   POWER_2(-29),               // c_uc
   POWER_2(-33),               // e
   POWER_2(-29),               // c_us

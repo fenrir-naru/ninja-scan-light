@@ -192,7 +192,7 @@ case line_num: { \
             info.ephemeris.iode,
             info.ephemeris.c_rs,
             info.ephemeris.delta_n,
-            info.ephemeris.m0);
+            info.ephemeris.M0);
           READ_AND_STORE(2,
             info.ephemeris.c_uc,
             info.ephemeris.e,
@@ -703,7 +703,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           << RINEX_FloatD(data.ephemeris.iode, 19, 12)
           << RINEX_FloatD(data.ephemeris.c_rs, 19, 12)
           << RINEX_FloatD(data.ephemeris.delta_n, 19, 12)
-          << RINEX_FloatD(data.ephemeris.m0, 19, 12)
+          << RINEX_FloatD(data.ephemeris.M0, 19, 12)
           << std::endl;
       
       // 3rd line

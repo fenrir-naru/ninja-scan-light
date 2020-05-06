@@ -132,7 +132,7 @@ struct GNSS_Data {
       out.iode    = in.ephemeris_iode_subframe2();
       out.c_rs    = in.ephemeris_c_rs();
       out.delta_n = in.ephemeris_delta_n();
-      out.m0      = in.ephemeris_m_0();
+      out.M0      = in.ephemeris_m_0();
       out.c_uc    = in.ephemeris_c_uc();
       out.e       = in.ephemeris_e();
       out.c_us    = in.ephemeris_c_us();
