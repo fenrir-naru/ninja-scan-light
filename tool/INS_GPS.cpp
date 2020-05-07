@@ -1838,6 +1838,7 @@ class StreamProcessor
             unsigned int bytes((G_Observer_t::u8_t)observer[6 + 4] * 4); // numWords (1word = 32bits)
             if(bytes > sizeof(packet.subframe.buffer)){return;}
             observer.inspect(packet.subframe.buffer, bytes, 6 + 8);
+            if((G_Observer_t::u8_t)observer[6 + 2] != 0){return;} // TODO sigID? (0:L1C/A, 4:L2CM?)
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 0],
                 (G_Observer_t::u8_t)observer[6 + 1],
