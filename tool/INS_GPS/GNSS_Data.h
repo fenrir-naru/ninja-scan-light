@@ -56,13 +56,13 @@ struct GNSS_Data {
     typedef GPS_SpaceNode<FloatT> gps_t;
     gps_t *gps;
 
-    struct gps_ephemeris_t : public gps_t::Satellite::Ephemeris {
-      typename gps_t::uint_t how;
-      typename gps_t::int_t iode2;
-      typedef typename gps_t::Satellite::Ephemeris super_t;
-      gps_ephemeris_t(){
-        super_t::iodc = super_t::iode = iode2 = -1;
-      }
+    typedef typename gps_t::Satellite::Ephemeris gps_ephemeris_t;
+    struct gps_ephemeris_raw_t : public gps_t::Satellite::Ephemeris::raw_t {
+      bool set_iodc;
+      int iode_subframe2, iode_subframe3;
+      typedef typename gps_t::Satellite::Ephemeris::raw_t super_t;
+      gps_ephemeris_raw_t()
+          : set_iodc(false), iode_subframe2(-1), iode_subframe3(-1) {}
     } gps_ephemeris[32];
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
@@ -71,49 +71,6 @@ struct GNSS_Data {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
         gps_ephemeris[i].svid = i + 1;
       }
-    }
-
-    static gps_iono_utc_t fetch_as_GPS_iono_utc(const subframe_t &subframe){
-
-      typename gps_iono_utc_t::raw_t raw;
-      typedef typename observer_t::s8_t s8_t;
-      typedef typename observer_t::s32_t s32_t;
-      typedef typename observer_t::u32_t u32_t;
-#define get8(index) (subframe.bits2u8_align(index, 8))
-      { // IONO parameter
-        raw.alpha0 = (s8_t)get8( 68);
-        raw.alpha1 = (s8_t)get8( 76);
-        raw.alpha2 = (s8_t)get8( 90);
-        raw.alpha3 = (s8_t)get8( 98);
-        raw.beta0  = (s8_t)get8(106);
-        raw.beta1  = (s8_t)get8(120);
-        raw.beta2  = (s8_t)get8(128);
-        raw.beta3  = (s8_t)get8(136);
-      }
-      { // UTC parameter
-        {
-          u32_t buf(get8(150));
-          if(buf & 0x80){buf |= 0xFF00;}
-          buf <<= 8; buf |= get8(158);
-          buf <<= 8; buf |= get8(166);
-          raw.A1 = (s32_t)buf;
-        }
-        {
-          u32_t buf(get8(180));
-          buf <<= 8; buf |= get8(188);
-          buf <<= 8; buf |= get8(196);
-          buf <<= 8; buf |= get8(210);
-          raw.A0 = (s32_t)buf;
-        }
-        raw.t_ot = get8(218);
-        raw.WN_t = get8(226); // truncated
-        raw.delta_t_LS = (s8_t)get8(240);
-        raw.WN_LSF = get8(248); // truncated
-        raw.DN = get8(256);
-        raw.delta_t_LSF = (s8_t)get8(270);
-      }
-#undef get8
-      return (gps_iono_utc_t)raw;
     }
 
     static void fetch_as_GPS_subframe1(const subframe_t &in, gps_ephemeris_t &out){
@@ -139,8 +96,7 @@ struct GNSS_Data {
       out.sqrt_A  = in.ephemeris_root_a();
       out.t_oe    = in.ephemeris_t_oe();
       out.fit_interval
-          = gps_ephemeris_t::super_t::raw_t::fit_interval(
-              in.ephemeris_fit(), out.iodc);
+          = gps_ephemeris_t::raw_t::fit_interval(in.ephemeris_fit(), out.iodc);
     }
 
     static void fetch_as_GPS_subframe3(const subframe_t &in, gps_ephemeris_t &out){
@@ -151,14 +107,17 @@ struct GNSS_Data {
       out.c_rc        = in.ephemeris_c_rc();
       out.omega       = in.ephemeris_omega();
       out.dot_Omega0  = in.ephemeris_omega_0_dot();
-      out.iode2       = in.ephemeris_iode_subframe3();
       out.dot_i0      = in.ephemeris_i_0_dot();
     }
 
+    /**
+     * Used for legacy interface such as RXM-EPH(0x0231), AID-EPH(0x0B31)
+     */
     template <class Base>
     struct gps_ephemeris_extended_t : public Base {
       unsigned int &sv_number; // sv_number is alias.
       bool valid;
+      typename gps_t::uint_t how;
       gps_ephemeris_extended_t()
           : Base(),
           sv_number(Base::svid), valid(false){}
@@ -188,26 +147,36 @@ struct GNSS_Data {
       // This is acceptable because it will be used to compensate truncated upper significant bits.
       if(week_number < 0){week_number = gps_time_t::now().week;}
 
+      typename observer_t::u32_t *buf((typename observer_t::u32_t *)data.subframe.buffer);
+      for(int i(0); i < sizeof(data.subframe.buffer); i += sizeof(typename observer_t::u32_t)){
+        /* Move padding bits(=) in accordance with ICD
+         * // 0x==_0xDD_0xDD_0xDD => 0b==DDDDDD_0xDD_0xDD_0bDD======
+         * TODO This is based on old RXM-SFRB; format of new RXM-SFRBX is already aligned.
+         */
+        buf[i] <<= 6;
+      }
+
       if(data.subframe.subframe_no <= 3){
-        gps_ephemeris_t &eph(gps_ephemeris[data.subframe.sv_number - 1]);
+        gps_ephemeris_raw_t &eph(gps_ephemeris[data.subframe.sv_number - 1]);
+
         switch(data.subframe.subframe_no){
-          case 1:
-            fetch_as_GPS_subframe1(data.subframe, eph);
-            eph.how = data.subframe.how();
-            break;
-          case 2: fetch_as_GPS_subframe2(data.subframe, eph); break;
-          case 3: fetch_as_GPS_subframe3(data.subframe, eph); break;
+          case 1: eph.template update_subframe1<2, 0>(buf); eph.set_iodc = true; break;
+          case 2: eph.iode_subframe2 = eph.template update_subframe2<2, 0>(buf); break;
+          case 3: eph.iode_subframe3 = eph.template update_subframe3<2, 0>(buf); break;
         }
-        if((eph.iodc >= 0) && (eph.iode >= 0) && (eph.iode2 >= 0)
-            && (eph.iode == eph.iode2) && ((eph.iodc & 0xFF) == eph.iode)){
+        if(eph.set_iodc && (eph.iode_subframe2 >= 0) && (eph.iode_subframe3 >= 0)
+            && (eph.iode_subframe2 == eph.iode_subframe3) && ((eph.iodc & 0xFF) == eph.iode)){
           // Original WN is truncated to 10 bits.
           eph.WN = (week_number - (week_number % 0x400)) + (eph.WN % 0x400);
-          bool res(load(eph));
-          eph.iodc = eph.iode = eph.iode2 = -1; // invalidate
+          bool res(load((gps_ephemeris_t)eph));
+          eph.set_iodc = false; eph.iode_subframe2 = eph.iode_subframe3 = -1; // invalidate
           return res;
         }
       }else if((data.subframe.subframe_no == 4) && (data.subframe.sv_or_page_id == 56)){ // IONO UTC parameters
-        gps_iono_utc_t iono_utc(fetch_as_GPS_iono_utc(data.subframe));
+        typename gps_iono_utc_t::raw_t raw;
+        raw.template update<2, 0>(buf);
+        gps_iono_utc_t iono_utc((gps_iono_utc_t)raw);
+
         // taking truncation into account
         int week_number_base(week_number - (week_number % 0x100));
         iono_utc.WN_t = week_number_base + (iono_utc.WN_t % 0x100);
