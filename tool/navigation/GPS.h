@@ -719,6 +719,20 @@ static s ## bits ## _t name(const InputT *buf){ \
         u8_t  WN_LSF;       ///< Last leap second update week (weeks, truncated)
         u8_t  DN;           ///< Last leap second update day (days)
         s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
+
+#define fetch_item(name) name = BroadcastedMessage< \
+   InputT, sizeof(InputT) * 8 - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
+   :: SubFrame4_Page18 :: name (src)
+        template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
+        void update(const InputT *src){
+          fetch_item(alpha0); fetch_item(alpha1); fetch_item(alpha2); fetch_item(alpha3);
+          fetch_item(beta0);  fetch_item(beta1);  fetch_item(beta2);  fetch_item(beta3);
+          fetch_item(A1);     fetch_item(A0);
+          fetch_item(WN_t);   fetch_item(WN_LSF);
+          fetch_item(t_ot);   fetch_item(delta_t_LS);   fetch_item(delta_t_LSF);
+          fetch_item(DN);
+        }
+#undef fetch_item
         
         enum {
           SF_alpha0,
@@ -1077,7 +1091,52 @@ static s ## bits ## _t name(const InputT *buf){ \
             s32_t omega;        ///< Argument of perigee    (-31, sc)
             s32_t dot_Omega0;   ///< Right ascension rate   (-43, sc/s)
             s16_t dot_i0;       ///< Inclination angle rate (-43, sc/s)
-            
+
+#define fetch_item(num, name) name = BroadcastedMessage< \
+   InputT, sizeof(InputT) * 8 - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
+   :: SubFrame ## num :: name (src)
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
+            u16_t update_subframe1(const InputT *src){
+              fetch_item(1, WN);
+              fetch_item(1, URA);
+              fetch_item(1, SV_health);
+              fetch_item(1, iodc);
+              fetch_item(1, t_GD);
+              fetch_item(1, t_oc);
+              fetch_item(1, a_f2);
+              fetch_item(1, a_f1);
+              fetch_item(1, a_f0);
+              return iodc;
+            }
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
+            u8_t update_subframe2(const InputT *src){
+              fetch_item(2, iode);
+              fetch_item(2, c_rs);
+              fetch_item(2, delta_n);
+              fetch_item(2, M0);
+              fetch_item(2, c_uc);
+              fetch_item(2, e);
+              fetch_item(2, c_us);
+              fetch_item(2, sqrt_A);
+              fetch_item(2, t_oe);
+              u8_t fetch_item(2, fit); fit_interval_flag = (fit == 1);
+              return iode;
+            }
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
+            u8_t update_subframe3(const InputT *src){
+              fetch_item(3, c_ic);
+              fetch_item(3, Omega0);
+              fetch_item(3, c_is);
+              fetch_item(3, i0);
+              fetch_item(3, c_rc);
+              fetch_item(3, omega);
+              fetch_item(3, dot_Omega0);
+              fetch_item(3, dot_i0);
+              fetch_item(3, iode);
+              return iode;
+            }
+#undef fetch_item
+
             static float_t fit_interval(const bool &_flag, const u16_t &_iodc){
               // Fit interval (ICD:20.3.4.4)
               if(_flag == false){
@@ -1338,6 +1397,25 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             s16_t a_f0;         ///< Clock corr. param. (-20, s)
             s16_t a_f1;         ///< Clock corr. param. (-38, s)
             
+#define fetch_item(name) name = BroadcastedMessage< \
+   InputT, sizeof(InputT) * 8 - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
+   :: SubFrame4_5_Alnamac :: name (src)
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
+            void update(const InputT *src){
+              fetch_item(e);
+              fetch_item(t_oa);
+              fetch_item(delta_i);
+              fetch_item(dot_Omega0);
+              fetch_item(SV_health);
+              fetch_item(sqrt_A);
+              fetch_item(Omega0);
+              fetch_item(omega);
+              fetch_item(M0);
+              fetch_item(a_f0);
+              fetch_item(a_f1);
+            }
+#undef fetch_item
+
             enum {
               SF_e,
               SF_t_oa,
@@ -2092,10 +2170,10 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::Ionospheric
 template <class FloatT>
 const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t::sf[] = {
   POWER_2(-31), // t_GD
-  1,            // t_oc
-  POWER_2(-55), // a_f0
+  POWER_2(4),   // t_oc
+  POWER_2(-31), // a_f0
   POWER_2(-43), // a_f1
-  POWER_2(-31), // a_f2
+  POWER_2(-55), // a_f2
 
   POWER_2(-5),                // c_rs
   GPS_SC2RAD * POWER_2(-43),  // delta_n
