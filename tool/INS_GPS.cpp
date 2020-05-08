@@ -1750,7 +1750,13 @@ class StreamProcessor
         }
       }
 
-      void check_subframe(G_Packet_Data &packet){
+      void check_subframeX(
+          const unsigned int &gnssID,
+          const unsigned int &svID,
+          G_Packet_Data &packet){
+
+        packet.subframe.sv_number = svID;
+        packet.subframe.gnssID = gnssID;
         packet.loader = &loader;
         packet.time_of_reception.week
             = (status.time_stamp == status_t::TIME_STAMP_INVALID) ? -1 : week_number; // -1 means invalid
@@ -1758,30 +1764,23 @@ class StreamProcessor
         Handler::outer.updatable->update(packet);
       }
 
-      void check_subframeX(
-          const unsigned int &gnssID,
-          const unsigned int &svID,
-          G_Packet_Data &packet){
-
-        switch(gnssID){
-          case G_Observer_t::gnss_svid_t::GPS: {
-            packet.subframe.sv_number = svID;
-            // change format to UBX-RXM-SFRB by removing parity
-            for(int i(0); i < sizeof(packet.subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
-              *(G_Observer_t::u32_t *)(&packet.subframe.buffer[i]) >>= 6;
-            }
-            packet.subframe.update_properties();
-            check_subframe(packet);
-            return;
+      void check_subframe(G_Packet_Data &packet){
+        // Change format in accordance with UBX-RXM-SFRBX
+        if(packet.subframe.sv_number < 1){}
+        else if(packet.subframe.sv_number <= 32){ // GPS(1-32)
+          /* Move padding bits(=) in accordance with ICD
+           * 0x==_0xDD_0xDD_0xDD => 0b==DDDDDD_0xDD_0xDD_0bDD======
+           */
+          for(int i(0); i < sizeof(packet.subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
+            *(G_Observer_t::u32_t *)(&packet.subframe.buffer[i]) <<= 6;
           }
-          case G_Observer_t::gnss_svid_t::SBAS: {
-            packet.subframe.sv_number = svID; // svID (120-158)
-            // change format to UBX-RXM-SFRB by removing padding on the last word
-            *(G_Observer_t::u32_t *)(&packet.subframe.buffer[sizeof(G_Observer_t::u32_t) * 7]) >>= 6;
-            check_subframe(packet);
-            return;
-          }
-          // TODO GNSS
+          check_subframeX(G_Observer_t::gnss_svid_t::GPS, packet.subframe.sv_number, packet);
+        }
+        else if(packet.subframe.sv_number < 120){}
+        else if(packet.subframe.sv_number <= 158){ // SBAS(120-158)
+          // change format to UBX-RXM-SFRB by removing padding on the last word
+          *(G_Observer_t::u32_t *)(&packet.subframe.buffer[sizeof(G_Observer_t::u32_t) * 7]) <<= 6;
+          check_subframeX(G_Observer_t::gnss_svid_t::SBAS, packet.subframe.sv_number, packet);
         }
       }
 

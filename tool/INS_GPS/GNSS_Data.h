@@ -46,8 +46,9 @@ struct GNSS_Data {
   mutable Loader *loader;
 
   typedef G_Packet_Observer<FloatT> observer_t;
-  typedef typename observer_t::subframe_t subframe_t;
-  subframe_t subframe;
+  struct subframe_t : public observer_t::subframe_t {
+    unsigned int gnssID;
+  } subframe;
 
   typedef GPS_Time<FloatT> gps_time_t;
   gps_time_t time_of_reception;
@@ -73,7 +74,8 @@ struct GNSS_Data {
       }
     }
 
-    static void fetch_as_GPS_subframe1(const subframe_t &in, gps_ephemeris_t &out){
+    static void fetch_as_GPS_subframe1(
+        const typename observer_t::subframe_t &in, gps_ephemeris_t &out){
       out.WN        = in.ephemeris_wn();
       out.URA       = in.ephemeris_ura();
       out.SV_health = in.ephemeris_sv_health();
@@ -85,7 +87,8 @@ struct GNSS_Data {
       out.a_f0      = in.ephemeris_a_f0();
     }
 
-    static void fetch_as_GPS_subframe2(const subframe_t &in, gps_ephemeris_t &out){
+    static void fetch_as_GPS_subframe2(
+        const typename observer_t::subframe_t &in, gps_ephemeris_t &out){
       out.iode    = in.ephemeris_iode_subframe2();
       out.c_rs    = in.ephemeris_c_rs();
       out.delta_n = in.ephemeris_delta_n();
@@ -99,7 +102,8 @@ struct GNSS_Data {
           = gps_ephemeris_t::raw_t::fit_interval(in.ephemeris_fit(), out.iodc);
     }
 
-    static void fetch_as_GPS_subframe3(const subframe_t &in, gps_ephemeris_t &out){
+    static void fetch_as_GPS_subframe3(
+        const typename observer_t::subframe_t &in, gps_ephemeris_t &out){
       out.c_ic        = in.ephemeris_c_ic();
       out.Omega0      = in.ephemeris_omega_0();
       out.c_is        = in.ephemeris_c_is();
@@ -122,13 +126,13 @@ struct GNSS_Data {
           : Base(),
           sv_number(Base::svid), valid(false){}
 
-      void fetch_as_subframe1(const subframe_t &buf){
+      void fetch_as_subframe1(const typename observer_t::subframe_t &buf){
         fetch_as_GPS_subframe1(buf, *this);
       }
-      void fetch_as_subframe2(const subframe_t &buf){
+      void fetch_as_subframe2(const typename observer_t::subframe_t &buf){
         fetch_as_GPS_subframe2(buf, *this);
       }
-      void fetch_as_subframe3(const subframe_t &buf){
+      void fetch_as_subframe3(const typename observer_t::subframe_t &buf){
         fetch_as_GPS_subframe3(buf, *this);
       }
     };
@@ -140,7 +144,7 @@ struct GNSS_Data {
     }
 
     bool load(const GNSS_Data &data){
-      if(data.subframe.sv_number > 32){return false;}
+      if(data.subframe.gnssID != observer_t::gnss_svid_t::GPS){return false;}
 
       int week_number(data.time_of_reception.week);
       // If invalid week number, estimate it based on current time
@@ -148,18 +152,13 @@ struct GNSS_Data {
       if(week_number < 0){week_number = gps_time_t::now().week;}
 
       typename observer_t::u32_t *buf((typename observer_t::u32_t *)data.subframe.buffer);
-      for(int i(0); i < sizeof(data.subframe.buffer); i += sizeof(typename observer_t::u32_t)){
-        /* Move padding bits(=) in accordance with ICD
-         * // 0x==_0xDD_0xDD_0xDD => 0b==DDDDDD_0xDD_0xDD_0bDD======
-         * TODO This is based on old RXM-SFRB; format of new RXM-SFRBX is already aligned.
-         */
-        buf[i] <<= 6;
-      }
+      typedef typename gps_t::template BroadcastedMessage<typename observer_t::u32_t, 30> parser_t;
+      int subframe_no(parser_t::subframe_id(buf));
 
-      if(data.subframe.subframe_no <= 3){
+      if(subframe_no <= 3){
         gps_ephemeris_raw_t &eph(gps_ephemeris[data.subframe.sv_number - 1]);
 
-        switch(data.subframe.subframe_no){
+        switch(subframe_no){
           case 1: eph.template update_subframe1<2, 0>(buf); eph.set_iodc = true; break;
           case 2: eph.iode_subframe2 = eph.template update_subframe2<2, 0>(buf); break;
           case 3: eph.iode_subframe3 = eph.template update_subframe3<2, 0>(buf); break;
@@ -172,7 +171,7 @@ struct GNSS_Data {
           eph.set_iodc = false; eph.iode_subframe2 = eph.iode_subframe3 = -1; // invalidate
           return res;
         }
-      }else if((data.subframe.subframe_no == 4) && (data.subframe.sv_or_page_id == 56)){ // IONO UTC parameters
+      }else if((subframe_no == 4) && (parser_t::sv_page_id(buf) == 56)){ // IONO UTC parameters
         typename gps_iono_utc_t::raw_t raw;
         raw.template update<2, 0>(buf);
         gps_iono_utc_t iono_utc((gps_iono_utc_t)raw);
