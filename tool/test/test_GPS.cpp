@@ -23,29 +23,45 @@ typedef GPS_SpaceNode<double> space_node_t;
 BOOST_AUTO_TEST_SUITE(GPS)
 
 template <int PaddingMSB, int PaddingLSB,
-    size_t N_bitset, class BufferT, size_t N>
-void fill(const bitset<N_bitset> &b, BufferT (&buf)[N]){
+    size_t N_bitset, class BufferT>
+void fill(
+    const bitset<N_bitset> &b,
+    BufferT (&buf)[(N_bitset + sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB - 1)
+      / (sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB)]){
+  static const int effectiveBits((int)sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB);
+  static const int N((N_bitset + effectiveBits - 1) / effectiveBits);
   int b_index(0);
   for(int i(0); i < (N - 1); ++i){
     //buf[i] = 0;
-    for(int j(0);
-        j < (sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB);
-        ++j){
+    for(int j(0); j < effectiveBits; ++j){
       buf[i] <<= 1;
       buf[i] |= (b[b_index++] ? 1 : 0);
     }
-    buf[i] <<= PaddingLSB;
+    (PaddingLSB >= 0) ? (buf[i] <<= PaddingLSB) : (buf[i] >>= -PaddingLSB);
   }
-  // Last
-  {
-    int j(0);
+  { // Last
     //buf[N - 1] = 0;
-    for(; b_index < b.size(); ++j){
+    while(b_index < N_bitset){
       buf[N - 1] <<= 1;
       buf[N - 1] |= (b[b_index++] ? 1 : 0);
     }
-    buf[N - 1] <<= (
-        (sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB) - j + PaddingLSB);
+    static const int lash_shift((N_bitset % effectiveBits == 0)
+        ? PaddingLSB
+        : (int)(effectiveBits - (N_bitset % effectiveBits) + PaddingLSB));
+    (lash_shift >= 0) ? (buf[N - 1] <<= lash_shift) : (buf[N - 1] >>= -lash_shift);
+  }
+
+
+  BOOST_TEST_MESSAGE("Buffer =>");
+  for(int i(0); i < N; ++i){ // debug print
+    std::string msg;
+    BufferT buf2(buf[i]);
+    for(int j(sizeof(BufferT)); j > 0; --j){
+      msg.insert(0, std::bitset<8>((unsigned long long)(buf2 & 0xFF)).to_string());
+      msg.insert(0, " ");
+      buf2 >>= 8;
+    }
+    BOOST_TEST_MESSAGE(msg);
   }
 }
 
@@ -209,6 +225,13 @@ BOOST_AUTO_TEST_CASE(data_parse){
       u32_t buf[(300 + sizeof(u32_t) * 8 - 4 - 1) / (sizeof(u32_t) * 8 - 4)];
       fill<2, 2>(b, buf);
       check<2, 2>(b, buf);
+    }
+
+    { // special case for u-blox 6 RXM-EPH
+      BOOST_TEST_MESSAGE("u32_t container with padding (8, -6)");
+      u32_t buf[(300 + sizeof(u32_t) * 8 - 2 - 1) / (sizeof(u32_t) * 8 - 2)];
+      fill<8, -6>(b, buf);
+      check<8, -6>(b, buf);
     }
   }
 }
