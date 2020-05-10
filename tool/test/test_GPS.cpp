@@ -1,4 +1,5 @@
 #include <ctime>
+#include <climits>
 #include <iostream>
 #include <bitset>
 #include <string>
@@ -23,13 +24,11 @@ typedef GPS_SpaceNode<double> space_node_t;
 BOOST_AUTO_TEST_SUITE(GPS)
 
 template <int PaddingMSB, int PaddingLSB,
-    size_t N_bitset, class BufferT>
-void fill(
-    const bitset<N_bitset> &b,
-    BufferT (&buf)[(N_bitset + sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB - 1)
-      / (sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB)]){
-  static const int effectiveBits((int)sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB);
+    size_t N_bitset, class BufferT, size_t N_buf>
+void fill(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
+  static const int effectiveBits((int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB);
   static const int N((N_bitset + effectiveBits - 1) / effectiveBits);
+  BOOST_REQUIRE_LE(N, (int)N_buf);
   int b_index(0);
   for(int i(0); i < (N - 1); ++i){
     //buf[i] = 0;
@@ -47,7 +46,7 @@ void fill(
     }
     static const int lash_shift((N_bitset % effectiveBits == 0)
         ? PaddingLSB
-        : (int)(effectiveBits - (N_bitset % effectiveBits) + PaddingLSB));
+        : (effectiveBits - ((int)N_bitset % effectiveBits) + PaddingLSB));
     (lash_shift >= 0) ? (buf[N - 1] <<= lash_shift) : (buf[N - 1] >>= -lash_shift);
   }
 
@@ -56,7 +55,7 @@ void fill(
   for(int i(0); i < N; ++i){ // debug print
     std::string msg;
     BufferT buf2(buf[i]);
-    for(int j(sizeof(BufferT)); j > 0; --j){
+    for(int j(sizeof(BufferT) * CHAR_BIT); j > 0; j -= 8){
       msg.insert(0, std::bitset<8>((unsigned long long)(buf2 & 0xFF)).to_string());
       msg.insert(0, " ");
       buf2 >>= 8;
@@ -69,7 +68,7 @@ template <int PaddingMSB, int PaddingLSB,
     size_t N_bitset, class BufferT>
 void check(const bitset<N_bitset> &b, const BufferT *buf){
   typedef space_node_t::BroadcastedMessage<
-      BufferT, sizeof(BufferT) * 8 - PaddingMSB - PaddingLSB, PaddingMSB> msg_t;
+      BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB, PaddingMSB> msg_t;
 
 #define each2(offset, bits, shift, func) { \
   boost::uint32_t res((boost::uint32_t)msg_t::func(buf)); \
@@ -168,7 +167,7 @@ BOOST_AUTO_TEST_CASE(data_parse){
 
   for(int loop(0); loop < 0x1000; loop++){
     bitset<300> b;
-    for(int i(0); i < b.size(); ++i){
+    for(unsigned int i(0); i < b.size(); ++i){
       b.set(i, dist(gen) == 1);
     }
     string b_str(b.to_string());
@@ -178,58 +177,60 @@ BOOST_AUTO_TEST_CASE(data_parse){
       BOOST_TEST_MESSAGE(format("%3d ") % i << b_str.substr(i, 24) << ' ' << b_str.substr(i + 24, 6));
     }
 
+    static const int u8_bits(sizeof(u8_t) * CHAR_BIT);
     {
       BOOST_TEST_MESSAGE("u8_t container without padding");
-      u8_t buf[(300 + sizeof(u8_t) * 8 - 1) / (sizeof(u8_t) * 8)];
+      u8_t buf[(300 + u8_bits - 1) / u8_bits];
       fill<0, 0>(b, buf);
       check<0, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u8_t container with padding (2, 0)");
-      u8_t buf[(300 + sizeof(u8_t) * 8 - 2 - 1) / (sizeof(u8_t) * 8 - 2)];
+      u8_t buf[(300 + u8_bits - 2 - 1) / (u8_bits - 2)];
       fill<2, 0>(b, buf);
       check<2, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u8_t container with padding (0, 2)");
-      u8_t buf[(300 + sizeof(u8_t) * 8 - 2 - 1) / (sizeof(u8_t) * 8 - 2)];
+      u8_t buf[(300 + u8_bits - 2 - 1) / (u8_bits - 2)];
       fill<0, 2>(b, buf);
       check<0, 2>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u8_t container with padding (2, 2)");
-      u8_t buf[(300 + sizeof(u8_t) * 8 - 4 - 1) / (sizeof(u8_t) * 8 - 4)];
+      u8_t buf[(300 + u8_bits - 4 - 1) / (u8_bits - 4)];
       fill<2, 2>(b, buf);
       check<2, 2>(b, buf);
     }
+    static const int u32_bits(sizeof(u32_t) * CHAR_BIT);
     {
       BOOST_TEST_MESSAGE("u32_t container without padding");
-      u32_t buf[(300 + sizeof(u32_t) * 8 - 1) / (sizeof(u32_t) * 8)];
+      u32_t buf[(300 + u32_bits - 1) / u32_bits];
       fill<0, 0>(b, buf);
       check<0, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container with padding (2, 0)");
-      u32_t buf[(300 + sizeof(u32_t) * 8 - 2 - 1) / (sizeof(u32_t) * 8 - 2)];
+      u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
       fill<2, 0>(b, buf);
       check<2, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container with padding (0, 2)");
-      u32_t buf[(300 + sizeof(u32_t) * 8 - 2 - 1) / (sizeof(u32_t) * 8 - 2)];
+      u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
       fill<0, 2>(b, buf);
       check<0, 2>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container with padding (2, 2)");
-      u32_t buf[(300 + sizeof(u32_t) * 8 - 4 - 1) / (sizeof(u32_t) * 8 - 4)];
+      u32_t buf[(300 + u32_bits - 4 - 1) / (u32_bits - 4)];
       fill<2, 2>(b, buf);
       check<2, 2>(b, buf);
     }
 
     { // special case for u-blox 6 RXM-EPH
       BOOST_TEST_MESSAGE("u32_t container with padding (8, -6)");
-      u32_t buf[(300 + sizeof(u32_t) * 8 - 2 - 1) / (sizeof(u32_t) * 8 - 2)];
+      u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
       fill<8, -6>(b, buf);
       check<8, -6>(b, buf);
     }

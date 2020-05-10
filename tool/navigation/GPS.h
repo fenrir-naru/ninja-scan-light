@@ -486,10 +486,10 @@ class GPS_SpaceNode {
     struct DataParser {
       template <
           class OutputT, class InputT,
-          int EffectiveBits_in_InputT = sizeof(InputT) * 8,
-          int PaddingBits_in_InputT_MSB = sizeof(InputT) * 8 - EffectiveBits_in_InputT,
+          int EffectiveBits_in_InputT = sizeof(InputT) * CHAR_BIT,
+          int PaddingBits_in_InputT_MSB = (int)sizeof(InputT) * CHAR_BIT - EffectiveBits_in_InputT,
           bool output_is_smaller_than_input
-            = (EffectiveBits_in_InputT >= (sizeof(OutputT) * 8))>
+            = (EffectiveBits_in_InputT >= ((int)sizeof(OutputT) * CHAR_BIT))>
       struct bits2num_t {
         static OutputT run(const InputT *buf, const uint_t &index){
           // ex.1) I_8 0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5
@@ -498,17 +498,20 @@ class GPS_SpaceNode {
           //       O_8        0*1*2*3*4*5*6*7
           // ex.3) I_16 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
           //       O_8                          0*1*2*3* *4*5*6*7
+          static const int
+              output_bits(sizeof(OutputT) * CHAR_BIT),
+              input_bits(sizeof(InputT) * CHAR_BIT);
           std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
           OutputT res(
               (buf[aligned.quot] << (aligned.rem + PaddingBits_in_InputT_MSB))
-                >> ((sizeof(InputT) - sizeof(OutputT)) * 8));
-          if(aligned.rem > (EffectiveBits_in_InputT - (sizeof(OutputT) * 8))){
+                >> (input_bits - output_bits));
+          if(aligned.rem > (EffectiveBits_in_InputT - output_bits)){
             // in case of overrun; ex.1 and ex.3
             res |= (OutputT)(
                 (buf[++aligned.quot] << PaddingBits_in_InputT_MSB)
                   // left shift to remove padding
                   >> (EffectiveBits_in_InputT
-                     + (sizeof(InputT) - sizeof(OutputT)) * 8 - aligned.rem));
+                     + (input_bits - output_bits) - aligned.rem));
                   // right shift to fill remaining;
                   // shift = input - [require_bits = output - (effective - rem)]
           }
@@ -523,26 +526,29 @@ class GPS_SpaceNode {
           // When sizeof(OutputT) > sizeof(InputT)
           // ex.4) I_8  0 1 2 3 4 5 6 7 | 8 9 0 1 2 3 4 5 | 6 7 8 9 0 1 2 3
           //       O_16         0*1*2*3* *4*5*6*7*8*9*0*1* *2*3*4*5
+          static const int
+              output_bits(sizeof(OutputT) * CHAR_BIT),
+              input_bits(sizeof(InputT) * CHAR_BIT);
           static const int padding_bits_LSB(
-              (int)sizeof(InputT) * 8 - EffectiveBits_in_InputT - PaddingBits_in_InputT_MSB);
+              input_bits - EffectiveBits_in_InputT - PaddingBits_in_InputT_MSB);
           static const int padding_bits_LSB_abs(
               padding_bits_LSB >= 0 ? padding_bits_LSB : -padding_bits_LSB);
           static const int effective_mask_shift(
               (PaddingBits_in_InputT_MSB <= 0) ? 0 : (PaddingBits_in_InputT_MSB - 1));
           static const InputT effective_mask((PaddingBits_in_InputT_MSB <= 0)
               ? (~(InputT)0)
-              : (((((InputT)1) << (sizeof(InputT) * 8 - 1)) - 1) >> effective_mask_shift));
+              : (((((InputT)1) << (input_bits - 1)) - 1) >> effective_mask_shift));
           std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
           OutputT res((padding_bits_LSB >= 0)
               ? ((buf[aligned.quot] & effective_mask) >> padding_bits_LSB_abs)
               : ((buf[aligned.quot] & effective_mask) << padding_bits_LSB_abs));
-          for(int i(sizeof(OutputT) * 8 / EffectiveBits_in_InputT); i > 1; --i){
+          for(int i(output_bits / EffectiveBits_in_InputT); i > 1; --i){
             res <<= EffectiveBits_in_InputT;
             res |= ((padding_bits_LSB >= 0)
                 ? ((buf[++aligned.quot] & effective_mask) >> padding_bits_LSB_abs)
                 : ((buf[++aligned.quot] & effective_mask) << padding_bits_LSB_abs));
           }
-          int last_shift(aligned.rem + ((sizeof(OutputT) * 8) % EffectiveBits_in_InputT));
+          int last_shift(aligned.rem + (output_bits % EffectiveBits_in_InputT));
           if(last_shift > 0){
             res <<= last_shift;
             res |= ((buf[++aligned.quot] & effective_mask)
@@ -558,7 +564,7 @@ class GPS_SpaceNode {
       }
       template <class OutputT, class InputT>
       static OutputT bits2num(const InputT *buf, const uint_t &index, const uint_t &length){
-        return (bits2num<OutputT, InputT>(buf, index) >> ((sizeof(OutputT) * 8) - length));
+        return (bits2num<OutputT, InputT>(buf, index) >> ((sizeof(OutputT) * CHAR_BIT) - length));
       }
 
       template <class OutputT,
@@ -575,13 +581,13 @@ class GPS_SpaceNode {
         return (bits2num<OutputT,
               EffectiveBits_in_InputT, PaddingBits_in_InputT_MSB,
               InputT>(buf, index)
-            >> ((sizeof(OutputT) * 8) - length));
+            >> ((sizeof(OutputT) * CHAR_BIT) - length));
       }
     };
 
     template <class InputT,
-        int EffectiveBits = sizeof(InputT) * 8,
-        int PaddingBits_MSB = sizeof(InputT) * 8 - EffectiveBits>
+        int EffectiveBits = sizeof(InputT) * CHAR_BIT,
+        int PaddingBits_MSB = (int)sizeof(InputT) * CHAR_BIT - EffectiveBits>
     struct BroadcastedMessage : public DataParser {
 #define convert_u(bits, offset_bits, length, name) \
 static u ## bits ## _t name(const InputT *buf){ \
@@ -729,7 +735,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
 
 #define fetch_item(name) name = BroadcastedMessage< \
-   InputT, sizeof(InputT) * 8 - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
+   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
    :: SubFrame4_Page18 :: name (src)
         template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
         void update(const InputT *src){
@@ -1101,7 +1107,7 @@ static s ## bits ## _t name(const InputT *buf){ \
             s16_t dot_i0;       ///< Inclination angle rate (-43, sc/s)
 
 #define fetch_item(num, name) name = BroadcastedMessage< \
-   InputT, sizeof(InputT) * 8 - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
+   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
    :: SubFrame ## num :: name (src)
             template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
             u16_t update_subframe1(const InputT *src){
@@ -1406,7 +1412,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             s16_t a_f1;         ///< Clock corr. param. (-38, s)
             
 #define fetch_item(name) name = BroadcastedMessage< \
-   InputT, sizeof(InputT) * 8 - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
+   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
    :: SubFrame4_5_Alnamac :: name (src)
             template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
             void update(const InputT *src){
