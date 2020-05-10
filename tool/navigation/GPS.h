@@ -501,21 +501,38 @@ class GPS_SpaceNode {
           static const int
               output_bits(sizeof(OutputT) * CHAR_BIT),
               input_bits(sizeof(InputT) * CHAR_BIT);
+          static const int padding_bits_MSB_abs(
+              PaddingBits_in_InputT_MSB * (PaddingBits_in_InputT_MSB >= 0 ? 1 : -1));
           std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
-          OutputT res(
-              (buf[aligned.quot] << (aligned.rem + PaddingBits_in_InputT_MSB))
-                >> (input_bits - output_bits));
-          if(aligned.rem > (EffectiveBits_in_InputT - output_bits)){
-            // in case of overrun; ex.1 and ex.3
-            res |= (OutputT)(
-                (buf[++aligned.quot] << PaddingBits_in_InputT_MSB)
-                  // left shift to remove padding
-                  >> (EffectiveBits_in_InputT
-                     + (input_bits - output_bits) - aligned.rem));
-                  // right shift to fill remaining;
-                  // shift = input - [require_bits = output - (effective - rem)]
+          if(PaddingBits_in_InputT_MSB >= 0){
+            OutputT res(
+                (buf[aligned.quot] << (aligned.rem + padding_bits_MSB_abs))
+                  >> (input_bits - output_bits));
+            if(aligned.rem > (EffectiveBits_in_InputT - output_bits)){
+              // in case of overrun; ex.1 and ex.3
+              res |= (OutputT)(
+                  (buf[++aligned.quot] << padding_bits_MSB_abs)
+                    // left shift to remove padding
+                    >> (EffectiveBits_in_InputT
+                       + (input_bits - output_bits) - aligned.rem));
+                    // right shift to fill remaining;
+                    // shift = input - [require_bits = output - (effective - rem)]
+            }
+            return res;
+          }else{
+            // rare case: negative MSB padding
+            int left_shift(aligned.rem + PaddingBits_in_InputT_MSB);
+            OutputT res(
+                (buf[aligned.quot] << (left_shift >= 0 ? left_shift : 0))
+                  >> (input_bits - output_bits + (left_shift >= 0 ? 0 : -left_shift)));
+            if(aligned.rem > (EffectiveBits_in_InputT - output_bits)){
+              res |= (OutputT)(
+                  buf[++aligned.quot]
+                    >> (EffectiveBits_in_InputT + padding_bits_MSB_abs
+                       + (input_bits - output_bits) - aligned.rem));
+            }
+            return res;
           }
-          return res;
         }
       };
       template <class OutputT, class InputT,
@@ -538,20 +555,20 @@ class GPS_SpaceNode {
           static const InputT effective_mask((PaddingBits_in_InputT_MSB <= 0)
               ? (~(InputT)0)
               : (((((InputT)1) << (input_bits - 1)) - 1) >> effective_mask_shift));
+          static const int shift_after_mask(
+              (PaddingBits_in_InputT_MSB < 0) ? -PaddingBits_in_InputT_MSB : 0);
           std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
-          OutputT res((padding_bits_LSB >= 0)
-              ? ((buf[aligned.quot] & effective_mask) >> padding_bits_LSB_abs)
-              : ((buf[aligned.quot] & effective_mask) << padding_bits_LSB_abs));
-          for(int i(output_bits / EffectiveBits_in_InputT); i > 1; --i){
+          OutputT res(0);
+          for(int i(output_bits / EffectiveBits_in_InputT); i > 0; --i, ++aligned.quot){
             res <<= EffectiveBits_in_InputT;
             res |= ((padding_bits_LSB >= 0)
-                ? ((buf[++aligned.quot] & effective_mask) >> padding_bits_LSB_abs)
-                : ((buf[++aligned.quot] & effective_mask) << padding_bits_LSB_abs));
+                ? (((buf[aligned.quot] & effective_mask) >> shift_after_mask) >> padding_bits_LSB_abs)
+                : (((buf[aligned.quot] & effective_mask) >> shift_after_mask) << padding_bits_LSB_abs));
           }
           int last_shift(aligned.rem + (output_bits % EffectiveBits_in_InputT));
           if(last_shift > 0){
             res <<= last_shift;
-            res |= ((buf[++aligned.quot] & effective_mask)
+            res |= (((buf[aligned.quot] & effective_mask) >> shift_after_mask)
                 >> (EffectiveBits_in_InputT + padding_bits_LSB - last_shift));
           }
           return res;
