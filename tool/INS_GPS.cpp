@@ -1786,7 +1786,7 @@ class StreamProcessor
 
       void check_ephemeris(const G_Observer_t &observer){
         GNSS_Data<float_sylph_t>::Loader::gps_ephemeris_extended_t<G_Packet_GPS_Ephemeris> ephemeris;
-        observer.fetch_ephemeris(ephemeris);
+        ephemeris.fetch(observer);
         if((week_number >= 0) && ephemeris.valid){
           ephemeris.WN += (week_number - (week_number % 0x400)); // Original WN is truncated to 10 bits.
           ephemeris.loader = &loader;

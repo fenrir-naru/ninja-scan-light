@@ -58,10 +58,10 @@ struct GNSS_Data {
     gps_t *gps;
 
     typedef typename gps_t::Satellite::Ephemeris gps_ephemeris_t;
-    struct gps_ephemeris_raw_t : public gps_t::Satellite::Ephemeris::raw_t {
+    struct gps_ephemeris_raw_t : public gps_ephemeris_t::raw_t {
       bool set_iodc;
       int iode_subframe2, iode_subframe3;
-      typedef typename gps_t::Satellite::Ephemeris::raw_t super_t;
+      typedef typename gps_ephemeris_t::raw_t super_t;
       gps_ephemeris_raw_t()
           : set_iodc(false), iode_subframe2(-1), iode_subframe3(-1) {}
     } gps_ephemeris[32];
@@ -74,66 +74,31 @@ struct GNSS_Data {
       }
     }
 
-    static void fetch_as_GPS_subframe1(
-        const typename observer_t::subframe_t &in, gps_ephemeris_t &out){
-      out.WN        = in.ephemeris_wn();
-      out.URA       = in.ephemeris_ura();
-      out.SV_health = in.ephemeris_sv_health();
-      out.iodc      = in.ephemeris_iodc();
-      out.t_GD      = in.ephemeris_t_gd();
-      out.t_oc      = in.ephemeris_t_oc();
-      out.a_f2      = in.ephemeris_a_f2();
-      out.a_f1      = in.ephemeris_a_f1();
-      out.a_f0      = in.ephemeris_a_f0();
-    }
-
-    static void fetch_as_GPS_subframe2(
-        const typename observer_t::subframe_t &in, gps_ephemeris_t &out){
-      out.iode    = in.ephemeris_iode_subframe2();
-      out.c_rs    = in.ephemeris_c_rs();
-      out.delta_n = in.ephemeris_delta_n();
-      out.M0      = in.ephemeris_m_0();
-      out.c_uc    = in.ephemeris_c_uc();
-      out.e       = in.ephemeris_e();
-      out.c_us    = in.ephemeris_c_us();
-      out.sqrt_A  = in.ephemeris_root_a();
-      out.t_oe    = in.ephemeris_t_oe();
-      out.fit_interval
-          = gps_ephemeris_t::raw_t::fit_interval(in.ephemeris_fit(), out.iodc);
-    }
-
-    static void fetch_as_GPS_subframe3(
-        const typename observer_t::subframe_t &in, gps_ephemeris_t &out){
-      out.c_ic        = in.ephemeris_c_ic();
-      out.Omega0      = in.ephemeris_omega_0();
-      out.c_is        = in.ephemeris_c_is();
-      out.i0          = in.ephemeris_i_0();
-      out.c_rc        = in.ephemeris_c_rc();
-      out.omega       = in.ephemeris_omega();
-      out.dot_Omega0  = in.ephemeris_omega_0_dot();
-      out.dot_i0      = in.ephemeris_i_0_dot();
-    }
-
     /**
      * Used for legacy interface such as RXM-EPH(0x0231), AID-EPH(0x0B31)
      */
     template <class Base>
     struct gps_ephemeris_extended_t : public Base {
-      unsigned int &sv_number; // sv_number is alias.
       bool valid;
-      typename gps_t::uint_t how;
       gps_ephemeris_extended_t()
-          : Base(),
-          sv_number(Base::svid), valid(false){}
+          : Base(), valid(false){}
 
-      void fetch_as_subframe1(const typename observer_t::subframe_t &buf){
-        fetch_as_GPS_subframe1(buf, *this);
-      }
-      void fetch_as_subframe2(const typename observer_t::subframe_t &buf){
-        fetch_as_GPS_subframe2(buf, *this);
-      }
-      void fetch_as_subframe3(const typename observer_t::subframe_t &buf){
-        fetch_as_GPS_subframe3(buf, *this);
+      void fetch(const observer_t &in){
+        if(in.current_packet_size() < (8 + 104)){return;}
+        typename gps_ephemeris_t::raw_t raw;
+        typename observer_t::v8_t buf[40];
+        in.inspect(buf, 4, 6);
+        raw.svid = le_char4_2_num<typename observer_t::u32_t>(buf[0]);
+        for(int i(0); i <= 2; ++i){
+          in.inspect(&(buf[8]), 32, 6 + 8 + i * 32);
+          switch(i){
+            case 0: raw.template update_subframe1<8, -6>((typename observer_t::u32_t *)buf); break;
+            case 1: raw.template update_subframe2<8, -6>((typename observer_t::u32_t *)buf); break;
+            case 2: raw.template update_subframe3<8, -6>((typename observer_t::u32_t *)buf); break;
+          }
+        }
+        *(gps_ephemeris_t *)this = raw;
+        valid = true;
       }
     };
 
