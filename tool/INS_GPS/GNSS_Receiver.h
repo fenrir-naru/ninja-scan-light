@@ -302,20 +302,18 @@ struct GNSS_Receiver {
       friend std::ostream &operator<<(std::ostream &out, const mask_printer_t &p){
         if(p.prn_msb < p.prn_lsb){return out;}
         int prn(p.prn_lsb % 8);
-        prn = ((p.prn_msb - prn) / 8) * 8 + prn; // first prn_lsb is aligned to input prn_lsb modulo
-        out << std::bitset<8>(
+        prn = ((p.prn_msb - prn) / 8) * 8 + prn; // lower prn of each chunk is aligned to input prn_lsb modulo
 #if defined(_MSC_VER) && (_MSC_VER >= 1600) && (_MSC_VER < 1700) // work around of C2668
-              (unsigned long long)
+#define print_bits(x) std::bitset<8>((unsigned long long)x)
+#else
+#define print_bits(x) std::bitset<8>(x)
 #endif
-              p.mask.pattern(prn, p.prn_msb));
+        out << print_bits(p.mask.pattern(prn, p.prn_msb));
         for(int i((prn - p.prn_lsb) / 8); i > 0; --i){
           prn -= 8;
-          out << '_' << std::bitset<8>(
-#if defined(_MSC_VER) && (_MSC_VER >= 1600) && (_MSC_VER < 1700) // work around of C2668
-              (unsigned long long)
-#endif
-                p.mask.pattern(prn, prn + 7));
+          out << '_' << print_bits(p.mask.pattern(prn, prn + 7));
         }
+#undef print_bits
         return out;
       }
     };
