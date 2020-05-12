@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "navigation/GPS.h"
+#include "navigation/GPS_Solver_Base.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -20,6 +21,7 @@ using namespace std;
 using boost::format;
 
 typedef GPS_SpaceNode<double> space_node_t;
+typedef GPS_Solver_Base<double> solver_base_t;
 
 BOOST_AUTO_TEST_SUITE(GPS)
 
@@ -157,18 +159,29 @@ void check(const bitset<N_bitset> &b, const BufferT *buf){
 #undef each2
 }
 
-BOOST_AUTO_TEST_CASE(data_parse){
-  namespace br = boost::random;
-  br::mt19937 gen(0); //static_cast<unsigned long>(time(0)));
-  br::uniform_int_distribution<> dist(0, 1);
+struct Fixture {
+  boost::random::mt19937 gen;
+  boost::random::uniform_int_distribution<> bin_dist;
 
+  Fixture()
+      : gen(0), //static_cast<unsigned long>(time(0))
+      bin_dist(0, 1)
+      {}
+  ~Fixture(){}
+
+  bool get_bool(){
+    return bin_dist(gen) == 1;
+  }
+};
+
+BOOST_FIXTURE_TEST_CASE(data_parse, Fixture){
   typedef boost::uint8_t u8_t;
   typedef boost::uint32_t u32_t;
 
   for(int loop(0); loop < 0x1000; loop++){
     bitset<300> b;
     for(unsigned int i(0); i < b.size(); ++i){
-      b.set(i, dist(gen) == 1);
+      b.set(i, get_bool());
     }
     string b_str(b.to_string());
     reverse(b_str.begin(), b_str.end());
@@ -233,6 +246,41 @@ BOOST_AUTO_TEST_CASE(data_parse){
       u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
       fill<8, -6>(b, buf);
       check<8, -6>(b, buf);
+    }
+  }
+}
+
+BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
+  for(int loop(0); loop < 0x1000; loop++){
+    bitset<64> b;
+    for(unsigned int i(0); i < b.size(); ++i){
+      b.set(i, get_bool());
+    }
+    string b_str(b.to_string());
+    reverse(b_str.begin(), b_str.end());
+    string b_str2("");
+    for(int i(0); i < 64; i += 8){
+      b_str2.append(" ").append(b_str.substr(i, 8));
+    }
+    BOOST_TEST_MESSAGE(format("Origin(%d) LSB => MSB:%s") % loop % b_str2);
+
+    typedef solver_base_t::bit_array_t<64> bit_array_t;
+    bit_array_t bit_array;
+    for(unsigned int i(0); i < b.size(); ++i){
+      bit_array.set(i, b[i]);
+    }
+
+    for(int i(0); i < (int)b.size(); ++i){
+      int j(i + (sizeof(unsigned int) * CHAR_BIT) - 1);
+      if(j >= (int)b.size()){j = (int)b.size() - 1;}
+      for(; j >= i; --j){
+        unsigned int pattern(bit_array.pattern(i, j));
+        BOOST_TEST_MESSAGE(format("(%d, %d) => 0x%08x") % i % j % pattern);
+        for(int k1(i), k2(0); k1 <= j; ++k1, ++k2){
+          BOOST_REQUIRE_EQUAL((pattern & 0x1), (b[k1] ? 1 : 0));
+          pattern >>= 1;
+        }
+      }
     }
   }
 }

@@ -42,6 +42,7 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
+#include <climits>
 
 #include "param/matrix.h"
 #include "GPS.h"
@@ -254,6 +255,57 @@ struct GPS_Solver_Base {
     return invalid;
   }
 
+  template <int MAX_SIZE>
+  struct bit_array_t { ///< alternation of std::bitset
+    unsigned char buf[(MAX_SIZE + CHAR_BIT - 1) / CHAR_BIT];
+    void clear() {
+      std::memset(buf, 0, sizeof(buf));
+    }
+    bool operator[](const int &idx) const {
+      if((idx < 0) || (idx >= MAX_SIZE)){return false;}
+      std::div_t qr(std::div(idx, CHAR_BIT));
+      unsigned char mask((unsigned char)1 << qr.rem);
+      return buf[qr.quot] & mask;
+    }
+    void set(const int &idx, const bool &bit = true) {
+      if((idx < 0) || (idx >= MAX_SIZE)){return;}
+      std::div_t qr(std::div(idx, CHAR_BIT));
+      unsigned char mask((unsigned char)1 << qr.rem);
+      bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
+    }
+    void reset(const int &idx) {
+      set(idx, false);
+    }
+    /**
+     * Generate bit pattern with arbitrary start and end indices
+     */
+    unsigned int pattern(const int &idx_lsb, int idx_msb) const {
+      if((idx_msb < idx_lsb) || (idx_lsb < 0) || (idx_msb >= MAX_SIZE)){
+        return 0;
+      }
+      static const int res_bits((int)sizeof(unsigned int) * CHAR_BIT);
+      if((idx_msb - idx_lsb) >= res_bits){
+        // check output boundary; if overrun, msb will be truncated.
+        idx_msb = idx_lsb + res_bits - 1;
+      }
+
+      std::div_t qr_lsb(std::div(idx_lsb, CHAR_BIT)),
+          qr_msb(std::div(idx_msb, CHAR_BIT));
+      unsigned int res(buf[qr_msb.quot] & ((1U << (qr_msb.rem + 1)) - 1)); // MSB byte
+      if(qr_msb.quot > qr_lsb.quot){
+        for(int i(qr_msb.quot - 1); i > qr_lsb.quot; --i){ // Fill intermediate
+          res <<= CHAR_BIT;
+          res |= buf[i];
+        }
+        res <<= (CHAR_BIT - qr_lsb.rem);
+        res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
+      }else{
+        res >>= qr_lsb.rem;
+      }
+      return res;
+    }
+  };
+
   struct user_pvt_t {
     enum {
       ERROR_NO = 0,
@@ -274,62 +326,8 @@ struct GPS_Solver_Base {
     float_t receiver_error_rate;
     float_t gdop, pdop, hdop, vdop, tdop;
     unsigned int used_satellites;
-    struct satellite_mask_t {
-      static const int NUM_PRN = 0x800;
-      static const int bit_per_addr = sizeof(char) * 8;
-      char buf[NUM_PRN / bit_per_addr];
-      void clear() {
-        std::memset(buf, 0, sizeof(buf));
-      }
-      struct mask_t {
-        char buf[bit_per_addr];
-        mask_t() {
-          for(int i(0); i < bit_per_addr; ++i){
-            buf[i] = (1 << i);
-          }
-        }
-        const char &operator[] (const int &idx) const {
-          return buf[idx];
-        }
-      };
-      void set(const int &prn, const bool &bit = true) {
-        static const mask_t mask;
-        if((prn < 0) || (prn >= NUM_PRN)){return;}
-        std::div_t qr(std::div(prn, bit_per_addr));
-        if(bit){
-          buf[qr.quot] |= mask[qr.rem];
-        }else{
-          buf[qr.quot] &= ~mask[qr.rem];
-        }
-      }
-      void reset(const int &prn) {
-        set(prn, false);
-      }
-      unsigned int pattern(const int &prn_lsb, int prn_msb) const {
-        if((prn_msb < prn_lsb) || (prn_lsb < 0) || (prn_msb >= NUM_PRN)){
-          return 0;
-        }
-        if((prn_msb - prn_lsb) >= sizeof(unsigned int) * bit_per_addr){
-          // check output boundary; if overrun, msb will be truncated.
-          prn_msb = prn_lsb + sizeof(unsigned int) * bit_per_addr  - 1;
-        }
-
-        std::div_t qr_lsb(std::div(prn_lsb, bit_per_addr)),
-            qr_msb(std::div(prn_msb, bit_per_addr));
-        unsigned int res(buf[qr_msb.quot] & ((1U << (qr_msb.rem + 1)) - 1)); // MSB byte
-        if(qr_msb.quot > qr_lsb.quot){
-          for(int i(qr_msb.quot - 1); i > qr_lsb.quot; --i){ // Fill intermediate
-            res <<= bit_per_addr;
-            res |= buf[qr_msb.quot];
-          }
-          res <<= (bit_per_addr - qr_lsb.rem);
-          res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
-        }else{
-          res >>= qr_lsb.rem;
-        }
-        return res;
-      }
-    } used_satellite_mask; ///< bit pattern(use=1, otherwise=0), PRN 1(LSB) to 32 for GPS
+    typedef bit_array_t<0x400> satellite_mask_t;
+    satellite_mask_t used_satellite_mask; ///< bit pattern(use=1, otherwise=0), PRN 1(LSB) to 32 for GPS
 
     user_pvt_t()
         : error_code(ERROR_UNSOLVED),
