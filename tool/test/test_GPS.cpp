@@ -27,7 +27,7 @@ BOOST_AUTO_TEST_SUITE(GPS)
 
 template <int PaddingMSB, int PaddingLSB,
     size_t N_bitset, class BufferT, size_t N_buf>
-void fill(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
+void fill_buffer(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
   static const int effectiveBits((int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB);
   static const int N((N_bitset + effectiveBits - 1) / effectiveBits);
   BOOST_REQUIRE_LE(N, (int)N_buf);
@@ -68,7 +68,7 @@ void fill(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
 
 template <int PaddingMSB, int PaddingLSB,
     size_t N_bitset, class BufferT>
-void check(const bitset<N_bitset> &b, const BufferT *buf){
+void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
   typedef space_node_t::BroadcastedMessage<
       BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB, PaddingMSB> msg_t;
 
@@ -194,58 +194,74 @@ BOOST_FIXTURE_TEST_CASE(data_parse, Fixture){
     {
       BOOST_TEST_MESSAGE("u8_t container without padding");
       u8_t buf[(300 + u8_bits - 1) / u8_bits];
-      fill<0, 0>(b, buf);
-      check<0, 0>(b, buf);
+      fill_buffer<0, 0>(b, buf);
+      check_parse<0, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u8_t container with padding (2, 0)");
       u8_t buf[(300 + u8_bits - 2 - 1) / (u8_bits - 2)];
-      fill<2, 0>(b, buf);
-      check<2, 0>(b, buf);
+      fill_buffer<2, 0>(b, buf);
+      check_parse<2, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u8_t container with padding (0, 2)");
       u8_t buf[(300 + u8_bits - 2 - 1) / (u8_bits - 2)];
-      fill<0, 2>(b, buf);
-      check<0, 2>(b, buf);
+      fill_buffer<0, 2>(b, buf);
+      check_parse<0, 2>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u8_t container with padding (2, 2)");
       u8_t buf[(300 + u8_bits - 4 - 1) / (u8_bits - 4)];
-      fill<2, 2>(b, buf);
-      check<2, 2>(b, buf);
+      fill_buffer<2, 2>(b, buf);
+      check_parse<2, 2>(b, buf);
     }
     static const int u32_bits(sizeof(u32_t) * CHAR_BIT);
     {
       BOOST_TEST_MESSAGE("u32_t container without padding");
       u32_t buf[(300 + u32_bits - 1) / u32_bits];
-      fill<0, 0>(b, buf);
-      check<0, 0>(b, buf);
+      fill_buffer<0, 0>(b, buf);
+      check_parse<0, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container with padding (2, 0)");
       u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
-      fill<2, 0>(b, buf);
-      check<2, 0>(b, buf);
+      fill_buffer<2, 0>(b, buf);
+      check_parse<2, 0>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container with padding (0, 2)");
       u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
-      fill<0, 2>(b, buf);
-      check<0, 2>(b, buf);
+      fill_buffer<0, 2>(b, buf);
+      check_parse<0, 2>(b, buf);
     }
     {
       BOOST_TEST_MESSAGE("u32_t container with padding (2, 2)");
       u32_t buf[(300 + u32_bits - 4 - 1) / (u32_bits - 4)];
-      fill<2, 2>(b, buf);
-      check<2, 2>(b, buf);
+      fill_buffer<2, 2>(b, buf);
+      check_parse<2, 2>(b, buf);
     }
 
     { // special case for u-blox 6 RXM-EPH
       BOOST_TEST_MESSAGE("u32_t container with padding (8, -6)");
       u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
-      fill<8, -6>(b, buf);
-      check<8, -6>(b, buf);
+      fill_buffer<8, -6>(b, buf);
+      check_parse<8, -6>(b, buf);
+    }
+  }
+}
+
+template <size_t N, class BitArrayT>
+void check_bit_array(const bitset<N> &b, const BitArrayT &bit_array){
+  for(int i(0); i < (int)b.size(); ++i){
+    int j(i + (sizeof(unsigned int) * CHAR_BIT) - 1);
+    if(j >= (int)b.size()){j = (int)b.size() - 1;}
+    for(; j >= i; --j){
+      unsigned int pattern(bit_array.pattern(i, j));
+      BOOST_TEST_MESSAGE(format("(%d, %d) => 0x%08x") % i % j % pattern);
+      for(int k1(i), k2(0); k1 <= j; ++k1, ++k2){
+        BOOST_REQUIRE_EQUAL((pattern & 0x1), (b[k1] ? 1 : 0));
+        pattern >>= 1;
+      }
     }
   }
 }
@@ -264,23 +280,34 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
     }
     BOOST_TEST_MESSAGE(format("Origin(%d) LSB => MSB:%s") % loop % b_str2);
 
-    typedef solver_base_t::bit_array_t<64> bit_array_t;
-    bit_array_t bit_array;
-    for(unsigned int i(0); i < b.size(); ++i){
-      bit_array.set(i, b[i]);
+    {
+      BOOST_TEST_MESSAGE("u8_t container");
+      typedef solver_base_t::bit_array_t<64, boost::uint8_t> bit_array_t;
+      bit_array_t bit_array;
+      for(unsigned int i(0); i < b.size(); ++i){
+        bit_array.set(i, b[i]);
+      }
+      check_bit_array(b, bit_array);
     }
 
-    for(int i(0); i < (int)b.size(); ++i){
-      int j(i + (sizeof(unsigned int) * CHAR_BIT) - 1);
-      if(j >= (int)b.size()){j = (int)b.size() - 1;}
-      for(; j >= i; --j){
-        unsigned int pattern(bit_array.pattern(i, j));
-        BOOST_TEST_MESSAGE(format("(%d, %d) => 0x%08x") % i % j % pattern);
-        for(int k1(i), k2(0); k1 <= j; ++k1, ++k2){
-          BOOST_REQUIRE_EQUAL((pattern & 0x1), (b[k1] ? 1 : 0));
-          pattern >>= 1;
-        }
+    {
+      BOOST_TEST_MESSAGE("u32_t container");
+      typedef solver_base_t::bit_array_t<64, boost::uint32_t> bit_array_t;
+      bit_array_t bit_array;
+      for(unsigned int i(0); i < b.size(); ++i){
+        bit_array.set(i, b[i]);
       }
+      check_bit_array(b, bit_array);
+    }
+
+    {
+      BOOST_TEST_MESSAGE("u64_t container");
+      typedef solver_base_t::bit_array_t<64, boost::uint64_t> bit_array_t;
+      bit_array_t bit_array;
+      for(unsigned int i(0); i < b.size(); ++i){
+        bit_array.set(i, b[i]);
+      }
+      check_bit_array(b, bit_array);
     }
   }
 }

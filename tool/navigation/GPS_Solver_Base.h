@@ -255,23 +255,33 @@ struct GPS_Solver_Base {
     return invalid;
   }
 
-  template <int MAX_SIZE>
+  template <int MAX_SIZE, class ContainerT = unsigned char>
   struct bit_array_t { ///< alternation of std::bitset
-    unsigned char buf[(MAX_SIZE + CHAR_BIT - 1) / CHAR_BIT];
+    static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
+    ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
     void clear() {
       std::memset(buf, 0, sizeof(buf));
     }
     bool operator[](const int &idx) const {
       if((idx < 0) || (idx >= MAX_SIZE)){return false;}
-      std::div_t qr(std::div(idx, CHAR_BIT));
-      unsigned char mask((unsigned char)1 << qr.rem);
-      return buf[qr.quot] & mask;
+      if(MAX_SIZE > bits_per_addr){
+        std::div_t qr(std::div(idx, bits_per_addr));
+        ContainerT mask((ContainerT)1 << qr.rem);
+        return buf[qr.quot] & mask;
+      }else{
+        return buf[0] & ((ContainerT)1 << idx);
+      }
     }
     void set(const int &idx, const bool &bit = true) {
       if((idx < 0) || (idx >= MAX_SIZE)){return;}
-      std::div_t qr(std::div(idx, CHAR_BIT));
-      unsigned char mask((unsigned char)1 << qr.rem);
-      bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
+      if(MAX_SIZE > bits_per_addr){
+        std::div_t qr(std::div(idx, bits_per_addr));
+        ContainerT mask((ContainerT)1 << qr.rem);
+        bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
+      }else{
+        ContainerT mask((ContainerT)1 << idx);
+        bit ? (buf[0] |= mask) : (buf[0] &= ~mask);
+      }
     }
     void reset(const int &idx) {
       set(idx, false);
@@ -289,20 +299,35 @@ struct GPS_Solver_Base {
         idx_msb = idx_lsb + res_bits - 1;
       }
 
-      std::div_t qr_lsb(std::div(idx_lsb, CHAR_BIT)),
-          qr_msb(std::div(idx_msb, CHAR_BIT));
-      unsigned int res(buf[qr_msb.quot] & ((1U << (qr_msb.rem + 1)) - 1)); // MSB byte
-      if(qr_msb.quot > qr_lsb.quot){
-        for(int i(qr_msb.quot - 1); i > qr_lsb.quot; --i){ // Fill intermediate
-          res <<= CHAR_BIT;
-          res |= buf[i];
+      std::div_t qr_lsb(std::div(idx_lsb, bits_per_addr)),
+          qr_msb(std::div(idx_msb, bits_per_addr));
+      if(res_bits >= bits_per_addr){
+        unsigned int res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
+            ? ~((ContainerT)0)
+            : (((ContainerT)1 << (qr_msb.rem + 1)) - 1))); // MSB byte
+        if(qr_msb.quot > qr_lsb.quot){
+          for(int i(qr_msb.quot - 1); i > qr_lsb.quot; --i){ // Fill intermediate
+            res <<= bits_per_addr;
+            res |= buf[i];
+          }
+          res <<= (bits_per_addr - qr_lsb.rem);
+          res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
+        }else{
+          res >>= qr_lsb.rem;
         }
-        res <<= (CHAR_BIT - qr_lsb.rem);
-        res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
+        return res;
       }else{
-        res >>= qr_lsb.rem;
+        ContainerT res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
+            ? ~((ContainerT)0)
+            : (((ContainerT)1 << (qr_msb.rem + 1)) - 1))); // MSB byte
+        if(qr_msb.quot > qr_lsb.quot){
+          res <<= (bits_per_addr - qr_lsb.rem);
+          res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
+        }else{
+          res >>= qr_lsb.rem;
+        }
+        return (unsigned int)res;
       }
-      return res;
     }
   };
 
