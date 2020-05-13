@@ -259,9 +259,11 @@ struct GPS_Solver_Base {
   struct bit_array_t { ///< alternation of std::bitset
     static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
     ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
-    void clear() {
-      std::memset(buf, 0, sizeof(buf));
+    void set(const bool &new_bit = false) {
+      std::memset(buf, (new_bit ? (~0) : 0), sizeof(buf));
     }
+    void reset() {set(false);}
+    void clear() {reset();}
     bool operator[](const int &idx) const {
       if((idx < 0) || (idx >= MAX_SIZE)){return false;}
       if(MAX_SIZE > bits_per_addr){
