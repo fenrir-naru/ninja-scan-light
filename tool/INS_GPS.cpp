@@ -143,6 +143,12 @@
  *   --GNSS_elv_mask_deg=(angle [deg])
  *      excludes observation of GNSS satellites which locates under the specified angle.
  *      The default mask angle is zero.
+ *   --GNSS_without=(specific_satellite)
+ *      excludes specific satellite. "specific_satellite" can be written as "GPS:4", which means
+ *      PRN 4 of GPS. Alternative representation is available; --GNSS_without=GPS:4 is equivalent
+ *      to --GNSS_with=GPS:-4, --GNSS_without=4, and --GNSS_with=-4.
+ *      If "specific_satellite" does not include satellite number, whole satellites of a specific
+ *      system are excluded. For example, "--without=GPS" filters out whole GPS satellites.
  */
 
 // Comment-In when QNAN DEBUG

@@ -302,6 +302,59 @@ data.gps.solver_options. expr
     }
 #undef option_apply
 
+    /* --GNSS_with[out]=(system|[system:][+-]sat_id)
+     *    --GNSS_without=GPS excludes all GPS satellites
+     *    --GNSS_without=GPS:4, --GNSS_with=GPS:-4, or --GNSS_without=-4 exclude GPS(4).
+     */
+    while(true){
+      bool without(true);
+      if(!(value = runtime_opt_t::get_value(spec, "GNSS_without", false))){
+        without = false;
+        if(!(value = runtime_opt_t::get_value(spec, "GNSS_with", false))){break;}
+      }
+      if(dry_run){return true;}
+
+      typename system_t::type_t sys(system_t::Unknown);
+      int sv_id(0);
+      bool select_all(false);
+      do{
+        char sys_str[8];
+        int tmp;
+        if((tmp = std::sscanf(value, "%7[A-Z]:%i", sys_str, &sv_id)) >= 1){
+          // Specific system (with optional satellite) selected
+          // system string check
+          select_all = (tmp == 1);
+          sys = system_t::str2system(sys_str);
+        }else if((tmp = std::atoi(value)) != 0){
+          // Specific satellite selected
+          satellite_id_t id(std::abs(tmp));
+          sys = id.type;
+          sv_id = (tmp < 0 ? -1 : 1) * id.sv_id;
+        }
+      }while(false);
+
+      if(sv_id < 0){ // check polarity
+        sv_id *= -1;
+        without = !without;
+      }
+
+      switch(sys){
+        case system_t::GPS:
+          select_all
+              ? data.gps.solver_options.exclude_prn.set(without)
+              : data.gps.solver_options.exclude_prn.set(sv_id, without);
+          break;
+        default:
+          std::cerr << "(error!) Unsupported satellite! [" << value << "]" << std::endl;
+          return false;
+      }
+
+      std::cerr << "GNSS_" << (without ? "without" : "with") << ": " << system_t::system2str(sys);
+      if(!select_all){std::cerr << "(" << sv_id << ")";}
+      std::cerr << std::endl;
+      return true;
+    }
+
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
     if(value = runtime_opt_t::get_value(spec, "GNSS_L2", true)){
     if(dry_run){return true;}

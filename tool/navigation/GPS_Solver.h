@@ -49,7 +49,7 @@
 #include "NTCM.h"
 
 template <class FloatT>
-struct GPS_SinglePositioning_Options {
+struct GPS_Solver_GeneralOptions {
   FloatT elevation_mask;
 
   enum ionospheric_model_t {
@@ -71,7 +71,7 @@ struct GPS_SinglePositioning_Options {
 
   FloatT f_10_7;
 
-  GPS_SinglePositioning_Options()
+  GPS_Solver_GeneralOptions()
       : elevation_mask(0), f_10_7(-1) {
     for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
       ionospheric_models[i] = IONOSPHERIC_SKIP;
@@ -93,6 +93,36 @@ struct GPS_SinglePositioning_Options {
     ionospheric_models[index] = model;
 
     return true;
+  }
+
+  /**
+   * Flags to invalidate specific satellite
+   * Its index will be adjusted for PRN.
+   */
+  template <int prn_begin, int prn_end>
+  struct exclude_prn_t
+      : public GPS_Solver_Base<FloatT>::template bit_array_t<prn_end - prn_begin + 1, unsigned int> {
+    typedef typename GPS_Solver_Base<FloatT>
+        ::template bit_array_t<prn_end - prn_begin + 1, unsigned int> super_t;
+    bool operator[](const int &prn) const {
+      return super_t::operator[](prn - prn_begin);
+    }
+    using super_t::set;
+    void set(const int &prn, const bool &bit = true) {
+      super_t::set(prn - prn_begin, bit);
+    }
+    using super_t::reset;
+    void reset(const int &prn) {set(prn, false);}
+  };
+};
+
+template <class FloatT>
+struct GPS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> {
+  typename GPS_Solver_GeneralOptions<FloatT>
+      ::template exclude_prn_t<1, 32> exclude_prn; // PRN ranges from 1 to 32
+
+  GPS_SinglePositioning_Options() : GPS_Solver_GeneralOptions<FloatT>() {
+    exclude_prn.clear();
   }
 };
 
@@ -332,6 +362,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     const satellite_t *is_available(
         const typename space_node_t::satellites_t::key_type &prn,
         const gps_time_t &receiver_time) const {
+
+      if(_options.exclude_prn[prn]){return NULL;}
 
       const typename space_node_t::satellites_t &sats(_space_node.satellites());
       const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
