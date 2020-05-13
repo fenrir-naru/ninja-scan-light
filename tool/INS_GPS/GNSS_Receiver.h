@@ -33,6 +33,8 @@
 #define __GNSS_RECEIVER_H__
 
 #include <iostream>
+#include <cmath>
+#include <cstring>
 
 #include "navigation/GPS.h"
 #include "navigation/GPS_Solver.h"
@@ -86,8 +88,8 @@ struct GNSS_Receiver {
         {}
 
     // Proxy functions
-    const base_t &select(const typename base_t::prn_t &prn) const {
-      switch(system_t::prn2system(prn)){
+    const base_t &select(const typename base_t::prn_t &serial) const {
+      switch(system_t::serial2system(serial)){
         case system_t::GPS: return gps;
       }
       return *this;
@@ -136,15 +138,15 @@ struct GNSS_Receiver {
       make_entry(Unknown),  // 0x400
 #undef make_entry
     };
-    static type_t prn2system(const typename solver_t::prn_t &id_prn){
-      if(id_prn <= 0){return Unknown;}
-      switch(id_prn >> 8){
+    static type_t serial2system(const typename solver_t::prn_t &serial){
+      if(serial <= 0){return Unknown;}
+      switch(serial >> 8){
         case GPS_SHIFT:
-          if(id_prn <= 32){return GPS;}
-          else if(id_prn < 120){break;}
-          else if(id_prn <= 158){return SBAS;}
-          else if(id_prn < 193){break;}
-          else if(id_prn <= 202){return QZSS;}
+          if(serial <= 32){return GPS;}
+          else if(serial < 120){break;}
+          else if(serial <= 158){return SBAS;}
+          else if(serial < 193){break;}
+          else if(serial <= 202){return QZSS;}
           else {break;}
         case GLONASS_SHIFT: return GLONASS;
         case Galileo_SHIFT: return Galileo;
@@ -152,16 +154,60 @@ struct GNSS_Receiver {
       }
       return Unknown;
     }
+    static const struct type_str_t {
+      type_t type;
+      const char *str;
+    } type_str_list[];
+    static const int type_str_list_length;
+    static const char *system2str(const type_t &type){
+      for(int i(0); i < type_str_list_length; ++i){
+        if(type == type_str_list[i].type){
+          return type_str_list[i].str;
+        }
+      }
+      return "Unknown";
+    }
+    static type_t str2system(const char *system_str){
+      for(int i(0); i < type_str_list_length; ++i){
+        if(std::strcmp(system_str, type_str_list[i].str) == 0){
+          return type_str_list[i].type;
+        }
+      }
+      return Unknown;
+    }
+  };
+
+  struct satellite_id_t {
+    const typename system_t::type_t type;
+    const int sv_id;
+    satellite_id_t(const typename solver_t::prn_t &serial)
+        : type(system_t::serial2system(serial)),
+        sv_id((type != system_t::Unknown) ? (serial & 0xFF) : 0)
+        {}
+    satellite_id_t(const typename system_t::type_t &_type, const unsigned int &_sv_id)
+        : type(_type),
+        sv_id((type != system_t::Unknown) ? ((int)_sv_id & 0xFF) : 0)
+        {}
+    operator typename solver_t::prn_t() const {
+      return ((type & ~0xFF) | sv_id); // 0x(GNSS_type)_(8bits:SVID)
+    }
+    friend std::ostream &operator<<(std::ostream &out, const satellite_id_t &id){
+      out << system_t::system2str(id.type);
+      if(id.type != system_t::Unknown){
+        out << '(' << id.sv_id << ')';
+      }
+      return out;
+    }
   };
 
   /**
-   * Generate satellite unique (PRN) ID from UBX GNSS ID and SV ID
+   * Generate satellite unique serial from UBX GNSS ID and SV ID
    * @param gnss_id GNSS ID defined in UBX protocol
    * @param sv_id Space vehicle ID defined in UBX protocol
-   * @return unique ID. If a satellite system uses PRN such as GPS and SBAS,
+   * @return unique satellite serial. If a satellite system uses PRN such as GPS and SBAS,
    * the return value is identical to PRN code.
    */
-  static typename solver_t::prn_t id_prn(
+  static typename solver_t::prn_t satellite_serial(
       const unsigned int &gnss_id,
       const unsigned int &sv_id){
     typedef G_Packet_Observer<FloatT> decorder_t;
@@ -174,7 +220,7 @@ struct GNSS_Receiver {
       case decorder_t::gnss_svid_t::BeiDou:   type = system_t::Beido;   break;
       case decorder_t::gnss_svid_t::GLONASS:  type = system_t::GLONASS; break;
     }
-    return ((type & ~0xFF) | (sv_id & 0xFF)); // 0x(GNSS_type)_(8bits:SVID)
+    return satellite_id_t(type, sv_id);
   }
 
   /**
@@ -231,27 +277,30 @@ struct GNSS_Receiver {
       return true;
     }
 
+#define option_apply(expr) \
+data.gps.solver_options. expr
     if(value = runtime_opt_t::get_value(spec, "GNSS_elv_mask_deg", false)){
       if(dry_run){return true;}
-      FloatT mask_deg(atof(value));
+      FloatT mask_deg(std::atof(value));
       std::cerr << "GNSS_elv_mask: " << mask_deg << " [deg]" << std::endl;
-      data.gps.solver_options.elevation_mask = deg2rad(mask_deg);
+      option_apply(elevation_mask = deg2rad(mask_deg));
       return true;
     }
 
     if(value = runtime_opt_t::get_value(spec, "F10.7", false)){
       if(dry_run){return true;}
-      FloatT f_10_7(atof(value));
+      FloatT f_10_7(std::atof(value));
       if((f_10_7 <= 0) || (f_10_7 > 1E3)){
         std::cerr << "(error!) Abnormal F10.7!" << value << std::endl;
         return false;
       }
       std::cerr << "F10.7: " << f_10_7 << std::endl;
-      data.gps.solver_options.f_10_7 = f_10_7;
-      data.gps.solver_options.insert_ionospheric_model(
-          gps_solver_t::options_t::IONOSPHERIC_NTCM_GL);
+      option_apply(f_10_7 = f_10_7);
+      option_apply(insert_ionospheric_model(
+          gps_solver_t::options_t::IONOSPHERIC_NTCM_GL));
       return true;
     }
+#undef option_apply
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
     if(value = runtime_opt_t::get_value(spec, "GNSS_L2", true)){
@@ -422,6 +471,19 @@ struct GNSS_Receiver {
     }
   };
 };
+
+template <class FloatT>
+const typename GNSS_Receiver<FloatT>::system_t::type_str_t GNSS_Receiver<FloatT>::system_t::type_str_list[] = {
+#define make_entry(x) {x, #x}
+  make_entry(GPS), make_entry(SBAS), make_entry(QZSS),
+  make_entry(GLONASS), make_entry(Galileo), make_entry(Beido),
+  make_entry(Unknown),
+#undef make_entry
+};
+
+template <class FloatT>
+const int GNSS_Receiver<FloatT>::system_t::type_str_list_length
+    = sizeof(type_str_list) / sizeof(type_str_list[0]);
 
 template <class FloatT>
 typename GNSS_Receiver<FloatT>::pvt_printer_t::label_t GNSS_Receiver<FloatT>::pvt_printer_t::label;
