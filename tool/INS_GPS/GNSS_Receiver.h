@@ -409,6 +409,11 @@ data.sbas.solver_options. expr
               ? data.gps.solver_options.exclude_prn.set(without)
               : data.gps.solver_options.exclude_prn.set(sv_id, without);
           break;
+        case system_t::SBAS:
+          select_all
+              ? data.sbas.solver_options.exclude_prn.set(without)
+              : data.sbas.solver_options.exclude_prn.set(sv_id, without);
+          break;
         default:
           std::cerr << "(error!) Unsupported satellite! [" << value << "]" << std::endl;
           return false;

@@ -44,11 +44,15 @@
 template <class FloatT>
 struct SBAS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> {
   typedef GPS_Solver_GeneralOptions<FloatT> super_t;
+
+  typename GPS_Solver_Base<FloatT>::options_t::template exclude_prn_t<120, 158> exclude_prn; // SBAS PRN ranges from 120 to 158
   SBAS_SinglePositioning_Options()
       : super_t() {
     // default: SBAS IGP, then broadcasted Klobuchar.
     super_t::ionospheric_models[0] = super_t::IONOSPHERIC_SBAS;
     super_t::ionospheric_models[1] = super_t::IONOSPHERIC_KLOBUCHAR;
+
+    exclude_prn.set(true); // SBAS ranging is default off.
   }
 };
 
@@ -192,6 +196,8 @@ class SBAS_SinglePositioning : public SolverBaseT {
         const xyz_t &usr_vel) const {
 
       relative_property_t res = {0};
+
+      if(_options.exclude_prn[prn]){return res;}
 
       float_t range;
       range_error_t range_error;
