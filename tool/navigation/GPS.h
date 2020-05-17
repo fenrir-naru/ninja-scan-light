@@ -2129,6 +2129,86 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       return -2.47 * pow(f, 5) / (sin(el) + 0.0121);
     }
     
+    struct NiellMappingFunction {
+      float_t hydrostatic, wet;
+      static float_t marini1972_2(const float_t &v, const float_t (&coef)[3]) {
+        return (coef[0] / ((coef[1] / (coef[2] + v)) + v) + v);
+      }
+      static float_t marini1972(const float_t &sin_elv, const float_t (&coef)[3]) {
+        return marini1972_2(1, coef) / marini1972_2(sin_elv, coef);
+      }
+      static NiellMappingFunction get(
+          const float_t &year,
+          const float_t &latitude, const float_t &elevation, const float_t &height_km){
+        static const struct coef_t {
+          float_t coef[3];
+        } tbl_hyd_avg[] = {
+          {1.2769934e-3, 2.9153695e-3, 62.610505e-3}, // 15
+          {1.2683230e-3, 2.9152299e-3, 62.837393e-3}, // 30
+          {1.2465397e-3, 2.9288445e-3, 63.721774e-3}, // 45
+          {1.2196049e-3, 2.9022565e-3, 63.824265e-3}, // 60
+          {1.2045996e-3, 2.9024912e-3, 64.258455e-3}, // 75
+        }, tbl_hyd_amp[] = {
+          {0.0,          0.0,          0.0         }, // 15
+          {1.2709626e-5, 2.1414979e-5, 9.0128400e-5}, // 30
+          {2.6523662e-5, 3.0160779e-5, 4.3497037e-5}, // 45
+          {3.4000452e-5, 7.2562722e-5, 84.795348e-5}, // 60
+          {4.1202191e-5, 11.723375e-5, 170.37206e-5}, // 75
+        }, tbl_wet[] = {
+          {5.8021897e-4, 1.4275268e-3, 4.3472961e-2}, // 15
+          {5.6794847e-4, 1.5138625e-3, 4.6729510e-2}, // 30
+          {5.8118019e-4, 1.4572752e-3, 4.3908931e-2}, // 45
+          {5.9727542e-4, 1.5007428e-3, 4.4626982e-2}, // 60
+          {6.1641693e-4, 1.7599082e-3, 5.4736038e-2}, // 75
+        };
+        static const int tbl_length(sizeof(tbl_hyd_avg) / sizeof(tbl_hyd_avg[0]));
+        static const float_t delta(M_PI / 180 * 15);
+        float_t idx_f(latitude / delta);
+        int idx(idx_f);
+
+        coef_t abc_avg, abc_amp, abc_wet;
+        if(idx < 1){
+          abc_avg = tbl_hyd_avg[0];
+          abc_amp = tbl_hyd_amp[0];
+          abc_wet = tbl_wet[0];
+        }else if(idx >= (tbl_length - 1)){
+          abc_avg = tbl_hyd_avg[tbl_length - 1];
+          abc_amp = tbl_hyd_amp[tbl_length - 1];
+          abc_wet = tbl_wet[tbl_length - 1];
+        }else{
+          // interpolation
+          float_t weight_b((idx_f - idx) / delta), weight_a(1. - weight_b);
+          for(int i(0); i < 3; ++i){
+            abc_avg = tbl_hyd_avg[i] * weight_a + tbl_hyd_avg[i + 1] * weight_b;
+            abc_amp = tbl_hyd_amp[i] * weight_a + tbl_hyd_amp[i + 1] * weight_b;
+            abc_wet =     tbl_wet[i] * weight_a +     tbl_wet[i + 1] * weight_b;;
+          }
+        }
+
+        NiellMappingFunction res;
+        float_t sin_elv(sin(elevation));
+        {
+          float_t xi[3];
+          float_t k_amp(cos(M_PI * 2 * (year - (28. / 365.25))));
+          for(int i(0); i < 3; ++i){
+            xi[i] = abc_avg.coef[i] - abc_amp.coef[i] * k_amp;
+          }
+
+          static const float_t abc_ht[] = {2.53e-5, 5.49e-3, 1.14e-3};
+          res.hydrostatic = marini1972(sin_elv, xi)
+              + ((1. / sin_elv) - marini1972(sin_elv, abc_ht)) * height_km;
+        }
+        res.wet = marini1972(sin_elv, abc_wet);
+        return res;
+      }
+      NiellMappingFunction(
+          const enu_t &relative_pos,
+          const llh_t &usrllh,
+          const gps_time_t &t){
+        (*this) = get(t.year(), usrllh.latitude(), relative_pos.elevation(), usrllh.height() / 1E3);
+      }
+    };
+
     /**
      * Calculate correction value in accordance with tropospheric model
      *
