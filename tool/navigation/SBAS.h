@@ -1528,6 +1528,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         const enu_t &relative_pos,
         const llh_t &usrllh) const {
 
+      if(usrllh.height() > 10E3){ // same as RTKlib; troposphere ranges from 0 to approximately 11km
+        return 0;
+      }
+
       union MeteologicalParameter {
         struct {
           float_t p, T, e, beta, lambda; // mbar, K, mbar, K/m, [dimless]
@@ -1535,44 +1539,40 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         float_t v[5];
       };
 
-#define D2R(deg) (M_PI / deg * 180)
       static const struct {
-        float_t lat;
         MeteologicalParameter average, seasonal_variation;
       } preset[] = {
-        {D2R(15), {1013.25, 299.65, 26.31, 6.30E-3, 2.77}, { 0.00,  0.00, 0.00, 0.00E-3, 0.00}},
-        {D2R(30), {1017.25, 294.15, 21.79, 6.05E-3, 3.15}, {-3.75,  7.00, 8.85, 0.25E-3, 0.33}},
-        {D2R(45), {1015.75, 283.15, 11.66, 5.58E-3, 2.57}, {-2.25, 11.00, 7.24, 0.32E-3, 0.46}},
-        {D2R(60), {1011.75, 272.15,  6.78, 5.39E-3, 1.81}, {-1.75, 15.00, 5.36, 0.81E-3, 0.74}},
-        {D2R(75), {1013.00, 263.65,  4.11, 4.53E-3, 1.55}, {-0.50, 14.50, 3.39, 0.62E-3, 0.30}},
+        {{1013.25, 299.65, 26.31, 6.30E-3, 2.77}, { 0.00,  0.00, 0.00, 0.00E-3, 0.00}}, // 15
+        {{1017.25, 294.15, 21.79, 6.05E-3, 3.15}, {-3.75,  7.00, 8.85, 0.25E-3, 0.33}}, // 30
+        {{1015.75, 283.15, 11.66, 5.58E-3, 2.57}, {-2.25, 11.00, 7.24, 0.32E-3, 0.46}}, // 45
+        {{1011.75, 272.15,  6.78, 5.39E-3, 1.81}, {-1.75, 15.00, 5.36, 0.81E-3, 0.74}}, // 60
+        {{1013.00, 263.65,  4.11, 4.53E-3, 1.55}, {-0.50, 14.50, 3.39, 0.62E-3, 0.30}}, // 75
       }; // Table A-2
-#undef D2R
+      static const int preset_langth(sizeof(preset) / sizeof(preset[0]));
 
-      float_t phi_abs(std::abs(usrllh.latitude()));
-      int i(0);
-      do{
-        if(phi_abs <= preset[i].lat){break;}
-      }while((++i) < sizeof(preset) / sizeof(preset[0]));
+      float_t preset_idx_f(std::abs(usrllh.latitude()) / (M_PI / 180 * 15));
+      int preset_idx(preset_idx_f);
 
       MeteologicalParameter average, seasonal_variation;
-      switch(i){
-        case 0:
-        case (sizeof(preset) / sizeof(preset[0])):
-          average = preset[i].average;
-          seasonal_variation = preset[i].seasonal_variation;
-          break;
-        default: // linear interpolation
-          float_t
-              weight_a((preset[i].lat - phi_abs) / (preset[i].lat - preset[i - 1].lat)),
-              weight_b(1. - weight_a);
-          for(int j(0); j < sizeof(preset[i].average.v) / sizeof(preset[i].average.v[0]); ++j){
-            average.v[j]
-                = preset[i - 1].average.v[j] * weight_a + preset[i].average.v[j] * weight_b;
-            seasonal_variation.v[j]
-                = preset[i - 1].seasonal_variation.v[j] * weight_a
-                    + preset[i].seasonal_variation.v[j] * weight_b;
-          }
-          break;
+      if(preset_idx == 0){
+        average = preset[preset_idx].average;
+        seasonal_variation = preset[preset_idx].seasonal_variation;
+      }else if(preset_idx >= (preset_langth - 1)){
+        average = preset[preset_langth - 1].average;
+        seasonal_variation = preset[preset_langth - 1].seasonal_variation;
+      }else{
+        // linear interpolation
+        float_t
+            weight_b(preset_idx_f - preset_idx),
+            weight_a(1. - weight_b);
+        for(int j(0); j < sizeof(average.v) / sizeof(average.v[0]); ++j){
+          average.v[j]
+              = preset[preset_idx].average.v[j] * weight_a
+                + preset[preset_idx + 1].average.v[j] * weight_b; // (A-4)
+          seasonal_variation.v[j]
+              = preset[preset_idx].seasonal_variation.v[j] * weight_a
+                + preset[preset_idx + 1].seasonal_variation.v[j] * weight_b; // (A-5)
+        }
       }
 
       float_t d_hyd, d_wet;
@@ -1590,16 +1590,22 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
 
         static const float_t
             k1(77.604), k2(382000), Rd(287.054), gm(9.784); // K/mbar, K^2/mbar, J/(kg*K), m/s^2
+        // Zero-altitude zenith delay term (z_hyd, z_wet)
         float_t
-            z_hyd(1E-6 * k1 * Rd * param.p), // (A-6)
+            z_hyd(1E-6 * k1 * Rd * param.p / gm), // (A-6)
             z_wet(1E-6 * k2 * Rd / (gm * (param.lambda + 1) - param.beta * Rd) * param.e / param.T); // (A-7)
 
         {
           const float_t &h(usrllh.height()); // Altitude (m)
           static const float_t g(9.80665); // m/s^2
-          float_t x(1. - (param.beta * h / param.T)), y(g / Rd / param.beta);
-          d_hyd = std::pow(x, y) * z_hyd; // (A-8)
-          d_wet = std::pow(x, y * (param.lambda + 1) - 1) * z_wet; // (A-9)
+          if(h > 0){
+            float_t x(1. - (param.beta * h / param.T)), y(g / Rd / param.beta);
+            d_hyd = std::pow(x, y) * z_hyd; // (A-8)
+            d_wet = std::pow(x, y * (param.lambda + 1) - 1) * z_wet; // (A-9)
+          }else{
+            d_hyd = z_hyd;
+            d_wet = z_wet;
+          }
         }
       }
 
