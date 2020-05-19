@@ -489,22 +489,22 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewBase<> >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
+      MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::partial_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
+      MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
 
   BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
@@ -514,14 +514,14 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewBase<> >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::partial_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::transpose_t::partial_t::builder_t::template view_merge_t<
         typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
   prologue_print();
