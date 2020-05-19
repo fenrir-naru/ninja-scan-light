@@ -2209,6 +2209,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       }
     };
 
+    static float_t tropo_correction_zenith_hydrostatic_Saastamoinen(
+        const float_t &latitude, const float_t &p_hpa, const float_t &height_km){
+      return (0.0022767 * p_hpa)
+          / (1. - 0.00266 * cos(latitude * 2) - 0.00028 * height_km);
+    }
+
     /**
      * Calculate correction value in accordance with tropospheric model
      *
