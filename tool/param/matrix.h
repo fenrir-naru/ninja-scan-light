@@ -651,16 +651,36 @@ struct priority_t<MatrixView ## name, U> { \
     typedef typename rebuild_t<View>::res_t res_t;
   };
 
-  template <template <class> class OnceView>
-  struct once_t { // off => on => on => ...
+  template <template <class> class UniqueView>
+  struct unique_t { // off => on => on => ...
     typedef typename MatrixViewBuilder<
-        typename remove_t<OnceView>::res_t> // remove all OnceView, then add an OnceView
-            ::template add_t<OnceView>::res_t res_t;
+        typename remove_t<UniqueView>::res_t> // remove all UniqueViews, then add an UniqueView
+            ::template add_t<UniqueView>::res_t res_t;
+  };
+
+  template <template <class> class GroupView>
+  struct group_t {
+    /* If GroupViews are consecutive, then summarize them into one;
+     * if no GroupViews, just add it
+     */
+    template <class V>
+    struct rebuild_t {
+      typedef V res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef V2<typename rebuild_t<V1>::res_t> res_t;
+    };
+    template <class V>
+    struct rebuild_t<GroupView<GroupView<V> > > {
+      typedef typename rebuild_t<GroupView<V> >::res_t res_t;
+    };
+    typedef typename rebuild_t<typename add_t<GroupView>::res_t>::res_t res_t;
   };
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
   typedef typename MatrixViewBuilder<
-      typename once_t<MatrixViewOffset>::res_t>::template once_t<
+      typename group_t<MatrixViewOffset>::res_t>::template unique_t<
         MatrixViewSizeVariable>::res_t partial_t;
 
   template <class View2>
