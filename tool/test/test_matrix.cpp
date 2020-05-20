@@ -664,8 +664,8 @@ BOOST_AUTO_TEST_CASE(det){
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
   prologue_print();
-  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
-    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+  for(int i(-(int)(A->rows()) + 1); i < (int)A->rows(); ++i){
+    for(int j(-(int)(A->columns()) + 1); j < (int)A->columns(); ++j){
       matrix_t A_copy(A->copy());
       matrix_t _A(A->pivotMerge(i, j, *B));
       BOOST_TEST_MESSAGE("pivotMerge:" << _A);
@@ -686,8 +686,8 @@ BOOST_AUTO_TEST_CASE(pivot_merge){
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
   prologue_print();
-  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
-    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+  for(int i(-(int)(A->rows()) + 1); i < (int)A->rows(); ++i){
+    for(int j(-(int)(A->columns()) + 1); j < (int)A->columns(); ++j){
       matrix_t _A(A->pivotAdd(i, j, *B));
       BOOST_TEST_MESSAGE("pivotAdd:" << _A);
 
@@ -863,12 +863,12 @@ void mat_mul(FloatT *x, const int &r1, const int &c1,
     indy_r = c2;
   }
   int indx, indy, indr(0);
-  for(unsigned int i(0); i < r1; i++){
-    for(unsigned int j(0); j < c2; j++){
+  for(int i(0); i < r1; i++){
+    for(int j(0); j < c2; j++){
       indx = i * indx_r;
       indy = j * indy_c;
       r[indr] = FloatT(0);
-      for(unsigned int k(0); k < c1; k++){
+      for(int k(0); k < c1; k++){
         r[indr] += x[indx] * y[indy];
         indx += indx_c;
         indy += indy_r;

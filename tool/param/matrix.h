@@ -1837,9 +1837,9 @@ class Matrix_Frozen {
       for(int i(rows() - 1); i >= 0; i--){
         D(i, i) = P(i, i);
         U(i, i) = T(1);
-        for(unsigned int j(0); j < i; j++){
+        for(int j(0); j < i; j++){
           U(j, i) = P(j, i) / D(i, i);
-          for(unsigned int k(0); k <= j; k++){
+          for(int k(0); k <= j; k++){
             P(k, j) -= U(k, i) * D(i, i) * U(j, i);
           }
         }
