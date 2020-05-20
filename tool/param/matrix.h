@@ -501,6 +501,7 @@ struct MatrixViewBase {
 
   void update_size(const unsigned int &rows, const unsigned int &columns){}
   void update_offset(const unsigned int &row, const unsigned int &column){}
+  void update_loop(const unsigned int &rows, const unsigned int &columns){}
 };
 
 template <class BaseView>
@@ -511,6 +512,9 @@ struct MatrixViewSizeVariable;
 
 template <class BaseView>
 struct MatrixViewOffset;
+
+template <class BaseView>
+struct MatrixViewLoop;
 
 template <class View>
 struct MatrixViewProperty {
@@ -564,6 +568,7 @@ struct MatrixViewBuilder {
   };
   enum {
     Offset = 0,
+    Loop = Offset,
     SizeVariable,
     Transpose,
   };
@@ -573,23 +578,30 @@ struct priority_t<MatrixView ## name, U> { \
   static const int priority = name; \
 }
   make_priority_table(Offset);
+  make_priority_table(Loop);
   make_priority_table(SizeVariable);
   make_priority_table(Transpose);
 #undef make_priority_table
 
-  template <template <class> class V1, class V2>
-  struct sort_t {
-    typedef V1<V2> res_t;
+  template <template <class> class AddView, class BaseView = View>
+  struct add_t {
+    /* Add view in accordance with view priority
+     * The first rule is that higher priority view is outer, lower one is inner.
+     * The second rule is if two views have a same priority, then original oredr is kept.
+     * For example;
+     *   Adding "2-C" to "3 <2-A <2-B <1 <0> > > >" yields "3 <2-C <2-A <2-B <1 <0> > > > >"
+     */
+    typedef AddView<BaseView> res_t;
   };
   template <template <class> class V1, template <class> class V2, class V3>
-  struct sort_t<V1, V2<V3> > {
+  struct add_t<V1, V2<V3> > {
     template <bool is_V1_has_higher_priority, class U = void>
     struct rebuild_t {
-      typedef V1<V2<V3> > res_t;
+      typedef V1<typename add_t<V2, V3>::res_t> res_t;
     };
     template <class U>
     struct rebuild_t<false, U> {
-      typedef V2<V1<V3> > res_t;
+      typedef V2<typename add_t<V1, V3>::res_t> res_t;
     };
     typedef typename rebuild_t<
         (priority_t<V1>::priority >= priority_t<V2>::priority)>::res_t res_t;
@@ -616,39 +628,21 @@ struct priority_t<MatrixView ## name, U> { \
     typedef typename rebuild_t<View>::res_t res_t;
   };
 
-  template <template <class> class AddView>
-  struct add_t {
-    template <class V>
-    struct rebuild_t {
-      typedef AddView<V> res_t;
-    };
-    template <class V1, template <class> class V2>
-    struct rebuild_t<V2<V1> > {
-      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-    };
-    typedef typename rebuild_t<View>::res_t res_t;
-  };
-
   template <template <class> class SwitchView>
   struct switch_t { // off => on => off => ...
     template <class V>
     struct rebuild_t {
-      template <class V1>
-      struct check_t {
-        typedef SwitchView<V1> res_t;
-      };
-      template <class V1, template <class> class V2>
-      struct check_t<V2<V1> > {
-        typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-      };
-      typedef typename check_t<V>::res_t res_t;
+      typedef V res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef V2<typename rebuild_t<V1>::res_t> res_t;
     };
     template <class V>
-    struct rebuild_t<SwitchView<V> > {
-      typedef typename MatrixViewBuilder<V>
-          ::template remove_t<SwitchView>::res_t res_t; // remove all subsequential SwitchView
+    struct rebuild_t<SwitchView<SwitchView<V> > > {
+      typedef typename rebuild_t<V>::res_t res_t;
     };
-    typedef typename rebuild_t<View>::res_t res_t;
+    typedef typename rebuild_t<typename add_t<SwitchView>::res_t>::res_t res_t;
   };
 
   template <template <class> class UniqueView>
@@ -682,6 +676,7 @@ struct priority_t<MatrixView ## name, U> { \
   typedef typename MatrixViewBuilder<
       typename group_t<MatrixViewOffset>::res_t>::template unique_t<
         MatrixViewSizeVariable>::res_t partial_t;
+  typedef typename group_t<MatrixViewLoop>::res_t loop_t;
 
   template <class View2>
   struct merge_t {
@@ -694,6 +689,10 @@ struct priority_t<MatrixView ## name, U> { \
   template <class BaseView>
   struct merge_t<MatrixViewSizeVariable<MatrixViewOffset<BaseView> > > {
     typedef typename MatrixViewBuilder<partial_t>::template merge_t<BaseView>::res_t res_t;
+  };
+  template <class BaseView>
+  struct merge_t<MatrixViewLoop<BaseView> > {
+    typedef typename MatrixViewBuilder<loop_t>::template merge_t<BaseView>::res_t res_t;
   };
 
   struct reverse_t {
@@ -836,6 +835,9 @@ struct MatrixViewTranspose : public BaseView {
   void update_offset(const unsigned int &row, const unsigned int &column){
     BaseView::update_offset(column, row);
   }
+  void update_loop(const unsigned int &rows, const unsigned int &columns){
+    BaseView::update_loop(columns, rows);
+  }
 };
 
 template <class BaseView>
@@ -922,6 +924,48 @@ struct MatrixViewSizeVariable : public BaseView {
   }
 };
 
+template <class BaseView>
+struct MatrixViewLoop : public BaseView {
+  typedef MatrixViewLoop<BaseView> self_t;
+
+  struct {
+    unsigned int rows, columns;
+  } prop;
+
+  MatrixViewLoop() : BaseView() {
+    prop.rows = prop.columns = 0;
+  }
+  MatrixViewLoop(const self_t &view)
+      : BaseView((const BaseView &)view), prop(view.prop) {
+  }
+
+  template <class View>
+  friend struct MatrixViewBuilder;
+
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewLoop<BaseView> &view){
+    return out << " [L]("
+         << view.prop.rows << ","
+         << view.prop.columns << ")"
+         << (const BaseView &)view;
+  }
+
+  inline unsigned int i(
+      const unsigned int &i, const unsigned int &j) const noexcept {
+    return BaseView::i(i % prop.rows, j % prop.columns);
+  }
+  inline unsigned int j(
+      const unsigned int &i, const unsigned int &j) const noexcept {
+    return BaseView::j(i % prop.rows, j % prop.columns);
+  }
+
+  void update_loop(const unsigned int &rows, const unsigned int &columns){
+    prop.rows = rows;
+    prop.columns = columns;
+  }
+};
+
 
 template <
     class T,
@@ -943,6 +987,8 @@ struct MatrixBuilder_ViewTransformer<
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::partial_t> partial_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::loop_t> loop_t;
 
   template <class ViewType2>
   struct view_merge_t {
@@ -2275,6 +2321,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef typename builder_t::assignable_t clone_t;
     typedef typename builder_t::transpose_t transpose_t;
     typedef typename builder_t::partial_t partial_t;
+    typedef typename builder_t::loop_t::partial_t circular_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
