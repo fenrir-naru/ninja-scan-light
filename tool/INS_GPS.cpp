@@ -2654,7 +2654,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
                     &(gps_raw_pvt = g_packet.pvt(gps_raw_pvt))));
             break;
         }
-      }else if((recent_a.buf.size() >= min_a_packets_for_init)
+      }else if(((int)recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && ((gps_raw_pvt = g_packet.pvt(gps_raw_pvt))
             .error_code == G_Packet_Measurement::pvt_t::ERROR_NO)){

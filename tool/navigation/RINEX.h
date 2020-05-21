@@ -79,7 +79,7 @@ class RINEX_Reader {
         std::string label(content, 60, 20);
         {
           int real_length(label.find_last_not_of(' ') + 1);
-          if(real_length < label.length()){
+          if(real_length < (int)label.length()){
             label = label.substr(0, real_length);
           }
         }
@@ -538,7 +538,7 @@ class RINEX_Writer {
             for(header_t::const_iterator it(header.begin()); 
                 it != header.end(); 
                 ++it){
-              for(int index(0); index < it->second.length(); index += 60){
+              for(unsigned int index(0); index < it->second.length(); index += 60){
                 write_header_item(
                     ss, it->first.substr(0, 20), it->second.substr(index, 60));
               }

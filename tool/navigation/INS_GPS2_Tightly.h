@@ -549,7 +549,7 @@ class INS_GPS2_Tightly : public BaseFINS {
       { // setup H matrix
         { // velocity
           mat_t dcm_q_e2n_star(super_t::q_e2n.conj().getDCM());
-          for(int j(0); j < dcm_q_e2n_star.columns(); ++j){
+          for(unsigned int j(0); j < dcm_q_e2n_star.columns(); ++j){
             for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
               H[1][j] -= prop.los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
             }
@@ -652,7 +652,7 @@ class INS_GPS2_Tightly : public BaseFINS {
       float_t range_residual_sum(0);
       unsigned int z_ranges(0);
 
-      for(int i(0); i < info.z.rows(); i++){
+      for(unsigned int i(0); i < info.z.rows(); i++){
         if(info.H(i, P_SIZE_WITHOUT_CLOCK_ERROR + (clock_index * 2)) > -0.5){continue;}
         range_residual_sum += info.z(i, 0);
         z_ranges++;

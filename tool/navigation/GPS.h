@@ -1674,7 +1674,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           }
 
           // insert new one.
-          if(std::distance(history.begin(), it_insert) < selected_index){
+          if(std::distance(history.begin(), it_insert) < (int)selected_index){
             selected_index++;
           }
           history.insert(it_insert, item_t(item, priority_delta));
