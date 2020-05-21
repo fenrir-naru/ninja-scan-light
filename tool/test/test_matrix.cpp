@@ -531,12 +531,24 @@ BOOST_AUTO_TEST_CASE(view){
       matrix_t::partial_t::circular_t::view_t,
       MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewBase<> > > > > >::value));
   BOOST_CHECK((boost::is_same<
-      matrix_t::circular_t::partial_t::view_t,
+      matrix_t::circular_t::builder_t::partial_t::view_t,
       MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > >::value));
   BOOST_CHECK((boost::is_same<
-      matrix_t::circular_t::circular_t::view_t,
+      matrix_t::circular_t::builder_t::circular_t::view_t,
       MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<
         MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_bijective_t::view_t,
+      MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::circular_bijective_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewBase<> > > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_bijective_t::partial_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_bijective_t::circular_bijective_t::view_t,
+      MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > > >::value));
 
   BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,

@@ -673,9 +673,8 @@ struct priority_t<MatrixView ## name, U> { \
   };
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
-  typedef typename MatrixViewBuilder<
-      typename group_t<MatrixViewOffset>::res_t>::template unique_t<
-        MatrixViewSizeVariable>::res_t partial_t;
+  typedef typename group_t<MatrixViewOffset>::res_t offset_t;
+  typedef typename unique_t<MatrixViewSizeVariable>::res_t size_variable_t;
   typedef typename group_t<MatrixViewLoop>::res_t loop_t;
 
   template <class View2>
@@ -687,8 +686,12 @@ struct priority_t<MatrixView ## name, U> { \
     typedef typename MatrixViewBuilder<transpose_t>::template merge_t<BaseView>::res_t res_t;
   };
   template <class BaseView>
-  struct merge_t<MatrixViewSizeVariable<MatrixViewOffset<BaseView> > > {
-    typedef typename MatrixViewBuilder<partial_t>::template merge_t<BaseView>::res_t res_t;
+  struct merge_t<MatrixViewOffset<BaseView> > {
+    typedef typename MatrixViewBuilder<offset_t>::template merge_t<BaseView>::res_t res_t;
+  };
+  template <class BaseView>
+  struct merge_t<MatrixViewSizeVariable<BaseView> > {
+    typedef typename MatrixViewBuilder<size_variable_t>::template merge_t<BaseView>::res_t res_t;
   };
   template <class BaseView>
   struct merge_t<MatrixViewLoop<BaseView> > {
@@ -986,9 +989,15 @@ struct MatrixBuilder_ViewTransformer<
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
-      typename view_builder_t::partial_t> partial_t;
+      typename MatrixViewBuilder<
+        typename view_builder_t::offset_t>::size_variable_t> partial_t;
   typedef MatrixT<T, Array2D_Type,
-      typename view_builder_t::loop_t> loop_t;
+      typename MatrixViewBuilder<
+        typename view_builder_t::loop_t>::offset_t> circular_bijective_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename MatrixViewBuilder<
+        typename MatrixViewBuilder<
+          typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
   template <class ViewType2>
   struct view_merge_t {
@@ -1308,8 +1317,7 @@ class Matrix_Frozen {
       }else if(new_columns + column_offset > self.columns()){
         throw std::out_of_range("Column size exceeding");
       }
-      typedef typename MatrixBuilder<MatrixT>::partial_t res_t;
-      res_t res(self);
+      typename MatrixBuilder<MatrixT>::partial_t res(self);
       res.view.update_size(new_rows, new_columns);
       res.view.update_offset(row_offset, column_offset);
       return res;
@@ -1359,8 +1367,7 @@ class Matrix_Frozen {
 
   protected:
     template <class MatrixT>
-    static typename MatrixBuilder<
-          typename MatrixBuilder<MatrixT>::loop_t>::partial_t circular_internal(
+    static typename MatrixBuilder<MatrixT>::circular_t circular_internal(
         const MatrixT &self,
         const unsigned int &loop_rows,
         const unsigned int &loop_columns,
@@ -1373,9 +1380,7 @@ class Matrix_Frozen {
       }else if(loop_columns > self.columns()){
         throw std::out_of_range("Column loop exceeding");
       }
-      typedef typename MatrixBuilder<
-          typename MatrixBuilder<MatrixT>::loop_t>::partial_t res_t;
-      res_t res(self);
+      typename MatrixBuilder<MatrixT>::circular_t res(self);
       res.view.update_loop(loop_rows, loop_columns);
       res.view.update_size(new_rows, new_columns);
       res.view.update_offset(row_offset, column_offset);
@@ -1402,7 +1407,7 @@ class Matrix_Frozen {
      * @throw std::out_of_range When either row or column loop exceeds original size
      * @return matrix with circular view
      */
-    typename builder_t::loop_t::builder_t::partial_t circular(
+    typename builder_t::circular_t circular(
         const unsigned int &row_offset,
         const unsigned int &column_offset,
         const unsigned int &new_rows,
@@ -1413,14 +1418,11 @@ class Matrix_Frozen {
 
   protected:
     template <class MatrixT>
-    static typename MatrixBuilder<
-          typename MatrixBuilder<MatrixT>::loop_t>::partial_t circular_internal(
+    static typename MatrixBuilder<MatrixT>::circular_bijective_t circular_internal(
         const MatrixT &self,
         const unsigned int &row_offset,
         const unsigned int &column_offset) noexcept {
-      typedef typename MatrixBuilder<
-          typename MatrixBuilder<MatrixT>::loop_t>::partial_t res_t;
-      res_t res(self);
+      typename MatrixBuilder<MatrixT>::circular_t res(self);
       res.view.update_loop(self.rows(), self.columns());
       res.view.update_size(self.rows(), self.columns());
       res.view.update_offset(row_offset, column_offset);
@@ -1434,6 +1436,7 @@ class Matrix_Frozen {
      *  10 11 12      22 20 21
      *  20 21 22      32 30 31
      *  30 31 32      02 00 01
+     * In addition, this view is "bijective", that is, one-to-one mapping.
      *
      * @param row_offset Upper row index of original matrix for circular matrix
      * @param column_offset Left column index of original matrix for circular matrix
@@ -1442,7 +1445,7 @@ class Matrix_Frozen {
      *    const unsigned int &, const unsigned int &,
      *    const unsigned int &, const unsigned int &)
      */
-    typename builder_t::loop_t::builder_t::partial_t circular(
+    typename builder_t::circular_bijective_t circular(
         const unsigned int &row_offset,
         const unsigned int &column_offset) const noexcept {
       return circular_internal(*this, row_offset, column_offset);
@@ -2413,7 +2416,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef typename builder_t::assignable_t clone_t;
     typedef typename builder_t::transpose_t transpose_t;
     typedef typename builder_t::partial_t partial_t;
-    typedef typename builder_t::loop_t::partial_t circular_t;
+    typedef typename builder_t::circular_bijective_t circular_bijective_t;
+    typedef typename super_t::builder_t::circular_t circular_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
@@ -2660,7 +2664,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      *    const unsigned int &, const unsigned int &,
      *    const unsigned int &, const unsigned int &)
      */
-    circular_t circular(
+    circular_bijective_t circular(
         const unsigned int &row_offset,
         const unsigned int &column_offset) const noexcept {
       return super_t::circular_internal(*this, row_offset, column_offset);
