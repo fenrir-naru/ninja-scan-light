@@ -229,8 +229,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     int *ref;  ///< reference counter
 
     template <class T2>
-    static void copy_raw(Array2D_Dense<T2> &dist, const T2 *src){
-      std::memcpy(dist.values, src, sizeof(T2) * dist.rows() * dist.columns());
+    static void copy_raw(Array2D_Dense<T2> &dest, const T2 *src){
+      std::memcpy(dest.values, src, sizeof(T2) * dest.rows() * dest.columns());
     }
 
     template <class T2>
@@ -474,6 +474,8 @@ template <class BaseView = void>
 struct MatrixViewBase {
   typedef MatrixViewBase self_t;
 
+  struct {} prop;
+
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const self_t &view){
@@ -496,13 +498,23 @@ struct MatrixViewBase {
       const unsigned int &i, const unsigned int &j) const noexcept {
     return j;
   }
+
+  void update_size(const unsigned int &rows, const unsigned int &columns){}
+  void update_offset(const unsigned int &row, const unsigned int &column){}
+  void update_loop(const unsigned int &rows, const unsigned int &columns){}
 };
 
 template <class BaseView>
 struct MatrixViewTranspose;
 
 template <class BaseView>
-struct MatrixViewPartial;
+struct MatrixViewSizeVariable;
+
+template <class BaseView>
+struct MatrixViewOffset;
+
+template <class BaseView>
+struct MatrixViewLoop;
 
 template <class View>
 struct MatrixViewProperty {
@@ -515,9 +527,10 @@ struct MatrixViewProperty {
   };
 
   static const bool transposed = false;
-  static const bool partialized = false;
+  static const bool offset = false;
+  static const bool variable_size = false;
 
-  static const bool truncated = false;
+  static const bool partialized = false;
 };
 
 template <class V1, template <class> class V2>
@@ -539,9 +552,10 @@ struct MatrixViewProperty<V2<V1> > {
   };
 
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
-  static const bool partialized = check_of_t<MatrixViewPartial>::res;
+  static const bool offset = check_of_t<MatrixViewOffset>::res;
+  static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
 
-  static const bool truncated = partialized;
+  static const bool partialized = offset && variable_size;
 };
 
 template <class View>
@@ -553,31 +567,41 @@ struct MatrixViewBuilder {
     static const int priority = -1;
   };
   enum {
-    Partial = 0,
+    Offset = 0,
+    Loop = Offset,
+    SizeVariable,
     Transpose,
   };
 #define make_priority_table(name) \
 template <class U> \
 struct priority_t<MatrixView ## name, U> { \
   static const int priority = name; \
-};
-  make_priority_table(Partial)
-  make_priority_table(Transpose)
+}
+  make_priority_table(Offset);
+  make_priority_table(Loop);
+  make_priority_table(SizeVariable);
+  make_priority_table(Transpose);
 #undef make_priority_table
 
-  template <template <class> class V1, class V2>
-  struct sort_t {
-    typedef V1<V2> res_t;
+  template <template <class> class AddView, class BaseView = View>
+  struct add_t {
+    /* Add view in accordance with view priority
+     * The first rule is that higher priority view is outer, lower one is inner.
+     * The second rule is if two views have a same priority, then original oredr is kept.
+     * For example;
+     *   Adding "2-C" to "3 <2-A <2-B <1 <0> > > >" yields "3 <2-C <2-A <2-B <1 <0> > > > >"
+     */
+    typedef AddView<BaseView> res_t;
   };
   template <template <class> class V1, template <class> class V2, class V3>
-  struct sort_t<V1, V2<V3> > {
-    template <bool, class U = void>
+  struct add_t<V1, V2<V3> > {
+    template <bool is_V1_has_higher_priority, class U = void>
     struct rebuild_t {
-      typedef V1<V2<V3> > res_t;
+      typedef V1<typename add_t<V2, V3>::res_t> res_t;
     };
     template <class U>
     struct rebuild_t<false, U> {
-      typedef V2<V1<V3> > res_t;
+      typedef V2<typename add_t<V1, V3>::res_t> res_t;
     };
     typedef typename rebuild_t<
         (priority_t<V1>::priority >= priority_t<V2>::priority)>::res_t res_t;
@@ -604,50 +628,54 @@ struct priority_t<MatrixView ## name, U> { \
     typedef typename rebuild_t<View>::res_t res_t;
   };
 
-  template <template <class> class AddView>
-  struct add_t {
-    template <class V>
-    struct rebuild_t {
-      typedef AddView<V> res_t;
-    };
-    template <class V1, template <class> class V2>
-    struct rebuild_t<V2<V1> > {
-      typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-    };
-    typedef typename rebuild_t<View>::res_t res_t;
-  };
-
   template <template <class> class SwitchView>
   struct switch_t { // off => on => off => ...
     template <class V>
     struct rebuild_t {
-      template <class V1>
-      struct check_t {
-        typedef SwitchView<V1> res_t;
-      };
-      template <class V1, template <class> class V2>
-      struct check_t<V2<V1> > {
-        typedef typename sort_t<V2, typename rebuild_t<V1>::res_t>::res_t res_t;
-      };
-      typedef typename check_t<V>::res_t res_t;
+      typedef V res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef V2<typename rebuild_t<V1>::res_t> res_t;
     };
     template <class V>
-    struct rebuild_t<SwitchView<V> > {
-      typedef typename MatrixViewBuilder<V>
-          ::template remove_t<SwitchView>::res_t res_t; // remove all subsequential SwitchView
+    struct rebuild_t<SwitchView<SwitchView<V> > > {
+      typedef typename rebuild_t<V>::res_t res_t;
     };
-    typedef typename rebuild_t<View>::res_t res_t;
+    typedef typename rebuild_t<typename add_t<SwitchView>::res_t>::res_t res_t;
   };
 
-  template <template <class> class OnceView>
-  struct once_t { // off => on => on => ...
+  template <template <class> class UniqueView>
+  struct unique_t { // off => on => on => ...
     typedef typename MatrixViewBuilder<
-        typename remove_t<OnceView>::res_t> // remove all OnceView, then add an OnceView
-            ::template add_t<OnceView>::res_t res_t;
+        typename remove_t<UniqueView>::res_t> // remove all UniqueViews, then add an UniqueView
+            ::template add_t<UniqueView>::res_t res_t;
+  };
+
+  template <template <class> class GroupView>
+  struct group_t {
+    /* If GroupViews are consecutive, then summarize them into one;
+     * if no GroupViews, just add it
+     */
+    template <class V>
+    struct rebuild_t {
+      typedef V res_t;
+    };
+    template <class V1, template <class> class V2>
+    struct rebuild_t<V2<V1> > {
+      typedef V2<typename rebuild_t<V1>::res_t> res_t;
+    };
+    template <class V>
+    struct rebuild_t<GroupView<GroupView<V> > > {
+      typedef typename rebuild_t<GroupView<V> >::res_t res_t;
+    };
+    typedef typename rebuild_t<typename add_t<GroupView>::res_t>::res_t res_t;
   };
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
-  typedef typename once_t<MatrixViewPartial>::res_t partial_t;
+  typedef typename group_t<MatrixViewOffset>::res_t offset_t;
+  typedef typename unique_t<MatrixViewSizeVariable>::res_t size_variable_t;
+  typedef typename group_t<MatrixViewLoop>::res_t loop_t;
 
   template <class View2>
   struct merge_t {
@@ -658,64 +686,121 @@ struct priority_t<MatrixView ## name, U> { \
     typedef typename MatrixViewBuilder<transpose_t>::template merge_t<BaseView>::res_t res_t;
   };
   template <class BaseView>
-  struct merge_t<MatrixViewPartial<BaseView> > {
-    typedef typename MatrixViewBuilder<partial_t>::template merge_t<BaseView>::res_t res_t;
+  struct merge_t<MatrixViewOffset<BaseView> > {
+    typedef typename MatrixViewBuilder<offset_t>::template merge_t<BaseView>::res_t res_t;
+  };
+  template <class BaseView>
+  struct merge_t<MatrixViewSizeVariable<BaseView> > {
+    typedef typename MatrixViewBuilder<size_variable_t>::template merge_t<BaseView>::res_t res_t;
+  };
+  template <class BaseView>
+  struct merge_t<MatrixViewLoop<BaseView> > {
+    typedef typename MatrixViewBuilder<loop_t>::template merge_t<BaseView>::res_t res_t;
   };
 
-  template <class View2>
-  struct copy_t {
-    typedef property_t dist_prop_t;
-    typedef MatrixViewProperty<View2> orig_prop_t;
-
-    template <bool, class U = void>
-    struct partial_t {
-      static void run(View &dist, const View2 &orig){}
+  struct reverse_t {
+    template <class V1, class V2>
+    struct rebuild_t {
+      typedef V2 res_t;
     };
-    template <class U>
-    struct partial_t<true, U> {
-      static void run(View &dist, const View2 &orig){
-        dist.partial_prop = orig.partial_prop;
+    template <template <class> class V1, class V2, class V3>
+    struct rebuild_t<V1<V2>, V3> {
+      typedef typename rebuild_t<V2, V1<V3> >::res_t res_t;
+    };
+    typedef typename rebuild_t<View, void>::res_t res_t;
+  };
+
+  template <
+      class DestView, class DestView_Reverse,
+      class SrcView, class SrcView_Reverse>
+  struct copy_t {
+    template <class DestR = DestView_Reverse, class SrcR = SrcView_Reverse>
+    struct upcast_copy_t {
+      static void run(DestView *dest, const SrcView *src){}
+    };
+    template <
+        template <class> class Dest_Src_R1,
+        class DestR2, class SrcR2>
+    struct upcast_copy_t<Dest_Src_R1<DestR2>, Dest_Src_R1<SrcR2> > {
+      static void run(DestView *dest, const SrcView *src){
+        std::memcpy(
+            &static_cast<Dest_Src_R1<DestView> *>(dest)->prop,
+            &static_cast<const Dest_Src_R1<SrcView> *>(src)->prop,
+            sizeof(static_cast<Dest_Src_R1<DestView> *>(dest)->prop));
+        copy_t<
+            Dest_Src_R1<DestView>, DestR2,
+            Dest_Src_R1<SrcView>, SrcR2>::run(
+              static_cast<Dest_Src_R1<DestView> *>(dest),
+              static_cast<const Dest_Src_R1<SrcView> *>(src));
       }
     };
-    static void run(View &dist, const View2 &orig){
-      partial_t<
-          dist_prop_t::partialized
-          && orig_prop_t::partialized>::run(dist, orig);
+    template <
+        template <class> class DestR1, class DestR2,
+        template <class> class SrcR1, class SrcR2>
+    struct upcast_copy_t<DestR1<DestR2>, SrcR1<SrcR2> > {
+      template<
+          bool is_DestR1_higher = (priority_t<DestR1>::priority > priority_t<SrcR1>::priority),
+          bool is_DestR1_lower = (priority_t<DestR1>::priority < priority_t<SrcR1>::priority)>
+      struct next_t { // catch srcR1.priority == destR1.priority
+        typedef DestR1<DestView> dest_t;
+        typedef DestR2 dest_R_t;
+        typedef SrcR1<SrcView> src_t;
+        typedef SrcR2 src_R_t;
+      };
+      template<bool is_DestR1_lower>
+      struct next_t<true, is_DestR1_lower> { // catch destR1.priority > srcR1.priority
+        typedef DestView dest_t;
+        typedef DestR1<DestR2> dest_R_t;
+        typedef SrcR1<SrcView> src_t;
+        typedef SrcR2 src_R_t;
+      };
+      template<bool is_DestR1_higher>
+      struct next_t<is_DestR1_higher, true> { // catch destR1.priority < srcR1.priority
+        typedef DestR1<DestView> dest_t;
+        typedef DestR2 dest_R_t;
+        typedef SrcView src_t;
+        typedef SrcR1<SrcR2> src_R_t;
+      };
+      static void run(DestView *dest, const SrcView *src){
+        copy_t<
+            typename next_t<>::dest_t, typename next_t<>::dest_R_t,
+            typename next_t<>::src_t, typename next_t<>::src_R_t>::run(
+              static_cast<typename next_t<>::dest_t *>(dest),
+              static_cast<const typename next_t<>::src_t *>(src));
+      }
+    };
+    static void run(DestView *dest, const SrcView *src){
+      upcast_copy_t<>::run(dest, src);
     }
   };
-  template <class View2>
-  static void copy(View &dist, const View2 &orig){
-    copy_t<View2>::run(dist, orig);
-  }
 
-  /* Using template because of inhibit generation of method
-   * in case View does not have partial attribute.
+  /**
+   * Copy views as much as possible even if source and destination views are different.
+   * As the primary rule, the copy is performed from a lower view,
+   * which means a nearer component from MatrixViewBase, to higher one.
+   * The secondary rule is if both source and destination views have same component,
+   * its property such as offset is copied, otherwise copy is skipped.
+   *
+   * For example, destination = [Transpose(2)] [VariableSize(1)] [Offset(0)], and
+   * source = [Transpose(2)] [Offset(0)], then only properties of transpose and offset
+   * are copied.
+   *
+   * @param dest Destination view
+   * @param src Source view
    */
   template <class View2>
-  static void set_partial(
-      View2 &view,
-      const unsigned int &new_rows,
-      const unsigned int &new_columns,
-      const unsigned int &row_offset,
-      const unsigned int &column_offset){
-    if(property_t::transposed){
-      view.partial_prop.rows = new_columns;
-      view.partial_prop.columns = new_rows;
-      view.partial_prop.row_offset += column_offset;
-      view.partial_prop.column_offset += row_offset;
-    }else{
-      view.partial_prop.rows = new_rows;
-      view.partial_prop.columns = new_columns;
-      view.partial_prop.row_offset += row_offset;
-      view.partial_prop.column_offset += column_offset;
-    }
-
+  static void copy(View &dest, const View2 &src){
+    copy_t<
+        void, typename reverse_t::res_t,
+        void, typename MatrixViewBuilder<View2>::reverse_t::res_t>::run(&dest, &src);
   }
 };
 
 template <class BaseView>
-struct MatrixViewTranspose : protected BaseView {
+struct MatrixViewTranspose : public BaseView {
   typedef MatrixViewTranspose<BaseView> self_t;
+
+  struct {} prop;
 
   MatrixViewTranspose() : BaseView() {}
   MatrixViewTranspose(const self_t &view)
@@ -746,25 +831,31 @@ struct MatrixViewTranspose : protected BaseView {
       const unsigned int &i, const unsigned int &j) const noexcept {
     return BaseView::j(j, i);
   }
+
+  void update_size(const unsigned int &rows, const unsigned int &columns){
+    BaseView::update_size(columns, rows);
+  }
+  void update_offset(const unsigned int &row, const unsigned int &column){
+    BaseView::update_offset(column, row);
+  }
+  void update_loop(const unsigned int &rows, const unsigned int &columns){
+    BaseView::update_loop(columns, rows);
+  }
 };
 
 template <class BaseView>
-struct MatrixViewPartial : protected BaseView {
-  typedef MatrixViewPartial<BaseView> self_t;
+struct MatrixViewOffset : public BaseView {
+  typedef MatrixViewOffset<BaseView> self_t;
 
-  struct partial_prop_t {
-    unsigned int rows, row_offset;
-    unsigned int columns, column_offset;
-    partial_prop_t()
-        : rows(0), row_offset(0), columns(0), column_offset(0){}
-    partial_prop_t(const partial_prop_t &prop)
-        : rows(prop.rows), row_offset(prop.row_offset),
-        columns(prop.columns), column_offset(prop.column_offset){}
-  } partial_prop;
+  struct {
+    unsigned int row, column;
+  } prop;
 
-  MatrixViewPartial() : BaseView(), partial_prop() {}
-  MatrixViewPartial(const self_t &view)
-      : BaseView((const BaseView &)view), partial_prop(view.partial_prop) {
+  MatrixViewOffset() : BaseView() {
+    prop.row = prop.column = 0;
+  }
+  MatrixViewOffset(const self_t &view)
+      : BaseView((const BaseView &)view), prop(view.prop) {
   }
 
   template <class View>
@@ -772,30 +863,109 @@ struct MatrixViewPartial : protected BaseView {
 
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
-      std::basic_ostream<CharT, Traits> &out, const MatrixViewPartial<BaseView> &view){
-    return out << " [P]("
-         << view.partial_prop.rows << ","
-         << view.partial_prop.columns << ","
-         << view.partial_prop.row_offset << ","
-         << view.partial_prop.column_offset << ")"
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewOffset<BaseView> &view){
+    return out << " [O]("
+         << view.prop.row << ","
+         << view.prop.column << ")"
+         << (const BaseView &)view;
+  }
+
+  inline unsigned int i(
+      const unsigned int &i, const unsigned int &j) const noexcept {
+    return BaseView::i(i + prop.row, j + prop.column);
+  }
+  inline unsigned int j(
+      const unsigned int &i, const unsigned int &j) const noexcept {
+    return BaseView::j(i + prop.row, j + prop.column);
+  }
+
+  void update_offset(const unsigned int &row, const unsigned int &column){
+    prop.row += row;
+    prop.column += column;
+  }
+};
+
+template <class BaseView>
+struct MatrixViewSizeVariable : public BaseView {
+  typedef MatrixViewSizeVariable<BaseView> self_t;
+
+  struct {
+    unsigned int rows, columns;
+  } prop;
+
+  MatrixViewSizeVariable() : BaseView() {
+    prop.rows = prop.columns = 0;
+  }
+  MatrixViewSizeVariable(const self_t &view)
+      : BaseView((const BaseView &)view), prop(view.prop) {
+  }
+
+  template <class View>
+  friend struct MatrixViewBuilder;
+
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewSizeVariable<BaseView> &view){
+    return out << " [S]("
+         << view.prop.rows << ","
+         << view.prop.columns << ")"
          << (const BaseView &)view;
   }
 
   inline const unsigned int rows(
       const unsigned int &_rows, const unsigned int &_columns) const noexcept {
-    return partial_prop.rows;
+    return prop.rows;
   }
   inline const unsigned int columns(
       const unsigned int &_rows, const unsigned int &_columns) const noexcept {
-    return partial_prop.columns;
+    return prop.columns;
   }
+
+  void update_size(const unsigned int &rows, const unsigned int &columns){
+    prop.rows = rows;
+    prop.columns = columns;
+  }
+};
+
+template <class BaseView>
+struct MatrixViewLoop : public BaseView {
+  typedef MatrixViewLoop<BaseView> self_t;
+
+  struct {
+    unsigned int rows, columns;
+  } prop;
+
+  MatrixViewLoop() : BaseView() {
+    prop.rows = prop.columns = 0;
+  }
+  MatrixViewLoop(const self_t &view)
+      : BaseView((const BaseView &)view), prop(view.prop) {
+  }
+
+  template <class View>
+  friend struct MatrixViewBuilder;
+
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewLoop<BaseView> &view){
+    return out << " [L]("
+         << view.prop.rows << ","
+         << view.prop.columns << ")"
+         << (const BaseView &)view;
+  }
+
   inline unsigned int i(
       const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::i(i + partial_prop.row_offset, j + partial_prop.column_offset);
+    return BaseView::i(i % prop.rows, j % prop.columns);
   }
   inline unsigned int j(
       const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::j(i + partial_prop.row_offset, j + partial_prop.column_offset);
+    return BaseView::j(i % prop.rows, j % prop.columns);
+  }
+
+  void update_loop(const unsigned int &rows, const unsigned int &columns){
+    prop.rows = rows;
+    prop.columns = columns;
   }
 };
 
@@ -819,7 +989,15 @@ struct MatrixBuilder_ViewTransformer<
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
-      typename view_builder_t::partial_t> partial_t;
+      typename MatrixViewBuilder<
+        typename view_builder_t::offset_t>::size_variable_t> partial_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename MatrixViewBuilder<
+        typename view_builder_t::loop_t>::offset_t> circular_bijective_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename MatrixViewBuilder<
+        typename MatrixViewBuilder<
+          typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
   template <class ViewType2>
   struct view_merge_t {
@@ -1139,11 +1317,9 @@ class Matrix_Frozen {
       }else if(new_columns + column_offset > self.columns()){
         throw std::out_of_range("Column size exceeding");
       }
-      typedef typename MatrixBuilder<MatrixT>::partial_t res_t;
-      res_t res(self);
-      res_t::builder_t::view_builder_t::set_partial(
-          res.view,
-          new_rows, new_columns, row_offset, column_offset);
+      typename MatrixBuilder<MatrixT>::partial_t res(self);
+      res.view.update_size(new_rows, new_columns);
+      res.view.update_offset(row_offset, column_offset);
       return res;
     }
 
@@ -1188,6 +1364,93 @@ class Matrix_Frozen {
     typename builder_t::partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
     }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixBuilder<MatrixT>::circular_t circular_internal(
+        const MatrixT &self,
+        const unsigned int &loop_rows,
+        const unsigned int &loop_columns,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset){
+      if(loop_rows > self.rows()){
+        throw std::out_of_range("Row loop exceeding");
+      }else if(loop_columns > self.columns()){
+        throw std::out_of_range("Column loop exceeding");
+      }
+      typename MatrixBuilder<MatrixT>::circular_t res(self);
+      res.view.update_loop(loop_rows, loop_columns);
+      res.view.update_size(new_rows, new_columns);
+      res.view.update_offset(row_offset, column_offset);
+      return res;
+    }
+  public:
+    /**
+     * Generate matrix with circular view
+     * "circular" means its index is treated with roll over correction, for example,
+     * if specified index is 5 to a matrix of 4 rows, then it will be treated
+     * as the same as index 1 (= 5 % 4) is selected.
+     *
+     * Another example; [4x3].circular(1,2,5,6) is
+     *  00 01 02  =>  12 10 11 12 10
+     *  10 11 12      22 20 21 22 20
+     *  20 21 22      32 30 31 32 30
+     *  30 31 32      02 00 01 02 00
+     *                12 10 11 12 10
+     *
+     * @param row_offset Upper row index of original matrix for circular matrix
+     * @param column_offset Left column index of original matrix for circular matrix
+     * @param new_rows Row number
+     * @param new_columns Column number
+     * @throw std::out_of_range When either row or column loop exceeds original size
+     * @return matrix with circular view
+     */
+    typename builder_t::circular_t circular(
+        const unsigned int &row_offset,
+        const unsigned int &column_offset,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns) const {
+      return circular_internal(*this,
+          rows(), columns(), new_rows, new_columns, row_offset, column_offset);
+    }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixBuilder<MatrixT>::circular_bijective_t circular_internal(
+        const MatrixT &self,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) noexcept {
+      typename MatrixBuilder<MatrixT>::circular_t res(self);
+      res.view.update_loop(self.rows(), self.columns());
+      res.view.update_size(self.rows(), self.columns());
+      res.view.update_offset(row_offset, column_offset);
+      return res;
+    }
+  public:
+    /**
+     * Generate matrix with circular view, keeping original size version.
+     * For example, [4x3].circular(1,2) is
+     *  00 01 02  =>  12 10 11
+     *  10 11 12      22 20 21
+     *  20 21 22      32 30 31
+     *  30 31 32      02 00 01
+     * In addition, this view is "bijective", that is, one-to-one mapping.
+     *
+     * @param row_offset Upper row index of original matrix for circular matrix
+     * @param column_offset Left column index of original matrix for circular matrix
+     * @return matrix with circular view
+     * @see circular(
+     *    const unsigned int &, const unsigned int &,
+     *    const unsigned int &, const unsigned int &)
+     */
+    typename builder_t::circular_bijective_t circular(
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const noexcept {
+      return circular_internal(*this, row_offset, column_offset);
+    }
+
 
     enum {
       OPERATOR_2_Multiply_Matrix_by_Scalar,
@@ -1735,9 +1998,9 @@ class Matrix_Frozen {
       for(int i(rows() - 1); i >= 0; i--){
         D(i, i) = P(i, i);
         U(i, i) = T(1);
-        for(unsigned int j(0); j < i; j++){
+        for(int j(0); j < i; j++){
           U(j, i) = P(j, i) / D(i, i);
-          for(unsigned int k(0); k <= j; k++){
+          for(int k(0); k <= j; k++){
             P(k, j) -= U(k, i) * D(i, i) * U(j, i);
           }
         }
@@ -2153,6 +2416,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef typename builder_t::assignable_t clone_t;
     typedef typename builder_t::transpose_t transpose_t;
     typedef typename builder_t::partial_t partial_t;
+    typedef typename builder_t::circular_bijective_t circular_bijective_t;
+    typedef typename super_t::builder_t::circular_t circular_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
@@ -2194,7 +2459,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      *
      */
     void clear(){
-      if(view_property_t::truncated){
+      if(view_property_t::variable_size){
         for(unsigned int i(0); i < rows(); i++){
           for(unsigned int j(0); j < columns(); j++){
             (*this)(i, j) = T(0);
@@ -2383,6 +2648,26 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &column_offset) const {
       return super_t::partial_internal(*this,
           new_rows, new_columns, row_offset, column_offset);
+    }
+
+    using super_t::circular;
+
+    /**
+     * Generate matrix with circular view, keeping original size version.
+     * This version is still belonged into Matrix class.
+     * Another size variable version returns Matrix_Frozen.
+     *
+     * @param row_offset Upper row index of original matrix for circular matrix
+     * @param column_offset Left column index of original matrix for circular matrix
+     * @return matrix with circular view
+     * @see circular(
+     *    const unsigned int &, const unsigned int &,
+     *    const unsigned int &, const unsigned int &)
+     */
+    circular_bijective_t circular(
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const noexcept {
+      return super_t::circular_internal(*this, row_offset, column_offset);
     }
 
     /**
