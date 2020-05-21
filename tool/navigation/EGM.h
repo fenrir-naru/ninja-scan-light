@@ -187,7 +187,7 @@ struct EGM_Generic {
       const coefficients_t coefs[],
       const cache_t<N_MAX> &x) {
 
-    calc_res_t sum_n = {1, 1, 0, 0}, sum_m;
+    calc_res_t sum_n = {1, 1, 0, 0};
     for(int n(2), coef_i(0); n <= x.n_max; n++){
       calc_res_t sum_m = {0, 0, 0, 0};
       for(int m(0); m <= n; m++, coef_i++){
@@ -222,7 +222,7 @@ struct EGM_Generic {
       const coefficients_t coefs[],
       const FloatT &a_r, const FloatT &phi, const FloatT &lambda) {
 
-    calc_res_t sum_n = {1, 1, 0, 0}, sum_m; buffer_t<N_MAX> x(a_r, phi, lambda);
+    calc_res_t sum_n = {1, 1, 0, 0}; buffer_t<N_MAX> x(a_r, phi, lambda);
     for(int n(2), coef_i(0); n <= N_MAX; n++){
       calc_res_t sum_m = {0, 0, 0, 0}; ++x;
       for(int m(0); m <= n; m++, coef_i++){
