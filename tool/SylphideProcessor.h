@@ -315,7 +315,7 @@ class G_Packet_Observer : public Packet_Observer<>{
       v8_t buf[2];
       this->inspect(buf, 2, 4);
       return min_macro(
-          le_char2_2_num<u16_t>(*buf) + 8,
+          (unsigned int)le_char2_2_num<u16_t>(*buf) + 8,
           (this->capacity / 2)
         );
     }
@@ -331,7 +331,7 @@ class G_Packet_Observer : public Packet_Observer<>{
     bool valid_size() const {
       int _stored(Packet_Observer<>::stored());
       if(_stored < 6) return false;
-      if(current_packet_size() > _stored) return false; 
+      if((int)current_packet_size() > _stored) return false;
       return true;
     }
     bool valid_parity() const {

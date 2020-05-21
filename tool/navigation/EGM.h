@@ -73,7 +73,7 @@ struct EGM_Generic {
         FloatT c(std::sqrt(FloatT(2 * n + 1) / (2 * n - 3)));
         p_bar_n[0] = (p_bar_n1[0] * sp * (2 * n - 1) * b - p_bar_n2[0] * (n - 1) * c) / n;
       }
-      for(int m(1); m <= n - 2; ++m){ // 0 < m < n-1
+      for(int m(1); m <= (int)n - 2; ++m){ // 0 < m < n-1
         FloatT a(std::pow(((2 * n - 1) * (n + m - 1)), -0.5) * std::sqrt(m == 1 ? 2.0 : 1.0));
         FloatT b(std::sqrt(FloatT(n - m) / (2 * n - 1)));
         FloatT c(std::sqrt(FloatT((n - m) * (n - m - 1)) / ((2 * n - 3) * (n + m - 1))));

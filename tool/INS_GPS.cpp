@@ -489,7 +489,7 @@ class NAV : public Updatable {
           it_eval(it_head + (group_size / 2)),
           it_end(packets_time_series.end());
       for(int i(distance(it_head, it_end));
-          i > group_size;
+          i > (int)group_size;
           i--, it_head++, it_eval++){
         if(it_eval->itow >= itow){break;}
       }
@@ -852,15 +852,15 @@ class INS_GPS_NAV : public NAV {
   protected:
     static void set_matrix_full(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
-      for(int i(0); i < mat.rows(); i++){
-        for(int j(0); j < mat.columns(); j++){
+      for(unsigned int i(0); i < mat.rows(); i++){
+        for(unsigned int j(0); j < mat.columns(); j++){
           mat(i, j) = std::strtod(_spec, &_spec);
         }
       }
     }
     static void set_matrix_diagonal(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
-      for(int i(0); i < mat.rows(); i++){
+      for(unsigned int i(0); i < mat.rows(); i++){
         mat(i, i) = std::strtod(_spec, &_spec);
       }
     }
@@ -1708,7 +1708,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       buf_t buf;
       PacketBuffer(const int &_max_size) : max_size(_max_size), buf() {}
       void push(const T &packet){
-        if(buf.size() >= max_size){buf.pop_front();}
+        if((int)buf.size() >= max_size){buf.pop_front();}
         buf.push_back(packet);
       }
     };
@@ -2021,7 +2021,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         }
         status = MEASUREMENT_UPDATED;
         nav.ins_gps->set_header("MU");
-      }else if((recent_a.buf.size() >= min_a_packets_for_init)
+      }else if(((int)recent_a.buf.size() >= min_a_packets_for_init)
           && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
           && (g_packet.sigma_2d <= options.gps_threshold.init_acc_2d)
           && (g_packet.sigma_height <= options.gps_threshold.init_acc_v)){

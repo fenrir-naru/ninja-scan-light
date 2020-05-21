@@ -57,7 +57,7 @@ struct generic_SylphideProtocol {
       v_u16_t crc_u16 = 0){
     
     unsigned int _offset(offset);
-    for(int i(0); i < size; i++){
+    for(unsigned int i(0); i < size; i++){
       crc_u16 = CRC16::crc16_generic(target[_offset++], crc_u16);
     }
     return crc_u16;
@@ -115,7 +115,7 @@ struct generic_SylphideProtocol {
       unsigned int payload_start_offset(capsule_head_size);
       
       // ƒwƒbƒ_‚Ì‘‚«ž‚Ý
-      for(int i(0); i < header_size; i++){
+      for(unsigned int i(0); i < header_size; i++){
         target[i] = header[i];
       }
       
@@ -378,7 +378,7 @@ struct generic_SylphideProtocol {
         const unsigned int &whole_size, const unsigned int &extract_size){
       
       for(int i(0), j(whole_size - extract_size - capsule_tail_size); 
-          i < extract_size; 
+          i < (int)extract_size;
           i++, j++){
         buf[i] = (KeyType)target[j];
       }
