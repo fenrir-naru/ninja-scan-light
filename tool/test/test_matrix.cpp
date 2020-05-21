@@ -108,6 +108,19 @@ struct Fixture {
       B_array[row][j] = (*B)(row, j) = content_t(0);
     }
   }
+  void assign_linear(){
+    int counter(0);
+    for(unsigned int i(0); i < A->rows(); i++){
+      for(unsigned int j(0); j < A->columns(); j++){
+        A_array[i][j] = (*A)(i, j) = counter++;
+      }
+    }
+    for(unsigned int i(0); i < B->rows(); i++){
+      for(unsigned int j(0); j < B->columns(); j++){
+        B_array[i][j] = (*B)(i, j) = counter++;
+      }
+    }
+  }
   void prologue_print(){
     BOOST_TEST_MESSAGE("A:" << *A);
     BOOST_TEST_MESSAGE("B:" << *B);
@@ -308,6 +321,7 @@ BOOST_AUTO_TEST_CASE(getI){
 }
 
 BOOST_AUTO_TEST_CASE(exchange_row){
+  assign_linear();
   prologue_print();
   direct_t a(A->copy());
   a.row[0] = 1;
@@ -317,6 +331,7 @@ BOOST_AUTO_TEST_CASE(exchange_row){
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(exchange_column){
+  assign_linear();
   prologue_print();
   direct_t a(A->copy());
   a.column[1] = 0;
@@ -568,6 +583,7 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
+  assign_linear();
   prologue_print();
   direct_t a(*A);
   a.trans = true;
@@ -582,6 +598,7 @@ BOOST_AUTO_TEST_CASE(trans){
   matrix_compare(*A, ___A);
 }
 BOOST_AUTO_TEST_CASE(partial){
+  assign_linear();
   prologue_print();
   direct_t a(*A);
 
@@ -621,7 +638,7 @@ BOOST_AUTO_TEST_CASE(partial){
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(trans_partial){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
   direct_t a(*A);
 
@@ -647,50 +664,54 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
 BOOST_AUTO_TEST_CASE(circular){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
   direct_t a(*A);
 
+#define print_then_compare(mat) \
+BOOST_TEST_MESSAGE(#mat ": " << (mat)); \
+matrix_compare(a, mat)
   a.reset().rotate_map(1,2);
-  matrix_compare(a, A->circular(1,2));
+  print_then_compare(A->circular(1,2));
 
   a.reset().rotate_map(2,1); a.trans = true;
-  matrix_compare(a, A->transpose().circular(1,2));
+  print_then_compare(A->transpose().circular(1,2));
 
   a.reset().rotate_map(5,6).rotate_map(1,2);
-  matrix_compare(a, A->circular(5,6).partial(6,5,1,2));
+  print_then_compare(A->circular(5,6).partial(6,5,1,2));
 
   a.reset().rotate_map(5,6).rotate_map(2,1); a.trans = true;
-  matrix_compare(a, A->circular(5,6).transpose().partial(6,5,1,2));
+  print_then_compare(A->circular(5,6).transpose().partial(6,5,1,2));
 
   a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(3,2);
-  matrix_compare(a, A->partial(6,5,1,2).circular(3,2));
+  print_then_compare(A->partial(6,5,1,2).circular(3,2));
 
   a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(2,3); a.trans = true;
-  matrix_compare(a, A->partial(6,5,1,2).transpose().circular(3,2));
+  print_then_compare(A->partial(6,5,1,2).transpose().circular(3,2));
 
 
   a.reset().rotate_map(1,2);
-  matrix_compare(a, A->circular(1,2,3,4));
+  print_then_compare(A->circular(1,2,3,4));
 
   a.reset().rotate_map(2,1); a.trans = true;
-  matrix_compare(a, A->transpose().circular(1,2,3,4));
+  print_then_compare(A->transpose().circular(1,2,3,4));
 
   a.reset().rotate_map(5,6).shrink_map(6,7).rotate_map(1,2);
-  matrix_compare(a, A->circular(5,6,6,7).partial(4,3,1,2));
+  print_then_compare(A->circular(5,6,6,7).partial(4,3,1,2));
 
   a.reset().rotate_map(5,6).shrink_map(6,7).rotate_map(2,1); a.trans = true;
-  matrix_compare(a, A->circular(5,6,6,7).transpose().partial(4,3,1,2));
+  print_then_compare(A->circular(5,6,6,7).transpose().partial(4,3,1,2));
 
   a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(3,2);
-  matrix_compare(a, A->partial(6,5,1,2).circular(3,2,4,3));
+  print_then_compare(A->partial(6,5,1,2).circular(3,2,4,3));
 
   a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(2,3); a.trans = true;
-  matrix_compare(a, A->partial(6,5,1,2).transpose().circular(3,2,4,3));
+  print_then_compare(A->partial(6,5,1,2).transpose().circular(3,2,4,3));
+#undef print_then_compare
 }
 
 BOOST_AUTO_TEST_CASE(view_downcast){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
 
   direct_t a(*A);
@@ -705,7 +726,7 @@ BOOST_AUTO_TEST_CASE(view_downcast){
 }
 
 BOOST_AUTO_TEST_CASE(replace){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
 
   direct_t a(*A), b(B->copy());
@@ -723,6 +744,7 @@ BOOST_AUTO_TEST_CASE(replace){
 }
 
 BOOST_AUTO_TEST_CASE(minor){
+  assign_linear();
   prologue_print();
   for(unsigned i(0); i < A->rows(); ++i){
     for(unsigned j(0); j < A->columns(); ++j){
@@ -1082,8 +1104,6 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
 }
 
 BOOST_AUTO_TEST_CASE(fixed_types){
-  prologue_print();
-
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
