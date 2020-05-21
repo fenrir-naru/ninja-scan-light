@@ -1357,6 +1357,98 @@ class Matrix_Frozen {
       return partial(rows(), 1, 0, column);
     }
 
+  protected:
+    template <class MatrixT>
+    static typename MatrixBuilder<
+          typename MatrixBuilder<MatrixT>::loop_t>::partial_t circular_internal(
+        const MatrixT &self,
+        const unsigned int &loop_rows,
+        const unsigned int &loop_columns,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset){
+      if(loop_rows > self.rows()){
+        throw std::out_of_range("Row loop exceeding");
+      }else if(loop_columns > self.columns()){
+        throw std::out_of_range("Column loop exceeding");
+      }
+      typedef typename MatrixBuilder<
+          typename MatrixBuilder<MatrixT>::loop_t>::partial_t res_t;
+      res_t res(self);
+      res.view.update_loop(loop_rows, loop_columns);
+      res.view.update_size(new_rows, new_columns);
+      res.view.update_offset(row_offset, column_offset);
+      return res;
+    }
+  public:
+    /**
+     * Generate matrix with circular view
+     * "circular" means its index is treated with roll over correction, for example,
+     * if specified index is 5 to a matrix of 4 rows, then it will be treated
+     * as the same as index 1 (= 5 % 4) is selected.
+     *
+     * Another example; [4x3].circular(1,2,5,6) is
+     *  00 01 02  =>  12 10 11 12 10
+     *  10 11 12      22 20 21 22 20
+     *  20 21 22      32 30 31 32 30
+     *  30 31 32      02 00 01 02 00
+     *                12 10 11 12 10
+     *
+     * @param row_offset Upper row index of original matrix for circular matrix
+     * @param column_offset Left column index of original matrix for circular matrix
+     * @param new_rows Row number
+     * @param new_columns Column number
+     * @throw std::out_of_range When either row or column loop exceeds original size
+     * @return matrix with circular view
+     */
+    typename builder_t::loop_t::builder_t::partial_t circular(
+        const unsigned int &row_offset,
+        const unsigned int &column_offset,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns) const {
+      return circular_internal(*this,
+          rows(), columns(), new_rows, new_columns, row_offset, column_offset);
+    }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixBuilder<
+          typename MatrixBuilder<MatrixT>::loop_t>::partial_t circular_internal(
+        const MatrixT &self,
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) noexcept {
+      typedef typename MatrixBuilder<
+          typename MatrixBuilder<MatrixT>::loop_t>::partial_t res_t;
+      res_t res(self);
+      res.view.update_loop(self.rows(), self.columns());
+      res.view.update_size(self.rows(), self.columns());
+      res.view.update_offset(row_offset, column_offset);
+      return res;
+    }
+  public:
+    /**
+     * Generate matrix with circular view, keeping original size version.
+     * For example, [4x3].circular(1,2) is
+     *  00 01 02  =>  12 10 11
+     *  10 11 12      22 20 21
+     *  20 21 22      32 30 31
+     *  30 31 32      02 00 01
+     *
+     * @param row_offset Upper row index of original matrix for circular matrix
+     * @param column_offset Left column index of original matrix for circular matrix
+     * @return matrix with circular view
+     * @see circular(
+     *    const unsigned int &, const unsigned int &,
+     *    const unsigned int &, const unsigned int &)
+     */
+    typename builder_t::loop_t::builder_t::partial_t circular(
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const noexcept {
+      return circular_internal(*this, row_offset, column_offset);
+    }
+
+
     enum {
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
@@ -2552,6 +2644,26 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &column_offset) const {
       return super_t::partial_internal(*this,
           new_rows, new_columns, row_offset, column_offset);
+    }
+
+    using super_t::circular;
+
+    /**
+     * Generate matrix with circular view, keeping original size version.
+     * This version is still belonged into Matrix class.
+     * Another size variable version returns Matrix_Frozen.
+     *
+     * @param row_offset Upper row index of original matrix for circular matrix
+     * @param column_offset Left column index of original matrix for circular matrix
+     * @return matrix with circular view
+     * @see circular(
+     *    const unsigned int &, const unsigned int &,
+     *    const unsigned int &, const unsigned int &)
+     */
+    circular_t circular(
+        const unsigned int &row_offset,
+        const unsigned int &column_offset) const noexcept {
+      return super_t::circular_internal(*this, row_offset, column_offset);
     }
 
     /**

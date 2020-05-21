@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <set>
 #include <deque>
+#include <algorithm>
 
 #include "param/complex.h"
 #include "param/matrix.h"
@@ -225,16 +226,33 @@ struct direct_t {
   deque<unsigned int> row, column;
   bool trans;
   unsigned int i_offset, j_offset;
-  direct_t(const matrix_t &_m)
-      : m(_m), scalar(1),
-      row(), column(), trans(false),
-      i_offset(0), j_offset(0) {
+  direct_t &reset(){
+    scalar = 1;
+    trans = false;
+    i_offset = j_offset = 0;
+    row.clear();
     for(unsigned int i(0); i < m.rows(); ++i){
       row.push_back(i);
     }
+    column.clear();
     for(unsigned int j(0); j < m.columns(); ++j){
       column.push_back(j);
     }
+    return *this;
+  }
+  direct_t &shrink_map(const int &rows, const int &columns){
+    row.erase(row.begin() + rows, row.end());
+    column.erase(column.begin() + columns, column.end());
+    return *this;
+  }
+  direct_t &rotate_map(const int &row_shift, const int &column_shift){
+    rotate(row.begin(), row.begin() + row_shift, row.end());
+    rotate(column.begin(), column.begin() + column_shift, column.end());
+    return *this;
+  }
+  direct_t(const matrix_t &_m)
+      : m(_m), row(), column() {
+    reset();
   }
   content_t operator()(const unsigned &i, const unsigned &j) const {
     // strength: modification of row[], column[] > i_offset, j_offset > trans
@@ -615,6 +633,48 @@ BOOST_AUTO_TEST_CASE(trans_partial){
 
   a.trans = false;  a.i_offset = 5; a.j_offset = 5;
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
+}
+BOOST_AUTO_TEST_CASE(circular){
+  assign_unsymmetric();
+  prologue_print();
+  direct_t a(*A);
+
+  a.reset().rotate_map(1,2);
+  matrix_compare(a, A->circular(1,2));
+
+  a.reset().rotate_map(2,1); a.trans = true;
+  matrix_compare(a, A->transpose().circular(1,2));
+
+  a.reset().rotate_map(5,6).rotate_map(1,2);
+  matrix_compare(a, A->circular(5,6).partial(6,5,1,2));
+
+  a.reset().rotate_map(5,6).rotate_map(2,1); a.trans = true;
+  matrix_compare(a, A->circular(5,6).transpose().partial(6,5,1,2));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(3,2);
+  matrix_compare(a, A->partial(6,5,1,2).circular(3,2));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(2,3); a.trans = true;
+  matrix_compare(a, A->partial(6,5,1,2).transpose().circular(3,2));
+
+
+  a.reset().rotate_map(1,2);
+  matrix_compare(a, A->circular(1,2,3,4));
+
+  a.reset().rotate_map(2,1); a.trans = true;
+  matrix_compare(a, A->transpose().circular(1,2,3,4));
+
+  a.reset().rotate_map(5,6).shrink_map(6,7).rotate_map(1,2);
+  matrix_compare(a, A->circular(5,6,6,7).partial(4,3,1,2));
+
+  a.reset().rotate_map(5,6).shrink_map(6,7).rotate_map(2,1); a.trans = true;
+  matrix_compare(a, A->circular(5,6,6,7).transpose().partial(4,3,1,2));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(3,2);
+  matrix_compare(a, A->partial(6,5,1,2).circular(3,2,4,3));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(2,3); a.trans = true;
+  matrix_compare(a, A->partial(6,5,1,2).transpose().circular(3,2,4,3));
 }
 
 BOOST_AUTO_TEST_CASE(view_downcast){
