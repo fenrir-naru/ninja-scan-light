@@ -425,9 +425,9 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
       // UD分解
       Matrix<FloatT> UD(P.decomposeUD(false));
 
-      for(int i = 0; i < m_U.rows(); i++){
+      for(unsigned int i = 0; i < m_U.rows(); i++){
         m_D(i, i) = UD(i, i + m_U.columns());
-        for(int j = 0; j < m_U.columns(); j++){
+        for(unsigned int j = 0; j < m_U.columns(); j++){
           m_U(i, j) = UD(i, j);
         }
       }
@@ -500,10 +500,10 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
       
       // 行列Q
       Matrix<FloatT> Q(W.columns(), W.columns());
-      for(int i = 0; i < m_D.rows(); i++){
+      for(unsigned int i = 0; i < m_D.rows(); i++){
         Q(i, i) = m_D(i, i);
       }
-      for(int i = m_D.rows(); i < Q.rows(); i++){
+      for(unsigned int i = m_D.rows(); i < Q.rows(); i++){
         Q(i, i) = KalmanFilter<FloatT>::m_Q(i - m_D.rows(), i - m_D.rows());
       }
 
@@ -512,11 +512,11 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
       std::cerr << "Q:" << Q << std::endl;
 #endif
       
-      for(int j = W.rows() - 1; j > 0; j--){
+      for(int j = (int)W.rows() - 1; j > 0; j--){
         typename Matrix<FloatT>::partial_t V(W.rowVector(j));
         
         Matrix<FloatT> Z(1, Q.columns()); // = V * Q、高速化のため展開して書く
-        for(int i = 0; i < Z.columns(); i++){
+        for(unsigned int i = 0; i < Z.columns(); i++){
           Z(0, i) = V(0, i) * Q(i, i); 
         }
         
@@ -529,7 +529,7 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
       
       // m_D(0, 0) = (W.rowVector(0) * Q * W.rowVector(0).transpose())(0, 0);→高速化
       m_D(0, 0) = 0;
-      for(int j = 0; j < W.columns(); j++){
+      for(unsigned int j = 0; j < W.columns(); j++){
         m_D(0, 0) += W(0, j) * W(0, j) * Q(j, j);
       }
 
@@ -560,19 +560,19 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
       // カルマンゲイン
       Matrix<FloatT> K(KalmanFilter<FloatT>::m_P.rows(), R.rows());
       
-      for(int k = 0; k < R.rows(); k++){
+      for(unsigned int k = 0; k < R.rows(); k++){
         Matrix<FloatT> f(m_U.columns(), H.rows());
         Matrix<FloatT> g(m_D.rows(), f.columns());
         
         // fの生成
-        for(int i = 0; i < f.rows(); i++){
-          for(int j = 0; j <= i; j++){
+        for(unsigned int i = 0; i < f.rows(); i++){
+          for(unsigned int j = 0; j <= i; j++){
             f(i, 0) += H(k, j) * m_U(j, i);
           }
         }
         
         // gの生成
-        for(int i = 0; i < g.rows(); i++){
+        for(unsigned int i = 0; i < g.rows(); i++){
           g(i, 0) = m_D(i, i) * f(i, 0);
         }
         
@@ -581,7 +581,7 @@ class KalmanFilterUD : public KalmanFilter<FloatT>{
         K(0, k) = g(0, 0);
         m_D(0, 0) *= (r / alpha);
         
-        for(int j = 1; j < f.rows(); j++){
+        for(unsigned int j = 1; j < f.rows(); j++){
           FloatT _alpha(alpha + f(j, 0) * g(j, 0));
           m_D(j, j) *= (alpha / _alpha);
           FloatT lambda(f(j, 0) / alpha);

@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <set>
 #include <deque>
+#include <algorithm>
 
 #include "param/complex.h"
 #include "param/matrix.h"
@@ -105,6 +106,19 @@ struct Fixture {
     }
     for(unsigned int j(0); j < row; j++){
       B_array[row][j] = (*B)(row, j) = content_t(0);
+    }
+  }
+  void assign_linear(){
+    int counter(0);
+    for(unsigned int i(0); i < A->rows(); i++){
+      for(unsigned int j(0); j < A->columns(); j++){
+        A_array[i][j] = (*A)(i, j) = counter++;
+      }
+    }
+    for(unsigned int i(0); i < B->rows(); i++){
+      for(unsigned int j(0); j < B->columns(); j++){
+        B_array[i][j] = (*B)(i, j) = counter++;
+      }
     }
   }
   void prologue_print(){
@@ -225,16 +239,33 @@ struct direct_t {
   deque<unsigned int> row, column;
   bool trans;
   unsigned int i_offset, j_offset;
-  direct_t(const matrix_t &_m)
-      : m(_m), scalar(1),
-      row(), column(), trans(false),
-      i_offset(0), j_offset(0) {
+  direct_t &reset(){
+    scalar = 1;
+    trans = false;
+    i_offset = j_offset = 0;
+    row.clear();
     for(unsigned int i(0); i < m.rows(); ++i){
       row.push_back(i);
     }
+    column.clear();
     for(unsigned int j(0); j < m.columns(); ++j){
       column.push_back(j);
     }
+    return *this;
+  }
+  direct_t &shrink_map(const int &rows, const int &columns){
+    row.erase(row.begin() + rows, row.end());
+    column.erase(column.begin() + columns, column.end());
+    return *this;
+  }
+  direct_t &rotate_map(const int &row_shift, const int &column_shift){
+    rotate(row.begin(), row.begin() + row_shift, row.end());
+    rotate(column.begin(), column.begin() + column_shift, column.end());
+    return *this;
+  }
+  direct_t(const matrix_t &_m)
+      : m(_m), row(), column() {
+    reset();
   }
   content_t operator()(const unsigned &i, const unsigned &j) const {
     // strength: modification of row[], column[] > i_offset, j_offset > trans
@@ -290,6 +321,7 @@ BOOST_AUTO_TEST_CASE(getI){
 }
 
 BOOST_AUTO_TEST_CASE(exchange_row){
+  assign_linear();
   prologue_print();
   direct_t a(A->copy());
   a.row[0] = 1;
@@ -299,6 +331,7 @@ BOOST_AUTO_TEST_CASE(exchange_row){
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(exchange_column){
+  assign_linear();
   prologue_print();
   direct_t a(A->copy());
   a.column[1] = 0;
@@ -489,22 +522,48 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewBase<> >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
+      MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::partial_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::partial_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::view_t,
-      MatrixViewTranspose<MatrixViewPartial<MatrixViewBase<> > > >::value));
+      MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       matrix_t::partial_t::transpose_t::transpose_t::partial_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
+
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::circular_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewBase<> > > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_t::builder_t::partial_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_t::builder_t::circular_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<
+        MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_bijective_t::view_t,
+      MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::partial_t::circular_bijective_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewBase<> > > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_bijective_t::partial_t::view_t,
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::circular_bijective_t::circular_bijective_t::view_t,
+      MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > > >::value));
 
   BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
@@ -514,16 +573,17 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewBase<> >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::partial_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::transpose_t::partial_t::builder_t::template view_merge_t<
         typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewPartial<MatrixViewBase<> > >::value));
+      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
+  assign_linear();
   prologue_print();
   direct_t a(*A);
   a.trans = true;
@@ -538,6 +598,7 @@ BOOST_AUTO_TEST_CASE(trans){
   matrix_compare(*A, ___A);
 }
 BOOST_AUTO_TEST_CASE(partial){
+  assign_linear();
   prologue_print();
   direct_t a(*A);
 
@@ -577,7 +638,7 @@ BOOST_AUTO_TEST_CASE(partial){
   matrix_compare(a, _A);
 }
 BOOST_AUTO_TEST_CASE(trans_partial){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
   direct_t a(*A);
 
@@ -602,9 +663,55 @@ BOOST_AUTO_TEST_CASE(trans_partial){
   a.trans = false;  a.i_offset = 5; a.j_offset = 5;
   matrix_compare(a, A->partial(3,4,3,4).transpose().partial(3,1,1,2).transpose());
 }
+BOOST_AUTO_TEST_CASE(circular){
+  assign_linear();
+  prologue_print();
+  direct_t a(*A);
+
+#define print_then_compare(mat) \
+BOOST_TEST_MESSAGE(#mat ": " << (mat)); \
+matrix_compare(a, mat)
+  a.reset().rotate_map(1,2);
+  print_then_compare(A->circular(1,2));
+
+  a.reset().rotate_map(2,1); a.trans = true;
+  print_then_compare(A->transpose().circular(1,2));
+
+  a.reset().rotate_map(5,6).rotate_map(1,2);
+  print_then_compare(A->circular(5,6).partial(6,5,1,2));
+
+  a.reset().rotate_map(5,6).rotate_map(2,1); a.trans = true;
+  print_then_compare(A->circular(5,6).transpose().partial(6,5,1,2));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(3,2);
+  print_then_compare(A->partial(6,5,1,2).circular(3,2));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(2,3); a.trans = true;
+  print_then_compare(A->partial(6,5,1,2).transpose().circular(3,2));
+
+
+  a.reset().rotate_map(1,2);
+  print_then_compare(A->circular(1,2,3,4));
+
+  a.reset().rotate_map(2,1); a.trans = true;
+  print_then_compare(A->transpose().circular(1,2,3,4));
+
+  a.reset().rotate_map(5,6).shrink_map(6,7).rotate_map(1,2);
+  print_then_compare(A->circular(5,6,6,7).partial(4,3,1,2));
+
+  a.reset().rotate_map(5,6).shrink_map(6,7).rotate_map(2,1); a.trans = true;
+  print_then_compare(A->circular(5,6,6,7).transpose().partial(4,3,1,2));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(3,2);
+  print_then_compare(A->partial(6,5,1,2).circular(3,2,4,3));
+
+  a.reset().rotate_map(1,2).shrink_map(6,5).rotate_map(2,3); a.trans = true;
+  print_then_compare(A->partial(6,5,1,2).transpose().circular(3,2,4,3));
+#undef print_then_compare
+}
 
 BOOST_AUTO_TEST_CASE(view_downcast){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
 
   direct_t a(*A);
@@ -619,7 +726,7 @@ BOOST_AUTO_TEST_CASE(view_downcast){
 }
 
 BOOST_AUTO_TEST_CASE(replace){
-  assign_unsymmetric();
+  assign_linear();
   prologue_print();
 
   direct_t a(*A), b(B->copy());
@@ -637,6 +744,7 @@ BOOST_AUTO_TEST_CASE(replace){
 }
 
 BOOST_AUTO_TEST_CASE(minor){
+  assign_linear();
   prologue_print();
   for(unsigned i(0); i < A->rows(); ++i){
     for(unsigned j(0); j < A->columns(); ++j){
@@ -664,8 +772,8 @@ BOOST_AUTO_TEST_CASE(det){
 
 BOOST_AUTO_TEST_CASE(pivot_merge){
   prologue_print();
-  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
-    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+  for(int i(-(int)(A->rows()) + 1); i < (int)A->rows(); ++i){
+    for(int j(-(int)(A->columns()) + 1); j < (int)A->columns(); ++j){
       matrix_t A_copy(A->copy());
       matrix_t _A(A->pivotMerge(i, j, *B));
       BOOST_TEST_MESSAGE("pivotMerge:" << _A);
@@ -686,8 +794,8 @@ BOOST_AUTO_TEST_CASE(pivot_merge){
 }
 BOOST_AUTO_TEST_CASE(pivot_add){
   prologue_print();
-  for(int i(-(A->rows()) + 1); i < A->rows(); ++i){
-    for(int j(-(A->columns()) + 1); j < A->columns(); ++j){
+  for(int i(-(int)(A->rows()) + 1); i < (int)A->rows(); ++i){
+    for(int j(-(int)(A->columns()) + 1); j < (int)A->columns(); ++j){
       matrix_t _A(A->pivotAdd(i, j, *B));
       BOOST_TEST_MESSAGE("pivotAdd:" << _A);
 
@@ -863,12 +971,12 @@ void mat_mul(FloatT *x, const int &r1, const int &c1,
     indy_r = c2;
   }
   int indx, indy, indr(0);
-  for(unsigned int i(0); i < r1; i++){
-    for(unsigned int j(0); j < c2; j++){
+  for(int i(0); i < r1; i++){
+    for(int j(0); j < c2; j++){
       indx = i * indx_r;
       indy = j * indy_c;
       r[indr] = FloatT(0);
-      for(unsigned int k(0); k < c1; k++){
+      for(int k(0); k < c1; k++){
         r[indr] += x[indx] * y[indy];
         indx += indx_c;
         indy += indy_r;
@@ -996,8 +1104,6 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
 }
 
 BOOST_AUTO_TEST_CASE(fixed_types){
-  prologue_print();
-
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,

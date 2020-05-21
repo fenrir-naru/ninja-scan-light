@@ -145,8 +145,8 @@ class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
 
     static void inspect_matrix(
         std::ostream &out, const mat_t &mat){
-      for(int i(0); i < mat.rows(); i++){
-        for(int j(0); j < mat.columns(); j++){
+      for(unsigned int i(0); i < mat.rows(); i++){
+        for(unsigned int j(0); j < mat.columns(); j++){
           out << mat(i, j) << ',';
         }
       }

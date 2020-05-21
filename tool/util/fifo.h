@@ -127,7 +127,7 @@ class FIFO {
       unsigned int _size;
       StorageT *prius_next;
       if(values == NULL){return 0;}
-      size = min_macro(margin(), size);
+      size = min_macro(margin(), (int)size);
       _size = storage + capacity - prius;
       if(_size <= size){
         DuplicatorT(values, prius, _size);
@@ -173,7 +173,7 @@ class FIFO {
     unsigned int skip(unsigned int size){
       unsigned int _size;
       StorageT *follower_next;
-      size = min_macro(stored(), size);
+      size = min_macro(stored(), (int)size);
       _size = storage + capacity - follower;
       if(_size <= size){
         follower_next = storage;
@@ -200,7 +200,7 @@ class FIFO {
       unsigned int _size;
       StorageT *follower_next;
       if(buffer == NULL){return 0;}
-      size = min_macro(stored(), size);
+      size = min_macro(stored(), (int)size);
       _size = storage + capacity - follower;
       if(_size <= size){
         DuplicatorT(follower, buffer, _size);
@@ -284,8 +284,8 @@ class FIFO {
       unsigned int _size;
       StorageT *follower2;
       if(buffer == NULL){return 0;}
-      if(stored() <= offset){return 0;}
-      size = min_macro(stored() - offset, size);
+      if(stored() <= (int)offset){return 0;}
+      size = min_macro(stored() - offset, (int)size);
       if((follower2 = follower + offset) >= (storage + capacity)){
         follower2 -= capacity;
       }

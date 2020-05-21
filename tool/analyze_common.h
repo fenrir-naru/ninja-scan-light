@@ -594,7 +594,7 @@ struct CalendarTime {
 
       utc_time = gps_time_zero
           + (7u * 24 * 60 * 60) * gps_time.wn
-          + gps_time.sec - leap_sec; // POSIX time ignores leap seconds.
+          + (int)gps_time.sec - leap_sec; // POSIX time ignores leap seconds.
       leap_seconds = LEAP_SECONDS_CORRECTED;
     }
     void update(const float_t &gps_sec, const int &gps_wn){
@@ -639,7 +639,7 @@ struct CalendarTime {
               + (itow - gps_time.sec);
       }
 
-      int gap_sec(std::floor(gap));
+      int gap_sec((int)std::floor(gap));
       return convert(std::time_t(t_base + gap_sec + correction_sec), gap - gap_sec);
     }
     CalendarTime convert(const gps_time_t &current_gps) const {
@@ -726,16 +726,16 @@ class NAVData {
       typedef int v_s32_t;
       typedef short v_s16_t;
       
-      v_u32_t t(itow * 1000);
-      v_s32_t lat(rad2deg(latitude()) * 1E7), 
-          lng(rad2deg(longitude()) * 1E7), 
-          h(height() * 1E4);
-      v_s16_t v_n(v_north() * 1E2), 
-          v_e(v_east() * 1E2), 
-          v_d(v_down() * 1E2);
-      v_s16_t psi(rad2deg(heading()) * 1E2), 
-          theta(rad2deg(euler_theta()) * 1E2), 
-          phi(rad2deg(euler_phi()) * 1E2);
+      v_u32_t t((v_u32_t)(itow * 1000));
+      v_s32_t lat((v_s32_t)(rad2deg(latitude()) * 1E7)),
+          lng((v_s32_t)(rad2deg(longitude()) * 1E7)),
+          h((v_s32_t)(height() * 1E4));
+      v_s16_t v_n((v_s16_t)(v_north() * 1E2)),
+          v_e((v_s16_t)(v_east() * 1E2)),
+          v_d((v_s16_t)(v_down() * 1E2));
+      v_s16_t psi((v_s16_t)(rad2deg(heading()) * 1E2)),
+          theta((v_s16_t)(rad2deg(euler_theta()) * 1E2)),
+          phi((v_s16_t)(rad2deg(euler_phi()) * 1E2));
       buf[0] = 'N';
       buf[1] = '\0';
       buf[2] = '\0';
