@@ -551,9 +551,10 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
             }
             std::cerr << std::endl;
           }
-          std::cerr << "G:" << geomat.Gp(res.used_satellites) << std::endl;
-          std::cerr << "W:" << geomat.Wp(res.used_satellites) << std::endl;
-          std::cerr << "delta_r:" << geomat.delta_rp(res.used_satellites) << std::endl;
+          typename geometric_matrices_t::partial_t geomat_filled(geomat.partial(res.used_satellites));
+          std::cerr << "G:" << geomat_filled.G << std::endl;
+          std::cerr << "W:" << geomat_filled.W << std::endl;
+          std::cerr << "delta_r:" << geomat_filled.delta_r << std::endl;
         }
 
         if(res.used_satellites < 4){
@@ -563,7 +564,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
 
         try{
           // Least square
-          matrix_t delta_x(geomat.least_square(res.used_satellites));
+          matrix_t delta_x(geomat.partial(res.used_satellites).least_square());
 
           xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
           res.user_position.xyz += delta_user_position;
@@ -589,7 +590,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       }
 
       try{
-        res.update_DOP(geomat.C(res.used_satellites));
+        res.update_DOP(geomat.partial(res.used_satellites).C());
       }catch(std::exception &e){
         res.error_code = user_pvt_t::ERROR_DOP;
         return res;
@@ -638,7 +639,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       // 4. Calculate velocity
       try{
         // Least square
-        matrix_t sol(geomat2.least_square(i_rate));
+        matrix_t sol(geomat2.partial(i_rate).least_square());
 
         xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
         res.user_velocity_enu = enu_t::relative_rel(

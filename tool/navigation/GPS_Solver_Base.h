@@ -387,58 +387,54 @@ struct GPS_Solver_Base {
   };
 
 protected:
-  struct geometric_matrices_t {
-    matrix_t G; ///< Design matrix
-    matrix_t W; ///< Weight (diagonal) matrix
-    matrix_t delta_r; ///< Residual vector
-    geometric_matrices_t(const unsigned int &size)
-        : G(size, 4), W(size, size), delta_r(size, 1) {
-      for(unsigned int i(0); i < size; ++i){
-        G(i, 3) = 1;
-      }
-    }
-
-    typename matrix_t::partial_offsetless_t Gp(const unsigned int &size) const {
-      return G.partial(size, 4);
-    }
-    typename matrix_t::partial_offsetless_t Wp(const unsigned int &size) const {
-      return W.partial(size, size);
-    }
-    typename matrix_t::partial_offsetless_t delta_rp(const unsigned int &size) const {
-      return delta_r.partial(size, 1);
-    }
-
-    template <class MatrixT>
-    static matrix_t C(const MatrixT &G_) {
-      return (G_.transpose() * G_).inverse();
-    }
+  template <class MatrixT>
+  struct linear_solver_t {
+    MatrixT G; ///< Design matrix
+    MatrixT W; ///< Weight (diagonal) matrix
+    MatrixT delta_r; ///< Residual vector
+    linear_solver_t(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_)
+        : G(G_), W(W_), delta_r(delta_r_) {}
     matrix_t C() const {
-      return C(G);
-    }
-    matrix_t C(const unsigned int &size) const {
-      return (size >= G.rows()) ? C() : C(Gp(size));
-    }
-
-    template <class MatrixT>
-    static matrix_t least_square(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_) {
-      matrix_t Gt_W(G_.transpose() * W_);
-      return (Gt_W * G_).inverse() * Gt_W * delta_r_;
+      return (G.transpose() * G).inverse();
     }
     matrix_t least_square() const {
-      return least_square(G, W, delta_r);
+      matrix_t Gt_W(G.transpose() * W);
+      return (Gt_W * G).inverse() * Gt_W * delta_r;
     }
-    matrix_t least_square(const unsigned int &size) const {
-      return (size >= G.rows())
-          ? least_square()
-          : least_square(Gp(size), Wp(size), delta_rp(size));
+    typedef linear_solver_t<typename MatrixT::partial_offsetless_t> partial_t;
+    partial_t partial(unsigned int size) const {
+      if(size >= G.rows()){size = G.rows();}
+      return partial_t(
+          G.partial(size, 4), W.partial(size, size), delta_r.partial(size, 1));
     }
-
-    void copy_G_W_row(const geometric_matrices_t &src,
+    typedef linear_solver_t<typename MatrixT::circular_t> exclude_t;
+    exclude_t exclude(const unsigned int &row) const {
+      unsigned int size(G.rows()), offset((row + 1) % size);
+      if(size >= 1){size--;}
+      // generate matrices having circular view
+      return exclude_t(
+          G.circular(offset, 0, size, 4),
+          W.circular(offset, offset, size, size),
+          delta_r.circular(offset, 0, size, 1));
+    }
+    template <class MatrixT2>
+    void copy_G_W_row(const linear_solver_t<MatrixT2> &src,
         const unsigned int &i_src, const unsigned int &i_dst){
       for(unsigned int j(0); j < 4; ++j){
         G(i_dst, j) = src.G(i_src, j);
       }
       W(i_dst, i_dst) = src.W(i_src, i_src);
+    }
+  };
+
+  struct geometric_matrices_t : public linear_solver_t<matrix_t> {
+    typedef linear_solver_t<matrix_t> super_t;
+    geometric_matrices_t(const unsigned int &capacity)
+        : super_t(
+          matrix_t(capacity, 4), matrix_t(capacity, capacity), matrix_t(capacity, 1)) {
+      for(unsigned int i(0); i < capacity; ++i){
+        super_t::G(i, 3) = 1;
+      }
     }
   };
 
@@ -528,7 +524,7 @@ public:
 
       try{
         // Least square
-        matrix_t delta_x(geomat.least_square(res.used_satellites));
+        matrix_t delta_x(geomat.partial(res.used_satellites).least_square());
 
         xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
         res.user_position.xyz += delta_user_position;
@@ -554,7 +550,7 @@ public:
     }
 
     try{
-      res.update_DOP(geomat.C(res.used_satellites));
+      res.update_DOP(geomat.partial(res.used_satellites).C());
     }catch(std::exception &e){
       res.error_code = user_pvt_t::ERROR_DOP;
       return res;
@@ -595,7 +591,7 @@ public:
 
     try{
       // Least square
-      matrix_t sol(geomat2.least_square(i_rate));
+      matrix_t sol(geomat2.partial(i_rate).least_square());
 
       xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
       res.user_velocity_enu = enu_t::relative_rel(
