@@ -1013,6 +1013,8 @@ struct MatrixBuilder_ViewTransformer<
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::size_variable_t> partial_offsetless_t;
+  typedef MatrixT<T, Array2D_Type,
       typename MatrixViewBuilder<
         typename view_builder_t::offset_t>::size_variable_t> partial_t;
   typedef MatrixT<T, Array2D_Type,
@@ -1387,6 +1389,38 @@ class Matrix_Frozen {
      */
     typename builder_t::partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
+    }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixBuilder<MatrixT>::partial_offsetless_t partial_internal(
+        const MatrixT &self,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns){
+      if(new_rows > self.rows()){
+        throw std::out_of_range("Row size exceeding");
+      }else if(new_columns > self.columns()){
+        throw std::out_of_range("Column size exceeding");
+      }
+      typename MatrixBuilder<MatrixT>::partial_offsetless_t res(self);
+      res.view.update_size(new_rows, new_columns);
+      return res;
+    }
+
+  public:
+    /**
+     * Generate partial matrix by just reducing its size;
+     * The origins and direction of original and return matrices are the same.
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     */
+    typename builder_t::partial_offsetless_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns) const {
+      return partial_internal(*this, new_rows, new_columns);
     }
 
   protected:
@@ -2439,6 +2473,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     typedef typename builder_t::assignable_t clone_t;
     typedef typename builder_t::transpose_t transpose_t;
+    typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     typedef typename builder_t::partial_t partial_t;
     typedef typename builder_t::circular_bijective_t circular_bijective_t;
     typedef typename super_t::builder_t::circular_t circular_t;
@@ -2672,6 +2707,23 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &column_offset) const {
       return super_t::partial_internal(*this,
           new_rows, new_columns, row_offset, column_offset);
+    }
+
+    /**
+     * Generate partial matrix by just reducing its size;
+     * The origins and direction of original and return matrices are the same.
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do partial().copy().
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     */
+    partial_offsetless_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns) const {
+      return super_t::partial_internal(*this, new_rows, new_columns);
     }
 
     using super_t::circular;
