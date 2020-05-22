@@ -570,7 +570,7 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewTranspose<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::transpose_t::builder_t::template view_merge_t<typename matrix_t::transpose_t::view_t>::merged_t::view_t,
-      MatrixViewBase<> >::value));
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_merge_t<typename matrix_t::partial_t::view_t>::merged_t::view_t,
       MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
@@ -580,7 +580,7 @@ BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
       typename matrix_t::transpose_t::partial_t::builder_t::template view_merge_t<
         typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
-      MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > >::value));
+        MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
 }
 BOOST_AUTO_TEST_CASE(trans){
   assign_linear();
