@@ -529,8 +529,6 @@ struct MatrixViewProperty {
   static const bool transposed = false;
   static const bool offset = false;
   static const bool variable_size = false;
-
-  static const bool partialized = false;
 };
 
 template <class V1, template <class> class V2>
@@ -554,8 +552,6 @@ struct MatrixViewProperty<V2<V1> > {
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
   static const bool offset = check_of_t<MatrixViewOffset>::res;
   static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
-
-  static const bool partialized = offset && variable_size;
 };
 
 template <class View>
@@ -2186,7 +2182,7 @@ class Matrix_Frozen {
         format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
           return (*this) << "M"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
-              << (MatrixViewProperty<View_Type2>::partialized ? "p" : "")
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "")
               << "(" << m.rows() << "," << m.columns() << ")";
         }
         template <class LHS_T, class RHS_T>
