@@ -529,8 +529,6 @@ struct MatrixViewProperty {
   static const bool transposed = false;
   static const bool offset = false;
   static const bool variable_size = false;
-
-  static const bool partialized = false;
 };
 
 template <class V1, template <class> class V2>
@@ -554,8 +552,6 @@ struct MatrixViewProperty<V2<V1> > {
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
   static const bool offset = check_of_t<MatrixViewOffset>::res;
   static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
-
-  static const bool partialized = offset && variable_size;
 };
 
 template <class View>
@@ -677,27 +673,6 @@ struct priority_t<MatrixView ## name, U> { \
   typedef typename unique_t<MatrixViewSizeVariable>::res_t size_variable_t;
   typedef typename group_t<MatrixViewLoop>::res_t loop_t;
 
-  template <class View2>
-  struct merge_t {
-    typedef View res_t;
-  };
-  template <class BaseView>
-  struct merge_t<MatrixViewTranspose<BaseView> > {
-    typedef typename MatrixViewBuilder<transpose_t>::template merge_t<BaseView>::res_t res_t;
-  };
-  template <class BaseView>
-  struct merge_t<MatrixViewOffset<BaseView> > {
-    typedef typename MatrixViewBuilder<offset_t>::template merge_t<BaseView>::res_t res_t;
-  };
-  template <class BaseView>
-  struct merge_t<MatrixViewSizeVariable<BaseView> > {
-    typedef typename MatrixViewBuilder<size_variable_t>::template merge_t<BaseView>::res_t res_t;
-  };
-  template <class BaseView>
-  struct merge_t<MatrixViewLoop<BaseView> > {
-    typedef typename MatrixViewBuilder<loop_t>::template merge_t<BaseView>::res_t res_t;
-  };
-
   struct reverse_t {
     template <class V1, class V2>
     struct rebuild_t {
@@ -715,13 +690,14 @@ struct priority_t<MatrixView ## name, U> { \
       class SrcView, class SrcView_Reverse>
   struct copy_t {
     template <class DestR = DestView_Reverse, class SrcR = SrcView_Reverse>
-    struct upcast_copy_t {
+    struct downcast_copy_t {
       static void run(DestView *dest, const SrcView *src){}
     };
     template <
         template <class> class Dest_Src_R1,
         class DestR2, class SrcR2>
-    struct upcast_copy_t<Dest_Src_R1<DestR2>, Dest_Src_R1<SrcR2> > {
+    struct downcast_copy_t<Dest_Src_R1<DestR2>, Dest_Src_R1<SrcR2> > {
+      // catch if same views exist at the same stack level in both source and destination
       static void run(DestView *dest, const SrcView *src){
         std::memcpy(
             &static_cast<Dest_Src_R1<DestView> *>(dest)->prop,
@@ -737,7 +713,7 @@ struct priority_t<MatrixView ## name, U> { \
     template <
         template <class> class DestR1, class DestR2,
         template <class> class SrcR1, class SrcR2>
-    struct upcast_copy_t<DestR1<DestR2>, SrcR1<SrcR2> > {
+    struct downcast_copy_t<DestR1<DestR2>, SrcR1<SrcR2> > {
       template<
           bool is_DestR1_higher = (priority_t<DestR1>::priority > priority_t<SrcR1>::priority),
           bool is_DestR1_lower = (priority_t<DestR1>::priority < priority_t<SrcR1>::priority)>
@@ -770,7 +746,7 @@ struct priority_t<MatrixView ## name, U> { \
       }
     };
     static void run(DestView *dest, const SrcView *src){
-      upcast_copy_t<>::run(dest, src);
+      downcast_copy_t<>::run(dest, src);
     }
   };
 
@@ -794,6 +770,54 @@ struct priority_t<MatrixView ## name, U> { \
         void, typename reverse_t::res_t,
         void, typename MatrixViewBuilder<View2>::reverse_t::res_t>::run(&dest, &src);
   }
+
+
+  template <class View2>
+  struct merge_t {
+    template <class ViewA_R, class ViewB_R, class ViewMerged>
+    struct downcast_merge_t {
+      typedef ViewMerged res_t;
+    };
+    template <template <class> class ViewA_R1, class ViewA_R2, class ViewB_R, class ViewMerged>
+    struct downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R, ViewMerged> {
+      // catch if A has more views
+      typedef typename downcast_merge_t<ViewA_R2, ViewB_R, ViewA_R1<ViewMerged> >::res_t res_t;
+    };
+    template <class ViewA_R, template <class> class ViewB_R1, class ViewB_R2, class ViewMerged>
+    struct downcast_merge_t<ViewA_R, ViewB_R1<ViewB_R2>, ViewMerged> {
+      // catch if B has more views
+      typedef typename downcast_merge_t<ViewA_R, ViewB_R2, ViewB_R1<ViewMerged> >::res_t res_t;
+    };
+    template <
+        template <class> class ViewAB_R1,
+        class ViewA_R2, class ViewB_R2, class ViewMerged>
+    struct downcast_merge_t<ViewAB_R1<ViewA_R2>, ViewAB_R1<ViewB_R2>, ViewMerged> {
+      // catch if same views exist at the same (reverse) top level in both A and B
+      typedef typename downcast_merge_t<ViewA_R2, ViewB_R2, ViewAB_R1<ViewMerged> >::res_t res_t;
+    };
+    template <
+        template <class> class ViewA_R1, class ViewA_R2,
+        template <class> class ViewB_R1, class ViewB_R2,
+        class ViewMerged>
+    struct downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R1<ViewB_R2>, ViewMerged> {
+      // catch if A and B has multiple views and the views at the (reversed) top level are different
+      template<
+          bool is_ViewA_R1_higher = (priority_t<ViewA_R1>::priority > priority_t<ViewB_R1>::priority),
+          class U = void>
+      struct next_t { // catch A_R1.priority <= B_R1.priority
+        typedef typename downcast_merge_t<ViewA_R2, ViewB_R1<ViewB_R2>, ViewA_R1<ViewMerged> >::res_t res_t;
+      };
+      template<class U>
+      struct next_t<true, U> { // catch A_R1.priority > B_R1.priority
+        typedef typename downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R2, ViewB_R1<ViewMerged> >::res_t res_t;
+      };
+      typedef typename next_t<>::res_t res_t;
+    };
+    typedef typename downcast_merge_t<
+        typename reverse_t::res_t,
+        typename MatrixViewBuilder<View2>::reverse_t::res_t,
+        void>::res_t res_t;
+  };
 };
 
 template <class BaseView>
@@ -988,6 +1012,8 @@ struct MatrixBuilder_ViewTransformer<
 
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::transpose_t> transpose_t;
+  typedef MatrixT<T, Array2D_Type,
+      typename view_builder_t::size_variable_t> partial_offsetless_t;
   typedef MatrixT<T, Array2D_Type,
       typename MatrixViewBuilder<
         typename view_builder_t::offset_t>::size_variable_t> partial_t;
@@ -1363,6 +1389,38 @@ class Matrix_Frozen {
      */
     typename builder_t::partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
+    }
+
+  protected:
+    template <class MatrixT>
+    static typename MatrixBuilder<MatrixT>::partial_offsetless_t partial_internal(
+        const MatrixT &self,
+        const unsigned int &new_rows,
+        const unsigned int &new_columns){
+      if(new_rows > self.rows()){
+        throw std::out_of_range("Row size exceeding");
+      }else if(new_columns > self.columns()){
+        throw std::out_of_range("Column size exceeding");
+      }
+      typename MatrixBuilder<MatrixT>::partial_offsetless_t res(self);
+      res.view.update_size(new_rows, new_columns);
+      return res;
+    }
+
+  public:
+    /**
+     * Generate partial matrix by just reducing its size;
+     * The origins and direction of original and return matrices are the same.
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     */
+    typename builder_t::partial_offsetless_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns) const {
+      return partial_internal(*this, new_rows, new_columns);
     }
 
   protected:
@@ -2158,7 +2216,7 @@ class Matrix_Frozen {
         format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
           return (*this) << "M"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
-              << (MatrixViewProperty<View_Type2>::partialized ? "p" : "")
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "")
               << "(" << m.rows() << "," << m.columns() << ")";
         }
         template <class LHS_T, class RHS_T>
@@ -2415,6 +2473,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     typedef typename builder_t::assignable_t clone_t;
     typedef typename builder_t::transpose_t transpose_t;
+    typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     typedef typename builder_t::partial_t partial_t;
     typedef typename builder_t::circular_bijective_t circular_bijective_t;
     typedef typename super_t::builder_t::circular_t circular_t;
@@ -2648,6 +2707,23 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &column_offset) const {
       return super_t::partial_internal(*this,
           new_rows, new_columns, row_offset, column_offset);
+    }
+
+    /**
+     * Generate partial matrix by just reducing its size;
+     * The origins and direction of original and return matrices are the same.
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do partial().copy().
+     *
+     * @param rowSize Row number
+     * @param columnSize Column number
+     * @throw std::out_of_range When either row or column size exceeds original one
+     * @return partial matrix
+     */
+    partial_offsetless_t partial(
+        const unsigned int &new_rows,
+        const unsigned int &new_columns) const {
+      return super_t::partial_internal(*this, new_rows, new_columns);
     }
 
     using super_t::circular;
