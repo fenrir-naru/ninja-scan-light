@@ -398,33 +398,39 @@ protected:
       }
     }
 
-    typename matrix_t::partial_t Gp(const unsigned int &size) const {
-      return G.partial(size, 4, 0, 0);
+    typename matrix_t::partial_offsetless_t Gp(const unsigned int &size) const {
+      return G.partial(size, 4);
     }
-    typename matrix_t::partial_t Wp(const unsigned int &size) const {
-      return W.partial(size, size, 0, 0);
+    typename matrix_t::partial_offsetless_t Wp(const unsigned int &size) const {
+      return W.partial(size, size);
     }
-    typename matrix_t::partial_t delta_rp(const unsigned int &size) const {
-      return delta_r.partial(size, 1, 0, 0);
+    typename matrix_t::partial_offsetless_t delta_rp(const unsigned int &size) const {
+      return delta_r.partial(size, 1);
     }
 
+    template <class MatrixT>
+    static matrix_t C(const MatrixT &G_) {
+      return (G_.transpose() * G_).inverse();
+    }
     matrix_t C() const {
-      return (G.transpose() * G).inverse();
+      return C(G);
     }
     matrix_t C(const unsigned int &size) const {
-      typename matrix_t::partial_t Gp_(Gp(size));
-      return (Gp_.transpose() * Gp_).inverse();
+      return (size >= G.rows()) ? C() : C(Gp(size));
     }
 
+    template <class MatrixT>
+    static matrix_t least_square(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_) {
+      matrix_t Gt_W(G_.transpose() * W_);
+      return (Gt_W * G_).inverse() * Gt_W * delta_r_;
+    }
     matrix_t least_square() const {
-      matrix_t Gt_W(G.transpose() * W);
-      return (Gt_W * G).inverse() * Gt_W * delta_r;
+      return least_square(G, W, delta_r);
     }
     matrix_t least_square(const unsigned int &size) const {
-      if(size >= G.rows()){return least_square();}
-      typename matrix_t::partial_t Gp_(Gp(size));
-      matrix_t Gpt_Wp(Gp_.transpose() * Wp(size));
-      return (Gpt_Wp * Gp_).inverse() * Gpt_Wp * delta_rp(size);
+      return (size >= G.rows())
+          ? least_square()
+          : least_square(Gp(size), Wp(size), delta_rp(size));
     }
 
     void copy_G_W_row(const geometric_matrices_t &src,
