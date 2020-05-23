@@ -302,7 +302,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
 
       // on grid, roll over (int)
       static const int roll_over_i[] = {-360, 360};
-      for(int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
+      for(unsigned int i(0); i < sizeof(roll_over_i) / sizeof(roll_over_i[0]); ++i){ // +/- roll over
         check_pivot_of_grid_point(
             igp_t::get_pivot(
               igp_lat_lng[band][mask][0],
@@ -312,7 +312,7 @@ BOOST_AUTO_TEST_CASE(igp_pivot){
 
       // on grid, roll over (double)
       static const double roll_over_f[] = {-360.0, 360.0};
-      for(int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
+      for(unsigned int i(0); i < sizeof(roll_over_f) / sizeof(roll_over_f[0]); ++i){ // +/- roll over
         check_pivot_of_grid_point(
             igp_t::get_pivot(
               (double)igp_lat_lng[band][mask][0],
@@ -393,12 +393,12 @@ void igp_interpolate_check(const double &in_lat, const double &in_lng){
     85, 1, 2, {{10, 10}, {10, 10}},
   };
 
-  for(int i(0); i < sizeof(props) / sizeof(props[0]); i++){ // lat = [-75, 75]
+  for(unsigned int i(0); i < sizeof(props) / sizeof(props[0]); i++){ // lat = [-75, 75]
     if(abs(in_lat) > props[i].lat_max){continue;}
 
     BOOST_REQUIRE_GE(trapezoid_list.size(), props[i].num_min); // number of candidates
     BOOST_REQUIRE_LE(trapezoid_list.size(), props[i].num_max); // number of candidates
-    for(int i2(0); i2 < trapezoid_list.size(); ++i2){
+    for(unsigned int i2(0); i2 < trapezoid_list.size(); ++i2){
       { // check latitude
         { // spacing
           BOOST_REQUIRE_EQUAL(

@@ -1268,18 +1268,18 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         }
 
         void clear_igp() {
-          for(int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
-            for(int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
+          for(unsigned int i(0); i < sizeof(properties) / sizeof(properties[0]); ++i){
+            for(unsigned int j(0); j < sizeof(properties[0]) / sizeof(properties[0][0]); ++j){
               properties[i][j] = PointProperty::raw_t::unavailable;
             }
           }
         }
 
         void clear_mask(){
-          for(int i(0); i < sizeof(masks) / sizeof(masks[0]); ++i){
+          for(unsigned int i(0); i < sizeof(masks) / sizeof(masks[0]); ++i){
             masks[i].clear();
           }
-          for(int i(0); i < sizeof(masks_new) / sizeof(masks_new[0]); ++i){
+          for(unsigned int i(0); i < sizeof(masks_new) / sizeof(masks_new[0]); ++i){
             masks_new[i].clear();
           }
         }
@@ -2190,7 +2190,7 @@ typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
   }; ///< @see https://www.gps.gov/technical/prn-codes/L1-CA-PRN-code-assignments-2020-Apr.pdf
   list_t res;
   res.reserve(sizeof(codes) / sizeof(codes[0]));
-  for(int i(0); i < sizeof(codes) / sizeof(codes[0]); ++i){
+  for(unsigned int i(0); i < sizeof(codes) / sizeof(codes[0]); ++i){
     res.push_back(&codes[i]);
   }
   std::sort(res.begin(), res.end(), sorter);
