@@ -303,7 +303,7 @@ struct GPS_Solver_Base {
 
       std::div_t qr_lsb(std::div(idx_lsb, bits_per_addr)),
           qr_msb(std::div(idx_msb, bits_per_addr));
-      if(res_bits >= bits_per_addr){
+      if(res_bits > bits_per_addr){
         unsigned int res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
             ? ~((ContainerT)0)
             : (((ContainerT)1 << (qr_msb.rem + 1)) - 1))); // MSB byte
