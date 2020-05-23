@@ -676,7 +676,7 @@ struct priority_t<MatrixView ## name, U> { \
   typedef typename unique_t<MatrixViewSizeVariable>::res_t size_variable_t;
   typedef typename group_t<MatrixViewLoop>::res_t loop_t;
 
-  struct reverse_t {
+  struct reverse_op_t {
     template <class V1, class V2>
     struct rebuild_t {
       typedef V2 res_t;
@@ -687,6 +687,7 @@ struct priority_t<MatrixView ## name, U> { \
     };
     typedef typename rebuild_t<View, void>::res_t res_t;
   };
+  typedef typename reverse_op_t::res_t reverse_t;
 
   template <
       class DestView, class DestView_Reverse,
@@ -770,10 +771,10 @@ struct priority_t<MatrixView ## name, U> { \
   template <class View2>
   static void copy(View &dest, const View2 &src){
     copy_t<
-        void, typename reverse_t::res_t,
-        void, typename MatrixViewBuilder<View2>::reverse_t::res_t>::run(&dest, &src);
-  }
+        void, reverse_t,
+        void, typename MatrixViewBuilder<View2>::reverse_t>::run(&dest, &src);
 
+  }
 
   template <class View2>
   struct merge_t {
@@ -817,8 +818,8 @@ struct priority_t<MatrixView ## name, U> { \
       typedef typename next_t<>::res_t res_t;
     };
     typedef typename downcast_merge_t<
-        typename reverse_t::res_t,
-        typename MatrixViewBuilder<View2>::reverse_t::res_t,
+        reverse_t,
+        typename MatrixViewBuilder<View2>::reverse_t,
         void>::res_t res_t;
   };
 };
