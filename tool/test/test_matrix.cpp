@@ -582,6 +582,13 @@ BOOST_AUTO_TEST_CASE(view){
         typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
         MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
 }
+BOOST_AUTO_TEST_CASE(view_inspect){
+  boost::test_tools::output_test_stream os;
+
+  os << matrix_t::partial_t::circular_t::builder_t::transpose_t::view_t();
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.is_equal("[T] [Size](0,0) [Offset](0,0) [Loop](0,0) [Offset](0,0) [Base]"));
+}
 BOOST_AUTO_TEST_CASE(trans){
   assign_linear();
   prologue_print();
