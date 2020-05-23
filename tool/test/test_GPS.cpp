@@ -31,7 +31,7 @@ void fill_buffer(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
   static const int effectiveBits((int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB);
   static const int N((N_bitset + effectiveBits - 1) / effectiveBits);
   BOOST_REQUIRE_LE(N, (int)N_buf);
-  int b_index(0);
+  unsigned int b_index(0);
   for(int i(0); i < (N - 1); ++i){
     //buf[i] = 0;
     for(int j(0); j < effectiveBits; ++j){
