@@ -519,6 +519,7 @@ struct MatrixViewOffset;
 template <class BaseView>
 struct MatrixViewLoop;
 
+
 template <class View>
 struct MatrixViewProperty {
   typedef View self_t;
@@ -532,7 +533,14 @@ struct MatrixViewProperty {
   static const bool transposed = false;
   static const bool offset = false;
   static const bool variable_size = false;
+
+  static const char *name;
+
+  template<class CharT, class Traits>
+  static void inspect(std::basic_ostream<CharT, Traits> &out){}
 };
+template <class View>
+const char *MatrixViewProperty<View>::name = "";
 
 template <class V1, template <class> class V2>
 struct MatrixViewProperty<V2<V1> > {
@@ -555,7 +563,17 @@ struct MatrixViewProperty<V2<V1> > {
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
   static const bool offset = check_of_t<MatrixViewOffset>::res;
   static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
+
+  static const char *name;
+
+  template<class CharT, class Traits>
+  static void inspect(std::basic_ostream<CharT, Traits> &out){
+    out << name << " ";
+    MatrixViewProperty<V1>::inspect(out);
+  }
 };
+template <class V1, template <class> class V2>
+const char *MatrixViewProperty<V2<V1> >::name = V2<MatrixViewBase<> >::name;
 
 template <class View>
 struct MatrixViewBuilder {

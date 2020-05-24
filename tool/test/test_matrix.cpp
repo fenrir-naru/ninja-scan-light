@@ -585,6 +585,16 @@ BOOST_AUTO_TEST_CASE(view){
 BOOST_AUTO_TEST_CASE(view_inspect){
   boost::test_tools::output_test_stream os;
 
+  MatrixViewProperty<matrix_t::partial_t::circular_t::builder_t::transpose_t::view_t>::inspect(os);
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.is_equal("[T] [Size] [Offset] [Loop] [Offset] [Base] "));
+
+  MatrixViewProperty<
+      matrix_t::partial_t::circular_t::builder_t::transpose_t
+        ::builder_t::view_builder_t::reverse_t>::inspect(os);
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.is_equal("[Base] [Offset] [Loop] [Offset] [Size] [T] "));
+
   os << matrix_t::partial_t::circular_t::builder_t::transpose_t::view_t();
   BOOST_TEST_MESSAGE(os.str());
   BOOST_CHECK(os.is_equal("[T] [Size](0,0) [Offset](0,0) [Loop](0,0) [Offset](0,0) [Base]"));
