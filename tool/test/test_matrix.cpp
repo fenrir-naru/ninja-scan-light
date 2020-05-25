@@ -513,6 +513,37 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(inv, 2){
   prologue_print();
   check_inv(*A);
 }
+BOOST_AUTO_TEST_CASE(view_property){
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::view_t>::viewless);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::offset);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::viewless);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::transpose_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::offset);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::viewless);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::offset);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::viewless);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::transposed);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_t::view_t>::offset);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::viewless);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::transposed);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::offset);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::viewless);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::transposed);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_t::view_t>::offset);
+  BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_t::view_t>::variable_size);
+}
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
       matrix_t::transpose_t::view_t,
@@ -581,6 +612,23 @@ BOOST_AUTO_TEST_CASE(view){
       typename matrix_t::transpose_t::partial_t::builder_t::template view_merge_t<
         typename matrix_t::transpose_t::partial_t::view_t>::merged_t::view_t,
         MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > >::value));
+}
+BOOST_AUTO_TEST_CASE(view_inspect){
+  boost::test_tools::output_test_stream os;
+
+  os << MatrixViewProperty<matrix_t::partial_t::circular_t::builder_t::transpose_t::view_t>::inspect();
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.is_equal("[T] [Size] [Offset] [Loop] [Offset] [Base]"));
+
+  os << MatrixViewProperty<
+      matrix_t::partial_t::circular_t::builder_t::transpose_t
+        ::builder_t::view_builder_t::reverse_t>::inspect();
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.is_equal("[Base] [Offset] [Loop] [Offset] [Size] [T]"));
+
+  os << matrix_t::partial_t::circular_t::builder_t::transpose_t::view_t();
+  BOOST_TEST_MESSAGE(os.str());
+  BOOST_CHECK(os.is_equal("[T] [Size](0,0) [Offset](0,0) [Loop](0,0) [Offset](0,0) [Base]"));
 }
 BOOST_AUTO_TEST_CASE(trans){
   assign_linear();
