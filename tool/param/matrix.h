@@ -536,8 +536,14 @@ struct MatrixViewProperty {
 
   static const char *name;
 
-  template<class CharT, class Traits>
-  static void inspect(std::basic_ostream<CharT, Traits> &out){}
+  struct inspect_t {
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(
+        std::basic_ostream<CharT, Traits> &out, const inspect_t &){
+      return out << name;
+    }
+  };
+  static inspect_t inspect(){return inspect_t();}
 };
 template <class View>
 const char *MatrixViewProperty<View>::name = "";
@@ -566,11 +572,18 @@ struct MatrixViewProperty<V2<V1> > {
 
   static const char *name;
 
-  template<class CharT, class Traits>
-  static void inspect(std::basic_ostream<CharT, Traits> &out){
-    out << name << " ";
-    MatrixViewProperty<V1>::inspect(out);
-  }
+  struct inspect_t {
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(
+        std::basic_ostream<CharT, Traits> &out, const inspect_t &){
+      if(MatrixViewProperty<V1>::viewless){
+        return out << name;
+      }else{
+        return out << name << " " << MatrixViewProperty<V1>::inspect();
+      }
+    }
+  };
+  static inspect_t inspect(){return inspect_t();}
 };
 template <class V1, template <class> class V2>
 const char *MatrixViewProperty<V2<V1> >::name = V2<MatrixViewBase<> >::name;
