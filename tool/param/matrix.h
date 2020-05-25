@@ -523,13 +523,8 @@ struct MatrixViewLoop;
 template <class View>
 struct MatrixViewProperty {
   typedef View self_t;
-  static const bool viewless = true;
-
-  template <template <class> class TargetView>
-  struct check_of_t {
-    static const bool res = false;
-  };
-
+  static const bool anchor = true;
+  static const bool viewless = false;
   static const bool transposed = false;
   static const bool offset = false;
   static const bool variable_size = false;
@@ -551,13 +546,21 @@ const char *MatrixViewProperty<View>::name = "";
 template <class V1, template <class> class V2>
 struct MatrixViewProperty<V2<V1> > {
   typedef V2<V1> self_t;
-  static const bool viewless = false;
+  static const bool anchor = false;
 
   template <template <class> class TargetView>
   struct check_of_t {
     template <template <class> class T, class U = void>
     struct check_t {
-      static const bool res = MatrixViewProperty<V1>::template check_of_t<TargetView>::res;
+      template <bool is_next_anchor, class U2 = void>
+      struct next_t {
+        static const bool res = MatrixViewProperty<V1>::template check_of_t<TargetView>::res;
+      };
+      template <class U2>
+      struct next_t<true, U2> {
+        static const bool res = false;
+      };
+      static const bool res = next_t<MatrixViewProperty<V1>::anchor>::res;
     };
     template <class U>
     struct check_t<TargetView, U> {
@@ -566,6 +569,7 @@ struct MatrixViewProperty<V2<V1> > {
     static const bool res = check_t<V2>::res;
   };
 
+  static const bool viewless = MatrixViewProperty<V2<void> >::template check_of_t<MatrixViewBase>::res;
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
   static const bool offset = check_of_t<MatrixViewOffset>::res;
   static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
@@ -576,7 +580,7 @@ struct MatrixViewProperty<V2<V1> > {
     template<class CharT, class Traits>
     friend std::basic_ostream<CharT, Traits> &operator<<(
         std::basic_ostream<CharT, Traits> &out, const inspect_t &){
-      if(MatrixViewProperty<V1>::viewless){
+      if(MatrixViewProperty<V1>::anchor){
         return out << name;
       }else{
         return out << name << " " << MatrixViewProperty<V1>::inspect();
