@@ -476,10 +476,11 @@ struct MatrixViewBase {
 
   struct {} prop;
 
+  static const char *name;
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const self_t &view){
-    return out << " [V]";
+    return out << name;
   }
 
   inline const unsigned int rows(
@@ -503,6 +504,8 @@ struct MatrixViewBase {
   void update_offset(const unsigned int &row, const unsigned int &column){}
   void update_loop(const unsigned int &rows, const unsigned int &columns){}
 };
+template <class BaseView>
+const char *MatrixViewBase<BaseView>::name = "[Base]";
 
 template <class BaseView>
 struct MatrixViewTranspose;
@@ -516,31 +519,48 @@ struct MatrixViewOffset;
 template <class BaseView>
 struct MatrixViewLoop;
 
+
 template <class View>
 struct MatrixViewProperty {
   typedef View self_t;
-  static const bool viewless = true;
-
-  template <template <class> class TargetView>
-  struct check_of_t {
-    static const bool res = false;
-  };
-
+  static const bool anchor = true;
+  static const bool viewless = false;
   static const bool transposed = false;
   static const bool offset = false;
   static const bool variable_size = false;
+
+  static const char *name;
+
+  struct inspect_t {
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(
+        std::basic_ostream<CharT, Traits> &out, const inspect_t &){
+      return out << name;
+    }
+  };
+  static inspect_t inspect(){return inspect_t();}
 };
+template <class View>
+const char *MatrixViewProperty<View>::name = "";
 
 template <class V1, template <class> class V2>
 struct MatrixViewProperty<V2<V1> > {
   typedef V2<V1> self_t;
-  static const bool viewless = false;
+  static const bool anchor = false;
 
   template <template <class> class TargetView>
   struct check_of_t {
     template <template <class> class T, class U = void>
     struct check_t {
-      static const bool res = MatrixViewProperty<V1>::template check_of_t<TargetView>::res;
+      template <bool is_next_anchor, class U2 = void>
+      struct next_t {
+        static const bool res = MatrixViewProperty<V1>::template check_of_t<TargetView>::res;
+      };
+      template <class U2>
+      struct next_t<true, U2> {
+        static const bool res = false;
+      };
+      static const bool res = next_t<MatrixViewProperty<V1>::anchor>::res;
     };
     template <class U>
     struct check_t<TargetView, U> {
@@ -549,10 +569,28 @@ struct MatrixViewProperty<V2<V1> > {
     static const bool res = check_t<V2>::res;
   };
 
+  static const bool viewless = MatrixViewProperty<V2<void> >::template check_of_t<MatrixViewBase>::res;
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
   static const bool offset = check_of_t<MatrixViewOffset>::res;
   static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
+
+  static const char *name;
+
+  struct inspect_t {
+    template<class CharT, class Traits>
+    friend std::basic_ostream<CharT, Traits> &operator<<(
+        std::basic_ostream<CharT, Traits> &out, const inspect_t &){
+      if(MatrixViewProperty<V1>::anchor){
+        return out << name;
+      }else{
+        return out << name << " " << MatrixViewProperty<V1>::inspect();
+      }
+    }
+  };
+  static inspect_t inspect(){return inspect_t();}
 };
+template <class V1, template <class> class V2>
+const char *MatrixViewProperty<V2<V1> >::name = V2<MatrixViewBase<> >::name;
 
 template <class View>
 struct MatrixViewBuilder {
@@ -673,7 +711,7 @@ struct priority_t<MatrixView ## name, U> { \
   typedef typename unique_t<MatrixViewSizeVariable>::res_t size_variable_t;
   typedef typename group_t<MatrixViewLoop>::res_t loop_t;
 
-  struct reverse_t {
+  struct reverse_op_t {
     template <class V1, class V2>
     struct rebuild_t {
       typedef V2 res_t;
@@ -684,6 +722,7 @@ struct priority_t<MatrixView ## name, U> { \
     };
     typedef typename rebuild_t<View, void>::res_t res_t;
   };
+  typedef typename reverse_op_t::res_t reverse_t;
 
   template <
       class DestView, class DestView_Reverse,
@@ -767,10 +806,10 @@ struct priority_t<MatrixView ## name, U> { \
   template <class View2>
   static void copy(View &dest, const View2 &src){
     copy_t<
-        void, typename reverse_t::res_t,
-        void, typename MatrixViewBuilder<View2>::reverse_t::res_t>::run(&dest, &src);
-  }
+        void, reverse_t,
+        void, typename MatrixViewBuilder<View2>::reverse_t>::run(&dest, &src);
 
+  }
 
   template <class View2>
   struct merge_t {
@@ -814,8 +853,8 @@ struct priority_t<MatrixView ## name, U> { \
       typedef typename next_t<>::res_t res_t;
     };
     typedef typename downcast_merge_t<
-        typename reverse_t::res_t,
-        typename MatrixViewBuilder<View2>::reverse_t::res_t,
+        reverse_t,
+        typename MatrixViewBuilder<View2>::reverse_t,
         void>::res_t res_t;
   };
 };
@@ -833,10 +872,12 @@ struct MatrixViewTranspose : public BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
+  static const char *name;
+
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const MatrixViewTranspose<BaseView> &view){
-    return out << " [T]" << (const BaseView &)view;
+    return out << name << " " << (const BaseView &)view;
   }
 
   inline const unsigned int rows(
@@ -866,6 +907,8 @@ struct MatrixViewTranspose : public BaseView {
     BaseView::update_loop(columns, rows);
   }
 };
+template <class BaseView>
+const char *MatrixViewTranspose<BaseView>::name = "[T]";
 
 template <class BaseView>
 struct MatrixViewOffset : public BaseView {
@@ -885,12 +928,14 @@ struct MatrixViewOffset : public BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
+  static const char *name;
+
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const MatrixViewOffset<BaseView> &view){
-    return out << " [O]("
+    return out << name << "("
          << view.prop.row << ","
-         << view.prop.column << ")"
+         << view.prop.column << ") "
          << (const BaseView &)view;
   }
 
@@ -908,6 +953,8 @@ struct MatrixViewOffset : public BaseView {
     prop.column += column;
   }
 };
+template <class BaseView>
+const char *MatrixViewOffset<BaseView>::name = "[Offset]";
 
 template <class BaseView>
 struct MatrixViewSizeVariable : public BaseView {
@@ -927,12 +974,14 @@ struct MatrixViewSizeVariable : public BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
+  static const char *name;
+
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const MatrixViewSizeVariable<BaseView> &view){
-    return out << " [S]("
+    return out << name << "("
          << view.prop.rows << ","
-         << view.prop.columns << ")"
+         << view.prop.columns << ") "
          << (const BaseView &)view;
   }
 
@@ -950,6 +999,8 @@ struct MatrixViewSizeVariable : public BaseView {
     prop.columns = columns;
   }
 };
+template <class BaseView>
+const char *MatrixViewSizeVariable<BaseView>::name = "[Size]";
 
 template <class BaseView>
 struct MatrixViewLoop : public BaseView {
@@ -969,12 +1020,14 @@ struct MatrixViewLoop : public BaseView {
   template <class View>
   friend struct MatrixViewBuilder;
 
+  static const char *name;
+
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const MatrixViewLoop<BaseView> &view){
-    return out << " [L]("
+    return out << name << "("
          << view.prop.rows << ","
-         << view.prop.columns << ")"
+         << view.prop.columns << ") "
          << (const BaseView &)view;
   }
 
@@ -992,6 +1045,8 @@ struct MatrixViewLoop : public BaseView {
     prop.columns = columns;
   }
 };
+template <class BaseView>
+const char *MatrixViewLoop<BaseView>::name = "[Loop]";
 
 
 template <
