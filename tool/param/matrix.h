@@ -1642,7 +1642,7 @@ class Matrix_Frozen {
     typedef Multiply_Matrix_by_Scalar<T> mul_mat_scalar_t;
 
     /**
-     * Multiply by scalar
+     * Multiply matrix by scalar
      *
      * @param scalar
      * @return multiplied matrix
@@ -1652,7 +1652,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Multiply by scalar
+     * Multiply scalar by matrix
      *
      * @param scalar
      * @param matrix
@@ -1663,7 +1663,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Divide by scalar
+     * Divide matrix by scalar
      *
      * @param scalar
      * @return divided matrix
@@ -1695,7 +1695,7 @@ class Matrix_Frozen {
     };
 
     /**
-     * Add to matrix
+     * Add matrix to matrix
      *
      * @param matrix Matrix to add
      * @return added matrix
@@ -1708,7 +1708,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Subtract from matrix
+     * Subtract matrix from matrix
      *
      * @param matrix Matrix to subtract
      * @return subtracted matrix
@@ -1865,7 +1865,7 @@ class Matrix_Frozen {
     };
 
     /**
-     * Multiply by matrix
+     * Multiply matrix by matrix
      *
      * @param matrix matrix to multiply
      * @return multiplied matrix
@@ -1940,7 +1940,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Perform decomposition of LUP
+     * Perform LUP decomposition
      * Return matrix is
      * (0, 0)-(n-1, n-1):  L matrix
      * (0, n)-(n-1, 2n-1): U matrix
@@ -2188,7 +2188,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Divide by matrix, in other words, multiply by inverse matrix
+     * Divide matrix by matrix, in other words, multiply by inverse matrix
      *
      * @param matrix Matrix to divide
      * @return divided matrix
@@ -2201,7 +2201,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Scalar divided by matrix, which is equivalent to inverted matrix multiplied by scalar
+     * Divide scalar by matrix, which is equivalent to inverted matrix multiplied by scalar
      *
      * @param scalar
      * @param matrix
@@ -2213,7 +2213,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Add by matrix with specified pivot
+     * Add matrix to matrix with specified pivot
      *
      * @param row Upper row index (pivot) of matrix to be added
      * @param column Left column index (pivot) of matrix to be added
@@ -2890,7 +2890,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isLU;
 
     /**
-     * Multiply by scalar (bang method)
+     * Multiply matrix by scalar (bang method)
      *
      * @param scalar
      * @return myself
@@ -2900,7 +2900,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Divide by scalar (bang method)
+     * Divide matrix by scalar (bang method)
      *
      * @param scalar
      * @return myself
@@ -2910,7 +2910,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
     
     /**
-     * Add to matrix (bang method)
+     * Add matrix to matrix (bang method)
      *
      * @param matrix Matrix to add
      * @return myself
@@ -2921,7 +2921,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
     
     /**
-     * Subtract from matrix (bang method)
+     * Subtract matrix from matrix (bang method)
      *
      * @param matrix Matrix to subtract
      * @return myself
@@ -2932,7 +2932,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
     
     /**
-     * Multiply by matrix (bang method)
+     * Multiply matrix by matrix (bang method)
      *
      * @param matrix Matrix to multiply
      * @return myself
@@ -2943,7 +2943,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Divide by matrix, in other words, multiply by inverse matrix. (bang method)
+     * Divide matrix by matrix, in other words, multiply matrix by inverse matrix. (bang method)
      *
      * @param matrix Matrix to divide
      * @return myself
@@ -2954,7 +2954,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Add by matrix with specified pivot (bang method)
+     * Add matrix to matrix with specified pivot (bang method)
      *
      * @param row Upper row index (pivot) of matrix to be added
      * @param column Left column index (pivot) of matrix to be added
