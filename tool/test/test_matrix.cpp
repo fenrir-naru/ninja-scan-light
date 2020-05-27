@@ -392,10 +392,29 @@ struct mat_add_t {
 
 BOOST_AUTO_TEST_CASE(matrix_add){
   prologue_print();
-  mat_add_t a = {*A, *B};
-  matrix_t _A((*A) + (*B));
-  BOOST_TEST_MESSAGE("+:" << _A);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+  mat_add_t a1 = {*A, *B};
+  matrix_t A1((*A) + (*B));
+  BOOST_TEST_MESSAGE("+:" << A1);
+  matrix_compare_delta(a1, A1, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_add_t a2 = {*A, matrix_t::getI(A->rows())};
+  matrix_t A2((*A) + 1);
+  BOOST_TEST_MESSAGE("+1:" << A2);
+  matrix_compare_delta(a2, A2, ACCEPTABLE_DELTA_DEFAULT);
+
+  matrix_t A2_(1 + (*A));
+  BOOST_TEST_MESSAGE("1+:" << A2_);
+  matrix_compare_delta(a2, A2_, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_add_t a3 = {*A, matrix_t::getScalar(A->rows(), -1)};
+  matrix_t A3((*A) - 1);
+  BOOST_TEST_MESSAGE("-1:" << A3);
+  matrix_compare_delta(a3, A3, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_add_t a4 = {matrix_t::getI(A->rows()), -(*A)};
+  matrix_t A4(1 - (*A));
+  BOOST_TEST_MESSAGE("1-:" << A4);
+  matrix_compare_delta(a4, A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 struct mat_mul_t {

@@ -1720,6 +1720,57 @@ class Matrix_Frozen {
       return Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::generate(*this, matrix);
     }
 
+    /**
+     * Add scalar to matrix
+     *
+     * @param scalar scalar to add
+     * @return added matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    typename Add_Matrix_to_Matrix<Matrix_Frozen<T, Array2D_ScaledUnit<T> > >::mat_t
+        operator+(const T &scalar) const {
+      return *this + Matrix_Frozen<T, Array2D_ScaledUnit<T> >::getScalar(rows(), scalar);
+    }
+
+    /**
+     * Subtract scalar from matrix
+     *
+     * @param scalar scalar to subtract
+     * @return subtracted matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    typename Add_Matrix_to_Matrix<Matrix_Frozen<T, Array2D_ScaledUnit<T> > >::mat_t
+        operator-(const T &scalar) const {
+      return *this + (-scalar);
+    }
+
+    /**
+     * Add matrix to scalar
+     *
+     * @param scalar scalar to be added
+     * @param matrix matrix to add
+     * @return added matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    friend typename Add_Matrix_to_Matrix<Matrix_Frozen<T, Array2D_ScaledUnit<T> > >::mat_t
+        operator+(const T &scalar, const self_t &matrix){
+      return matrix + scalar;
+    }
+
+    /**
+     * Subtract matrix from scalar
+     *
+     * @param scalar to be subtracted
+     * @param matrix matrix to subtract
+     * @return added matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    friend typename Matrix_Frozen<T, Array2D_ScaledUnit<T> >
+        ::template Add_Matrix_to_Matrix<self_t, false>::mat_t
+        operator-(const T &scalar, const self_t &matrix){
+      return Matrix_Frozen<T, Array2D_ScaledUnit<T> >::getScalar(matrix.rows(), scalar) - matrix;
+    }
+
 
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix {
@@ -2930,7 +2981,27 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     self_t &operator-=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
       return replace_internal((*this) - matrix);
     }
-    
+
+    /**
+     * Add scalar to matrix (bang method)
+     *
+     * @param scalar scalar to add
+     * @return myself
+     */
+    self_t &operator+=(const T &scalar){
+      return replace_internal((*this) + scalar);
+    }
+
+    /**
+     * Subtract scalar from matrix (bang method)
+     *
+     * @param scalar scalar to subtract
+     * @return myself
+     */
+    self_t &operator-=(const T &scalar){
+      return replace_internal((*this) - scalar);
+    }
+
     /**
      * Multiply matrix by matrix (bang method)
      *
