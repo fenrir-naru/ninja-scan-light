@@ -314,10 +314,14 @@ BOOST_AUTO_TEST_CASE(properties){
 }
 
 BOOST_AUTO_TEST_CASE(getI){
-  prologue_print();
   matrix_t _A(matrix_t::getI(SIZE));
   BOOST_TEST_MESSAGE("I:" << _A);
   matrix_compare(k_delta, _A);
+
+  // type(getI()) == type(getI().transpose)
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_ScaledUnit<content_t> >,
+      Matrix_Frozen<content_t, Array2D_ScaledUnit<content_t> >::builder_t::transpose_t>::value));
 }
 
 BOOST_AUTO_TEST_CASE(exchange_row){

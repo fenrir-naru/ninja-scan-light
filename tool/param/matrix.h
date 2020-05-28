@@ -1061,12 +1061,12 @@ template <
 class Matrix;
 
 template <class MatrixT>
-struct MatrixBuilder_ViewTransformer;
+struct MatrixBuilder_ViewTransformerBase;
 
 template <
     template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType>
-struct MatrixBuilder_ViewTransformer<
+struct MatrixBuilder_ViewTransformerBase<
     MatrixT<T, Array2D_Type, ViewType> > {
   typedef MatrixViewBuilder<ViewType> view_builder_t;
 
@@ -1090,6 +1090,17 @@ struct MatrixBuilder_ViewTransformer<
     typedef MatrixT<T, Array2D_Type,
         typename view_builder_t::template merge_t<ViewType2>::res_t> merged_t;
   };
+};
+
+template <class MatrixT>
+struct MatrixBuilder_ViewTransformer
+    : public MatrixBuilder_ViewTransformerBase<MatrixT> {};
+
+template <template <class, class, class> class MatrixT, class T>
+struct MatrixBuilder_ViewTransformer<MatrixT<T, Array2D_ScaledUnit<T>, MatrixViewBase<> > >
+    : public MatrixBuilder_ViewTransformerBase<
+        MatrixT<T, Array2D_ScaledUnit<T>, MatrixViewBase<> > > {
+  typedef MatrixT<T, Array2D_ScaledUnit<T>, MatrixViewBase<> > transpose_t;
 };
 
 template <
