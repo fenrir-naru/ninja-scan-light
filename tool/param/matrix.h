@@ -1928,6 +1928,20 @@ class Matrix_Frozen {
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
     }
 
+    /**
+     * Multiply matrix by scalar matrix
+     *
+     * @param matrix scalar matrix to multiply
+     * @return multiplied matrix
+     * @throw std::invalid_argument When operation is undefined
+     */
+    template <class T2>
+    typename Multiply_Matrix_by_Scalar<T2>::mat_t
+        operator*(const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &matrix) const {
+      if(columns() != matrix.rows()){throw std::invalid_argument("Incorrect size");}
+      return Multiply_Matrix_by_Scalar<T2>::generate(*this, matrix(0,0));
+    }
+
 
     /**
      * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
