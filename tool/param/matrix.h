@@ -381,6 +381,11 @@ class Array2D_ScaledUnit : public Array2D_Frozen<T> {
     typedef Array2D_ScaledUnit<T> self_t;
     typedef Array2D_Frozen<T> super_t;
 
+    template <class T2>
+    struct family_t {
+      typedef Array2D_ScaledUnit<T2> res_t;
+    };
+
   protected:
     const T value; ///< scaled unit
 
@@ -1772,7 +1777,7 @@ class Matrix_Frozen {
     }
 
 
-    template <class RHS_MatrixT>
+    template <class RHS_MatrixT, class LHS_MatrixT = self_t>
     struct Multiply_Matrix_by_Matrix {
 
       template <class MatrixT, int tag = OperatorProperty<MatrixT>::tag>
@@ -1909,14 +1914,25 @@ class Matrix_Frozen {
 #endif
 
       typedef typename optimizer2_t<>::res_t mat_t;
-      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
-        if(mat1.columns() != mat2.rows()){throw std::invalid_argument("Incorrect size");}
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2) noexcept {
         return optimizer2_t<>::generate(mat1, mat2);
+      }
+    };
+
+    template <class RHS_MatrixT>
+    struct Multiply_Matrix_by_Matrix<RHS_MatrixT, Matrix_Frozen<T, Array2D_ScaledUnit<T> > > {
+      // Specialization for (Scalar_M * M)
+      typedef typename RHS_MatrixT::template Multiply_Matrix_by_Scalar<T> generator_t;
+      typedef typename generator_t::mat_t mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2) noexcept {
+        return generator_t::generate(mat2, mat1(0, 0));
       }
     };
 
     /**
      * Multiply matrix by matrix
+     * If this matrix is scalar matrix, then right hand side matrix multipled by this will be returned.
+     * Otherwise, matrix * matrix will be returned.
      *
      * @param matrix matrix to multiply
      * @return multiplied matrix
@@ -1925,6 +1941,7 @@ class Matrix_Frozen {
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
         operator*(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      if(columns() != matrix.rows()){throw std::invalid_argument("Incorrect size");}
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
     }
 

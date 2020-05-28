@@ -482,6 +482,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       (*A * matrix_t::getScalar(A->columns(), 2)),
       (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
   matrix_inspect_contains(
+      (matrix_t::getScalar(A->rows(), 2) * (*A)),
+      (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
+  matrix_inspect_contains(
       (-(*A)),
       (format("*storage: (*, M(%1%,%1%), -1)") % SIZE).str());
   matrix_inspect_contains(
