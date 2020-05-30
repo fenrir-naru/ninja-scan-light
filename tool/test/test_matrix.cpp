@@ -489,6 +489,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       (matrix_t::getScalar(A->rows(), 2) * (*A)),
       (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
   matrix_inspect_contains(
+      (matrix_t::getScalar(A->rows(), 2) * 2), // should be 4_I
+      (format("*storage: M(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
       (-(*A)),
       (format("*storage: (*, M(%1%,%1%), -1)") % SIZE).str());
   matrix_inspect_contains(
@@ -520,6 +523,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A * 2) * (*B * 2)), // should be (*A * (*B)) * 4
       (format("*storage: (*, (*, M(%1%,%1%), M(%1%,%1%)), 4)") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A * 2) * (matrix_t::getScalar(B->rows(), 2) * 2)), // should be *A * 8
+      (format("*storage: (*, M(%1%,%1%), 8)") % SIZE).str());
 }
 
 void check_inv(const matrix_t &mat){

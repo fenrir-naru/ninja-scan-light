@@ -1225,16 +1225,16 @@ class Matrix_Frozen {
      */
     virtual ~Matrix_Frozen(){}
 
+    typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
+
     /**
      * Generate scalar matrix
      *
      * @param size Row and column number
      * @param scalar
      */
-    static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getScalar(
-        const unsigned int &size, const T &scalar){
-      return Matrix_Frozen<T, Array2D_ScaledUnit<T> >(
-          Array2D_ScaledUnit<T>(size, scalar));
+    static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar){
+      return scalar_matrix_t(typename scalar_matrix_t::storage_t(size, scalar));
     }
 
     /**
@@ -1242,7 +1242,7 @@ class Matrix_Frozen {
      *
      * @param size Row and column number
      */
-    static Matrix_Frozen<T, Array2D_ScaledUnit<T> > getI(const unsigned int &size){
+    static scalar_matrix_t getI(const unsigned int &size){
       return getScalar(size, T(1));
     }
 
@@ -1615,7 +1615,7 @@ class Matrix_Frozen {
       typedef typename check1_t<MatrixT>::operator_t operator_t;
     };
 
-    template <class RHS_T>
+    template <class RHS_T, class LHS_MatrixT = self_t>
     struct Multiply_Matrix_by_Scalar {
       typedef Array2D_Operator_Multiply<self_t, RHS_T> op_t;
 
@@ -1653,6 +1653,13 @@ class Matrix_Frozen {
       typedef typename opt_t::res_t mat_t;
       static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
         return opt_t::generate(mat, scalar);
+      }
+    };
+    template <class RHS_T>
+    struct Multiply_Matrix_by_Scalar<RHS_T, scalar_matrix_t> {
+      typedef scalar_matrix_t mat_t;
+      static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+        return getScalar(mat.rows(), mat(0, 0) * scalar);
       }
     };
     typedef Multiply_Matrix_by_Scalar<T> mul_mat_scalar_t;
@@ -1743,9 +1750,9 @@ class Matrix_Frozen {
      * @return added matrix
      * @throw std::invalid_argument When matrix sizes are not identical
      */
-    typename Add_Matrix_to_Matrix<Matrix_Frozen<T, Array2D_ScaledUnit<T> > >::mat_t
+    typename Add_Matrix_to_Matrix<scalar_matrix_t>::mat_t
         operator+(const T &scalar) const {
-      return *this + Matrix_Frozen<T, Array2D_ScaledUnit<T> >::getScalar(rows(), scalar);
+      return *this + getScalar(rows(), scalar);
     }
 
     /**
@@ -1755,7 +1762,7 @@ class Matrix_Frozen {
      * @return subtracted matrix
      * @throw std::invalid_argument When matrix sizes are not identical
      */
-    typename Add_Matrix_to_Matrix<Matrix_Frozen<T, Array2D_ScaledUnit<T> > >::mat_t
+    typename Add_Matrix_to_Matrix<scalar_matrix_t>::mat_t
         operator-(const T &scalar) const {
       return *this + (-scalar);
     }
@@ -1768,7 +1775,7 @@ class Matrix_Frozen {
      * @return added matrix
      * @throw std::invalid_argument When matrix sizes are not identical
      */
-    friend typename Add_Matrix_to_Matrix<Matrix_Frozen<T, Array2D_ScaledUnit<T> > >::mat_t
+    friend typename Add_Matrix_to_Matrix<scalar_matrix_t>::mat_t
         operator+(const T &scalar, const self_t &matrix){
       return matrix + scalar;
     }
@@ -1781,10 +1788,9 @@ class Matrix_Frozen {
      * @return added matrix
      * @throw std::invalid_argument When matrix sizes are not identical
      */
-    friend typename Matrix_Frozen<T, Array2D_ScaledUnit<T> >
-        ::template Add_Matrix_to_Matrix<self_t, false>::mat_t
+    friend typename scalar_matrix_t::template Add_Matrix_to_Matrix<self_t, false>::mat_t
         operator-(const T &scalar, const self_t &matrix){
-      return Matrix_Frozen<T, Array2D_ScaledUnit<T> >::getScalar(matrix.rows(), scalar) - matrix;
+      return getScalar(matrix.rows(), scalar) - matrix;
     }
 
 
@@ -1931,7 +1937,7 @@ class Matrix_Frozen {
     };
 
     template <class RHS_MatrixT>
-    struct Multiply_Matrix_by_Matrix<RHS_MatrixT, Matrix_Frozen<T, Array2D_ScaledUnit<T> > > {
+    struct Multiply_Matrix_by_Matrix<RHS_MatrixT, scalar_matrix_t> {
       // Specialization for (Scalar_M * M)
       typedef typename RHS_MatrixT::template Multiply_Matrix_by_Scalar<T> generator_t;
       typedef typename generator_t::mat_t mat_t;
@@ -1965,7 +1971,7 @@ class Matrix_Frozen {
      */
     template <class T2>
     typename Multiply_Matrix_by_Scalar<T2>::mat_t
-        operator*(const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &matrix) const {
+        operator*(const /*typename Matrix<T2>::scalar_matrix_t*/ Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &matrix) const {
       if(columns() != matrix.rows()){throw std::invalid_argument("Incorrect size");}
       return Multiply_Matrix_by_Scalar<T2>::generate(*this, matrix(0,0));
     }
