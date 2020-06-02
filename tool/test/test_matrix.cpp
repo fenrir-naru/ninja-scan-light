@@ -11,6 +11,7 @@
 #include "param/complex.h"
 #include "param/matrix.h"
 #include "param/matrix_fixed.h"
+#include "param/matrix_special.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -1162,7 +1163,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   delete [] AB_array;
 }
 
-#if 1
+#if !defined(SKIP_FIXED_MATRIX_TESTS) // tests for fixed
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
@@ -1216,7 +1217,27 @@ BOOST_AUTO_TEST_CASE(fixed_types){
         ::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
 }
+#endif
 
+#if !defined(SKIP_SPECIAL_MATRIX_TESTS) // tests for special
+BOOST_AUTO_TEST_CASE(force_symmetric){
+  assign_linear();
+  prologue_print();
+
+  matrix_t A_(as_symmetric(*A));
+  BOOST_TEST_MESSAGE("symmetric:" << A_);
+  BOOST_CHECK(A->isSymmetric() == false);
+  BOOST_CHECK(A_.isSymmetric() == true);
+
+#if !defined(SKIP_FIXED_MATRIX_TESTS)
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t A_fixed_(as_symmetric(A_fixed));
+  BOOST_TEST_MESSAGE("symmetric_fixed:" << A_fixed_);
+  BOOST_CHECK(A_fixed.isSymmetric() == false);
+  BOOST_CHECK(A_fixed_.isSymmetric() == true);
+#endif
+}
 #endif
 
 BOOST_AUTO_TEST_SUITE_END()
