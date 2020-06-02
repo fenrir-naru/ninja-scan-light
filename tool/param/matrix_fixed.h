@@ -274,7 +274,7 @@ template <
 struct MatrixBuilder<
     MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilder_ViewTransformer<
+    : public MatrixBuilderBase<
         MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
 
   typedef Matrix_Fixed<T,
@@ -289,7 +289,7 @@ template <
 struct MatrixBuilder<
     MatrixT<T, Array2D_Type, ViewType>,
     nR_add, nC_add, 0, 0>
-    : public MatrixBuilder_ViewTransformer<
+    : public MatrixBuilderBase<
         MatrixT<T, Array2D_Type, ViewType> > {
   typedef Matrix_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed ? nC_add : nR_add),
@@ -304,7 +304,7 @@ template <
 struct MatrixBuilder<
     MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
     nR_add, nC_add, 0, 0>
-    : public MatrixBuilder_ViewTransformer<
+    : public MatrixBuilderBase<
         MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
   typedef Matrix_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed ? nC_add : nR_add),
@@ -325,7 +325,7 @@ struct MatrixBuilder<
           Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
         ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilder_ViewTransformer<
+    : public MatrixBuilderBase<
       Matrix_Frozen<
           T,
           Array2D_Operator<T, Array2D_Operator_Multiply<

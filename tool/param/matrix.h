@@ -1103,6 +1103,20 @@ struct MatrixBuilder_ViewTransformer<MatrixT<T, Array2D_ScaledUnit<T>, MatrixVie
   typedef MatrixT<T, Array2D_ScaledUnit<T>, MatrixViewBase<> > transpose_t;
 };
 
+template <class MatrixT>
+struct MatrixBuilderBase : public MatrixBuilder_ViewTransformer<MatrixT> {
+  template <class T2, class Array2D_Type2, class ViewType2>
+  static Matrix<T2, Array2D_Type2, ViewType2> &clone_value(
+      Matrix<T2, Array2D_Type2, ViewType2> &dest, const MatrixT &src) {
+    for(unsigned int i(0); i < src.rows(); ++i){
+      for(unsigned int j(0); j < src.columns(); ++j){
+        dest(i, j) = (T2)(src(i, j));
+      }
+    }
+    return dest;
+  }
+};
+
 template <
     class MatrixT,
     int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
@@ -1115,7 +1129,7 @@ template <
 struct MatrixBuilder<
     MatrixT<T, Array2D_Type, ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilder_ViewTransformer<MatrixT<T, Array2D_Type, ViewType> > {
+    : public MatrixBuilderBase<MatrixT<T, Array2D_Type, ViewType> > {
 
   template <bool is_writable_array, class U = void>
   struct assignable_matrix_t {
@@ -1253,7 +1267,7 @@ class Matrix_Frozen {
     operator typename builder_t::assignable_t() const {
       typedef typename builder_t::assignable_t res_t;
       res_t res(res_t::blank(rows(), columns()));
-      res.replace_internal(*this);
+      builder_t::clone_value(res, *this);
       return res;
     }
 
@@ -2515,7 +2529,7 @@ template <
 struct MatrixBuilder<
     Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilder_ViewTransformer<
+    : public MatrixBuilderBase<
       Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
   template <class MatrixT>
@@ -2767,16 +2781,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return clone_t::blank(rows(), columns());
     }
 
-    template <class T2, class Array2D_Type2, class ViewType2>
-    self_t &replace_internal(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      for(unsigned int i(0); i < rows(); ++i){
-        for(unsigned int j(0); j < columns(); ++j){
-          (*this)(i, j) = (T)matrix(i, j);
-        }
-      }
-      return *this;
-    }
-
   public:
     /**
      * Assign operator performing shallow copy.
@@ -2798,7 +2802,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     struct copy_t {
       static clone_t run(const self_t &self){
         clone_t res(self.blank_copy());
-        res.replace_internal(self);
+        builder_t::clone_value(res, self);
         return res;
       }
     };
@@ -2979,7 +2983,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       if(do_check && isDifferentSize(matrix)){
         throw std::invalid_argument("Incorrect size");
       }
-      return replace_internal(matrix);
+      return Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::clone_value(*this, matrix);
     }
 
     using super_t::isSquare;
@@ -2995,7 +2999,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return myself
      */
     self_t &operator*=(const T &scalar) noexcept {
-      return replace_internal((*this) * scalar);
+      return replace((*this) * scalar, false);
     }
 
     /**
@@ -3016,7 +3020,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator+=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      return replace_internal((*this) + matrix);
+      return replace((*this) + matrix, false);
     }
     
     /**
@@ -3027,7 +3031,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator-=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      return replace_internal((*this) - matrix);
+      return replace((*this) - matrix, false);
     }
 
     /**
@@ -3037,7 +3041,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return myself
      */
     self_t &operator+=(const T &scalar){
-      return replace_internal((*this) + scalar);
+      return replace((*this) + scalar, false);
     }
 
     /**
@@ -3047,7 +3051,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return myself
      */
     self_t &operator-=(const T &scalar){
-      return replace_internal((*this) - scalar);
+      return replace((*this) - scalar, false);
     }
 
     /**
