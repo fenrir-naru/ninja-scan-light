@@ -1229,6 +1229,10 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   BOOST_CHECK(A->isSymmetric() == false);
   BOOST_CHECK(A_.isSymmetric() == true);
 
+  matrix_inspect_contains(as_symmetric(*A), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Symmetric] [Base]"); // should be same after transpose()
+  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Symmetric] [Base]"); // as_symmetric should be effective only once
+
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));

@@ -48,47 +48,80 @@
 #define throws_when_debug noexcept
 #endif
 
-enum {
-  MatrixViewSpecial_Symmetric,
+template <class BaseView>
+struct MatrixViewSpecial_Symmetric;
+
+template <class View>
+struct MatrixViewSpecialBuilder : public MatrixViewBuilder<View> {
+  typedef View view_t;
+  template <template <class> class RemoveView>
+  struct remove_t {
+    typedef MatrixViewSpecialBuilder<
+        typename MatrixViewBuilder<View>::template remove_t<RemoveView>::res_t> builder_t;
+  };
+  typedef typename remove_t<MatrixViewSpecial_Symmetric>::builder_t::view_t none_special_t;
 };
 
-template <int i>
-struct MatrixViewSpecial {
-  template <class BaseView>
-  struct impl_t : public BaseView {};
+// Symmetric {
+template <class BaseView>
+struct MatrixViewSpecial_Symmetric : public BaseView {
+  static const char *name;
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out,
+      const MatrixViewSpecial_Symmetric<BaseView> &view){
+    return out << name << " " << (const BaseView &)view;
+  }
 };
+template <class BaseView>
+const char *MatrixViewSpecial_Symmetric<BaseView>::name = "[Symmetric]";
 
 template <class T, class Array2D_Type, class ViewType>
 struct Matrix_Symmetric
-    : public Matrix_Frozen<
-      T, Array2D_Type,
-      typename MatrixViewSpecial<MatrixViewSpecial_Symmetric>::impl_t<ViewType> > {
+    : public Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > {
   typedef Matrix_Symmetric<T, Array2D_Type, ViewType> self_t;
-  typedef Matrix_Frozen<
-      T, Array2D_Type,
-      typename MatrixViewSpecial<MatrixViewSpecial_Symmetric>::impl_t<ViewType> > super_t;
-  Matrix_Symmetric(
-      const Matrix_Frozen<T, Array2D_Type, ViewType> &mat) noexcept : super_t(mat){}
+  typedef Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > super_t;
+  template <class ViewType2>
+  Matrix_Symmetric(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
+      : super_t(mat){
+    /* Reason to use template ViewType2 is to treat with duplication of special view.
+     * For example, if as_symmetric(as_symmetric(mat)), then this construct receives
+     * ViewType2 == Symmetric<AnotherBaseView> different from ViewType = AnotherBaseView.
+     */
+  }
   // TODO some functions
 };
 template <class T, class Array2D_Type, class ViewType>
-Matrix_Symmetric<T, Array2D_Type, ViewType> as_symmetric(
+Matrix_Symmetric<
+    T, Array2D_Type,
+    typename MatrixViewSpecialBuilder<ViewType>::none_special_t>
+    as_symmetric(
     const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
-  return Matrix_Symmetric<T, Array2D_Type, ViewType>(mat);
+  return Matrix_Symmetric<
+      T, Array2D_Type,
+      typename MatrixViewSpecialBuilder<ViewType>::none_special_t>(mat);
 }
+template <
+    template <class, class, class> class MatrixT,
+    class T, class Array2D_Type, class ViewType>
+struct MatrixBuilder_ViewTransformer<
+    MatrixT<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > >
+    : public MatrixBuilder_ViewTransformerBase<
+        MatrixT<T, Array2D_Type, ViewType> > {
+  typedef MatrixT<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > transpose_t;
+};
 template <class T, class Array2D_Type, class ViewType>
 struct MatrixBuilderBase<
     Matrix_Frozen<
-      T, Array2D_Type,
-      typename MatrixViewSpecial<MatrixViewSpecial_Symmetric>::impl_t<ViewType> > >
-    : public MatrixBuilder_ViewTransformer<Matrix_Frozen<T, Array2D_Type, ViewType> > {
+      T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > >
+    : public MatrixBuilder_ViewTransformer<Matrix_Frozen<
+      T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > > {
 
   template <class T2, class Array2D_Type2, class ViewType2>
   static Matrix<T2, Array2D_Type2, ViewType2> &clone_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest,
       const Matrix_Frozen<
-        T, Array2D_Type,
-        typename MatrixViewSpecial<MatrixViewSpecial_Symmetric>::impl_t<ViewType> > &src) {
+        T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > &src) {
     // use only upper triangle; lower one is cloned with upper one.
     for(unsigned int i(0); i < src.rows(); ++i){
       dest(i, i) = (T2)(src(i, i));
@@ -99,6 +132,7 @@ struct MatrixBuilderBase<
     return dest;
   }
 };
+// }
 
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)
