@@ -1242,6 +1242,30 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   BOOST_CHECK(A_fixed_.isSymmetric() == true);
 #endif
 }
+
+BOOST_AUTO_TEST_CASE(force_diagonal){
+  assign_linear();
+  prologue_print();
+
+  matrix_t A_(as_diagonal(*A));
+  BOOST_TEST_MESSAGE("diagonal:" << A_);
+  BOOST_CHECK(A->isDiagonal() == false);
+  BOOST_CHECK(A_.isDiagonal() == true);
+
+  matrix_inspect_contains(as_diagonal(*A), "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Diagonal] [Base]"); // should be same after transpose()
+  matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Diagonal] [Base]"); // as_diagonal should be effective only once
+  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "*view: [Diagonal] [Base]"); // only one special view can be used.
+
+#if !defined(SKIP_FIXED_MATRIX_TESTS)
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t A_fixed_(as_diagonal(A_fixed));
+  BOOST_TEST_MESSAGE("diagonal_fixed:" << A_fixed_);
+  BOOST_CHECK(A_fixed.isDiagonal() == false);
+  BOOST_CHECK(A_fixed_.isDiagonal() == true);
+#endif
+}
 #endif
 
 BOOST_AUTO_TEST_SUITE_END()

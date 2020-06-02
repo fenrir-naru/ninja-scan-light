@@ -51,6 +51,9 @@
 template <class BaseView>
 struct MatrixViewSpecial_Symmetric;
 
+template <class BaseView>
+struct MatrixViewSpecial_Diagonal;
+
 template <class View>
 struct MatrixViewSpecialBuilder : public MatrixViewBuilder<View> {
   typedef View view_t;
@@ -59,7 +62,9 @@ struct MatrixViewSpecialBuilder : public MatrixViewBuilder<View> {
     typedef MatrixViewSpecialBuilder<
         typename MatrixViewBuilder<View>::template remove_t<RemoveView>::res_t> builder_t;
   };
-  typedef typename remove_t<MatrixViewSpecial_Symmetric>::builder_t::view_t none_special_t;
+  typedef typename remove_t<MatrixViewSpecial_Symmetric>::builder_t
+      ::template remove_t<MatrixViewSpecial_Diagonal>::builder_t
+      ::view_t none_special_t;
 };
 
 // Symmetric {
@@ -127,6 +132,73 @@ struct MatrixBuilderBase<
       dest(i, i) = (T2)(src(i, i));
       for(unsigned int j(i+1); j < src.columns(); ++j){
         dest(i, j) = dest(j, i) = (T2)(src(i, j));
+      }
+    }
+    return dest;
+  }
+};
+// }
+
+// Diagonal {
+template <class BaseView>
+struct MatrixViewSpecial_Diagonal : public BaseView {
+  static const char *name;
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out,
+      const MatrixViewSpecial_Diagonal<BaseView> &view){
+    return out << name << " " << (const BaseView &)view;
+  }
+};
+template <class BaseView>
+const char *MatrixViewSpecial_Diagonal<BaseView>::name = "[Diagonal]";
+
+template <class T, class Array2D_Type, class ViewType>
+struct Matrix_Diagonal
+    : public Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > {
+  typedef Matrix_Diagonal<T, Array2D_Type, ViewType> self_t;
+  typedef Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > super_t;
+  template <class ViewType2>
+  Matrix_Diagonal(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
+      : super_t(mat){
+  }
+  // TODO some functions
+};
+template <class T, class Array2D_Type, class ViewType>
+Matrix_Diagonal<
+    T, Array2D_Type,
+    typename MatrixViewSpecialBuilder<ViewType>::none_special_t>
+    as_diagonal(
+    const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
+  return Matrix_Diagonal<
+      T, Array2D_Type,
+      typename MatrixViewSpecialBuilder<ViewType>::none_special_t>(mat);
+}
+template <
+    template <class, class, class> class MatrixT,
+    class T, class Array2D_Type, class ViewType>
+struct MatrixBuilder_ViewTransformer<
+    MatrixT<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > >
+    : public MatrixBuilder_ViewTransformerBase<
+        MatrixT<T, Array2D_Type, ViewType> > {
+  typedef MatrixT<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > transpose_t;
+};
+template <class T, class Array2D_Type, class ViewType>
+struct MatrixBuilderBase<
+    Matrix_Frozen<
+      T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > >
+    : public MatrixBuilder_ViewTransformer<Matrix_Frozen<
+      T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > > {
+
+  template <class T2, class Array2D_Type2, class ViewType2>
+  static Matrix<T2, Array2D_Type2, ViewType2> &clone_value(
+      Matrix<T2, Array2D_Type2, ViewType2> &dest,
+      const Matrix_Frozen<
+        T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > &src) {
+    for(unsigned int i(0); i < src.rows(); ++i){
+      dest(i, i) = (T2)(src(i, i));
+      for(unsigned int j(i+1); j < src.columns(); ++j){
+        dest(i, j) = dest(j, i) = (T2)0;
       }
     }
     return dest;
