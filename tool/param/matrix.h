@@ -1104,9 +1104,9 @@ struct MatrixBuilder_ViewTransformer<MatrixT<T, Array2D_ScaledUnit<T>, MatrixVie
 };
 
 template <class MatrixT>
-struct MatrixBuilderBase : public MatrixBuilder_ViewTransformer<MatrixT> {
+struct MatrixBuilder_ValueCopier {
   template <class T2, class Array2D_Type2, class ViewType2>
-  static Matrix<T2, Array2D_Type2, ViewType2> &clone_value(
+  static Matrix<T2, Array2D_Type2, ViewType2> &copy_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest, const MatrixT &src) {
     for(unsigned int i(0); i < src.rows(); ++i){
       for(unsigned int j(0); j < src.columns(); ++j){
@@ -1116,6 +1116,35 @@ struct MatrixBuilderBase : public MatrixBuilder_ViewTransformer<MatrixT> {
     return dest;
   }
 };
+
+template <class MatrixT>
+struct MatrixBuilder_Assignable;
+
+template <
+    template <class, class, class> class MatrixT,
+    class T, class Array2D_Type, class ViewType>
+struct MatrixBuilder_Assignable<MatrixT<T, Array2D_Type, ViewType> > {
+  template <class T2, bool is_writable_array = Array2D_Type::writable>
+  struct assignable_matrix_t {
+    typedef Matrix<T2> res_t;
+  };
+  template <class T2>
+  struct assignable_matrix_t<T2, true> {
+    typedef Matrix<T2, typename Array2D_Type::template family_t<T2>::res_t> res_t;
+  };
+  typedef typename assignable_matrix_t<T>::res_t assignable_t;
+
+  template <class T2>
+  struct family_t {
+    typedef typename assignable_matrix_t<T2>::res_t assignable_t;
+  };
+};
+
+template <class MatrixT>
+struct MatrixBuilderBase
+    : public MatrixBuilder_ViewTransformer<MatrixT>,
+    public MatrixBuilder_ValueCopier<MatrixT>,
+    public MatrixBuilder_Assignable<MatrixT> {};
 
 template <
     class MatrixT,
@@ -1130,16 +1159,6 @@ struct MatrixBuilder<
     MatrixT<T, Array2D_Type, ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply>
     : public MatrixBuilderBase<MatrixT<T, Array2D_Type, ViewType> > {
-
-  template <bool is_writable_array, class U = void>
-  struct assignable_matrix_t {
-    typedef Matrix<T> res_t;
-  };
-  template <class U>
-  struct assignable_matrix_t<true, U> {
-    typedef Matrix<T, Array2D_Type> res_t;
-  };
-  typedef typename assignable_matrix_t<Array2D_Type::writable>::res_t assignable_t;
 };
 
 /**
@@ -1267,7 +1286,7 @@ class Matrix_Frozen {
     operator typename builder_t::assignable_t() const {
       typedef typename builder_t::assignable_t res_t;
       res_t res(res_t::blank(rows(), columns()));
-      builder_t::clone_value(res, *this);
+      builder_t::copy_value(res, *this);
       return res;
     }
 
@@ -2604,7 +2623,16 @@ struct MatrixBuilder<
   typedef typename MatrixBuilder<
       typename MatrixBuilder<typename check_t<>::mat_t>::template view_merge_t<ViewType>::merged_t,
       nR_add, nC_add, nR_multiply, nC_multiply>::assignable_t assignable_t;
+
+  template <class T2>
+  struct family_t {
+    typedef typename MatrixBuilder<assignable_t>::template family_t<T2>::assignable_t assignable_t;
+  };
 };
+// Remove default assignable_t, family_t
+template <class T, class OperatorT, class ViewType>
+struct MatrixBuilder_Assignable<
+    Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {};
 
 
 /**
@@ -2802,7 +2830,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     struct copy_t {
       static clone_t run(const self_t &self){
         clone_t res(self.blank_copy());
-        builder_t::clone_value(res, self);
+        builder_t::copy_value(res, self);
         return res;
       }
     };
@@ -2983,7 +3011,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       if(do_check && isDifferentSize(matrix)){
         throw std::invalid_argument("Incorrect size");
       }
-      return Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::clone_value(*this, matrix);
+      return Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::copy_value(*this, matrix);
     }
 
     using super_t::isSquare;

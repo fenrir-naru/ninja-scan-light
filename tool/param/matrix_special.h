@@ -116,14 +116,12 @@ struct MatrixBuilder_ViewTransformer<
   typedef MatrixT<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > transpose_t;
 };
 template <class T, class Array2D_Type, class ViewType>
-struct MatrixBuilderBase<
+struct MatrixBuilder_ValueCopier<
     Matrix_Frozen<
-      T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > >
-    : public MatrixBuilder_ViewTransformer<Matrix_Frozen<
       T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > > {
 
   template <class T2, class Array2D_Type2, class ViewType2>
-  static Matrix<T2, Array2D_Type2, ViewType2> &clone_value(
+  static Matrix<T2, Array2D_Type2, ViewType2> &copy_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest,
       const Matrix_Frozen<
         T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > &src) {
@@ -184,14 +182,12 @@ struct MatrixBuilder_ViewTransformer<
   typedef MatrixT<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > transpose_t;
 };
 template <class T, class Array2D_Type, class ViewType>
-struct MatrixBuilderBase<
+struct MatrixBuilder_ValueCopier<
     Matrix_Frozen<
-      T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > >
-    : public MatrixBuilder_ViewTransformer<Matrix_Frozen<
       T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > > {
 
   template <class T2, class Array2D_Type2, class ViewType2>
-  static Matrix<T2, Array2D_Type2, ViewType2> &clone_value(
+  static Matrix<T2, Array2D_Type2, ViewType2> &copy_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest,
       const Matrix_Frozen<
         T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > &src) {
