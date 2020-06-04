@@ -268,14 +268,41 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
 };
 
 template <
+    class T, int nR, int nC,
+    int nR_add, int nC_add, int nR_multiply, int nC_multiply>
+struct MatrixBuilder<
+    Matrix_Fixed<T, nR, nC>,
+    nR_add, nC_add, nR_multiply, nC_multiply> {
+
+  typedef Matrix_Fixed<T, nR * nR_multiply + nR_add, nC * nC_multiply + nC_add> assignable_t;
+
+  template <class T2>
+  struct family_t {
+    typedef Matrix_Fixed<T2, nR * nR_multiply + nR_add, nC * nC_multiply + nC_add> assignable_t;
+  };
+};
+
+template <
+    template <class, class, class> class MatrixT,
+    class T, int nR, int nC, class ViewType>
+struct MatrixBuilder<
+    MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
+    0, 0, 1, 1>
+    : public MatrixBuilderBase<
+        MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
+
+  typedef Matrix_Fixed<T,
+      (MatrixViewProperty<ViewType>::transposed ? nC : nR),
+      (MatrixViewProperty<ViewType>::transposed ? nR : nC)> assignable_t;
+};
+
+template <
     template <class, class, class> class MatrixT,
     class T, int nR, int nC, class ViewType,
     int nR_add, int nC_add, int nR_multiply, int nC_multiply>
 struct MatrixBuilder<
     MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
-    nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilderBase<
-        MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
+    nR_add, nC_add, nR_multiply, nC_multiply> {
 
   typedef Matrix_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed ? nC : nR) * nR_multiply + nR_add,
@@ -289,12 +316,7 @@ template <
 struct MatrixBuilder<
     MatrixT<T, Array2D_Type, ViewType>,
     nR_add, nC_add, 0, 0>
-    : public MatrixBuilderBase<
-        MatrixT<T, Array2D_Type, ViewType> > {
-  typedef Matrix_Fixed<T,
-      (MatrixViewProperty<ViewType>::transposed ? nC_add : nR_add),
-      (MatrixViewProperty<ViewType>::transposed ? nR_add : nC_add)> assignable_t;
-};
+    : public MatrixBuilder<MatrixT<T, Array2D_Fixed<T, nR_add, nC_add>, ViewType> > {};
 
 // For resolution of partial specialization ambiguity
 template <
@@ -304,11 +326,35 @@ template <
 struct MatrixBuilder<
     MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
     nR_add, nC_add, 0, 0>
+    : public MatrixBuilder<MatrixT<T, Array2D_Fixed<T, nR_add, nC_add>, ViewType> > {};
+
+template <
+    class T,
+    class ViewType,
+    int nR_L, int nC_L, class ViewType_L,
+    int nR_R, int nC_R, class ViewType_R>
+struct MatrixBuilder<
+    Matrix_Frozen<
+        T,
+        Array2D_Operator<T, Array2D_Operator_Multiply<
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+        ViewType>,
+    0, 0, 1, 1>
     : public MatrixBuilderBase<
-        MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
+      Matrix_Frozen<
+          T,
+          Array2D_Operator<T, Array2D_Operator_Multiply<
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          ViewType> > {
   typedef Matrix_Fixed<T,
-      (MatrixViewProperty<ViewType>::transposed ? nC_add : nR_add),
-      (MatrixViewProperty<ViewType>::transposed ? nR_add : nC_add)> assignable_t;
+      (MatrixViewProperty<ViewType>::transposed
+          ? (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R)
+          : (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L)),
+      (MatrixViewProperty<ViewType>::transposed
+          ? (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L)
+          : (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R))> assignable_t;
 };
 
 template <
@@ -324,14 +370,7 @@ struct MatrixBuilder<
           Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
           Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
         ViewType>,
-    nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilderBase<
-      Matrix_Frozen<
-          T,
-          Array2D_Operator<T, Array2D_Operator_Multiply<
-            Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
-          ViewType> > {
+    nR_add, nC_add, nR_multiply, nC_multiply> {
   typedef Matrix_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed
           ? (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R)
