@@ -1120,6 +1120,17 @@ struct MatrixBuilder_ValueCopier {
 template <class MatrixT>
 struct MatrixBuilder_Assignable;
 
+template <class MatrixT>
+struct MatrixBuilderBase
+    : public MatrixBuilder_ViewTransformer<MatrixT>,
+    public MatrixBuilder_ValueCopier<MatrixT>,
+    public MatrixBuilder_Assignable<MatrixT> {};
+
+template <
+    class MatrixT,
+    int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
+struct MatrixBuilder;
+
 template <
     template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType>
@@ -1136,20 +1147,10 @@ struct MatrixBuilder_Assignable<MatrixT<T, Array2D_Type, ViewType> > {
 
   template <class T2>
   struct family_t {
-    typedef typename assignable_matrix_t<T2>::res_t assignable_t;
+    typedef typename MatrixBuilder<
+        typename assignable_matrix_t<T2>::res_t>::assignable_t assignable_t;
   };
 };
-
-template <class MatrixT>
-struct MatrixBuilderBase
-    : public MatrixBuilder_ViewTransformer<MatrixT>,
-    public MatrixBuilder_ValueCopier<MatrixT>,
-    public MatrixBuilder_Assignable<MatrixT> {};
-
-template <
-    class MatrixT,
-    int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
-struct MatrixBuilder;
 
 template <
     template <class, class, class> class MatrixT,
@@ -2359,6 +2360,435 @@ class Matrix_Frozen {
       return ((typename builder_t::assignable_t)(*this)).pivotMerge(row, column, matrix);
     }
 
+    /**
+     * Calculate Hessenberg matrix by performing householder conversion
+     *
+     * @param transform Pointer to store multiplication of matrices used for the conversion.
+     * If NULL is specified, the store will not be performed, The default is NULL.
+     * @return Hessenberg matrix
+     * @throw std::logic_error When operation is undefined
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename builder_t::assignable_t hessenberg(
+        Matrix<T2, Array2D_Type2, ViewType2> *transform = NULL) const {
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
+
+      typename builder_t::assignable_t result(*this);
+      typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
+      omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
+      for(unsigned int j(0); j < columns() - 2; j++){
+        T t(0);
+        for(unsigned int i(j + 1); i < rows(); i++){
+          t += pow(result(i, j), 2);
+        }
+        T s = ::sqrt(t);
+        if(result(j + 1, j) < 0){s *= -1;}
+
+        typename omega_buf_t::partial_offsetless_t omega(omega_buf.partial(rows() - (j+1), 1));
+        {
+          for(unsigned int i(0); i < omega.rows(); i++){
+            omega(i, 0) = result(j+i+1, j);
+          }
+          omega(0, 0) += s;
+        }
+
+        typename builder_t::assignable_t P(getI(rows()));
+        T denom(t + result(j + 1, j) * s);
+        if(denom){
+          P.pivotMerge(j+1, j+1, -(omega * omega.transpose() / denom));
+        }
+
+        result = P * result * P;
+        if(transform){(*transform) *= P;}
+      }
+
+      //ゼロ処理
+      bool sym = isSymmetric();
+      for(unsigned int j(0); j < columns() - 2; j++){
+        for(unsigned int i(j + 2); i < rows(); i++){
+          result(i, j) = T(0);
+          if(sym){result(j, i) = T(0);}
+        }
+      }
+
+      return result;
+    }
+
+
+    struct complex_t {
+      template <class T2>
+      struct check_t {
+        static const bool hit = false;
+        typedef Complex<T2> res_t;
+      };
+      template <class T2>
+      struct check_t<Complex<T2> > {
+        static const bool hit = true;
+        typedef Complex<T2> res_t;
+      };
+      static const bool is_complex = check_t<T>::hit;
+      typedef typename check_t<T>::res_t v_t;
+      typedef typename builder_t::template family_t<v_t>::assignable_t m_t;
+    };
+
+    /**
+     * Calculate eigenvalues of 2 by 2 partial matrix.
+     *
+     * @param row Upper row index of the partial matrix
+     * @param column Left column index of the partial matrix
+     * @param upper Eigenvalue (1)
+     * @param lower Eigenvalue (2)
+     */
+    void eigen22(
+        const unsigned int &row, const unsigned int &column,
+        typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
+      T a((*this)(row, column)),
+        b((*this)(row, column + 1)),
+        c((*this)(row + 1, column)),
+        d((*this)(row + 1, column + 1));
+      T root2(pow((a - d), 2) + b * c * 4);
+      if(complex_t::is_complex || (root2 > 0)){
+        T root(::sqrt(root2));
+        upper = ((a + d + root) / 2);
+        lower = ((a + d - root) / 2);
+      }else{
+        T root(::sqrt(root2 * -1));
+        upper = typename complex_t::v_t((a + d) / 2, root / 2);
+        lower = typename complex_t::v_t((a + d) / 2, root / 2 * -1);
+      }
+    }
+
+    /**
+     * Calculate eigenvalues and eigenvectors.
+     * The return matrix consists of
+     * (0,j)-(n-1,j): Eigenvector (j) (0 <= j <= n-1)
+     * (j,n)-(j,n): Eigenvalue (j)
+     *
+     * @param threshold_abs Absolute error to be used for convergence determination
+     * @param threshold_rel Relative error to be used for convergence determination
+     * @return Eigenvalues and eigenvectors
+     * @throw std::logic_error When operation is undefined
+     * @throw std::runtime_error When operation is unavailable
+     */
+    typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t eigen(
+        const T &threshold_abs = 1E-10,
+        const T &threshold_rel = 1E-7) const {
+
+      typedef typename complex_t::m_t cmat_t;
+      typedef typename MatrixBuilder<cmat_t, 0, 1, 1, 0>::assignable_t cvec_t;
+      typedef typename MatrixBuilder<cmat_t, 0, 1>::assignable_t res_t;
+
+      if(!isSquare()){throw std::logic_error("rows() != columns()");}
+
+#if 0
+      //パワー法(べき乗法)
+      typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows(), rows() + 1);
+      typename builder_t::assignable_t source(*this);
+      for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
+      for(unsigned int i(0); i < columns(); i++){
+        while(true){
+          typename MatrixBuilder<self_t, 0, 1>::assignable_t approxVec(source * result.columnVector(i));
+          T approxVal(0);
+          for(unsigned int j(0); j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
+          approxVal = sqrt(approxVal);
+          for(unsigned int j(0); j < approxVec.rows(); j++){result(j, i) = approxVec(j, 0) / approxVal;}
+          T before = result(i, rows());
+          if(abs(before - (result(i, rows()) = approxVal)) < threshold){break;}
+        }
+        for(unsigned int j(0); (i < rows() - 1) && (j < rows()); j++){
+          for(unsigned int k(0); k < rows(); k++){
+            source(j, k) -= result(i, rows()) * result(j, i) * result(k, i);
+          }
+        }
+      }
+      return result;
+#endif
+
+      // Double QR method
+      /* <Procedure>
+       * 1) Transform upper Hessenburg's matrix by using Householder's method
+       * ハウスホルダー法を適用して、上ヘッセンベルク行列に置換後
+       * 2) Then, Apply double QR method to get eigenvalues
+       * ダブルQR法を適用。
+       * 3) Finally, compute eigenvectors
+       * 結果、固有値が得られるので、固有ベクトルを計算。
+       */
+
+      const unsigned int &_rows(rows());
+
+      // 結果の格納用の行列
+      res_t result(_rows, _rows + 1);
+
+      // 固有値の計算
+#define lambda(i) result(i, _rows)
+
+      T mu_sum(0), mu_multi(0);
+      typename complex_t::v_t p1, p2;
+      int m = _rows;
+      bool first = true;
+
+      typename builder_t::assignable_t transform(getI(_rows));
+      typename builder_t::assignable_t A(hessenberg(&transform));
+      typename builder_t::assignable_t A_(A);
+
+      while(true){
+
+        //m = 1 or m = 2
+        if(m == 1){
+          lambda(0) = A(0, 0);
+          break;
+        }else if(m == 2){
+          A.eigen22(0, 0, lambda(0), lambda(1));
+          break;
+        }
+
+        //μ、μ*の更新(4.143)
+        {
+          typename complex_t::v_t p1_new, p2_new;
+          A.eigen22(m-2, m-2, p1_new, p2_new);
+          if(first ? (first = false) : true){
+            if((p1_new - p1).abs() > p1_new.abs() / 2){
+              if((p2_new - p2).abs() > p2_new.abs() / 2){
+                mu_sum = (p1 + p2).real();
+                mu_multi = (p1 * p2).real();
+              }else{
+                mu_sum = p2_new.real() * 2;
+                mu_multi = pow(p2_new.real(), 2);
+              }
+            }else{
+              if((p2_new - p2).abs() > p2_new.abs() / 2){
+                mu_sum = p1_new.real() * 2;
+                mu_multi = p1_new.real() * p1_new.real();
+              }else{
+                mu_sum = (p1_new + p2_new).real();
+                mu_multi = (p1_new * p2_new).real();
+              }
+            }
+          }
+          p1 = p1_new, p2 = p2_new;
+        }
+
+        //ハウスホルダー変換を繰り返す
+        T b1, b2, b3, r;
+        for(int i(0); i < m - 1; i++){
+          if(i == 0){
+            b1 = A(0, 0) * A(0, 0) - mu_sum * A(0, 0) + mu_multi + A(0, 1) * A(1, 0);
+            b2 = A(1, 0) * (A(0, 0) + A(1, 1) - mu_sum);
+            b3 = A(2, 1) * A(1, 0);
+          }else{
+            b1 = A(i, i - 1);
+            b2 = A(i + 1, i - 1);
+            b3 = (i == m - 2 ? T(0) : A(i + 2, i - 1));
+          }
+
+          r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
+
+          typename MatrixBuilder<self_t, 3, 1, 0, 0>::assignable_t omega(3, 1);
+          {
+            omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
+            omega(1, 0) = b2;
+            if(b3 != T(0)){omega(2, 0) = b3;}
+          }
+          typename builder_t::assignable_t P(getI(_rows));
+          T denom((omega.transpose() * omega)(0, 0));
+          if(denom){
+            P.pivotMerge(i, i, omega * omega.transpose() * -2 / denom);
+          }
+          //std::cout << "denom(" << m << ") " << denom << std::endl;
+
+          A = P * A * P;
+        }
+        //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
+
+#if defined(_MSC_VER)
+        if(_isnan(A(m-1,m-2)) || !_finite(A(m-1,m-2))){
+#else
+        if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
+#endif
+          throw std::runtime_error("eigen values calculation failed");
+        }
+
+        // Convergence test; 収束判定
+#define _abs(x) ((x) >= 0 ? (x) : -(x))
+        T A_m2_abs(_abs(A(m-2, m-2))), A_m1_abs(_abs(A(m-1, m-1)));
+        T epsilon(threshold_abs
+          + threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
+
+        //std::cout << "epsil(" << m << ") " << epsilon << std::endl;
+
+        if(_abs(A(m-1, m-2)) < epsilon){
+          --m;
+          lambda(m) = A(m, m);
+        }else if(_abs(A(m-2, m-3)) < epsilon){
+          A.eigen22(m-2, m-2, lambda(m-1), lambda(m-2));
+          m -= 2;
+        }
+      }
+#undef _abs
+
+#if defined(MATRIX_EIGENVEC_SIMPLE)
+      // 固有ベクトルの計算
+      cmat_t x(_rows, _rows);  // 固有ベクトル
+      A = A_;
+
+      for(unsigned int j(0); j < _rows; j++){
+        unsigned int n = _rows;
+        for(unsigned int i(0); i < j; i++){
+          if((lambda(j) - lambda(i)).abs() <= threshold_abs){--n;}
+        }
+        //std::cout << n << ", " << lambda(j) << std::endl;
+        x(--n, j) = 1;
+        while(n-- > 0){
+          x(n, j) = x(n+1, j) * (lambda(j) - A(n+1, n+1));
+          for(unsigned int i(n+2); i < _rows; i++){
+            x(n, j) -= x(i, j) * A(n+1, i);
+          }
+          if(A(n+1, n)){x(n, j) /= A(n+1, n);}
+        }
+        //std::cout << x.partial(_rows, 1, 0, j).transpose() << std::endl;
+      }
+#else
+      // Inverse Iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
+      cmat_t x(cmat_t::getI(_rows));  //固有ベクトル
+      A = A_;
+      cmat_t A_C(_rows, _rows);
+      for(unsigned int i(0); i < _rows; i++){
+        for(unsigned int j(0); j < columns(); j++){
+          A_C(i, j) = A(i, j);
+        }
+      }
+
+      for(unsigned int j(0); j < _rows; j++){
+        // http://www.prefield.com/algorithm/math/eigensystem.html を参考に
+        // かつ、固有値が等しい場合の対処方法として、
+        // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
+        // を参考に、値を振ってみることにした
+        cmat_t A_C_lambda(A_C.copy());
+        typename complex_t::v_t approx_lambda(lambda(j));
+        if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
+          approx_lambda += 2E-3;
+        }
+        for(unsigned int i(0); i < _rows; i++){
+          A_C_lambda(i, i) -= approx_lambda;
+        }
+        typename MatrixBuilder<typename complex_t::m_t, 0, 0, 1, 2>::assignable_t
+            A_C_lambda_LU(A_C_lambda.decomposeLU());
+
+        cvec_t target_x(cvec_t::blank(_rows, 1));
+        for(unsigned i(0); i < _rows; ++i){
+          target_x(i, 0) = x(i, j);
+        }
+        for(unsigned loop(0); true; loop++){
+          cvec_t target_x_new(
+              A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
+          T mu((target_x_new.transpose() * target_x)(0, 0).abs2()),
+            v2((target_x_new.transpose() * target_x_new)(0, 0).abs2()),
+            v2s(::sqrt(v2));
+          for(unsigned i(0); i < _rows; ++i){
+            target_x(i, 0) = target_x_new(i, 0) / v2s;
+          }
+          //std::cout << mu << ", " << v2 << std::endl;
+          //std::cout << target_x.transpose() << std::endl;
+          if((T(1) - (mu * mu / v2)) < T(1.1)){
+            for(unsigned i(0); i < _rows; ++i){
+              x(i, j) = target_x(i, 0);
+            }
+            break;
+          }
+          if(loop > 100){
+            throw std::runtime_error("eigen vectors calculation failed");
+          }
+        }
+      }
+#endif
+
+      /*res_t lambda2(_rows, _rows);
+      for(unsigned int i(0); i < _rows; i++){
+        lambda2(i, i) = lambda(i);
+      }
+
+      std::cout << "A:" << A << std::endl;
+      //std::cout << "x * x^-1" << x * x.inverse() << std::endl;
+      std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
+
+      // 結果の格納
+      for(unsigned int j(0); j < x.columns(); j++){
+        for(unsigned int i(0); i < x.rows(); i++){
+          for(unsigned int k(0); k < transform.columns(); k++){
+            result(i, j) += transform(i, k) * x(k, j);
+          }
+        }
+
+        // Normalization; 正規化
+        typename complex_t::v_t _norm;
+        for(unsigned int i(0); i < _rows; i++){
+          _norm += result(i, j).abs2();
+        }
+        T norm = ::sqrt(_norm.real());
+        for(unsigned int i(0); i < _rows; i++){
+          result(i, j) /= norm;
+        }
+        //std::cout << result.partial(_rows, 1, 0, j).transpose() << std::endl;
+      }
+#undef lambda
+
+      return result;
+    }
+
+  protected:
+    /**
+     * Calculate square root of a matrix
+     *
+     * If matrix (A) can be decomposed as
+     * @f[
+     *    A = V D V^{-1},
+     * @f]
+     * where D and V are diagonal matrix consisting of eigenvalues and eigenvectors, respectively,
+     * the square root A^{1/2} is
+     * @f[
+     *    A^{1/2} = V D^{1/2} V^{-1}.
+     * @f]
+     *
+     * @param eigen_mat result of eigen()
+     * @return square root
+     * @see eiegn(const T &, const T &)
+     */
+    template <class MatrixT>
+    static typename MatrixBuilder<MatrixT, 0, -1>::assignable_t sqrt(
+        const MatrixT &eigen_mat){
+      unsigned int n(eigen_mat.rows());
+      typename MatrixT::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename MatrixBuilder<MatrixT, 0, -1>::assignable_t nV(VsD.inverse());
+      for(unsigned int i(0); i < n; i++){
+        nV.partial(1, n, i, 0) *= (eigen_mat(i, n).sqrt());
+      }
+
+      return (typename MatrixBuilder<MatrixT, 0, -1>::assignable_t)(VsD * nV);
+    }
+
+  public:
+    /**
+     * Calculate square root of a matrix
+     *
+     * @param threshold_abs Absolute error to be used for convergence determination of eigenvalue calculation
+     * @param threshold_rel Relative error to be used for convergence determination of eigenvalue calculation
+     * @return square root
+     * @see eigen(const T &, const T &)
+     */
+    typename complex_t::m_t sqrt(
+        const T &threshold_abs,
+        const T &threshold_rel) const {
+      return sqrt(eigen(threshold_abs, threshold_rel));
+    }
+
+    /**
+     * Calculate square root
+     *
+     * @return square root
+     */
+    typename complex_t::m_t sqrt() const {
+      return sqrt(eigen());
+    }
 
     /**
      * Print matrix
@@ -2623,16 +3053,19 @@ struct MatrixBuilder<
   typedef typename MatrixBuilder<
       typename MatrixBuilder<typename check_t<>::mat_t>::template view_merge_t<ViewType>::merged_t,
       nR_add, nC_add, nR_multiply, nC_multiply>::assignable_t assignable_t;
+};
+// Remove default assignable_t, and make family_t depend on assignable_t defined in sub class
+template <class T, class OperatorT, class ViewType>
+struct MatrixBuilder_Assignable<
+    Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
   template <class T2>
   struct family_t {
-    typedef typename MatrixBuilder<assignable_t>::template family_t<T2>::assignable_t assignable_t;
+    typedef typename MatrixBuilder<
+        typename MatrixBuilder<Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> >::assignable_t>
+        ::template family_t<T2>::assignable_t assignable_t;
   };
 };
-// Remove default assignable_t, family_t
-template <class T, class OperatorT, class ViewType>
-struct MatrixBuilder_Assignable<
-    Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {};
 
 
 /**
@@ -3129,437 +3562,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return *this;
     }
 
-    /**
-     * Calculate Hessenberg matrix by performing householder conversion
-     *
-     * @param transform Pointer to store multiplication of matrices used for the conversion.
-     * If NULL is specified, the store will not be performed, The default is NULL.
-     * @return Hessenberg matrix
-     * @throw std::logic_error When operation is undefined
-     */
-    clone_t hessenberg(clone_t *transform = NULL) const {
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
-
-      clone_t result(copy());
-      typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
-      omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
-      for(unsigned int j(0); j < columns() - 2; j++){
-        T t(0);
-        for(unsigned int i(j + 1); i < rows(); i++){
-          t += pow(result(i, j), 2);
-        }
-        T s = ::sqrt(t);
-        if(result(j + 1, j) < 0){s *= -1;}
-
-        typename omega_buf_t::partial_t omega(omega_buf.partial(rows() - (j+1), 1, 0, 0));
-        {
-          for(unsigned int i(0); i < omega.rows(); i++){
-            omega(i, 0) = result(j+i+1, j);
-          }
-          omega(0, 0) += s;
-        }
-
-        clone_t P(super_t::getI(rows()));
-        T denom(t + result(j + 1, j) * s);
-        if(denom){
-          P.pivotMerge(j+1, j+1, -(omega * omega.transpose() / denom));
-        }
-
-        result = P * result * P;
-        if(transform){(*transform) *= P;}
-      }
-
-      //ゼロ処理
-      bool sym = isSymmetric();
-      for(unsigned int j(0); j < columns() - 2; j++){
-        for(unsigned int i(j + 2); i < rows(); i++){
-          result(i, j) = T(0);
-          if(sym){result(j, i) = T(0);}
-        }
-      }
-
-      return result;
-    }
-
-
-    struct complex_t {
-      template <class T2>
-      struct check_t {
-        static const bool hit = false;
-        typedef Complex<T2> res_t;
-      };
-      template <class T2>
-      struct check_t<Complex<T2> > {
-        static const bool hit = true;
-        typedef Complex<T2> res_t;
-      };
-      static const bool is_complex = check_t<T>::hit;
-      typedef typename check_t<T>::res_t v_t;
-      typedef Matrix<
-          v_t,
-          typename Array2D_Type::template family_t<v_t>::res_t,
-          ViewType> m_t;
-    };
-
-    /**
-     * Calculate eigenvalues of 2 by 2 partial matrix.
-     *
-     * @param row Upper row index of the partial matrix
-     * @param column Left column index of the partial matrix
-     * @param upper Eigenvalue (1)
-     * @param lower Eigenvalue (2)
-     */
-    void eigen22(
-        const unsigned int &row, const unsigned int &column,
-        typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
-      T a((*this)(row, column)),
-        b((*this)(row, column + 1)),
-        c((*this)(row + 1, column)),
-        d((*this)(row + 1, column + 1));
-      T root2(pow((a - d), 2) + b * c * 4);
-      if(complex_t::is_complex || (root2 > 0)){
-        T root(::sqrt(root2));
-        upper = ((a + d + root) / 2);
-        lower = ((a + d - root) / 2);
-      }else{
-        T root(::sqrt(root2 * -1));
-        upper = typename complex_t::v_t((a + d) / 2, root / 2);
-        lower = typename complex_t::v_t((a + d) / 2, root / 2 * -1);
-      }
-    }
-
-    /**
-     * Calculate eigenvalues and eigenvectors.
-     * The return matrix consists of
-     * (0,j)-(n-1,j): Eigenvector (j) (0 <= j <= n-1)
-     * (j,n)-(j,n): Eigenvalue (j)
-     *
-     * @param threshold_abs Absolute error to be used for convergence determination
-     * @param threshold_rel Relative error to be used for convergence determination
-     * @return Eigenvalues and eigenvectors
-     * @throw std::logic_error When operation is undefined
-     * @throw std::runtime_error When operation is unavailable
-     */
-    typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t eigen(
-        const T &threshold_abs = 1E-10,
-        const T &threshold_rel = 1E-7) const {
-
-      typedef typename complex_t::m_t::clone_t cmat_t;
-      typedef typename MatrixBuilder<
-          typename complex_t::m_t, 0, 1, 1, 0>::assignable_t cvec_t;
-      typedef typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t res_t;
-
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
-
-#if 0
-      //パワー法(べき乗法)
-      typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows(), rows() + 1);
-      clone_t source(copy());
-      for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
-      for(unsigned int i(0); i < columns(); i++){
-        while(true){
-          typename MatrixBuilder<self_t, 0, 1>::assignable_t approxVec(source * result.columnVector(i));
-          T approxVal(0);
-          for(unsigned int j(0); j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
-          approxVal = sqrt(approxVal);
-          for(unsigned int j(0); j < approxVec.rows(); j++){result(j, i) = approxVec(j, 0) / approxVal;}
-          T before = result(i, rows());
-          if(abs(before - (result(i, rows()) = approxVal)) < threshold){break;}
-        }
-        for(unsigned int j(0); (i < rows() - 1) && (j < rows()); j++){
-          for(unsigned int k(0); k < rows(); k++){
-            source(j, k) -= result(i, rows()) * result(j, i) * result(k, i);
-          }
-        }
-      }
-      return result;
-#endif
-
-      // Double QR method
-      /* <Procedure>
-       * 1) Transform upper Hessenburg's matrix by using Householder's method
-       * ハウスホルダー法を適用して、上ヘッセンベルク行列に置換後
-       * 2) Then, Apply double QR method to get eigenvalues
-       * ダブルQR法を適用。
-       * 3) Finally, compute eigenvectors
-       * 結果、固有値が得られるので、固有ベクトルを計算。
-       */
-
-      const unsigned int &_rows(rows());
-
-      // 結果の格納用の行列
-      res_t result(_rows, _rows + 1);
-
-      // 固有値の計算
-#define lambda(i) result(i, _rows)
-
-      T mu_sum(0), mu_multi(0);
-      typename complex_t::v_t p1, p2;
-      int m = _rows;
-      bool first = true;
-
-      clone_t transform(super_t::getI(_rows));
-      clone_t A(hessenberg(&transform));
-      clone_t A_(A);
-
-      while(true){
-
-        //m = 1 or m = 2
-        if(m == 1){
-          lambda(0) = A(0, 0);
-          break;
-        }else if(m == 2){
-          A.eigen22(0, 0, lambda(0), lambda(1));
-          break;
-        }
-
-        //μ、μ*の更新(4.143)
-        {
-          typename complex_t::v_t p1_new, p2_new;
-          A.eigen22(m-2, m-2, p1_new, p2_new);
-          if(first ? (first = false) : true){
-            if((p1_new - p1).abs() > p1_new.abs() / 2){
-              if((p2_new - p2).abs() > p2_new.abs() / 2){
-                mu_sum = (p1 + p2).real();
-                mu_multi = (p1 * p2).real();
-              }else{
-                mu_sum = p2_new.real() * 2;
-                mu_multi = pow(p2_new.real(), 2);
-              }
-            }else{
-              if((p2_new - p2).abs() > p2_new.abs() / 2){
-                mu_sum = p1_new.real() * 2;
-                mu_multi = p1_new.real() * p1_new.real();
-              }else{
-                mu_sum = (p1_new + p2_new).real();
-                mu_multi = (p1_new * p2_new).real();
-              }
-            }
-          }
-          p1 = p1_new, p2 = p2_new;
-        }
-
-        //ハウスホルダー変換を繰り返す
-        T b1, b2, b3, r;
-        for(int i(0); i < m - 1; i++){
-          if(i == 0){
-            b1 = A(0, 0) * A(0, 0) - mu_sum * A(0, 0) + mu_multi + A(0, 1) * A(1, 0);
-            b2 = A(1, 0) * (A(0, 0) + A(1, 1) - mu_sum);
-            b3 = A(2, 1) * A(1, 0);
-          }else{
-            b1 = A(i, i - 1);
-            b2 = A(i + 1, i - 1);
-            b3 = (i == m - 2 ? T(0) : A(i + 2, i - 1));
-          }
-
-          r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
-
-          typename MatrixBuilder<self_t, 3, 1, 0, 0>::assignable_t omega(3, 1);
-          {
-            omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
-            omega(1, 0) = b2;
-            if(b3 != T(0)){omega(2, 0) = b3;}
-          }
-          clone_t P(super_t::getI(_rows));
-          T denom((omega.transpose() * omega)(0, 0));
-          if(denom){
-            P.pivotMerge(i, i, omega * omega.transpose() * -2 / denom);
-          }
-          //std::cout << "denom(" << m << ") " << denom << std::endl;
-
-          A = P * A * P;
-        }
-        //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
-
-#if defined(_MSC_VER)
-        if(_isnan(A(m-1,m-2)) || !_finite(A(m-1,m-2))){
-#else
-        if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
-#endif
-          throw std::runtime_error("eigen values calculation failed");
-        }
-
-        // Convergence test; 収束判定
-#define _abs(x) ((x) >= 0 ? (x) : -(x))
-        T A_m2_abs(_abs(A(m-2, m-2))), A_m1_abs(_abs(A(m-1, m-1)));
-        T epsilon(threshold_abs
-          + threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
-
-        //std::cout << "epsil(" << m << ") " << epsilon << std::endl;
-
-        if(_abs(A(m-1, m-2)) < epsilon){
-          --m;
-          lambda(m) = A(m, m);
-        }else if(_abs(A(m-2, m-3)) < epsilon){
-          A.eigen22(m-2, m-2, lambda(m-1), lambda(m-2));
-          m -= 2;
-        }
-      }
-#undef _abs
-
-#if defined(MATRIX_EIGENVEC_SIMPLE)
-      // 固有ベクトルの計算
-      cmat_t x(_rows, _rows);  // 固有ベクトル
-      A = A_;
-
-      for(unsigned int j(0); j < _rows; j++){
-        unsigned int n = _rows;
-        for(unsigned int i(0); i < j; i++){
-          if((lambda(j) - lambda(i)).abs() <= threshold_abs){--n;}
-        }
-        //std::cout << n << ", " << lambda(j) << std::endl;
-        x(--n, j) = 1;
-        while(n-- > 0){
-          x(n, j) = x(n+1, j) * (lambda(j) - A(n+1, n+1));
-          for(unsigned int i(n+2); i < _rows; i++){
-            x(n, j) -= x(i, j) * A(n+1, i);
-          }
-          if(A(n+1, n)){x(n, j) /= A(n+1, n);}
-        }
-        //std::cout << x.partial(_rows, 1, 0, j).transpose() << std::endl;
-      }
-#else
-      // Inverse Iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
-      cmat_t x(cmat_t::getI(_rows));  //固有ベクトル
-      A = A_;
-      cmat_t A_C(_rows, _rows);
-      for(unsigned int i(0); i < _rows; i++){
-        for(unsigned int j(0); j < columns(); j++){
-          A_C(i, j) = A(i, j);
-        }
-      }
-
-      for(unsigned int j(0); j < _rows; j++){
-        // http://www.prefield.com/algorithm/math/eigensystem.html を参考に
-        // かつ、固有値が等しい場合の対処方法として、
-        // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
-        // を参考に、値を振ってみることにした
-        cmat_t A_C_lambda(A_C.copy());
-        typename complex_t::v_t approx_lambda(lambda(j));
-        if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
-          approx_lambda += 2E-3;
-        }
-        for(unsigned int i(0); i < _rows; i++){
-          A_C_lambda(i, i) -= approx_lambda;
-        }
-        typename MatrixBuilder<typename complex_t::m_t, 0, 0, 1, 2>::assignable_t
-            A_C_lambda_LU(A_C_lambda.decomposeLU());
-
-        cvec_t target_x(cvec_t::blank(_rows, 1));
-        for(unsigned i(0); i < _rows; ++i){
-          target_x(i, 0) = x(i, j);
-        }
-        for(unsigned loop(0); true; loop++){
-          cvec_t target_x_new(
-              A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
-          T mu((target_x_new.transpose() * target_x)(0, 0).abs2()),
-            v2((target_x_new.transpose() * target_x_new)(0, 0).abs2()),
-            v2s(::sqrt(v2));
-          for(unsigned i(0); i < _rows; ++i){
-            target_x(i, 0) = target_x_new(i, 0) / v2s;
-          }
-          //std::cout << mu << ", " << v2 << std::endl;
-          //std::cout << target_x.transpose() << std::endl;
-          if((T(1) - (mu * mu / v2)) < T(1.1)){
-            for(unsigned i(0); i < _rows; ++i){
-              x(i, j) = target_x(i, 0);
-            }
-            break;
-          }
-          if(loop > 100){
-            throw std::runtime_error("eigen vectors calculation failed");
-          }
-        }
-      }
-#endif
-
-      /*res_t lambda2(_rows, _rows);
-      for(unsigned int i(0); i < _rows; i++){
-        lambda2(i, i) = lambda(i);
-      }
-
-      std::cout << "A:" << A << std::endl;
-      //std::cout << "x * x^-1" << x * x.inverse() << std::endl;
-      std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
-
-      // 結果の格納
-      for(unsigned int j(0); j < x.columns(); j++){
-        for(unsigned int i(0); i < x.rows(); i++){
-          for(unsigned int k(0); k < transform.columns(); k++){
-            result(i, j) += transform(i, k) * x(k, j);
-          }
-        }
-
-        // Normalization; 正規化
-        typename complex_t::v_t _norm;
-        for(unsigned int i(0); i < _rows; i++){
-          _norm += result(i, j).abs2();
-        }
-        T norm = ::sqrt(_norm.real());
-        for(unsigned int i(0); i < _rows; i++){
-          result(i, j) /= norm;
-        }
-        //std::cout << result.partial(_rows, 1, 0, j).transpose() << std::endl;
-      }
-#undef lambda
-
-      return result;
-    }
-
-  protected:
-    /**
-     * Calculate square root of a matrix
-     *
-     * If matrix (A) can be decomposed as
-     * @f[
-     *    A = V D V^{-1},
-     * @f]
-     * where D and V are diagonal matrix consisting of eigenvalues and eigenvectors, respectively,
-     * the square root A^{1/2} is
-     * @f[
-     *    A^{1/2} = V D^{1/2} V^{-1}.
-     * @f]
-     *
-     * @param eigen_mat result of eigen()
-     * @return square root
-     * @see eiegn(const T &, const T &)
-     */
-    template <class MatrixT>
-    static typename MatrixBuilder<MatrixT, 0, -1>::assignable_t sqrt(
-        const MatrixT &eigen_mat){
-      unsigned int n(eigen_mat.rows());
-      typename MatrixT::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
-      typename MatrixBuilder<MatrixT, 0, -1>::assignable_t nV(VsD.inverse());
-      for(unsigned int i(0); i < n; i++){
-        nV.partial(1, n, i, 0) *= (eigen_mat(i, n).sqrt());
-      }
-
-      return (typename MatrixBuilder<MatrixT, 0, -1>::assignable_t)(VsD * nV);
-    }
-
-  public:
-    /**
-     * Calculate square root of a matrix
-     *
-     * @param threshold_abs Absolute error to be used for convergence determination of eigenvalue calculation
-     * @param threshold_rel Relative error to be used for convergence determination of eigenvalue calculation
-     * @return square root
-     * @see eigen(const T &, const T &)
-     */
-    typename complex_t::m_t::clone_t sqrt(
-        const T &threshold_abs,
-        const T &threshold_rel) const {
-      return sqrt(eigen(threshold_abs, threshold_rel));
-    }
-
-    /**
-     * Calculate square root
-     *
-     * @return square root
-     */
-    typename complex_t::m_t::clone_t sqrt() const {
-      return sqrt(eigen());
-    }
 };
 
 #undef throws_when_debug
