@@ -11,6 +11,7 @@
 #include "param/complex.h"
 #include "param/matrix.h"
 #include "param/matrix_fixed.h"
+#include "param/matrix_special.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -314,10 +315,14 @@ BOOST_AUTO_TEST_CASE(properties){
 }
 
 BOOST_AUTO_TEST_CASE(getI){
-  prologue_print();
   matrix_t _A(matrix_t::getI(SIZE));
   BOOST_TEST_MESSAGE("I:" << _A);
   matrix_compare(k_delta, _A);
+
+  // type(getI()) == type(getI().transpose)
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_ScaledUnit<content_t> >,
+      Matrix_Frozen<content_t, Array2D_ScaledUnit<content_t> >::builder_t::transpose_t>::value));
 }
 
 BOOST_AUTO_TEST_CASE(exchange_row){
@@ -392,10 +397,29 @@ struct mat_add_t {
 
 BOOST_AUTO_TEST_CASE(matrix_add){
   prologue_print();
-  mat_add_t a = {*A, *B};
-  matrix_t _A((*A) + (*B));
-  BOOST_TEST_MESSAGE("+:" << _A);
-  matrix_compare_delta(a, _A, ACCEPTABLE_DELTA_DEFAULT);
+  mat_add_t a1 = {*A, *B};
+  matrix_t A1((*A) + (*B));
+  BOOST_TEST_MESSAGE("+:" << A1);
+  matrix_compare_delta(a1, A1, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_add_t a2 = {*A, matrix_t::getI(A->rows())};
+  matrix_t A2((*A) + 1);
+  BOOST_TEST_MESSAGE("+1:" << A2);
+  matrix_compare_delta(a2, A2, ACCEPTABLE_DELTA_DEFAULT);
+
+  matrix_t A2_(1 + (*A));
+  BOOST_TEST_MESSAGE("1+:" << A2_);
+  matrix_compare_delta(a2, A2_, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_add_t a3 = {*A, matrix_t::getScalar(A->rows(), -1)};
+  matrix_t A3((*A) - 1);
+  BOOST_TEST_MESSAGE("-1:" << A3);
+  matrix_compare_delta(a3, A3, ACCEPTABLE_DELTA_DEFAULT);
+
+  mat_add_t a4 = {matrix_t::getI(A->rows()), -(*A)};
+  matrix_t A4(1 - (*A));
+  BOOST_TEST_MESSAGE("1-:" << A4);
+  matrix_compare_delta(a4, A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 struct mat_mul_t {
@@ -460,6 +484,15 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       (2 * (*A)),
       (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
   matrix_inspect_contains(
+      (*A * matrix_t::getScalar(A->columns(), 2)),
+      (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
+  matrix_inspect_contains(
+      (matrix_t::getScalar(A->rows(), 2) * (*A)),
+      (format("*storage: (*, M(%1%,%1%), 2)") % SIZE).str());
+  matrix_inspect_contains(
+      (matrix_t::getScalar(A->rows(), 2) * 2), // should be 4_I
+      (format("*storage: M(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
       (-(*A)),
       (format("*storage: (*, M(%1%,%1%), -1)") % SIZE).str());
   matrix_inspect_contains(
@@ -491,6 +524,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A * 2) * (*B * 2)), // should be (*A * (*B)) * 4
       (format("*storage: (*, (*, M(%1%,%1%), M(%1%,%1%)), 4)") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A * 2) * (matrix_t::getScalar(B->rows(), 2) * 2)), // should be *A * 8
+      (format("*storage: (*, M(%1%,%1%), 8)") % SIZE).str());
 }
 
 void check_inv(const matrix_t &mat){
@@ -1127,7 +1163,7 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   delete [] AB_array;
 }
 
-#if 1
+#if !defined(SKIP_FIXED_MATRIX_TESTS) // tests for fixed
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
@@ -1181,7 +1217,55 @@ BOOST_AUTO_TEST_CASE(fixed_types){
         ::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
 }
+#endif
 
+#if !defined(SKIP_SPECIAL_MATRIX_TESTS) // tests for special
+BOOST_AUTO_TEST_CASE(force_symmetric){
+  assign_linear();
+  prologue_print();
+
+  matrix_t A_(as_symmetric(*A));
+  BOOST_TEST_MESSAGE("symmetric:" << A_);
+  BOOST_CHECK(A->isSymmetric() == false);
+  BOOST_CHECK(A_.isSymmetric() == true);
+
+  matrix_inspect_contains(as_symmetric(*A), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Symmetric] [Base]"); // should be same after transpose()
+  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Symmetric] [Base]"); // as_symmetric should be effective only once
+
+#if !defined(SKIP_FIXED_MATRIX_TESTS)
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t A_fixed_(as_symmetric(A_fixed));
+  BOOST_TEST_MESSAGE("symmetric_fixed:" << A_fixed_);
+  BOOST_CHECK(A_fixed.isSymmetric() == false);
+  BOOST_CHECK(A_fixed_.isSymmetric() == true);
+#endif
+}
+
+BOOST_AUTO_TEST_CASE(force_diagonal){
+  assign_linear();
+  prologue_print();
+
+  matrix_t A_(as_diagonal(*A));
+  BOOST_TEST_MESSAGE("diagonal:" << A_);
+  BOOST_CHECK(A->isDiagonal() == false);
+  BOOST_CHECK(A_.isDiagonal() == true);
+
+  matrix_inspect_contains(as_diagonal(*A), "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Diagonal] [Base]"); // should be same after transpose()
+  matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Diagonal] [Base]"); // as_diagonal should be effective only once
+  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "*view: [Diagonal] [Base]"); // only one special view can be used.
+
+#if !defined(SKIP_FIXED_MATRIX_TESTS)
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t A_fixed_(as_diagonal(A_fixed));
+  BOOST_TEST_MESSAGE("diagonal_fixed:" << A_fixed_);
+  BOOST_CHECK(A_fixed.isDiagonal() == false);
+  BOOST_CHECK(A_fixed_.isDiagonal() == true);
+#endif
+}
 #endif
 
 BOOST_AUTO_TEST_SUITE_END()
