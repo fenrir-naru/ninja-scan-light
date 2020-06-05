@@ -106,6 +106,12 @@ Matrix_Symmetric<
       T, Array2D_Type,
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t>(mat);
 }
+template <class T>
+const Matrix_Frozen<T, Array2D_ScaledUnit<T> > &as_symmetric(
+    const Matrix_Frozen<T, Array2D_ScaledUnit<T> > &mat){
+  // Ineffective to scalar matrix
+  return mat;
+}
 template <
     template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType>
@@ -171,6 +177,12 @@ Matrix_Diagonal<
   return Matrix_Diagonal<
       T, Array2D_Type,
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t>(mat);
+}
+template <class T>
+const Matrix_Frozen<T, Array2D_ScaledUnit<T> > &as_diagonal(
+    const Matrix_Frozen<T, Array2D_ScaledUnit<T> > &mat){
+  // Ineffective to scalar matrix
+  return mat;
 }
 template <
     template <class, class, class> class MatrixT,
