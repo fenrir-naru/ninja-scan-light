@@ -2097,9 +2097,8 @@ class Matrix_Frozen {
       typedef typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t res_t;
       res_t LU(res_t::blank(rows(), columns() * 2));
 
-      typename res_t::partial_t
-          L(LU.partial(rows(), columns(), 0, 0)),
-          U(LU.partial(rows(), columns(), 0, columns()));
+      typename res_t::partial_offsetless_t L(LU.partial(rows(), columns()));
+      typename res_t::partial_t U(LU.partial(rows(), columns(), 0, columns()));
       for(unsigned int i(0); i < rows(); ++i){
         U(i, i) = (*this)(i, i);
         L(i, i) = T(1);
@@ -2175,9 +2174,8 @@ class Matrix_Frozen {
         throw std::invalid_argument("Incorrect y size");
       }
 
-      typename builder_t::partial_t
-          L(partial(rows(), rows(), 0, 0)),
-          U(partial(rows(), rows(), 0, rows()));
+      typename builder_t::partial_offsetless_t L(partial(rows(), rows()));
+      typename builder_t::partial_t U(partial(rows(), rows(), 0, rows()));
       typedef typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t y_t;
       // By using L(Ux) = y, firstly y' = (Ux) will be solved; L(Ux) = y ‚Å y' = (Ux)‚ð‚Ü‚¸‰ð‚­
       y_t y_copy(y);
@@ -2238,9 +2236,8 @@ class Matrix_Frozen {
       typename builder_t::assignable_t P(*this);
       typedef typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t res_t;
       res_t UD(rows(), columns() * 2);
-      typename res_t::partial_t
-          U(UD.partial(rows(), columns(), 0, 0)),
-          D(UD.partial(rows(), columns(), 0, columns()));
+      typename res_t::partial_offsetless_t U(UD.partial(rows(), columns()));
+      typename res_t::partial_t D(UD.partial(rows(), columns(), 0, columns()));
       for(int i(rows() - 1); i >= 0; i--){
         D(i, i) = P(i, i);
         U(i, i) = T(1);
@@ -2460,9 +2457,9 @@ class Matrix_Frozen {
 
     /**
      * Calculate eigenvalues and eigenvectors.
-     * The return matrix consists of
+     * The return (n, n+1) matrix consists of
      * (0,j)-(n-1,j): Eigenvector (j) (0 <= j <= n-1)
-     * (j,n)-(j,n): Eigenvalue (j)
+     * (j,n): Eigenvalue (j)
      *
      * @param threshold_abs Absolute error to be used for convergence determination
      * @param threshold_rel Relative error to be used for convergence determination
@@ -2757,7 +2754,7 @@ class Matrix_Frozen {
     static typename MatrixBuilder<MatrixT, 0, -1>::assignable_t sqrt(
         const MatrixT &eigen_mat){
       unsigned int n(eigen_mat.rows());
-      typename MatrixT::partial_t VsD(eigen_mat.partial(n, n, 0, 0));
+      typename MatrixT::partial_offsetless_t VsD(eigen_mat.partial(n, n));
       typename MatrixBuilder<MatrixT, 0, -1>::assignable_t nV(VsD.inverse());
       for(unsigned int i(0); i < n; i++){
         nV.partial(1, n, i, 0) *= (eigen_mat(i, n).sqrt());
