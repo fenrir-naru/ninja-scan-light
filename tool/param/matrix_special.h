@@ -155,6 +155,9 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> >
   Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
   }
+  bool isSquare() const noexcept {return true;}
+  bool isDiagonal() const noexcept {return false;}
+  bool isSymmetric() const noexcept {return true;}
   typename super_t::special_t transpose() const noexcept {
     return typename super_t::special_t(*this);
   }
@@ -213,6 +216,9 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
   Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
   }
+  bool isSquare() const noexcept {return true;}
+  bool isDiagonal() const noexcept {return true;}
+  bool isSymmetric() const noexcept {return true;}
   typename super_t::special_t transpose() const noexcept {
     return typename super_t::special_t(*this);
   }
