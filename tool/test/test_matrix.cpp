@@ -459,11 +459,16 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
 template<class T, class Array2D_Type, class ViewType, class U>
 void matrix_inspect_contains(
     const Matrix_Frozen<T, Array2D_Type, ViewType> &m,
-    const U &cmp){
+    const U &cmp,
+    const bool &is_negative = false){
   boost::test_tools::output_test_stream os;
   os << m.inspect();
   BOOST_TEST_MESSAGE(os.str());
-  BOOST_CHECK(os.str().find(cmp) != std::string::npos);
+  if(is_negative){
+    BOOST_CHECK(os.str().find(cmp) == std::string::npos);
+  }else{
+    BOOST_CHECK(os.str().find(cmp) != std::string::npos);
+  }
 }
 BOOST_AUTO_TEST_CASE(matrix_inspect){
   using boost::format;
@@ -1229,10 +1234,15 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   BOOST_CHECK(A->isSymmetric() == false);
   BOOST_CHECK(A_.isSymmetric() == true);
 
-  matrix_inspect_contains(as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Symmetric] [Base]"); // should be same after transpose()
-  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Symmetric] [Base]"); // as_symmetric should be effective only once
+  matrix_inspect_contains(as_symmetric(*A), "*view: [Base]");
+  matrix_inspect_contains(as_symmetric(*A), "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Base]"); // should be same after transpose()
+  matrix_inspect_contains(as_symmetric(*A).transpose(), "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Base]"); // as_symmetric should be effective only once
+  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "[Symmetric] [Symmetric]", true);
   matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "*view: [Base]"); // should be ineffective
+  matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "[Symmetric]", true);
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
@@ -1253,11 +1263,17 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   BOOST_CHECK(A->isDiagonal() == false);
   BOOST_CHECK(A_.isDiagonal() == true);
 
-  matrix_inspect_contains(as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Diagonal] [Base]"); // should be same after transpose()
-  matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Diagonal] [Base]"); // as_diagonal should be effective only once
-  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "*view: [Diagonal] [Base]"); // only one special view can be used.
+  matrix_inspect_contains(as_diagonal(*A), "*view: [Base]");
+  matrix_inspect_contains(as_diagonal(*A), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Base]"); // should be same after transpose()
+  matrix_inspect_contains(as_diagonal(*A).transpose(), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Base]"); // as_diagonal should be effective only once
+  matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "*view: [Base]"); // only one special view can be used.
+  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "[Diagonal] [Symmetric]", true);
   matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "*view: [Base]"); // should be ineffective
+  matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "[Diagonal]", true);
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
