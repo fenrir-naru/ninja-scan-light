@@ -155,6 +155,7 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
   upgrade_friend_operator(-, T,
       (typename super_t::scalar_matrix_t::template Add_Matrix_to_Matrix<super_t, false>::mat_t));
 
+  // Preserve feature even if scalar is multiplied
   template <class T2>
   typename MatrixBuilderSpecial<
       typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
@@ -169,6 +170,19 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
    * upgrade_function(operator*, (Matrix_Frozen<T, Array2D_ScaledUnit<T> >),
    *     typename super_t::template Multiply_Matrix_by_Scalar<T>::mat_t);
    */
+
+  // Preserve feature even if a matrix having the same feature is multiplied
+  // For example; symmetric * symmetric = symmetric
+  template <class T2, class Array2D_Type2, class ViewType2>
+  typename MatrixBuilderSpecial<
+      typename super_t::template Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t,
+      ViewType_Special>::special_t operator*(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> > &matrix) const {
+    return typename MatrixBuilderSpecial<
+        typename super_t::template Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t,
+        ViewType_Special>::special_t(super_t::operator*(
+          (const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &)matrix));
+  }
 
 #undef upgrade_function
 #undef upgrade_friend_operator
