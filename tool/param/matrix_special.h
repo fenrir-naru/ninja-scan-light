@@ -113,15 +113,19 @@ struct Matrix_Frozen_Special
   using super_t::operator*;
   using super_t::operator/;
 
+  template<typename U> struct arg_type;
+  template<typename U, typename V> struct arg_type<U(V)>{typedef V type;};
+#define get_type(t) typename arg_type<void(t)>::type
 #define upgrade_function(fname, in_type, out_type) \
-typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
-    fname(const in_type &in) const noexcept { \
-  return typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t(super_t::fname(in)); \
+typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::special_t \
+    fname(const get_type(in_type) &in) const { \
+  return typename MatrixBuilderSpecial< \
+      get_type(out_type), ViewType_Special>::special_t(super_t::fname(in)); \
 }
 #define upgrade_friend_operator(op, in_type, out_type) \
-friend typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
-    operator op(const in_type &in, const self_t &matrix) noexcept { \
-  return typename MatrixBuilderSpecial<out_type, ViewType_Special> \
+friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::special_t \
+    operator op(const get_type(in_type) &in, const self_t &matrix) { \
+  return typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special> \
       ::special_t(in op (const super_t &)matrix); \
 }
 
@@ -148,12 +152,27 @@ friend typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
   upgrade_friend_operator(+, T,
       typename super_t::template Add_Matrix_to_Matrix<typename super_t::scalar_matrix_t>::mat_t);
 
-  typedef typename super_t::scalar_matrix_t
-      ::template Add_Matrix_to_Matrix<super_t, false>::mat_t friend_binary_minus_res_t;
-  upgrade_friend_operator(-, T, friend_binary_minus_res_t);
+  upgrade_friend_operator(-, T,
+      (typename super_t::scalar_matrix_t::template Add_Matrix_to_Matrix<super_t, false>::mat_t));
+
+  template <class T2>
+  typename MatrixBuilderSpecial<
+      typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
+      ViewType_Special>::special_t operator*(
+        const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &in) const {
+    return typename MatrixBuilderSpecial<
+        typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
+        ViewType_Special>::special_t(super_t::operator*(in));
+  }
+  /* The below code is ideal, however, it cannot be applied to T2 instead of T,
+   * due to macro expansion and overload deduction
+   * upgrade_function(operator*, (Matrix_Frozen<T, Array2D_ScaledUnit<T> >),
+   *     typename super_t::template Multiply_Matrix_by_Scalar<T>::mat_t);
+   */
 
 #undef upgrade_function
 #undef upgrade_friend_operator
+#undef get_type
 
   struct inspect_t : public super_t::inspect_t {
     inspect_t(const super_t &target) : super_t::inspect_t(target){}
