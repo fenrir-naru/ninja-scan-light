@@ -1236,6 +1236,16 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
 
   matrix_inspect_contains(as_symmetric(*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A), "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(*A) * 2, "*view: [Base]");
+  matrix_inspect_contains(as_symmetric(*A) * 2, "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(*A) / 2, "*view: [Base]");
+  matrix_inspect_contains(as_symmetric(*A) / 2, "[Symmetric]");
+  matrix_inspect_contains(-as_symmetric(*A), "*view: [Base]");
+  matrix_inspect_contains(-as_symmetric(*A), "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(*A) + 2, "*view: [Base]");
+  matrix_inspect_contains(as_symmetric(*A) + 2, "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(*A) - 2, "*view: [Base]");
+  matrix_inspect_contains(as_symmetric(*A) - 2, "[Symmetric]");
   matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Base]"); // should be same after transpose()
   matrix_inspect_contains(as_symmetric(*A).transpose(), "[Symmetric]");
   matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Base]"); // as_symmetric should be effective only once
@@ -1265,6 +1275,16 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
 
   matrix_inspect_contains(as_diagonal(*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(*A) * 2, "*view: [Base]");
+  matrix_inspect_contains(as_diagonal(*A) * 2, "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(*A) / 2, "*view: [Base]");
+  matrix_inspect_contains(as_diagonal(*A) / 2, "[Diagonal]");
+  matrix_inspect_contains(-as_diagonal(*A), "*view: [Base]");
+  matrix_inspect_contains(-as_diagonal(*A), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(*A) + 2, "*view: [Base]");
+  matrix_inspect_contains(as_diagonal(*A) + 2, "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(*A) - 2, "*view: [Base]");
+  matrix_inspect_contains(as_diagonal(*A) - 2, "[Diagonal]");
   matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Base]"); // should be same after transpose()
   matrix_inspect_contains(as_diagonal(*A).transpose(), "[Diagonal]");
   matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Base]"); // as_diagonal should be effective only once

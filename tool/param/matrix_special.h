@@ -69,14 +69,25 @@ struct MatrixViewSpecialBuilder : public MatrixViewBuilder<View> {
   typedef MatrixViewSpecial_Diagonal<none_special_t> diagonal_t;
 };
 
+template <class MatrixT, template <class> class ViewType_Special>
+struct MatrixBuilderSpecial;
+
 template <
     class T, class Array2D_Type, class ViewType,
     template <class> class ViewType_Special>
-struct Matrix_Frozen_Special : public Matrix_Frozen<T, Array2D_Type, ViewType> {
+struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special> {
   typedef ViewType_Special<
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t> view_special_t;
   typedef Matrix_Frozen<T, Array2D_Type, view_special_t> special_t;
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    template <class> class ViewType_Special>
+struct Matrix_Frozen_Special
+    : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   typedef Matrix_Frozen<T, Array2D_Type, ViewType> super_t;
+  typedef typename MatrixBuilderSpecial<super_t, ViewType_Special>::special_t special_t;
   typedef MatrixBuilder<special_t> builder_t;
   template <class ViewType2>
   Matrix_Frozen_Special(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
@@ -96,11 +107,47 @@ struct Matrix_Frozen_Special : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     return special_t(mat);
   }
 
+  using super_t::operator+;
+  using super_t::operator-;
+  using super_t::operator*;
+  using super_t::operator/;
+
+#define upgrade_function(fname, in_type, out_type) \
+typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
+    fname(const in_type &in) const noexcept { \
+  return typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t(super_t::fname(in)); \
+}
+
+  upgrade_function(operator*, T, typename super_t::mul_mat_scalar_t::mat_t);
+
+  // TODO friend operator*(const T &scalar, const special_t &matrix)
+
+  upgrade_function(operator/, T, typename super_t::mul_mat_scalar_t::mat_t);
+
+  typename MatrixBuilderSpecial<
+      typename super_t::mul_mat_scalar_t::mat_t, ViewType_Special>::special_t
+      operator-() const noexcept {
+    return typename MatrixBuilderSpecial<
+        typename super_t::mul_mat_scalar_t::mat_t, ViewType_Special>
+        ::special_t(super_t::operator-());
+  }
+
+  upgrade_function(operator+, T,
+      typename super_t::template Add_Matrix_to_Matrix<typename super_t::scalar_matrix_t>::mat_t);
+
+  upgrade_function(operator-, T,
+      typename super_t::template Add_Matrix_to_Matrix<typename super_t::scalar_matrix_t>::mat_t);
+
+  // TODO friend operator+(const T &scalar, const special &matrix)
+  // TODO friend operator-(const T &scalar, const special &matrix)
+
+#undef upgrade_function
+
   struct inspect_t : public super_t::inspect_t {
     inspect_t(const super_t &target) : super_t::inspect_t(target){}
     template<class CharT, class Traits>
     std::basic_ostream<CharT, Traits> &operator()(std::basic_ostream<CharT, Traits> &out) const {
-      return super_t::inspect_t::operator()(out) << " " << view_special_t::name;
+      return super_t::inspect_t::operator()(out) << " " << ViewType_Special<void>::name;
     }
   };
   template<class CharT, class Traits>
@@ -125,14 +172,8 @@ struct Matrix_Frozen_Special<T, Array2D_ScaledUnit<T>, MatrixViewBase<>, ViewTyp
 
 // Symmetric {
 template <class BaseView>
-struct MatrixViewSpecial_Symmetric : public BaseView {
+struct MatrixViewSpecial_Symmetric {
   static const char *name;
-  template<class CharT, class Traits>
-  friend std::basic_ostream<CharT, Traits> &operator<<(
-      std::basic_ostream<CharT, Traits> &out,
-      const MatrixViewSpecial_Symmetric<BaseView> &view){
-    return out << name << " " << (const BaseView &)view;
-  }
 };
 template <class BaseView>
 const char *MatrixViewSpecial_Symmetric<BaseView>::name = "[Symmetric]";
@@ -186,14 +227,8 @@ struct MatrixBuilder_ValueCopier<
 
 // Diagonal {
 template <class BaseView>
-struct MatrixViewSpecial_Diagonal : public BaseView {
+struct MatrixViewSpecial_Diagonal {
   static const char *name;
-  template<class CharT, class Traits>
-  friend std::basic_ostream<CharT, Traits> &operator<<(
-      std::basic_ostream<CharT, Traits> &out,
-      const MatrixViewSpecial_Diagonal<BaseView> &view){
-    return out << name << " " << (const BaseView &)view;
-  }
 };
 template <class BaseView>
 const char *MatrixViewSpecial_Diagonal<BaseView>::name = "[Diagonal]";
