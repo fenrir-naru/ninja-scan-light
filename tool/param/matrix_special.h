@@ -86,6 +86,7 @@ template <
     template <class> class ViewType_Special>
 struct Matrix_Frozen_Special
     : public Matrix_Frozen<T, Array2D_Type, ViewType> {
+  typedef Matrix_Frozen_Special<T, Array2D_Type, ViewType, ViewType_Special> self_t;
   typedef Matrix_Frozen<T, Array2D_Type, ViewType> super_t;
   typedef typename MatrixBuilderSpecial<super_t, ViewType_Special>::special_t special_t;
   typedef MatrixBuilder<special_t> builder_t;
@@ -117,10 +118,16 @@ typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
     fname(const in_type &in) const noexcept { \
   return typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t(super_t::fname(in)); \
 }
+#define upgrade_friend_operator(op, in_type, out_type) \
+friend typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
+    operator op(const in_type &in, const self_t &matrix) noexcept { \
+  return typename MatrixBuilderSpecial<out_type, ViewType_Special> \
+      ::special_t(in op (const super_t &)matrix); \
+}
 
   upgrade_function(operator*, T, typename super_t::mul_mat_scalar_t::mat_t);
 
-  // TODO friend operator*(const T &scalar, const special_t &matrix)
+  upgrade_friend_operator(*, T, typename super_t::mul_mat_scalar_t::mat_t);
 
   upgrade_function(operator/, T, typename super_t::mul_mat_scalar_t::mat_t);
 
@@ -138,10 +145,15 @@ typename MatrixBuilderSpecial<out_type, ViewType_Special>::special_t \
   upgrade_function(operator-, T,
       typename super_t::template Add_Matrix_to_Matrix<typename super_t::scalar_matrix_t>::mat_t);
 
-  // TODO friend operator+(const T &scalar, const special &matrix)
-  // TODO friend operator-(const T &scalar, const special &matrix)
+  upgrade_friend_operator(+, T,
+      typename super_t::template Add_Matrix_to_Matrix<typename super_t::scalar_matrix_t>::mat_t);
+
+  typedef typename super_t::scalar_matrix_t
+      ::template Add_Matrix_to_Matrix<super_t, false>::mat_t friend_binary_minus_res_t;
+  upgrade_friend_operator(-, T, friend_binary_minus_res_t);
 
 #undef upgrade_function
+#undef upgrade_friend_operator
 
   struct inspect_t : public super_t::inspect_t {
     inspect_t(const super_t &target) : super_t::inspect_t(target){}
@@ -179,14 +191,10 @@ template <class BaseView>
 const char *MatrixViewSpecial_Symmetric<BaseView>::name = "[Symmetric]";
 
 template <class T, class Array2D_Type, class ViewType>
-typename Matrix_Frozen_Special<
-    T, Array2D_Type, ViewType,
-    MatrixViewSpecial_Symmetric>::special_t
-    as_symmetric(
-    const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
+typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric>::special_t
+    as_symmetric(const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
   return Matrix_Frozen_Special<
-      T, Array2D_Type, ViewType,
-      MatrixViewSpecial_Symmetric>::as_special(mat);
+      T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric>::as_special(mat);
 }
 template <class T, class Array2D_Type, class ViewType>
 struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> >
@@ -234,14 +242,10 @@ template <class BaseView>
 const char *MatrixViewSpecial_Diagonal<BaseView>::name = "[Diagonal]";
 
 template <class T, class Array2D_Type, class ViewType>
-typename Matrix_Frozen_Special<
-    T, Array2D_Type, ViewType,
-    MatrixViewSpecial_Diagonal>::special_t
-    as_diagonal(
-    const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
+typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal>::special_t
+    as_diagonal(const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
   return Matrix_Frozen_Special<
-      T, Array2D_Type, ViewType,
-      MatrixViewSpecial_Diagonal>::as_special(mat);
+      T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal>::as_special(mat);
 }
 template <class T, class Array2D_Type, class ViewType>
 struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >

@@ -1236,22 +1236,20 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
 
   matrix_inspect_contains(as_symmetric(*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A), "[Symmetric]");
-  matrix_inspect_contains(as_symmetric(*A) * 2, "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) * 2, "[Symmetric]");
-  matrix_inspect_contains(as_symmetric(*A) / 2, "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) / 2, "[Symmetric]");
-  matrix_inspect_contains(-as_symmetric(*A), "*view: [Base]");
   matrix_inspect_contains(-as_symmetric(*A), "[Symmetric]");
-  matrix_inspect_contains(as_symmetric(*A) + 2, "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) + 2, "[Symmetric]");
-  matrix_inspect_contains(as_symmetric(*A) - 2, "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) - 2, "[Symmetric]");
+  matrix_inspect_contains(2 * as_symmetric(*A), "[Symmetric]");
+  matrix_inspect_contains(2 + as_symmetric(*A), "[Symmetric]");
+  matrix_inspect_contains(2 - as_symmetric(*A), "[Symmetric]");
+
   matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Base]"); // should be same after transpose()
   matrix_inspect_contains(as_symmetric(*A).transpose(), "[Symmetric]");
   matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Base]"); // as_symmetric should be effective only once
-  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "[Symmetric]");
+  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "[Symmetric]"); // only one special view can be used.
   matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "[Symmetric] [Symmetric]", true);
-  matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "*view: [Base]"); // should be ineffective
   matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "[Symmetric]", true);
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
@@ -1275,24 +1273,21 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
 
   matrix_inspect_contains(as_diagonal(*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A), "[Diagonal]");
-  matrix_inspect_contains(as_diagonal(*A) * 2, "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) * 2, "[Diagonal]");
-  matrix_inspect_contains(as_diagonal(*A) / 2, "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) / 2, "[Diagonal]");
-  matrix_inspect_contains(-as_diagonal(*A), "*view: [Base]");
   matrix_inspect_contains(-as_diagonal(*A), "[Diagonal]");
-  matrix_inspect_contains(as_diagonal(*A) + 2, "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) + 2, "[Diagonal]");
-  matrix_inspect_contains(as_diagonal(*A) - 2, "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) - 2, "[Diagonal]");
+  matrix_inspect_contains(2 * as_diagonal(*A), "[Diagonal]");
+  matrix_inspect_contains(2 + as_diagonal(*A), "[Diagonal]");
+  matrix_inspect_contains(2 - as_diagonal(*A), "[Diagonal]");
+
   matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Base]"); // should be same after transpose()
   matrix_inspect_contains(as_diagonal(*A).transpose(), "[Diagonal]");
   matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Base]"); // as_diagonal should be effective only once
   matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "[Diagonal]");
-  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "*view: [Base]"); // only one special view can be used.
-  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "[Diagonal]");
+  matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "[Diagonal]"); // only one special view can be used.
   matrix_inspect_contains(as_diagonal(as_symmetric(*A)), "[Diagonal] [Symmetric]", true);
-  matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "*view: [Base]"); // should be ineffective
   matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "[Diagonal]", true);
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
