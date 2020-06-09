@@ -156,6 +156,7 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
       (typename super_t::scalar_matrix_t::template Add_Matrix_to_Matrix<super_t, false>::mat_t));
 
   // Preserve feature even if scalar is multiplied
+#if !(defined(__GNUC__) && (__GNUC__ <= 5))
   template <class T2>
   typename MatrixBuilderSpecial<
       typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
@@ -165,11 +166,16 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
         typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
         ViewType_Special>::special_t(super_t::operator*(in));
   }
+#else
   /* The below code is ideal, however, it cannot be applied to T2 instead of T,
-   * due to macro expansion and overload deduction
-   * upgrade_function(operator*, (Matrix_Frozen<T, Array2D_ScaledUnit<T> >),
-   *     typename super_t::template Multiply_Matrix_by_Scalar<T>::mat_t);
+   * due to macro expansion and overload deduction.
+   * In addition, g++-5.4 raises build error (maybe bug?) of ambiguous overload
+   * against super class functions, therefore, only T overload is applied.
    */
+  upgrade_function(operator*, (Matrix_Frozen<T, Array2D_ScaledUnit<T> >),
+      typename super_t::template Multiply_Matrix_by_Scalar<T>::mat_t);
+#endif
+
 
   // Adding / Subtracting a matrix having same or different special feature {
   template <
