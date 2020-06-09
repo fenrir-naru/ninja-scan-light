@@ -171,6 +171,50 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
    *     typename super_t::template Multiply_Matrix_by_Scalar<T>::mat_t);
    */
 
+  // Adding / Subtracting a matrix having same or different special feature {
+  template <
+      class T2, class Array2D_Type2, class ViewType2,
+      template <class> class ViewType_Special_self, template <class> class ViewType_Special_other,
+      bool rhs_positive = true>
+  struct add_mat_mat_t {
+    // default: error and call original due to SFINAE, consequently special feature is removed from return type
+  };
+  template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
+  struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special, rhs_positive> {
+    // (same feature) + (same feature) => (same feature), ex) (symmetric) + (symmetric) => (symmetric)
+    typedef typename MatrixBuilderSpecial<
+        typename super_t::template Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, rhs_positive>::mat_t,
+        ViewType_Special>::special_t res_t;
+  };
+  template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
+  struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, MatrixViewSpecial_Diagonal, MatrixViewSpecial_Symmetric, rhs_positive> {
+    // (diagonal) + (symmetric) => (symmetric)
+    typedef typename MatrixBuilderSpecial<
+        typename super_t::template Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, rhs_positive>::mat_t,
+        MatrixViewSpecial_Symmetric>::special_t res_t;
+  };
+  template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
+  struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, MatrixViewSpecial_Symmetric, MatrixViewSpecial_Diagonal, rhs_positive> {
+    // (symmetric) + (diagonal) => (symmetric)
+    typedef typename MatrixBuilderSpecial<
+        typename super_t::template Add_Matrix_to_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, rhs_positive>::mat_t,
+        MatrixViewSpecial_Symmetric>::special_t res_t;
+  };
+
+  template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
+  typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t operator+(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special2<ViewType2> > &matrix) const {
+    return typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t(
+        super_t::operator+((const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &)matrix));
+  }
+  template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
+  typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2, false>::res_t operator-(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special2<ViewType2> > &matrix) const {
+    return typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2, false>::res_t(
+        super_t::operator-((const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &)matrix));
+  }
+  // }
+
   // Multiplying a matrix having same or different special feature {
   template <
   class T2, class Array2D_Type2, class ViewType2,
