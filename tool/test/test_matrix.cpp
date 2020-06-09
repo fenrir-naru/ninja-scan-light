@@ -1246,7 +1246,6 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(2 - as_symmetric(*A), "[Symmetric]");
   matrix_inspect_contains(as_symmetric(*A) * matrix_t::getI(A->columns()), "[Symmetric]");
   matrix_inspect_contains(as_symmetric(*A) * (*A), "[Symmetric]", true);
-  matrix_inspect_contains(as_symmetric(*A) * as_symmetric(*A), "[Symmetric]");
 
   matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Base]"); // should be same after transpose()
   matrix_inspect_contains(as_symmetric(*A).transpose(), "[Symmetric]");
@@ -1286,7 +1285,6 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(2 - as_diagonal(*A), "[Diagonal]");
   matrix_inspect_contains(as_diagonal(*A) * matrix_t::getI(A->columns()), "[Diagonal]");
   matrix_inspect_contains(as_diagonal(*A) * (*A), "[Diagonal]", true);
-  matrix_inspect_contains(as_diagonal(*A) * as_diagonal(*A), "[Diagonal]");
 
   matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Base]"); // should be same after transpose()
   matrix_inspect_contains(as_diagonal(*A).transpose(), "[Diagonal]");
@@ -1305,6 +1303,18 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   BOOST_CHECK(A_fixed_.isDiagonal() == true);
 #endif
 }
+
+BOOST_AUTO_TEST_CASE(force_special_intersection){
+  assign_linear();
+  prologue_print();
+
+  matrix_inspect_contains(as_symmetric(*A) * as_symmetric(*A), "[Symmetric]");
+  matrix_inspect_contains(as_diagonal(*A) * as_diagonal(*A), "[Diagonal]");
+  matrix_inspect_contains(as_symmetric(*A) * as_diagonal(*A), "[Symmetric]");
+  matrix_inspect_contains(as_diagonal(*A) * as_symmetric(*A), "[Symmetric]");
+}
+
+
 #endif
 
 BOOST_AUTO_TEST_SUITE_END()
