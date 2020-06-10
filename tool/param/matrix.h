@@ -507,7 +507,7 @@ struct MatrixViewBase {
     return storage.Array2D_Type::operator()(i, j); // direct call instead of via vtable
   }
   template <class T, class Array2D_Type>
-  inline T &operator()(Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+  inline T operator()(Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
     return storage.Array2D_Type::operator()(i, j); // direct call instead of via vtable
   }
 
