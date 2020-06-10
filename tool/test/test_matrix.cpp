@@ -1234,6 +1234,8 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   BOOST_CHECK(A->isSymmetric() == false);
   BOOST_CHECK(A_.isSymmetric() == true);
 
+  BOOST_CHECK_THROW(as_symmetric(A->partial(SIZE - 1, SIZE), true), std::runtime_error); // !square
+
   matrix_inspect_contains(as_symmetric(*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A), "[Symmetric]");
   matrix_inspect_contains(as_symmetric(*A) * 2, "[Symmetric]");
@@ -1274,6 +1276,8 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   BOOST_TEST_MESSAGE("diagonal:" << A_);
   BOOST_CHECK(A->isDiagonal() == false);
   BOOST_CHECK(A_.isDiagonal() == true);
+
+  BOOST_CHECK_THROW(as_diagonal(A->partial(SIZE - 1, SIZE), true), std::runtime_error); // !square
 
   matrix_inspect_contains(as_diagonal(*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A), "[Diagonal]");

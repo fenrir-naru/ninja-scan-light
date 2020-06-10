@@ -288,6 +288,19 @@ struct Matrix_Frozen_Special<T, Array2D_ScaledUnit<T>, MatrixViewBase<>, ViewTyp
   }
 };
 
+#define upgrade_square_matrix(fname, special_upgraded) \
+template <class T, class Array2D_Type, class ViewType> \
+typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, special_upgraded>::special_t \
+    fname( \
+        const Matrix_Frozen<T, Array2D_Type, ViewType> &mat, \
+        const bool &do_check = false){ \
+  if(do_check && (!mat.isSquare())){ \
+    throw std::runtime_error("Could not be upgraded to " #special_upgraded); \
+  } \
+  return Matrix_Frozen_Special< \
+      T, Array2D_Type, ViewType, special_upgraded>::as_special(mat); \
+}
+
 
 // Symmetric {
 template <class BaseView>
@@ -297,12 +310,7 @@ struct MatrixViewSpecial_Symmetric {
 template <class BaseView>
 const char *MatrixViewSpecial_Symmetric<BaseView>::name = "[Symmetric]";
 
-template <class T, class Array2D_Type, class ViewType>
-typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric>::special_t
-    as_symmetric(const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
-  return Matrix_Frozen_Special<
-      T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric>::as_special(mat);
-}
+upgrade_square_matrix(as_symmetric, MatrixViewSpecial_Symmetric);
 template <class T, class Array2D_Type, class ViewType>
 struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> >
     : public Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric> {
@@ -348,12 +356,7 @@ struct MatrixViewSpecial_Diagonal {
 template <class BaseView>
 const char *MatrixViewSpecial_Diagonal<BaseView>::name = "[Diagonal]";
 
-template <class T, class Array2D_Type, class ViewType>
-typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal>::special_t
-    as_diagonal(const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
-  return Matrix_Frozen_Special<
-      T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal>::as_special(mat);
-}
+upgrade_square_matrix(as_diagonal, MatrixViewSpecial_Diagonal);
 template <class T, class Array2D_Type, class ViewType>
 struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
     : public Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal> {
@@ -389,6 +392,8 @@ struct MatrixBuilder_ValueCopier<
   }
 };
 // }
+
+#undef upgrade_square_matrix
 
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)
