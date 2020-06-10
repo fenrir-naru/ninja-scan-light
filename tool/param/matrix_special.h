@@ -48,6 +48,12 @@
 #define throws_when_debug noexcept
 #endif
 
+#if defined(_MSC_VER)
+#define DELETE_IF_MSC(x)
+#else
+#define DELETE_IF_MSC(x) x
+#endif
+
 template <class BaseView>
 struct MatrixViewSpecial_Symmetric;
 
@@ -300,6 +306,13 @@ typename Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, special_upgraded>:
 template <class BaseView>
 struct MatrixViewSpecial_Symmetric : public BaseView {
   struct {} prop;
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+    return (i > j) // use upper triangle forcedly
+        ? BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, j, i)
+        : BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, i, j);
+  }
   static const char *name;
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
@@ -353,6 +366,13 @@ template <class BaseView>
 struct MatrixViewSpecial_Diagonal : public BaseView {
   struct {} prop;
   static const char *name;
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+    return (i != j) // use upper triangle forcedly
+        ? 0
+        : BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, i, i);
+  }
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const MatrixViewSpecial_Diagonal<BaseView> &view){
@@ -400,6 +420,8 @@ struct MatrixBuilder_ValueCopier<
 // }
 
 #undef upgrade_square_matrix
+
+#undef DELETE_IF_MSC
 
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)

@@ -1230,7 +1230,9 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   prologue_print();
 
   matrix_t A_(as_symmetric(*A));
-  BOOST_TEST_MESSAGE("symmetric:" << A_);
+  BOOST_TEST_MESSAGE("symmetric:" << as_symmetric(*A));
+  BOOST_TEST_MESSAGE("symmetric_copy:" << A_);
+  matrix_compare(A_, as_symmetric(*A));
   BOOST_CHECK(A->isSymmetric() == false);
   BOOST_CHECK(A_.isSymmetric() == true);
 
@@ -1258,7 +1260,9 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
   fixed_t A_fixed_(as_symmetric(A_fixed));
-  BOOST_TEST_MESSAGE("symmetric_fixed:" << A_fixed_);
+  BOOST_TEST_MESSAGE("symmetric_fixed:" << as_symmetric(A_fixed));
+  BOOST_TEST_MESSAGE("symmetric_fixed_copy:" << A_fixed_);
+  matrix_compare(A_fixed_, as_symmetric(A_fixed));
   BOOST_CHECK(A_fixed.isSymmetric() == false);
   BOOST_CHECK(A_fixed_.isSymmetric() == true);
 #endif
@@ -1269,7 +1273,9 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   prologue_print();
 
   matrix_t A_(as_diagonal(*A));
-  BOOST_TEST_MESSAGE("diagonal:" << A_);
+  BOOST_TEST_MESSAGE("diagonal:" << as_diagonal(*A));
+  BOOST_TEST_MESSAGE("diagonal_copy:" << A_);
+  matrix_compare(A_, as_diagonal(*A));
   BOOST_CHECK(A->isDiagonal() == false);
   BOOST_CHECK(A_.isDiagonal() == true);
 
@@ -1297,7 +1303,9 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
   fixed_t A_fixed_(as_diagonal(A_fixed));
-  BOOST_TEST_MESSAGE("diagonal_fixed:" << A_fixed_);
+  BOOST_TEST_MESSAGE("diagonal_fixed:" << as_diagonal(A_fixed));
+  BOOST_TEST_MESSAGE("diagonal_fixed_copy:" << A_fixed_);
+  matrix_compare(A_fixed_, as_diagonal(A_fixed));
   BOOST_CHECK(A_fixed.isDiagonal() == false);
   BOOST_CHECK(A_fixed_.isDiagonal() == true);
 #endif
