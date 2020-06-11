@@ -71,12 +71,7 @@ struct MatrixViewSpecialBuilder : public MatrixViewBuilder<View> {
   typedef typename remove_t<MatrixViewSpecial_Symmetric>::builder_t
       ::template remove_t<MatrixViewSpecial_Diagonal>::builder_t
       ::view_t none_special_t;
-  typedef MatrixViewSpecial_Symmetric<none_special_t> symmetric_t;
-  typedef MatrixViewSpecial_Diagonal<none_special_t> diagonal_t;
 };
-
-template <class T, class Array2D_Type, class ViewType>
-struct Matrix_Frozen_Special;
 
 template <class MatrixT, template <class> class ViewType_Special>
 struct MatrixBuilderSpecial;
@@ -87,21 +82,21 @@ template <
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special> {
   typedef ViewType_Special<
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t> view_special_t;
-  typedef Matrix_Frozen_Special<T, Array2D_Type, view_special_t> special_t;
+  typedef Matrix_Frozen<T, Array2D_Type, view_special_t> special_t;
 };
 
 template <
     class T, class Array2D_Type, class ViewType,
     template <class> class ViewType_Special>
-struct Matrix_Frozen_SpecialBase
-    : public Matrix_Frozen<T, Array2D_Type, ViewType_Special<ViewType> > {
-  typedef Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, ViewType_Special> self_t;
-  typedef Matrix_Frozen<T, Array2D_Type, ViewType_Special<ViewType> > super_t;
+struct Matrix_Frozen_Special
+    : public Matrix_Frozen<T, Array2D_Type, typename ViewType_Special<ViewType>::base_t> {
+  typedef Matrix_Frozen_Special<T, Array2D_Type, ViewType, ViewType_Special> self_t;
+  typedef Matrix_Frozen<T, Array2D_Type, typename ViewType_Special<ViewType>::base_t> super_t;
   typedef typename MatrixBuilderSpecial<
       Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special>::special_t special_t;
   typedef MatrixBuilder<super_t> builder_t;
   template <class ViewType2>
-  Matrix_Frozen_SpecialBase(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
+  Matrix_Frozen_Special(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
     /* Reason to use template ViewType2 is to treat with duplication of special view.
      * For example, if as_symmetric(as_symmetric(mat)), then this construct receives
@@ -280,7 +275,7 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
 };
 
 template <class T, template <class> class ViewType_Special>
-struct Matrix_Frozen_SpecialBase<T, Array2D_ScaledUnit<T>, MatrixViewBase<>, ViewType_Special>{
+struct Matrix_Frozen_Special<T, Array2D_ScaledUnit<T>, MatrixViewBase<>, ViewType_Special>{
   // Ineffective to scalar matrix
   typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > special_t;
   static const special_t &as_special(const special_t &mat){
@@ -290,21 +285,21 @@ struct Matrix_Frozen_SpecialBase<T, Array2D_ScaledUnit<T>, MatrixViewBase<>, Vie
 
 #define upgrade_square_matrix(fname, special_upgraded) \
 template <class T, class Array2D_Type, class ViewType> \
-typename Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, special_upgraded>::special_t \
+typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, special_upgraded>::special_t \
     fname( \
         const Matrix_Frozen<T, Array2D_Type, ViewType> &mat, \
         const bool &do_check = false){ \
   if(do_check && (!mat.isSquare())){ \
     throw std::runtime_error("Could not be upgraded to " #special_upgraded); \
   } \
-  return Matrix_Frozen_SpecialBase< \
+  return Matrix_Frozen_Special< \
       T, Array2D_Type, ViewType, special_upgraded>::as_special(mat); \
 }
 
 
 // Symmetric {
 template <class BaseView>
-struct MatrixViewSpecial_Symmetric : public BaseView {
+struct MatrixViewSpecial_SymmetricBase : public BaseView {
   struct {} prop;
   template <class T, class Array2D_Type>
   inline T operator()(
@@ -316,20 +311,27 @@ struct MatrixViewSpecial_Symmetric : public BaseView {
   static const char *name;
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
-      std::basic_ostream<CharT, Traits> &out, const MatrixViewSpecial_Symmetric<BaseView> &view){
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewSpecial_SymmetricBase<BaseView> &view){
     return out << name << " " << (const BaseView &)view;
   }
 };
 template <class BaseView>
-const char *MatrixViewSpecial_Symmetric<BaseView>::name = "[Symmetric]";
+const char *MatrixViewSpecial_SymmetricBase<BaseView>::name = "[Symmetric]";
+template <class BaseView>
+struct MatrixViewSpecial_Symmetric : public MatrixViewSpecial_SymmetricBase<BaseView> {
+  typedef MatrixViewSpecial_SymmetricBase<BaseView> base_t;
+  static const char *name;
+};
+template <class BaseView>
+const char *MatrixViewSpecial_Symmetric<BaseView>::name = MatrixViewSpecial_SymmetricBase<BaseView>::name;
 
 upgrade_square_matrix(as_symmetric, MatrixViewSpecial_Symmetric);
 template <class T, class Array2D_Type, class ViewType>
-struct Matrix_Frozen_Special<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> >
-    : public Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric> {
-  typedef Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric> super_t;
+struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> >
+    : public Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric> {
+  typedef Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Symmetric> super_t;
   template <class ViewType2>
-  Matrix_Frozen_Special(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
+  Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
   }
   bool isSquare() const noexcept {return true;}
@@ -342,13 +344,13 @@ struct Matrix_Frozen_Special<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewTy
 template <class T, class Array2D_Type, class ViewType>
 struct MatrixBuilder_ValueCopier<
     Matrix_Frozen<
-      T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > > {
+      T, Array2D_Type, MatrixViewSpecial_SymmetricBase<ViewType> > > {
 
   template <class T2, class Array2D_Type2, class ViewType2>
   static Matrix<T2, Array2D_Type2, ViewType2> &copy_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest,
       const Matrix_Frozen<
-        T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> > &src) {
+        T, Array2D_Type, MatrixViewSpecial_SymmetricBase<ViewType> > &src) {
     // use only upper triangle; lower one is cloned with upper one.
     for(unsigned int i(0); i < src.rows(); ++i){
       dest(i, i) = (T2)(src(i, i));
@@ -363,9 +365,8 @@ struct MatrixBuilder_ValueCopier<
 
 // Diagonal {
 template <class BaseView>
-struct MatrixViewSpecial_Diagonal : public BaseView {
+struct MatrixViewSpecial_DiagonalBase : public BaseView {
   struct {} prop;
-  static const char *name;
   template <class T, class Array2D_Type>
   inline T operator()(
       Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
@@ -373,22 +374,30 @@ struct MatrixViewSpecial_Diagonal : public BaseView {
         ? 0
         : BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, i, i);
   }
+  static const char *name;
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
-      std::basic_ostream<CharT, Traits> &out, const MatrixViewSpecial_Diagonal<BaseView> &view){
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewSpecial_DiagonalBase<BaseView> &view){
     return out << name << " " << (const BaseView &)view;
   }
 };
 template <class BaseView>
-const char *MatrixViewSpecial_Diagonal<BaseView>::name = "[Diagonal]";
+const char *MatrixViewSpecial_DiagonalBase<BaseView>::name = "[Diagonal]";
+template <class BaseView>
+struct MatrixViewSpecial_Diagonal : public MatrixViewSpecial_DiagonalBase<BaseView> {
+  typedef MatrixViewSpecial_DiagonalBase<BaseView> base_t;
+  static const char *name;
+};
+template <class BaseView>
+const char *MatrixViewSpecial_Diagonal<BaseView>::name = MatrixViewSpecial_DiagonalBase<BaseView>::name;
 
 upgrade_square_matrix(as_diagonal, MatrixViewSpecial_Diagonal);
 template <class T, class Array2D_Type, class ViewType>
-struct Matrix_Frozen_Special<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
-    : public Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal> {
-  typedef Matrix_Frozen_SpecialBase<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal> super_t;
+struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
+    : public Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal> {
+  typedef Matrix_Frozen_Special<T, Array2D_Type, ViewType, MatrixViewSpecial_Diagonal> super_t;
   template <class ViewType2>
-  Matrix_Frozen_Special(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
+  Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
   }
   bool isSquare() const noexcept {return true;}
@@ -401,13 +410,13 @@ struct Matrix_Frozen_Special<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewTyp
 template <class T, class Array2D_Type, class ViewType>
 struct MatrixBuilder_ValueCopier<
     Matrix_Frozen<
-      T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > > {
+      T, Array2D_Type, MatrixViewSpecial_DiagonalBase<ViewType> > > {
 
   template <class T2, class Array2D_Type2, class ViewType2>
   static Matrix<T2, Array2D_Type2, ViewType2> &copy_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest,
       const Matrix_Frozen<
-        T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> > &src) {
+        T, Array2D_Type, MatrixViewSpecial_DiagonalBase<ViewType> > &src) {
     for(unsigned int i(0); i < src.rows(); ++i){
       dest(i, i) = (T2)(src(i, i));
       for(unsigned int j(i+1); j < src.columns(); ++j){
@@ -456,14 +465,14 @@ upgrade_mul_mat_mat_function(ViewType, MatrixViewSpecial_Diagonal<ViewType2>, op
     (const unsigned int &row, const unsigned int &column) const noexcept{
   return lhs_opt(row, column) * rhs_opt(column, column);
 }
-upgrade_mul_mat_mat(MatrixViewSpecial_Diagonal<ViewType>, ViewType2);
-upgrade_mul_mat_mat_function(MatrixViewSpecial_Diagonal<ViewType>, ViewType2, operator(), T)
+upgrade_mul_mat_mat(MatrixViewSpecial_DiagonalBase<ViewType>, ViewType2);
+upgrade_mul_mat_mat_function(MatrixViewSpecial_DiagonalBase<ViewType>, ViewType2, operator(), T)
     (const unsigned int &row, const unsigned int &column) const noexcept{
   return lhs_opt(row, row) * rhs_opt(row, column);
 }
-upgrade_mul_mat_mat(MatrixViewSpecial_Diagonal<ViewType>, MatrixViewSpecial_Diagonal<ViewType2>);
+upgrade_mul_mat_mat(MatrixViewSpecial_DiagonalBase<ViewType>, MatrixViewSpecial_Diagonal<ViewType2>);
 upgrade_mul_mat_mat_function(
-    MatrixViewSpecial_Diagonal<ViewType>, MatrixViewSpecial_Diagonal<ViewType2>, operator(), T)
+    MatrixViewSpecial_DiagonalBase<ViewType>, MatrixViewSpecial_Diagonal<ViewType2>, operator(), T)
     (const unsigned int &row, const unsigned int &column) const noexcept{
   return (row == column) ? (lhs_opt(row, row) * rhs_opt(column, column)) : T(0);
 }
