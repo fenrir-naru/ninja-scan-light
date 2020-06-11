@@ -1299,6 +1299,10 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Diagonal] [Base]"); // as_diagonal should be effective only once
   matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "*view: [Base]");
 
+  matrix_compare(A_ * (*A), as_diagonal(*A) * (*A));
+  matrix_compare((*A) * A_, (*A) * as_diagonal(*A));
+  matrix_compare(A_ * A_, as_diagonal(*A) * as_diagonal(*A));
+
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));

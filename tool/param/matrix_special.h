@@ -419,6 +419,59 @@ struct MatrixBuilder_ValueCopier<
 };
 // }
 
+// Optimization for multiplication of special matrix {
+#define upgrade_mul_mat_mat(view_lhs, view_rhs) \
+template < \
+    class T, class Array2D_Type, class ViewType, \
+    class T2, class Array2D_Type2, class ViewType2> \
+struct Array2D_Operator_Multiply< \
+      Matrix_Frozen<T, Array2D_Type, view_lhs >, \
+      Matrix_Frozen<T2, Array2D_Type2, view_rhs > > \
+    : public Array2D_Operator_Binary< \
+        Matrix_Frozen<T, Array2D_Type, view_lhs >, \
+        Matrix_Frozen<T2, Array2D_Type2, view_rhs > >{ \
+  typedef Array2D_Operator_Binary< \
+      Matrix_Frozen<T, Array2D_Type, view_lhs >, \
+      Matrix_Frozen<T2, Array2D_Type2, view_rhs > > super_t; \
+  static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix; \
+  typedef typename super_t::lhs_t::template Multiply_Matrix_by_Matrix<typename super_t::rhs_t> gen_t; \
+  typename gen_t::lhs_opt_t lhs_opt; \
+  typename gen_t::rhs_opt_t rhs_opt; \
+  Array2D_Operator_Multiply( \
+      const typename super_t::lhs_t &_lhs, \
+      const typename super_t::rhs_t &_rhs) noexcept \
+      : super_t(_lhs, _rhs), lhs_opt(_lhs), rhs_opt(_rhs) {} \
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept; \
+};
+#define upgrade_mul_mat_mat_function(view_lhs, view_rhs, fname, out_type) \
+template < \
+    class T, class Array2D_Type, class ViewType, \
+    class T2, class Array2D_Type2, class ViewType2> \
+out_type Array2D_Operator_Multiply< \
+    Matrix_Frozen<T, Array2D_Type, view_lhs >, \
+    Matrix_Frozen<T2, Array2D_Type2, view_rhs > >::fname
+
+upgrade_mul_mat_mat(ViewType, MatrixViewSpecial_Diagonal<ViewType2>);
+upgrade_mul_mat_mat_function(ViewType, MatrixViewSpecial_Diagonal<ViewType2>, operator(), T)
+    (const unsigned int &row, const unsigned int &column) const noexcept{
+  return lhs_opt(row, column) * rhs_opt(column, column);
+}
+upgrade_mul_mat_mat(MatrixViewSpecial_Diagonal<ViewType>, ViewType2);
+upgrade_mul_mat_mat_function(MatrixViewSpecial_Diagonal<ViewType>, ViewType2, operator(), T)
+    (const unsigned int &row, const unsigned int &column) const noexcept{
+  return lhs_opt(row, row) * rhs_opt(row, column);
+}
+upgrade_mul_mat_mat(MatrixViewSpecial_Diagonal<ViewType>, MatrixViewSpecial_Diagonal<ViewType2>);
+upgrade_mul_mat_mat_function(
+    MatrixViewSpecial_Diagonal<ViewType>, MatrixViewSpecial_Diagonal<ViewType2>, operator(), T)
+    (const unsigned int &row, const unsigned int &column) const noexcept{
+  return (row == column) ? (lhs_opt(row, row) * rhs_opt(column, column)) : T(0);
+}
+
+#undef upgrade_mul_mat_mat
+#undef upgrade_mul_mat_mat_function
+// }
+
 #undef upgrade_square_matrix
 
 #undef DELETE_IF_MSC
