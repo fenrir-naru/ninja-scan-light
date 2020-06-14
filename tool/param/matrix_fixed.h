@@ -172,27 +172,9 @@ template <class T, int nR, int nC = nR>
 struct Array2D_Fixed_init {};
 
 template <class T, int nR, int nC = nR>
-struct Matrix_Fixed : public Matrix<T, Array2D_Fixed_init<T, nR, nC> > {
-  typedef Matrix_Fixed<T, nR, nC> self_t;
-  typedef Matrix<T, Array2D_Fixed_init<T, nR, nC> > super_t;
-
-  Matrix_Fixed() noexcept : super_t(){}
-  Matrix_Fixed(
-      const unsigned int &rows, const unsigned int &columns, const T *serialized = NULL)
-      : super_t(rows, columns, serialized){}
-  Matrix_Fixed(const super_t &matrix) noexcept : super_t(matrix) {}
-  template <class T2, class Array2D_Type2, class ViewType2>
-  Matrix_Fixed(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
-      : super_t(matrix) {}
-  self_t &operator=(const super_t &matrix){
-    super_t::operator=(matrix);
-    return *this;
-  }
-  template <class T2, class Array2D_Type2>
-  self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
-    super_t::operator=(matrix);
-    return *this;
-  }
+struct Matrix_Fixed {
+  typedef Matrix<T, Array2D_Fixed_init<T, nR, nC> > mat_t;
+  typedef Matrix_Frozen<T, Array2D_Fixed<T, nR, nC> > frozen_t;
 };
 
 template <class T, int nR, int nC, class ViewType>
@@ -212,7 +194,6 @@ class Matrix<T, Array2D_Fixed_init<T, nR, nC>, ViewType>
 #endif
 
     typedef Matrix<T, Array2D_Fixed_init<T, nR, nC>, ViewType> self_t;
-    typedef Matrix_Fixed<T, nR, nC> fixed_t;
 
     static const int fixed_rows = nR;
     static const int fixed_columns = nC;
