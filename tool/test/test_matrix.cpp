@@ -1,20 +1,11 @@
 #include <string>
 #include <cstring>
 #include <cmath>
-#include <ctime>
 #include <iostream>
 #include <stdexcept>
 #include <set>
 #include <deque>
 #include <algorithm>
-
-#include "param/complex.h"
-#include "param/matrix.h"
-#include "param/matrix_fixed.h"
-#include "param/matrix_special.h"
-
-#include <boost/random.hpp>
-#include <boost/random/random_device.hpp>
 
 #include <boost/type_traits/is_same.hpp>
 
@@ -22,42 +13,9 @@
 
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
-#include <boost/test/floating_point_comparison.hpp>
-#include <boost/test/output_test_stream.hpp>
-
-#if !defined(BOOST_VERSION)
-#define BOOST_FIXTURE_TEST_SUITE(name, fixture)
-#define BOOST_AUTO_TEST_SUITE_END()
-#define BOOST_AUTO_TEST_CASE(name) void name()
-#define BOOST_AUTO_TEST_CASE_MAY_FAILURES(name, failures) void name()
-#elif defined(BOOST_VERSION) && (BOOST_VERSION < 105900)
-#define BOOST_AUTO_TEST_CASE_MAY_FAILURES(name, failures) \
-    BOOST_AUTO_TEST_CASE_EXPECTED_FAILURES(name, failures) \
-    BOOST_AUTO_TEST_CASE(name)
-#else
-#define BOOST_AUTO_TEST_CASE_MAY_FAILURES(name, failures) \
-    BOOST_AUTO_TEST_CASE(name, * boost::unit_test::expected_failures(failures))
-#endif
-
-#define SIZE 8
-#define ACCEPTABLE_DELTA_DEFAULT 1E-8
+#include "test_matrix/common.h"
 
 using namespace std;
-
-namespace br = boost::random;
-struct rand_t {
-  br::mt19937 gen;
-  br::normal_distribution<> dist;
-  rand_t()
-      : gen(static_cast<unsigned long>(time(0))), dist(0, 1.0){
-  }
-  rand_t(const unsigned long &seed)
-      : gen(seed), dist(0, 1.0){
-  }
-  double operator()(){
-    return (double)dist(gen);
-  }
-};
 
 int k_delta(const unsigned &i, const unsigned &j){
   return (i == j) ? 1 : 0;
@@ -66,173 +24,6 @@ int k_delta(const unsigned &i, const unsigned &j){
 typedef double content_t;
 typedef Matrix<content_t> matrix_t;
 typedef Matrix<Complex<content_t> > cmatrix_t;
-
-struct Fixture {
-  rand_t gen_rand;
-  matrix_t *A, *B;
-  content_t A_array[SIZE][SIZE], B_array[SIZE][SIZE];
-
-  void assign_symmetric(){
-    for(unsigned int i(0); i < A->rows(); i++){
-      A_array[i][i] = (*A)(i, i) = gen_rand();
-      for(unsigned int j(i + 1); j < A->columns(); j++){
-        A_array[i][j] = A_array[j][i]
-            = (*A)(i, j) = (*A)(j, i) = gen_rand();
-      }
-    }
-    for(unsigned int i(0); i < B->rows(); i++){
-      B_array[i][i] = (*B)(i, i) = gen_rand();
-      for(unsigned int j(i + 1); j < B->columns(); j++){
-        B_array[i][j] = B_array[j][i]
-            = (*B)(i, j) = (*B)(j, i) = gen_rand();
-      }
-    }
-  }
-  void assign_unsymmetric(){
-    for(unsigned int i(0); i < A->rows(); i++){
-      for(unsigned int j(i); j < A->columns(); j++){
-        A_array[i][j] = (*A)(i, j) = gen_rand();
-      }
-    }
-    for(unsigned int i(0); i < B->rows(); i++){
-      for(unsigned int j(i); j < B->columns(); j++){
-        B_array[i][j] = (*B)(i, j) = gen_rand();
-      }
-    }
-  }
-  void assign_intermediate_zeros(const unsigned &row = 1){
-    if(row > A->rows()){return;}
-    for(unsigned int j(0); j < row; j++){
-      A_array[row][j] = (*A)(row, j) = content_t(0);
-    }
-    for(unsigned int j(0); j < row; j++){
-      B_array[row][j] = (*B)(row, j) = content_t(0);
-    }
-  }
-  void assign_linear(){
-    int counter(0);
-    for(unsigned int i(0); i < A->rows(); i++){
-      for(unsigned int j(0); j < A->columns(); j++){
-        A_array[i][j] = (*A)(i, j) = counter++;
-      }
-    }
-    for(unsigned int i(0); i < B->rows(); i++){
-      for(unsigned int j(0); j < B->columns(); j++){
-        B_array[i][j] = (*B)(i, j) = counter++;
-      }
-    }
-  }
-  void prologue_print(){
-    BOOST_TEST_MESSAGE("A:" << *A);
-    BOOST_TEST_MESSAGE("B:" << *B);
-  }
-
-  Fixture()
-      : gen_rand(), A(new matrix_t(SIZE, SIZE)), B(new matrix_t(SIZE, SIZE)){
-    assign_symmetric();
-  }
-
-  ~Fixture(){
-    delete A;
-    delete B;
-  }
-};
-
-template<class T1, class T2, class T3>
-void element_compare_delta(
-    T1 v1, T2 v2,
-    T3 delta){
-  BOOST_CHECK_SMALL(v1 - v2, delta);
-}
-template<class T1, class T2>
-void element_compare_delta(
-    T1 v1, T2 v2,
-    const bool &){
-  BOOST_CHECK_EQUAL(v1, v2);
-}
-
-template<class T1, class T2, class T3>
-void element_compare_delta(
-    T1 v1, const Complex<T2> &v2,
-    T3 delta){
-  BOOST_CHECK_SMALL(v1 - v2.real(), delta);
-  BOOST_CHECK_SMALL(0 - v2.imaginary(), delta);
-}
-template<class T1, class T2>
-void element_compare_delta(
-    T1 v1, const Complex<T2> &v2,
-    const bool &){
-  BOOST_CHECK_EQUAL(v1, v2.real());
-  BOOST_CHECK_EQUAL(0, v2.imaginary());
-}
-
-template<class T1, class T2, class T3>
-void element_compare_delta(
-    const Complex<T1> &v1, const Complex<T2> &v2,
-    T3 delta){
-  BOOST_CHECK_SMALL(v1.real() - v2.real(), delta);
-  BOOST_CHECK_SMALL(v1.imaginary() - v2.imaginary(), delta);
-}
-template<class T1, class T2>
-void element_compare_delta(
-    const Complex<T1> &v1, const Complex<T2> &v2,
-    const bool &){
-  BOOST_CHECK_EQUAL(v1.real(), v2.real());
-  BOOST_CHECK_EQUAL(v1.imaginary(), v2.imaginary());
-}
-
-template<
-    class U,
-    class T2, class Array2D_Type2, class ViewType2,
-    class T3>
-void matrix_compare_delta(
-    U u,
-    const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &m,
-    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
-  for(unsigned i(0); i < m.rows(); i++){
-    for(unsigned j(0); j < m.columns(); j++){
-      element_compare_delta(u(i, j), m(i, j), delta);
-    }
-  }
-}
-
-template<
-    class T1, class Array2D_Type1, class ViewType1,
-    class T2, class Array2D_Type2, class ViewType2,
-    class T3>
-void matrix_compare_delta(
-    const Matrix_Frozen<T1, Array2D_Type1, ViewType1> &m1,
-    const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &m2,
-    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
-  BOOST_REQUIRE_EQUAL(m1.rows(), m2.rows());
-  BOOST_REQUIRE_EQUAL(m1.columns(), m2.columns());
-  for(unsigned i(0); i < m1.rows(); i++){
-    for(unsigned j(0); j < m1.columns(); j++){
-      element_compare_delta(m1(i, j), m2(i, j), delta);
-    }
-  }
-}
-
-template<
-    class T1,
-    class Array2D_Type2, class ViewType2,
-    class T3>
-void matrix_compare_delta(
-    T1 *t,
-    const Matrix_Frozen<T1, Array2D_Type2, ViewType2> &m,
-    const T3 &delta = ACCEPTABLE_DELTA_DEFAULT){
-  for(unsigned i(0); i < m.rows(); i++){
-    for(unsigned j(0); j < m.columns(); j++){
-      element_compare_delta(*(t++), m(i, j), delta);
-    }
-  }
-}
-
-template<class U, class V>
-void matrix_compare(
-    U u, V v){
-  matrix_compare_delta(u, v, false);
-}
 
 struct direct_t {
   matrix_t m;
@@ -276,7 +67,7 @@ struct direct_t {
   }
 };
 
-BOOST_FIXTURE_TEST_SUITE(matrix, Fixture)
+BOOST_FIXTURE_TEST_SUITE(matrix, Fixture<content_t>)
 
 BOOST_AUTO_TEST_CASE(init){
   prologue_print();
@@ -456,20 +247,6 @@ BOOST_AUTO_TEST_CASE(matrix_mul){
   matrix_compare_delta(a4, _A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
-template<class T, class Array2D_Type, class ViewType, class U>
-void matrix_inspect_contains(
-    const Matrix_Frozen<T, Array2D_Type, ViewType> &m,
-    const U &cmp,
-    const bool &is_negative = false){
-  boost::test_tools::output_test_stream os;
-  os << m.inspect();
-  BOOST_TEST_MESSAGE(os.str());
-  if(is_negative){
-    BOOST_CHECK(os.str().find(cmp) == std::string::npos);
-  }else{
-    BOOST_CHECK(os.str().find(cmp) != std::string::npos);
-  }
-}
 BOOST_AUTO_TEST_CASE(matrix_inspect){
   using boost::format;
 
@@ -1167,173 +944,5 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   }
   delete [] AB_array;
 }
-
-#if !defined(SKIP_FIXED_MATRIX_TESTS) // tests for fixed
-BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
-  prologue_print();
-  typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
-  fixed_t _A(fixed_t::blank(SIZE, SIZE).replace(*A));
-  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
-
-  typedef /*typename*/ Matrix_Fixed<Complex<content_t>, SIZE>::mat_t cfixed_t;
-  cfixed_t _Ac1(cfixed_t::blank(SIZE, SIZE).replace(*A));
-  cfixed_t _Ac2(_Ac1.copy());
-  matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
-
-  try{
-    matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
-    matrix_compare_delta(
-        A->partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
-        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
-        ACCEPTABLE_DELTA_DEFAULT);
-  }catch(std::runtime_error &e){
-    BOOST_ERROR("eigen_error:" << e.what());
-  }
-}
-
-BOOST_AUTO_TEST_CASE(fixed_types){
-  BOOST_CHECK((boost::is_same<
-      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
-        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
-        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 2, 16>::mat_t>::value));
-  BOOST_CHECK((boost::is_same<
-      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
-        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> > > > >,
-        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 2, 16>::mat_t>::value));
-  BOOST_CHECK((boost::is_same<
-      Matrix_Fixed<content_t, 2, 4>::frozen_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::frozen_t::builder_t::transpose_t>::mat_t
-        ::builder_t::transpose_t::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 16, 2>::mat_t>::value));
-  BOOST_CHECK((boost::is_same<
-      Matrix_Fixed<content_t, 2, 4>::frozen_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
-        ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::frozen_t>::mat_t
-        ::template Multiply_Matrix_by_Scalar<int>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::frozen_t>::mat_t
-        ::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 2, 16>::mat_t>::value));
-}
-#endif
-
-#if !defined(SKIP_SPECIAL_MATRIX_TESTS) // tests for special
-BOOST_AUTO_TEST_CASE(force_symmetric){
-  assign_linear();
-  prologue_print();
-
-  matrix_t A_(as_symmetric(*A));
-  BOOST_TEST_MESSAGE("symmetric:" << as_symmetric(*A));
-  BOOST_TEST_MESSAGE("symmetric_copy:" << A_);
-  matrix_compare(A_, as_symmetric(*A));
-  BOOST_CHECK(A->isSymmetric() == false);
-  BOOST_CHECK(A_.isSymmetric() == true);
-
-  BOOST_CHECK_THROW(as_symmetric(A->partial(SIZE - 1, SIZE), true), std::runtime_error); // !square
-
-  matrix_inspect_contains(as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) * 2, "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) / 2, "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(-as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) + 2, "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) - 2, "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(2 * as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(2 + as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(2 - as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) * matrix_t::getI(A->columns()), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) + (*A), "*view: [Base]");
-  matrix_inspect_contains(as_symmetric(*A) - (*A), "*view: [Base]");
-  matrix_inspect_contains(as_symmetric(*A) * (*A), "*view: [Base]");
-
-  matrix_inspect_contains(as_symmetric(*A).transpose(), "*view: [Symmetric] [Base]"); // should be same after transpose()
-  matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Symmetric] [Base]"); // as_symmetric should be effective only once
-  matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "*view: [Base]");
-
-#if !defined(SKIP_FIXED_MATRIX_TESTS)
-  typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
-  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
-  fixed_t A_fixed_(as_symmetric(A_fixed));
-  BOOST_TEST_MESSAGE("symmetric_fixed:" << as_symmetric(A_fixed));
-  BOOST_TEST_MESSAGE("symmetric_fixed_copy:" << A_fixed_);
-  matrix_compare(A_fixed_, as_symmetric(A_fixed));
-  BOOST_CHECK(A_fixed.isSymmetric() == false);
-  BOOST_CHECK(A_fixed_.isSymmetric() == true);
-#endif
-}
-
-BOOST_AUTO_TEST_CASE(force_diagonal){
-  assign_linear();
-  prologue_print();
-
-  matrix_t A_(as_diagonal(*A));
-  BOOST_TEST_MESSAGE("diagonal:" << as_diagonal(*A));
-  BOOST_TEST_MESSAGE("diagonal_copy:" << A_);
-  matrix_compare(A_, as_diagonal(*A));
-  BOOST_CHECK(A->isDiagonal() == false);
-  BOOST_CHECK(A_.isDiagonal() == true);
-
-  BOOST_CHECK_THROW(as_diagonal(A->partial(SIZE - 1, SIZE), true), std::runtime_error); // !square
-
-  matrix_inspect_contains(as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) * 2, "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) / 2, "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(-as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) + 2, "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) - 2, "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(2 * as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(2 + as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(2 - as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) * matrix_t::getI(A->columns()), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) + (*A), "*view: [Base]");
-  matrix_inspect_contains(as_diagonal(*A) - (*A), "*view: [Base]");
-  matrix_inspect_contains(as_diagonal(*A) * (*A), "*view: [Base]");
-
-  matrix_inspect_contains(as_diagonal(*A).transpose(), "*view: [Diagonal] [Base]"); // should be same after transpose()
-  matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Diagonal] [Base]"); // as_diagonal should be effective only once
-  matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "*view: [Base]");
-
-  matrix_compare(A_ * (*A), as_diagonal(*A) * (*A));
-  matrix_compare((*A) * A_, (*A) * as_diagonal(*A));
-  matrix_compare(A_ * A_, as_diagonal(*A) * as_diagonal(*A));
-
-#if !defined(SKIP_FIXED_MATRIX_TESTS)
-  typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
-  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
-  fixed_t A_fixed_(as_diagonal(A_fixed));
-  BOOST_TEST_MESSAGE("diagonal_fixed:" << as_diagonal(A_fixed));
-  BOOST_TEST_MESSAGE("diagonal_fixed_copy:" << A_fixed_);
-  matrix_compare(A_fixed_, as_diagonal(A_fixed));
-  BOOST_CHECK(A_fixed.isDiagonal() == false);
-  BOOST_CHECK(A_fixed_.isDiagonal() == true);
-#endif
-}
-
-BOOST_AUTO_TEST_CASE(force_special_intersection){
-  assign_linear();
-  prologue_print();
-
-  matrix_inspect_contains(as_symmetric(*A) + as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) + as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) + as_diagonal(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) + as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) - as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) - as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) - as_diagonal(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) - as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) * as_symmetric(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) * as_diagonal(*A), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(as_symmetric(*A) * as_diagonal(*A), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(as_diagonal(*A) * as_symmetric(*A), "*view: [Symmetric] [Base]");
-}
-
-
-#endif
 
 BOOST_AUTO_TEST_SUITE_END()
