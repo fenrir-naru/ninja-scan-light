@@ -1198,28 +1198,28 @@ BOOST_AUTO_TEST_CASE(fixed_types){
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
+          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t::fixed_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> > > > >,
-        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
+        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t::fixed_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
   BOOST_CHECK((boost::is_same<
-      Matrix_Fixed<content_t, 2, 4>::super_t::super_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::super_t::super_t>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::super_t::super_t::builder_t::transpose_t>::mat_t
-        ::builder_t::transpose_t::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 2, 4>::frozen_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::frozen_t::builder_t::transpose_t>::mat_t
+        ::builder_t::transpose_t::builder_t::assignable_t::fixed_t,
       Matrix_Fixed<content_t, 16, 2> >::value));
   BOOST_CHECK((boost::is_same<
-      Matrix_Fixed<content_t, 2, 4>::super_t::super_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::super_t::super_t>::mat_t
-        ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::super_t::super_t>::mat_t
+      Matrix_Fixed<content_t, 2, 4>::frozen_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
+        ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::frozen_t>::mat_t
         ::template Multiply_Matrix_by_Scalar<int>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::super_t::super_t>::mat_t
-        ::builder_t::assignable_t,
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::frozen_t>::mat_t
+        ::builder_t::assignable_t::fixed_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
 }
 #endif
