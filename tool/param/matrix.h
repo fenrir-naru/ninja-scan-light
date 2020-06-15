@@ -1174,6 +1174,7 @@ class Matrix_Frozen {
     typedef Array2D_Type storage_t;
     typedef ViewType view_t;
     typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
+    typedef self_t frozen_t;
 
     typedef MatrixBuilder<self_t> builder_t;
 

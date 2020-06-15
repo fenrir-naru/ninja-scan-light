@@ -174,7 +174,6 @@ struct Array2D_Fixed_init {};
 template <class T, int nR, int nC = nR>
 struct Matrix_Fixed {
   typedef Matrix<T, Array2D_Fixed_init<T, nR, nC> > mat_t;
-  typedef Matrix_Frozen<T, Array2D_Fixed<T, nR, nC> > frozen_t;
 };
 
 template <class T, int nR, int nC, class ViewType>
@@ -182,7 +181,6 @@ class Matrix<T, Array2D_Fixed_init<T, nR, nC>, ViewType>
     : public Matrix<T, Array2D_Fixed<T, nR, nC>, ViewType> {
   public:
     typedef Matrix<T, Array2D_Fixed<T, nR, nC>, ViewType> super_t;
-    typedef typename super_t::super_t frozen_t;
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename super_t::storage_t storage_t;
