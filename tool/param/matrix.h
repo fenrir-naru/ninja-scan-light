@@ -294,7 +294,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         : values(new T[array.rows() * array.columns()]), ref(new int(1)) {
       T *buf(values);
       for(unsigned int i(0); i < array.rows(); ++i){
-        for(unsigned int j(0); j < array.rows(); ++j){
+        for(unsigned int j(0); j < array.columns(); ++j){
           *(buf++) = array(i, j);
         }
       }
