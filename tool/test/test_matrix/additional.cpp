@@ -18,11 +18,11 @@ BOOST_FIXTURE_TEST_SUITE(matrix, Fixture<content_t>)
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
-  fixed_t _A(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t _A(*A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 
   typedef /*typename*/ Matrix_Fixed<Complex<content_t>, SIZE>::mat_t cfixed_t;
-  cfixed_t _Ac1(cfixed_t::blank(SIZE, SIZE).replace(*A));
+  cfixed_t _Ac1(*A);
   cfixed_t _Ac2(_Ac1.copy());
   matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
   matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
-  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t A_fixed(*A);
   fixed_t A_fixed_(as_symmetric(A_fixed));
   BOOST_TEST_MESSAGE("symmetric_fixed:" << as_symmetric(A_fixed));
   BOOST_TEST_MESSAGE("symmetric_fixed_copy:" << A_fixed_);
@@ -151,7 +151,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
-  fixed_t A_fixed(fixed_t::blank(SIZE, SIZE).replace(*A));
+  fixed_t A_fixed(*A);
   fixed_t A_fixed_(as_diagonal(A_fixed));
   BOOST_TEST_MESSAGE("diagonal_fixed:" << as_diagonal(A_fixed));
   BOOST_TEST_MESSAGE("diagonal_fixed_copy:" << A_fixed_);
