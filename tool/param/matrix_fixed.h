@@ -61,16 +61,36 @@
 #define throws_when_debug noexcept
 #endif
 
-template <class T, int nR, int nC = nR>
-class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
+template <class T, int nR, int nC = nR, bool has_buffer = false>
+struct Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC, has_buffer> > {
+  const T * const src;
+  Array2D_Fixed(
+      const unsigned int &rows, const unsigned int &columns,
+      const T *serialized = NULL)
+      : Array2D<T, Array2D_Fixed<T, nR, nC, has_buffer> >(rows, columns),
+      src(serialized) {}
+  bool has_source() const noexcept {return src != NULL;}
+  T operator()(const unsigned int &row, const unsigned int &column) const {
+    return src[(row * this->columns()) + column];
+  }
+};
+
+template <class T, int nR, int nC>
+struct Array2D<T, Array2D_Fixed<T, nR, nC, false> > : public Array2D_Frozen<T> {
+  Array2D(const unsigned int &rows, const unsigned int &columns) noexcept
+      : Array2D_Frozen<T>(rows, columns){}
+};
+
+template <class T, int nR, int nC>
+class Array2D_Fixed<T, nR, nC, true> : public Array2D<T, Array2D_Fixed<T, nR, nC, true> > {
   public:
-    typedef Array2D_Fixed<T, nR, nC> self_t;
+    typedef Array2D_Fixed<T, nR, nC, true> self_t;
     typedef Array2D<T, self_t> super_t;
     static const bool clonable = false;
 
     template <class T2>
     struct family_t {
-      typedef Array2D_Fixed<T2, nR, nC> res_t;
+      typedef Array2D_Fixed<T2, nR, nC, true> res_t;
     };
 
     using super_t::rows;
@@ -82,48 +102,69 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
   protected:
     T (* const values)[nR][nC]; ///< array for values
 
-  public:
-    Array2D_Fixed(T (*buf)[nR][nC] = NULL) noexcept
-        : super_t(nR, nC), values(buf) {
-    }
-    Array2D_Fixed(
-        const unsigned int &rows,
-        const unsigned int &columns,
-        T (*buf)[nR][nC] = NULL)
-        : super_t(rows, columns), values(buf) {
-      if((nR < rows) || (nC < columns)){
+    void check_size() const {
+      if((nR < rows()) || (nC < columns())){
         throw std::runtime_error("larger rows or columns");
       }
     }
 
-    /**
-     * Copy constructor, which performs shallow copy.
-     *
-     * @param array another one
-     */
-    Array2D_Fixed(const self_t &src) noexcept
-        : super_t(src.rows(), src.columns()), values(src.values){
+    template <class T2>
+    void fill_values(const Array2D_Frozen<T2> &array){
+      if(!values){
+        throw std::runtime_error("No buffer");
+      }
+      for(unsigned int i(0); i < array.rows(); ++i){
+        for(unsigned int j(0); j < array.columns(); ++j){
+          (*values)[i][j] = array(i, j);
+        }
+      }
     }
+
+  public:
+    Array2D_Fixed(const unsigned int &rows = 0, const unsigned int &columns = 0)
+        : super_t(rows, columns), values(NULL) {
+      check_size();
+    }
+
+    Array2D_Fixed(T (*buf)[nR][nC])
+        : super_t(0, 0), values(buf) {}
+
+    /**
+     * Copy constructor, which performs shallow copy
+     */
+    Array2D_Fixed(const self_t &another)
+        : super_t(another.rows(), another.columns()), values(another.values) {}
+
 
     /**
      * Destructor
      */
     ~Array2D_Fixed(){}
 
-    /**
-     * Assigner, which performs deep copy.
-     *
-     * @param rhs another one
-     * @return self_t
-     */
+    // Assigners, which performs deep copy
     self_t &operator=(const self_t &rhs) noexcept {
       if(this != &rhs){
         super_t::m_rows = rhs.m_rows;
         super_t::m_columns = rhs.m_columns;
-        if(rhs.values && values){
-          std::memcpy(values, rhs.values, sizeof(T[nR][nC]));
-        }
+        if(rhs.values){fill_values(rhs);}
       }
+      return *this;
+    }
+
+    self_t &operator=(const Array2D_Fixed<T, nR, nC, false> &array){
+      super_t::m_rows = array.rows();
+      super_t::m_columns = array.columns();
+      check_size();
+      if(array.has_source()){fill_values(array);}
+      return *this;
+    }
+
+    template <class T2>
+    self_t &operator=(const Array2D_Frozen<T2> &array){
+      super_t::m_rows = array.rows();
+      super_t::m_columns = array.columns();
+      check_size();
+      fill_values(array);
       return *this;
     }
 
@@ -164,127 +205,87 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
 
   protected:
     self_t copy(const bool &is_deep = false) const {
-      return self_t(*this); ///< is_deep flag will be ignored
+      return self_t(*this); ///< is_deep flag will be ignored, and return shallow copy
     }
-};
-
-template <class T, int nR, int nC = nR>
-struct Array2D_Fixed_init {};
-
-template <class T, int nR, int nC = nR>
-struct Matrix_Fixed {
-  typedef Matrix<T, Array2D_Fixed_init<T, nR, nC> > mat_t;
 };
 
 template <class T, int nR, int nC, class ViewType>
-class Matrix<T, Array2D_Fixed_init<T, nR, nC>, ViewType>
-    : public Matrix<T, Array2D_Fixed<T, nR, nC>, ViewType> {
+class Matrix_Frozen<T, Array2D_Fixed<T, nR, nC, false>, ViewType>
+    : public Matrix_Frozen<T, Array2D_Fixed<T, nR, nC, true>, ViewType> {
   public:
-    typedef Matrix<T, Array2D_Fixed<T, nR, nC>, ViewType> super_t;
-
-#if defined(__GNUC__) && (__GNUC__ < 5)
-    typedef typename super_t::storage_t storage_t;
-#elif defined(_MSC_VER)
-    typedef typename super_t::storage_t storage_t; // To fix VC2010(C2514) in constructor
-    using super_t::operator(); // To fix VC2010(C2106) of X(r, c) = something
-#else
-    using typename super_t::storage_t;
-#endif
-
-    typedef Matrix<T, Array2D_Fixed_init<T, nR, nC>, ViewType> self_t;
-
-    static const int fixed_rows = nR;
-    static const int fixed_columns = nC;
+    typedef Matrix_Frozen<T, Array2D_Fixed<T, nR, nC, true>, ViewType> super_t;
 
   protected:
     T buf[nR][nC]; ///< fixed size buffer
-
-    Matrix(const storage_t &storage) noexcept
-        : super_t(storage_t(&buf)) {
-      super_t::storage = storage;
+    Matrix_Frozen() : super_t(typename super_t::storage_t(&buf)) {}
+    Matrix_Frozen(const typename super_t::storage_t &src)
+        : super_t(typename super_t::storage_t(&buf)) {
+      super_t::storage = src;
     }
-
-    template <class T2, class Array2D_Type2, class ViewType2>
-    friend class Matrix;
-
+    /*
+     * This constructor is called by Matrix(row, columns [, serialized]) when has_buffer = false.
+     * When has_buffer = true, Matrix(const storage_t &) calls this, which be also invoked by
+     * Matrix::copy()
+     */
+    template <bool has_buffer>
+    Matrix_Frozen(const Array2D_Fixed<T, nR, nC, has_buffer> &src)
+        : super_t(typename super_t::storage_t(&buf)) {
+      super_t::storage = src;
+    }
   public:
-    /**
-     * Constructor without customization.
-     * The elements will be cleared with T(0).
-     *
-     */
-    Matrix() noexcept : super_t(storage_t(&buf)){
-      super_t::clear();
-    }
-
-    /**
-     * Constructor with specified row and column numbers, and values.
-     * The size will be compared with the predefined numbers.
-     * If the size is larger than buffer, then error will be thrown.
-     * The elements will be cleared with T(0) if serialized is NULL (default).
-     *
-     * @param rows Row number
-     * @param columns Column number
-     * @param serialized Initial values of elements
-     */
-    Matrix(
-        const unsigned int &rows,
-        const unsigned int &columns,
-        const T *serialized = NULL)
-        : super_t(storage_t(rows, columns, &buf)){
-      if(serialized){
-        if(columns == nC){
-          std::memcpy(buf, serialized, sizeof(T) * nC * rows);
-        }else{
-          for(unsigned int i(0); i < rows; ++i, serialized += columns){
-            std::memcpy(buf[i], serialized, sizeof(T) * columns);
-          }
-        }
-      }else{
-        super_t::clear();
-      }
-    }
-
-    /**
-     * Copy constructor generating deep copy.
-     */
-    Matrix(const self_t &matrix) noexcept
-        : super_t(storage_t(&buf)) {
+    Matrix_Frozen(const Matrix<T, Array2D_Fixed<T, nR, nC, false>, ViewType> &matrix)
+        : super_t(typename super_t::storage_t(&buf)) {
+      // change copy style from shallow to deep
       super_t::storage = matrix.storage;
+      super_t::view = matrix.view;
     }
-
-    template <class T2, class Array2D_Type2, class ViewType2>
-    Matrix(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
-        : super_t(storage_t(matrix.rows(), matrix.columns(), &buf)) {
-      super_t::replace(matrix);
-    }
-    /**
-     * Destructor
-     */
-    virtual ~Matrix(){}
-
-    self_t &operator=(const self_t &matrix){
-      super_t::operator=(matrix);
-      return *this;
-    }
-
     template <class T2, class Array2D_Type2>
-    self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
-      super_t::operator=(matrix);
-      return *this;
+    Matrix_Frozen(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
+        : super_t(typename super_t::storage_t(&buf)) {
+      super_t::storage = matrix.storage;
+      super_t::view = matrix.view;
     }
+  protected:
+    /* This view changer is not assumed to be called, because
+     * Matrix<T, Array2D_Fixed<T, nR, nC, false>, ViewType2>::view_change() returns
+     * Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType2::view_changed> resulting from the following
+     * specialization of MatrixBuilder_ViewTransformer.
+     */
+    template <class ViewType2>
+    Matrix_Frozen(const Matrix<T, Array2D_Fixed<T, nR, nC, false>, ViewType2> &matrix);
+  public:
+    template <class ViewType2>
+    operator Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType2> () const {
+      Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType> mat(this->storage);
+      mat.view = this->view;
+      return Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType2>(mat);
+    }
+};
+
+template <class T, int nR, int nC, class ViewType>
+struct MatrixBuilder_ViewTransformer<Matrix<T, Array2D_Fixed<T, nR, nC, false>, ViewType> >
+    : public MatrixBuilder_ViewTransformerBase<Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType> > {};
+
+template <class T, int nR, int nC, class ViewType>
+struct MatrixBuilder_ViewTransformer<Matrix_Frozen<T, Array2D_Fixed<T, nR, nC, false>, ViewType> >
+    : public MatrixBuilder_ViewTransformerBase<Matrix_Frozen<T, Array2D_Fixed<T, nR, nC, true>, ViewType> > {};
+
+
+template <class T, int nR, int nC = nR>
+struct Matrix_Fixed {
+  typedef Matrix<T, Array2D_Fixed<T, nR, nC> > mat_t;
 };
 
 template <
     template <class, class, class> class MatrixT,
-    class T, int nR, int nC, class ViewType,
+    class T, int nR, int nC, bool has_buffer, class ViewType,
     int nR_add, int nC_add, int nR_multiply, int nC_multiply>
 struct MatrixBuilder<
-    MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
+    MatrixT<T, Array2D_Fixed<T, nR, nC, has_buffer>, ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilderBase<MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> >{
+    : public MatrixBuilderBase<MatrixT<T, Array2D_Fixed<T, nR, nC, has_buffer>, ViewType> >{
 
-  typedef Matrix<T, Array2D_Fixed_init<T,
+  typedef Matrix<T, Array2D_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed ? nC : nR) * nR_multiply + nR_add,
       (MatrixViewProperty<ViewType>::transposed ? nR : nC) * nC_multiply + nC_add> > assignable_t;
 
@@ -298,17 +299,6 @@ struct MatrixBuilder<
 
 template <
     template <class, class, class> class MatrixT,
-    class T, int nR, int nC, class ViewType,
-    int nR_add, int nC_add, int nR_multiply, int nC_multiply>
-struct MatrixBuilder<
-    MatrixT<T, Array2D_Fixed_init<T, nR, nC>, ViewType>,
-    nR_add, nC_add, nR_multiply, nC_multiply>
-    : public MatrixBuilder<
-      MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
-      nR_add, nC_add, nR_multiply, nC_multiply> {};
-
-template <
-    template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType,
     int nR_add, int nC_add>
 struct MatrixBuilder<
@@ -319,34 +309,34 @@ struct MatrixBuilder<
 // For resolution of partial specialization ambiguity
 template <
     template <class, class, class> class MatrixT,
-    class T, int nR, int nC, class ViewType,
+    class T, int nR, int nC, bool has_buffer, class ViewType,
     int nR_add, int nC_add>
 struct MatrixBuilder<
-    MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType>,
+    MatrixT<T, Array2D_Fixed<T, nR, nC, has_buffer>, ViewType>,
     nR_add, nC_add, 0, 0>
-    : public MatrixBuilder<MatrixT<T, Array2D_Fixed<T, nR_add, nC_add>, ViewType> > {};
+    : public MatrixBuilder<MatrixT<T, Array2D_Fixed<T, nR_add, nC_add, has_buffer>, ViewType> > {};
 
 template <
     class T,
     class ViewType,
-    int nR_L, int nC_L, class ViewType_L,
-    int nR_R, int nC_R, class ViewType_R>
+    int nR_L, int nC_L, bool has_buffer_L, class ViewType_L,
+    int nR_R, int nC_R, bool has_buffer_R, class ViewType_R>
 struct MatrixBuilder<
     Matrix_Frozen<
         T,
         Array2D_Operator<T, Array2D_Operator_Multiply<
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L, has_buffer_L>, ViewType_L>,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R, has_buffer_R>, ViewType_R> > >,
         ViewType>,
     0, 0, 1, 1>
     : public MatrixBuilderBase<
       Matrix_Frozen<
           T,
           Array2D_Operator<T, Array2D_Operator_Multiply<
-            Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L, has_buffer_L>, ViewType_L>,
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R, has_buffer_R>, ViewType_R> > >,
           ViewType> > {
-  typedef Matrix<T, Array2D_Fixed_init<T,
+  typedef Matrix<T, Array2D_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed
           ? (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R)
           : (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L)),
@@ -358,18 +348,18 @@ struct MatrixBuilder<
 template <
     class T,
     class ViewType,
-    int nR_L, int nC_L, class ViewType_L,
-    int nR_R, int nC_R, class ViewType_R,
+    int nR_L, int nC_L, bool has_buffer_L, class ViewType_L,
+    int nR_R, int nC_R, bool has_buffer_R, class ViewType_R,
     int nR_add, int nC_add, int nR_multiply, int nC_multiply>
 struct MatrixBuilder<
     Matrix_Frozen<
         T,
         Array2D_Operator<T, Array2D_Operator_Multiply<
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L, has_buffer_L>, ViewType_L>,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R, has_buffer_R>, ViewType_R> > >,
         ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply> {
-  typedef Matrix<T, Array2D_Fixed_init<T,
+  typedef Matrix<T, Array2D_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed
           ? (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R)
           : (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L))
