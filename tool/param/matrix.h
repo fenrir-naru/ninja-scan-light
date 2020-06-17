@@ -1070,6 +1070,7 @@ struct MatrixBuilder_ViewTransformerBase<
     MatrixT<T, Array2D_Type, ViewType> > {
   typedef MatrixViewBuilder<ViewType> view_builder_t;
 
+  typedef MatrixT<T, Array2D_Type, ViewType> same_view_t;
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,

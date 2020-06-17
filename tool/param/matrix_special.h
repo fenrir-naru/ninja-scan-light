@@ -82,7 +82,12 @@ template <
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special> {
   typedef ViewType_Special<
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t> view_special_t;
-  typedef Matrix_Frozen<T, Array2D_Type, view_special_t> special_t;
+  typedef typename MatrixBuilder<
+      Matrix_Frozen<T, Array2D_Type, view_special_t> >::same_view_t special_t;
+};
+template <class T, template <class> class ViewType_Special>
+struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_ScaledUnit<T>, MatrixViewBase<> >, ViewType_Special> {
+  typedef Matrix_Frozen<T, Array2D_ScaledUnit<T>, MatrixViewBase<> > special_t;
 };
 
 template <
@@ -274,26 +279,17 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
 #undef get_type
 };
 
-template <class T, template <class> class ViewType_Special>
-struct Matrix_Frozen_Special<T, Array2D_ScaledUnit<T>, MatrixViewBase<>, ViewType_Special>{
-  // Ineffective to scalar matrix
-  typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > special_t;
-  static const special_t &as_special(const special_t &mat){
-    return mat;
-  }
-};
-
 #define upgrade_square_matrix(fname, special_upgraded) \
 template <class T, class Array2D_Type, class ViewType> \
-typename Matrix_Frozen_Special<T, Array2D_Type, ViewType, special_upgraded>::special_t \
-    fname( \
-        const Matrix_Frozen<T, Array2D_Type, ViewType> &mat, \
-        const bool &do_check = false){ \
+typename MatrixBuilderSpecial< \
+    Matrix_Frozen<T, Array2D_Type, ViewType>, special_upgraded>::special_t fname( \
+    const Matrix_Frozen<T, Array2D_Type, ViewType> &mat, \
+    const bool &do_check = false){ \
   if(do_check && (!mat.isSquare())){ \
     throw std::runtime_error("Could not be upgraded to " #special_upgraded); \
   } \
-  return Matrix_Frozen_Special< \
-      T, Array2D_Type, ViewType, special_upgraded>::as_special(mat); \
+  return MatrixBuilderSpecial< \
+      Matrix_Frozen<T, Array2D_Type, ViewType>, special_upgraded>::special_t(mat); \
 }
 
 
