@@ -291,7 +291,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     template <class T2>
     Array2D_Dense(const Array2D_Frozen<T2> &array)
-        : values(new T[array.rows() * array.columns()]), ref(new int(1)) {
+        : super_t(array.rows(), array.columns()),
+        values(new T[array.rows() * array.columns()]), ref(new int(1)) {
       T *buf(values);
       for(unsigned int i(0); i < array.rows(); ++i){
         for(unsigned int j(0); j < array.columns(); ++j){
@@ -1181,6 +1182,10 @@ class Matrix_Frozen {
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
 
+    static char (&check_storage(Array2D_Frozen<T> *) )[1];
+    static const int storage_t_should_be_derived_from_Array2D_Frozen
+        = sizeof(check_storage(static_cast<storage_t *>(0)));
+
   protected:
     storage_t storage; ///< 2D storage
     view_t view;
@@ -1196,8 +1201,8 @@ class Matrix_Frozen {
      *
      * @param storage new storage
      */
-    Matrix_Frozen(const Array2D_Frozen<T> &new_storage)
-        : storage(static_cast<const storage_t &>(new_storage)),
+    Matrix_Frozen(const storage_t &new_storage)
+        : storage(new_storage),
         view() {}
   public:
     /**
@@ -1228,7 +1233,7 @@ class Matrix_Frozen {
     T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      return view.DELETE_IF_MSC(template) operator()<T>((const Array2D_Type &)storage, row, column);
+      return view.DELETE_IF_MSC(template) operator()<T>((const storage_t &)storage, row, column);
     }
 
     /**
@@ -3109,13 +3114,18 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
 
+    template <class ImplementedT>
+    static char (&check_storage(Array2D<T, ImplementedT> *) )[1];
+    static const int storage_t_should_be_derived_from_Array2D
+        = sizeof(check_storage(static_cast<storage_t *>(0)));
+
   protected:
     /**
      * Constructor with storage
      *
      * @param storage new storage
      */
-    Matrix(const Array2D<T, Array2D_Type> &new_storage) : super_t(new_storage) {}
+    Matrix(const storage_t &new_storage) : super_t(new_storage) {}
 
     using super_t::storage;
 
@@ -3132,7 +3142,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         const unsigned int &row,
         const unsigned int &column){
       return super_t::view.DELETE_IF_MSC(template) operator()<T &>(
-          (Array2D_Type &)storage, row, column);
+          (storage_t &)storage, row, column);
     }
 
     using super_t::rows;
@@ -3202,7 +3212,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         : super_t(matrix){}
 
     template <class T2, class Array2D_Type2>
-    Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
+    Matrix(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
         : super_t(matrix) {}
   protected:
     template <class ViewType2>
