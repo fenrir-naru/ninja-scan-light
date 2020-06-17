@@ -2183,7 +2183,7 @@ class Matrix_Frozen {
       typename builder_t::partial_t U(partial(rows(), rows(), 0, rows()));
       typedef typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t y_t;
       // By using L(Ux) = y, firstly y' = (Ux) will be solved; L(Ux) = y で y' = (Ux)をまず解く
-      y_t y_copy(y);
+      y_t y_copy(y.operator y_t());
       y_t y_prime(y_t::blank(y.rows(), 1));
       for(unsigned i(0); i < rows(); i++){
         y_prime(i, 0) = y_copy(i, 0) / L(i, i);
@@ -2238,7 +2238,7 @@ class Matrix_Frozen {
      */
     typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t decomposeUD(const bool &do_check = true) const {
       if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
-      typename builder_t::assignable_t P(*this);
+      typename builder_t::assignable_t P(this->operator typename builder_t::assignable_t());
       typedef typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t res_t;
       res_t UD(rows(), columns() * 2);
       typename res_t::partial_offsetless_t U(UD.partial(rows(), columns()));
@@ -2280,7 +2280,7 @@ class Matrix_Frozen {
 #endif
 
       // Gaussian elimination; ガウス消去法
-      typename builder_t::assignable_t left(*this);
+      typename builder_t::assignable_t left(this->operator typename builder_t::assignable_t());
       typename builder_t::assignable_t right(getI(rows()));
       for(unsigned int i(0); i < rows(); i++){
         if(left(i, i) == T(0)){
@@ -2359,7 +2359,7 @@ class Matrix_Frozen {
     typename builder_t::assignable_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
         const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
-      return ((typename builder_t::assignable_t)(*this)).pivotMerge(row, column, matrix);
+      return this->operator typename builder_t::assignable_t().pivotMerge(row, column, matrix);
     }
 
     /**
@@ -2375,7 +2375,7 @@ class Matrix_Frozen {
         Matrix<T2, Array2D_Type2, ViewType2> *transform = NULL) const {
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
-      typename builder_t::assignable_t result(*this);
+      typename builder_t::assignable_t result(this->operator typename builder_t::assignable_t());
       typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
       omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
       for(unsigned int j(0); j < columns() - 2; j++){
@@ -2485,7 +2485,7 @@ class Matrix_Frozen {
 #if 0
       //パワー法(べき乗法)
       typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows(), rows() + 1);
-      typename builder_t::assignable_t source(*this);
+      typename builder_t::assignable_t source(this->operator typename builder_t::assignable_t());
       for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
       for(unsigned int i(0); i < columns(); i++){
         while(true){
