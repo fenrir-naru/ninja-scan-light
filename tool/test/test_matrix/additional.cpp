@@ -41,7 +41,7 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
 BOOST_AUTO_TEST_CASE(fixed_types){
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
-        Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
+        Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
@@ -49,8 +49,8 @@ BOOST_AUTO_TEST_CASE(fixed_types){
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
-          Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> > > > >,
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 8> > > > >,
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
   BOOST_CHECK((boost::is_same<

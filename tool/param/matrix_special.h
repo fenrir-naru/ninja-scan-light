@@ -82,8 +82,7 @@ template <
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special> {
   typedef ViewType_Special<
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t> view_special_t;
-  typedef typename MatrixBuilder<
-      Matrix_Frozen<T, Array2D_Type, view_special_t> >::same_view_t special_t;
+  typedef Matrix_Frozen<T, Array2D_Type, view_special_t> special_t;
 };
 template <class T, template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_ScaledUnit<T>, MatrixViewBase<> >, ViewType_Special> {

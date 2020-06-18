@@ -201,7 +201,6 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
 #endif
 
     typedef Matrix_Fixed<T, nR, nC> self_t;
-    typedef MatrixBuilder<super_t> builder_t;
 
   protected:
     T buf[nR][nC]; ///< fixed size buffer
@@ -274,13 +273,16 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
     virtual ~Matrix_Fixed(){}
 
     self_t &operator=(const self_t &matrix){
-      super_t::operator=(matrix);
+      super_t::operator=(matrix); // frozen_t::operator=(const frozen_t &) is exactly called.
       return *this;
     }
 
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
       super_t::operator=(matrix);
+      /* frozen_t::operator=(const frozen_t &) or frozen_t::operator=(const another_frozen_t &)
+       * is conditionally called.
+       */
       return *this;
     }
 };

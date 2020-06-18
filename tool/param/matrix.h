@@ -1070,7 +1070,6 @@ struct MatrixBuilder_ViewTransformerBase<
     MatrixT<T, Array2D_Type, ViewType> > {
   typedef MatrixViewBuilder<ViewType> view_builder_t;
 
-  typedef MatrixT<T, Array2D_Type, ViewType> same_view_t;
   typedef MatrixT<T, Array2D_Type,
       typename view_builder_t::transpose_t> transpose_t;
   typedef MatrixT<T, Array2D_Type,
@@ -3256,12 +3255,12 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return myself
      */
     self_t &operator=(const self_t &matrix){
-      super_t::operator=(matrix);
+      super_t::operator=(matrix); // frozen_t::operator=(const frozen_t &) is exactly called
       return *this;
     }
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
-      super_t::operator=(matrix);
+      super_t::operator=(matrix); // frozen_t::operator=(const another_frozen_t &) is exactly called
       return *this;
     }
 
