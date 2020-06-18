@@ -1119,13 +1119,13 @@ struct MatrixBuilder_ValueCopier {
 };
 
 template <class MatrixT>
-struct MatrixBuilder_Assignable;
+struct MatrixBuilder_Dependency;
 
 template <class MatrixT>
 struct MatrixBuilderBase
     : public MatrixBuilder_ViewTransformer<MatrixT>,
     public MatrixBuilder_ValueCopier<MatrixT>,
-    public MatrixBuilder_Assignable<MatrixT> {};
+    public MatrixBuilder_Dependency<MatrixT> {};
 
 template <
     class MatrixT,
@@ -1135,7 +1135,7 @@ struct MatrixBuilder;
 template <
     template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType>
-struct MatrixBuilder_Assignable<MatrixT<T, Array2D_Type, ViewType> > {
+struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Type, ViewType> > {
   template <class T2, bool is_writable_array = Array2D_Type::writable>
   struct assignable_matrix_t {
     typedef Matrix<T2> res_t;
@@ -1164,7 +1164,7 @@ struct MatrixBuilder<
 };
 
 /**
- * @brief Matrix for fixed content
+ * @brief Matrix for unchangeable content
  *
  * @see Matrix
  */
@@ -3058,7 +3058,7 @@ struct MatrixBuilder<
 };
 // Remove default assignable_t, and make family_t depend on assignable_t defined in sub class
 template <class T, class OperatorT, class ViewType>
-struct MatrixBuilder_Assignable<
+struct MatrixBuilder_Dependency<
     Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
   template <class T2>
@@ -3107,7 +3107,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     typedef typename builder_t::partial_t partial_t;
     typedef typename builder_t::circular_bijective_t circular_bijective_t;
-    typedef typename super_t::builder_t::circular_t circular_t;
+    typedef typename builder_t::circular_t circular_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
