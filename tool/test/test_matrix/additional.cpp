@@ -17,11 +17,11 @@ BOOST_FIXTURE_TEST_SUITE(matrix, Fixture<content_t>)
 #if !defined(SKIP_FIXED_MATRIX_TESTS) // tests for fixed
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
-  typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
+  typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t _A(*A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 
-  typedef /*typename*/ Matrix_Fixed<Complex<content_t>, SIZE>::mat_t cfixed_t;
+  typedef /*typename*/ Matrix_Fixed<Complex<content_t>, SIZE> cfixed_t;
   cfixed_t _Ac1(*A);
   cfixed_t _Ac2(_Ac1.copy());
   matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
@@ -45,28 +45,28 @@ BOOST_AUTO_TEST_CASE(fixed_types){
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 2, 16>::mat_t>::value));
+      Matrix_Fixed<content_t, 2, 16> >::value));
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply<
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 2, 4> >,
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> > > > >,
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 2, 16>::mat_t>::value));
+      Matrix_Fixed<content_t, 2, 16> >::value));
   BOOST_CHECK((boost::is_same<
-      Matrix_Fixed<content_t, 2, 4>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::mat_t::frozen_t>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::mat_t::frozen_t::builder_t::transpose_t>::mat_t
+      Matrix_Fixed<content_t, 2, 4>
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::frozen_t::builder_t::transpose_t>::mat_t
         ::builder_t::transpose_t::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 16, 2>::mat_t>::value));
+      Matrix_Fixed<content_t, 16, 2> >::value));
   BOOST_CHECK((boost::is_same<
-      Matrix_Fixed<content_t, 2, 4>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::mat_t::frozen_t>::mat_t
-        ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::mat_t::frozen_t>::mat_t
+      Matrix_Fixed<content_t, 2, 4>
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
+        ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::frozen_t>::mat_t
         ::template Multiply_Matrix_by_Scalar<int>::mat_t
-        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::mat_t::frozen_t>::mat_t
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::frozen_t>::mat_t
         ::builder_t::assignable_t,
-      Matrix_Fixed<content_t, 2, 16>::mat_t>::value));
+      Matrix_Fixed<content_t, 2, 16> >::value));
 }
 #endif
 
@@ -103,7 +103,7 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "*view: [Base]");
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
-  typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
+  typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(*A);
   fixed_t A_fixed_(as_symmetric(A_fixed));
   BOOST_TEST_MESSAGE("symmetric_fixed:" << as_symmetric(A_fixed));
@@ -150,7 +150,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_compare(A_ * A_, as_diagonal(*A) * as_diagonal(*A));
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
-  typedef /*typename*/ Matrix_Fixed<content_t, SIZE>::mat_t fixed_t;
+  typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(*A);
   fixed_t A_fixed_(as_diagonal(A_fixed));
   BOOST_TEST_MESSAGE("diagonal_fixed:" << as_diagonal(A_fixed));

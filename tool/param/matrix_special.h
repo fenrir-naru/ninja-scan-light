@@ -288,7 +288,7 @@ typename MatrixBuilderSpecial< \
   if(do_check && (!mat.isSquare())){ \
     throw std::runtime_error("Could not be upgraded to " #special_upgraded); \
   } \
-  return MatrixBuilderSpecial< \
+  return typename MatrixBuilderSpecial< \
       Matrix_Frozen<T, Array2D_Type, ViewType>, special_upgraded>::special_t(mat); \
 }
 
