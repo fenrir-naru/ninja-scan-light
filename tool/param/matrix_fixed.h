@@ -256,9 +256,8 @@ class Matrix_Frozen<T, Array2D_Fixed<T, nR, nC, false>, ViewType>
   public:
     template <class ViewType2>
     operator Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType2> () const {
-      Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType> mat(this->storage);
-      mat.view = this->view;
-      return Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType2>(mat);
+      return Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType2>(
+          Matrix<T, Array2D_Fixed<T, nR, nC, true>, ViewType>(*this));
     }
 };
 
