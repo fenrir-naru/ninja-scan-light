@@ -1880,7 +1880,7 @@ class Matrix_Frozen {
       typedef typename optimizer1_t<self_t>::res_t lhs_opt_t;
       typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_opt_t;
 
-      typedef Array2D_Operator_Multiply<self_t, RHS_MatrixT> op_t;
+      typedef Array2D_Operator_Multiply<self_t, typename RHS_MatrixT::frozen_t> op_t;
 
       /*
        * [Optimization policy 2]
@@ -1977,7 +1977,7 @@ class Matrix_Frozen {
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix<RHS_MatrixT, scalar_matrix_t> {
       // Specialization for (Scalar_M * M)
-      typedef typename RHS_MatrixT::template Multiply_Matrix_by_Scalar<T> generator_t;
+      typedef typename RHS_MatrixT::template Multiply_Matrix_by_Scalar<T, RHS_MatrixT> generator_t;
       typedef typename generator_t::mat_t mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2) noexcept {
         return generator_t::generate(mat2, mat1(0, 0));
@@ -2329,7 +2329,7 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t::super_t>::mat_t
+          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t>::mat_t
         operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
       return *this * matrix.inverse();
     }
@@ -2341,9 +2341,11 @@ class Matrix_Frozen {
      * @param matrix
      * @return result matrix
      */
-    friend typename mul_mat_scalar_t::mat_t
+    friend typename Multiply_Matrix_by_Scalar<T, typename self_t::builder_t::assignable_t>::mat_t
         operator/(const T &scalar, const self_t &matrix) {
-      return matrix.inverse() * scalar;
+      // TODO update Multiply_Matrix_by_Scalar to accept cache
+      return Multiply_Matrix_by_Scalar<T, typename self_t::builder_t::assignable_t>
+          ::generate(matrix.inverse(), scalar);
     }
 
     /**
