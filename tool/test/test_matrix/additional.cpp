@@ -28,6 +28,17 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
 
   try{
+    fixed_t inv(_A.inverse());
+    BOOST_TEST_MESSAGE("inv:" << inv);
+    matrix_compare_delta(matrix_t::getI(SIZE), _A * inv, 1E-5);
+    matrix_compare_delta(_A, matrix_t::getI(SIZE) / inv, 1E-5);
+    fixed_t inv2(1 / _A);
+    BOOST_CHECK(inv == inv2);
+  }catch(std::runtime_error &e){
+    BOOST_ERROR("inv_error:" << e.what());
+  }
+
+  try{
     matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
     matrix_compare_delta(
         A->partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
