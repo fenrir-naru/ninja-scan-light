@@ -286,17 +286,15 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A) * (*B)),
       (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
-#if 0 // TODO fix
   matrix_inspect_contains(
       ((*A) * (*B) * (*A)),
-      (format("*storage: (*, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
-#endif
+      (format("*storage: (*, (*, M, M), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
       (((*A) * (*B)) + (*A)),
       (format("*storage: (+, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
-      (((A->partial(2, 3, 1, 1).transpose()) * (B->partial(2, 3, 1, 1))) + (A->partial(3, 3, 1, 2))),
-      "*storage: (+, (*, Mtp(3,2), Mp(2,3)), Mp(3,3))");
+      (((A->partial(2, 3, 1, 1).transpose()) * (B->partial(2, 3, 1, 1))) + (A->partial(3, 3, 1, 2))).transpose(),
+      "*storage: (+, (*, Mtp(3,2), Mp(2,3)), Mp(3,3))t");
 
   // optimized cases
   matrix_inspect_contains(

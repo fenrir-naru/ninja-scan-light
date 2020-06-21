@@ -2837,19 +2837,53 @@ class Matrix_Frozen {
         }
 
         template <class T2, class Array2D_Type2, class View_Type2>
-        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
-          return (*this) << "M"
+        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *m){
+          (*this) << "M"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
-              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "")
-              << "(" << m.rows() << "," << m.columns() << ")";
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
+          if(m){
+            (*this) << "(" << m->rows() << "," << m->columns() << ")";
+          }
+          return *this;
+        }
+
+        template <class LHS_T, class RHS_T, bool rhs_positive>
+        format_t &operator<<(const Array2D_Operator_Add<LHS_T, RHS_T, rhs_positive> *op){
+          return (*this) << (const LHS_T *)(op ? &(op->lhs) : 0) << ", " << (const RHS_T *)(op ? &(op->rhs) : 0);
+        }
+
+        template <class U>
+        static const U &check_scalar(const U *u){return *u;}
+        template <class T2, class Array2D_Type2, class View_Type2>
+        static const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *check_scalar(
+            const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *m){
+          return m;
+        }
+
+        template <class LHS_T, class RHS_T, class LHS_BufferT, class RHS_BufferT>
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_BufferT, RHS_BufferT> *){
+          return (*this) << (const LHS_T *)0 << ", " << (const RHS_T *)0;
+        }
+        template <class LHS_T, class RHS_T, class LHS_BufferT>
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_BufferT, RHS_T> *op){
+          return (*this)
+              << (const LHS_T *)0 << ", "
+              << check_scalar((const RHS_T *)(op ? &(op->rhs) : 0));
+        }
+        template <class LHS_T, class RHS_T, class RHS_BufferT>
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_T, RHS_BufferT> *op){
+          return (*this) << (const LHS_T *)(op ? &(op->lhs) : 0) << ", " << (const RHS_T *)0;
         }
         template <class LHS_T, class RHS_T>
-        format_t &operator<<(const Array2D_Operator_Binary<LHS_T, RHS_T> &op){
-          return (*this) << op.lhs << ", " << op.rhs;
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_T, RHS_T> *op){
+          return (*this)
+              << (const LHS_T *)(op ? &(op->lhs) : 0) << ", "
+              << check_scalar((const RHS_T *)(op ? &(op->rhs) : 0));
         }
+
         template <class T2, class OperatorT, class View_Type2>
         format_t &operator<<(
-            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
+            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> *m){
           const char *symbol = "";
           switch(OperatorProperty<
               Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> >::tag){
@@ -2864,7 +2898,9 @@ class Matrix_Frozen {
               return (*this) << "(?)";
           }
           return (*this) << "(" << symbol << ", "
-              << (const typename OperatorT::super_t &)m.storage.op << ")"; // cast to Array2D_Operator_Binary
+              << (const OperatorT *)(m ? &(m->storage.op) : 0) << ")"
+              << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
         }
       };
 
@@ -2874,7 +2910,7 @@ class Matrix_Frozen {
             << "prop: {" << std::endl
             << "  *(R,C): (" << mat.rows() << "," << mat.columns() << ")" << std::endl
             << "  *view: " << mat.view << std::endl
-            << "  *storage: " << mat << std::endl
+            << "  *storage: " << &mat << std::endl
             << "}";
         return out;
       }
