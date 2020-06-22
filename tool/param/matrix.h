@@ -855,62 +855,6 @@ struct next_t<view_name<V>, DestView> { \
         void, reverse_t,
         void, typename MatrixViewBuilder<View2>::reverse_t>::run(&dest, &src);
   }
-
-
-  /**
-   * Calculate merged view which can represent both current and target view properties.
-   *
-   * For example, current = [Transpose(2)] [Offset(0)],
-   * and applied = [Transpose(2)] [VariableSize(1)],
-   * then result = [Transpose(2)] [VariableSize(1)] [Offset(0)].
-   * @param SrcView view to be applied to current view
-   */
-  template <class View2>
-  struct merge_t {
-    template <class ViewA_R, class ViewB_R, class ViewMerged>
-    struct downcast_merge_t {
-      typedef ViewMerged res_t;
-    };
-    template <template <class> class ViewA_R1, class ViewA_R2, class ViewB_R, class ViewMerged>
-    struct downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R, ViewMerged> {
-      // catch if A has more views
-      typedef typename downcast_merge_t<ViewA_R2, ViewB_R, ViewA_R1<ViewMerged> >::res_t res_t;
-    };
-    template <class ViewA_R, template <class> class ViewB_R1, class ViewB_R2, class ViewMerged>
-    struct downcast_merge_t<ViewA_R, ViewB_R1<ViewB_R2>, ViewMerged> {
-      // catch if B has more views
-      typedef typename downcast_merge_t<ViewA_R, ViewB_R2, ViewB_R1<ViewMerged> >::res_t res_t;
-    };
-    template <
-        template <class> class ViewAB_R1,
-        class ViewA_R2, class ViewB_R2, class ViewMerged>
-    struct downcast_merge_t<ViewAB_R1<ViewA_R2>, ViewAB_R1<ViewB_R2>, ViewMerged> {
-      // catch if same views exist at the same (reverse) top level in both A and B
-      typedef typename downcast_merge_t<ViewA_R2, ViewB_R2, ViewAB_R1<ViewMerged> >::res_t res_t;
-    };
-    template <
-        template <class> class ViewA_R1, class ViewA_R2,
-        template <class> class ViewB_R1, class ViewB_R2,
-        class ViewMerged>
-    struct downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R1<ViewB_R2>, ViewMerged> {
-      // catch if A and B has multiple views and the views at the (reversed) top level are different
-      template<
-          bool is_ViewA_R1_higher = (priority_t<ViewA_R1>::priority > priority_t<ViewB_R1>::priority),
-          class U = void>
-      struct next_t { // catch A_R1.priority <= B_R1.priority
-        typedef typename downcast_merge_t<ViewA_R2, ViewB_R1<ViewB_R2>, ViewA_R1<ViewMerged> >::res_t res_t;
-      };
-      template<class U>
-      struct next_t<true, U> { // catch A_R1.priority > B_R1.priority
-        typedef typename downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R2, ViewB_R1<ViewMerged> >::res_t res_t;
-      };
-      typedef typename next_t<>::res_t res_t;
-    };
-    typedef typename downcast_merge_t<
-        reverse_t,
-        typename MatrixViewBuilder<View2>::reverse_t,
-        void>::res_t res_t;
-  };
 };
 
 template <class BaseView>
@@ -1131,11 +1075,6 @@ struct MatrixBuilder_ViewTransformerBase<
   struct view_apply_t {
     typedef MatrixT<T, Array2D_Type,
         typename view_builder_t::template apply_t<ViewType2>::res_t> applied_t;
-  };
-  template <class ViewType2>
-  struct view_merge_t {
-    typedef MatrixT<T, Array2D_Type,
-        typename view_builder_t::template merge_t<ViewType2>::res_t> merged_t;
   };
 };
 
