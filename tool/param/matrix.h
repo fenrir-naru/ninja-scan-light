@@ -738,6 +738,38 @@ struct priority_t<MatrixView ## name, U> { \
   };
   typedef typename reverse_op_t::res_t reverse_t;
 
+  /**
+   * Calculate view to which another view is applied
+   * For example, current = [Transpose(2)] [Offset(0)],
+   * and applied = [Transpose(2)] [VariableSize(1)],
+   * then intermediate = [Transpose(2)] [Transpose(2)] [VariableSize(1)] [Offset(0)],
+   * and finally, result = [VariableSize(1)] [Offset(0)].
+   * Here, each view elements are applied in accordance with their characteristics.
+   * @param SrcView view to be applied to current view
+   */
+  template <class SrcView>
+  struct apply_t {
+    template <class SrcView_Reverse, class DestView>
+    struct next_t {
+      typedef DestView res_t;
+    };
+    template <template <class> class V1, class V2, class DestView>
+    struct next_t<V1<V2>, DestView> {
+      typedef typename next_t<V2, DestView>::res_t res_t;
+    };
+#define make_entry(view_name, result_type) \
+template <class V, class DestView> \
+struct next_t<view_name<V>, DestView> { \
+  typedef typename next_t<V, typename MatrixViewBuilder<DestView>::result_type>::res_t res_t; \
+};
+    make_entry(MatrixViewTranspose, transpose_t);
+    make_entry(MatrixViewOffset, offset_t);
+    make_entry(MatrixViewSizeVariable, size_variable_t);
+    make_entry(MatrixViewLoop, loop_t);
+#undef make_entry
+    typedef typename next_t<typename MatrixViewBuilder<SrcView>::reverse_t, View>::res_t res_t;
+  };
+
   template <
       class DestView, class DestView_Reverse,
       class SrcView, class SrcView_Reverse>
@@ -822,9 +854,17 @@ struct priority_t<MatrixView ## name, U> { \
     copy_t<
         void, reverse_t,
         void, typename MatrixViewBuilder<View2>::reverse_t>::run(&dest, &src);
-
   }
 
+
+  /**
+   * Calculate merged view which can represent both current and target view properties.
+   *
+   * For example, current = [Transpose(2)] [Offset(0)],
+   * and applied = [Transpose(2)] [VariableSize(1)],
+   * then result = [Transpose(2)] [VariableSize(1)] [Offset(0)].
+   * @param SrcView view to be applied to current view
+   */
   template <class View2>
   struct merge_t {
     template <class ViewA_R, class ViewB_R, class ViewMerged>
@@ -1087,6 +1127,11 @@ struct MatrixBuilder_ViewTransformerBase<
         typename MatrixViewBuilder<
           typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
+  template <class ViewType2>
+  struct view_apply_t {
+    typedef MatrixT<T, Array2D_Type,
+        typename view_builder_t::template apply_t<ViewType2>::res_t> applied_t;
+  };
   template <class ViewType2>
   struct view_merge_t {
     typedef MatrixT<T, Array2D_Type,
@@ -3017,6 +3062,9 @@ struct MatrixBuilder<
     : public MatrixBuilderBase<
       Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
+  template <class OperatorT2>
+  struct unpack_op_t;
+
   template <class MatrixT>
   struct unpack_mat_t {
     typedef MatrixT mat1_t;
@@ -3024,34 +3072,17 @@ struct MatrixBuilder<
   };
   template <class T2, class OperatorT2, class ViewType2>
   struct unpack_mat_t<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> > {
-    template <class OperatorT3 = OperatorT2>
-    struct check_op_t {
-      // consequently, M * S, M + M are captured
-      typedef typename OperatorT2::first_t::frozen_t mat1_t;
-      typedef mat1_t mat2_t;
-    };
-    template <
-        class LHS_T,
-        class T_R, class Array2D_Type_R, class ViewType_R,
-        class LHS_BufferT, class RHS_BufferT>
-    struct check_op_t<Array2D_Operator_Multiply<
-        LHS_T,
-        Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R>,
-        LHS_BufferT, RHS_BufferT> > { // specialization for M * M
-      typedef LHS_T mat1_t;
-      typedef Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> mat2_t;
-    };
-
-    typedef typename check_op_t<>::mat1_t mat1_t;
-    typedef typename check_op_t<>::mat2_t mat2_t;
+    typedef typename unpack_op_t<OperatorT2>::mat1_t mat1_t;
+    typedef typename unpack_op_t<OperatorT2>::mat2_t mat2_t;
   };
 
-
-  template <class OperatorT2 = OperatorT>
+  template <class OperatorT2>
   struct unpack_op_t {
     // consequently, M * S, M + M are captured
-    // (op, M1, M2, ...) => M1
-    typedef typename OperatorT::first_t::frozen_t mat_t;
+    // (op, M1, M2, ...) => M1, then apply ViewType
+    typedef typename OperatorT2::first_t::frozen_t mat1_t;
+    typedef mat1_t mat2_t;
+    typedef typename MatrixBuilder<mat1_t>::template view_apply_t<ViewType>::applied_t mat_t;
   };
   template <
       class LHS_T,
@@ -3060,43 +3091,29 @@ struct MatrixBuilder<
   struct unpack_op_t<Array2D_Operator_Multiply<
       LHS_T,
       Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R>,
-      LHS_BufferT, RHS_BufferT> > { // (M or M') * M
+      LHS_BufferT, RHS_BufferT> > { // M * M
+    typedef LHS_T mat1_t;
+    typedef Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> mat2_t;
+    
     template <
-        class OperatorT2 = typename LHS_T::template OperatorProperty<>::operator_t,
+        class OperatorT_L = typename mat1_t::template OperatorProperty<>::operator_t,
+        class OperatorT_R = typename mat2_t::template OperatorProperty<>::operator_t,
         class U = void>
     struct check_op_t {
-      // (op, M1, M2, ...) * Mr => M1 * Mr
       typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
-          typename MatrixBuilder<typename unpack_mat_t<LHS_T>::mat1_t>
-            ::template view_merge_t<typename LHS_T::view_t>::merged_t,
-          Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> > > > res_t;
+          typename unpack_mat_t<mat1_t>::mat1_t,
+          typename unpack_mat_t<mat2_t>::mat2_t> >, ViewType> res_t;
     };
     template <class U>
-    struct check_op_t<void, U> { // Non operator case
-      // Ml * Mr => Ml
-      typedef LHS_T res_t;
+    struct check_op_t<void, void, U> {
+      // When both left and right hand side terms are none operator
+      typedef typename MatrixBuilder<mat1_t>::template view_apply_t<ViewType>::applied_t res_t;
     };
     typedef typename check_op_t<>::res_t mat_t;
   };
-  template <
-      class LHS_T,
-      class T_R, class OperatorT_R, class ViewType_R,
-      class LHS_BufferT, class RHS_BufferT>
-  struct unpack_op_t<Array2D_Operator_Multiply<
-      LHS_T,
-      Matrix_Frozen<T_R, Array2D_Operator<T_R, OperatorT_R>, ViewType_R>,
-      LHS_BufferT, RHS_BufferT> > { // (M or M') * M'
-    // [Ml * (op, M1, M2, ...) => Ml * M1], or [Ml * (M1 * M2) => Ml * M2]
-    typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
-        LHS_T,
-        typename MatrixBuilder<typename unpack_mat_t<
-            Matrix_Frozen<T_R, Array2D_Operator<T_R, OperatorT_R>, ViewType_R> >::mat2_t>
-          ::template view_merge_t<ViewType_R>::merged_t> > > mat_t;
-  };
-
 
   typedef typename MatrixBuilder<
-      typename MatrixBuilder<typename unpack_op_t<>::mat_t>::template view_merge_t<ViewType>::merged_t,
+      typename unpack_op_t<OperatorT>::mat_t,
       nR_add, nC_add, nR_multiply, nC_multiply>::assignable_t assignable_t;
 };
 // Remove default assignable_t, and make family_t depend on assignable_t defined in sub class
