@@ -359,13 +359,15 @@ template <
     class T,
     class ViewType,
     int nR_L, int nC_L, class ViewType_L,
-    int nR_R, int nC_R, class ViewType_R>
+    int nR_R, int nC_R, class ViewType_R,
+    class LHS_BufferT, class RHS_BufferT>
 struct MatrixBuilder<
     Matrix_Frozen<
         T,
         Array2D_Operator<T, Array2D_Operator_Multiply<
           Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R>,
+          LHS_BufferT, RHS_BufferT> >,
         ViewType>,
     0, 0, 1, 1>
     : public MatrixBuilderBase<
@@ -373,7 +375,8 @@ struct MatrixBuilder<
           T,
           Array2D_Operator<T, Array2D_Operator_Multiply<
             Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+            Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R>,
+            LHS_BufferT, RHS_BufferT> >,
           ViewType> > {
   typedef Matrix_Fixed<T,
       (MatrixViewProperty<ViewType>::transposed
@@ -389,13 +392,15 @@ template <
     class ViewType,
     int nR_L, int nC_L, class ViewType_L,
     int nR_R, int nC_R, class ViewType_R,
+    class LHS_BufferT, class RHS_BufferT,
     int nR_add, int nC_add, int nR_multiply, int nC_multiply>
 struct MatrixBuilder<
     Matrix_Frozen<
         T,
         Array2D_Operator<T, Array2D_Operator_Multiply<
           Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R>,
+          LHS_BufferT, RHS_BufferT> >,
         ViewType>,
     nR_add, nC_add, nR_multiply, nC_multiply> {
   typedef Matrix_Fixed<T,
