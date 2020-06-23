@@ -3001,27 +3001,22 @@ struct MatrixBuilder<
     : public MatrixBuilderBase<
       Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
-  template <class OperatorT2>
-  struct unpack_op_t;
-
   template <class MatrixT>
   struct unpack_mat_t {
-    typedef MatrixT mat1_t;
-    typedef mat1_t mat2_t;
+    typedef MatrixT mat_t;
   };
   template <class T2, class OperatorT2, class ViewType2>
   struct unpack_mat_t<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> > {
-    typedef typename unpack_op_t<OperatorT2>::mat1_t mat1_t;
-    typedef typename unpack_op_t<OperatorT2>::mat2_t mat2_t;
+    typedef typename MatrixBuilder<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> >
+        ::assignable_t::frozen_t mat_t;
   };
 
   template <class OperatorT2>
   struct unpack_op_t {
     // consequently, M * S, M + M are captured
     // (op, M1, M2, ...) => M1, then apply ViewType
-    typedef typename OperatorT2::first_t::frozen_t mat1_t;
-    typedef mat1_t mat2_t;
-    typedef typename MatrixBuilder<mat1_t>::template view_apply_t<ViewType>::applied_t mat_t;
+    typedef typename MatrixBuilder<typename OperatorT2::first_t::frozen_t>
+        ::template view_apply_t<ViewType>::applied_t mat_t;
   };
   template <
       class LHS_T,
@@ -3040,12 +3035,13 @@ struct MatrixBuilder<
         class U = void>
     struct check_op_t {
       typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
-          typename unpack_mat_t<mat1_t>::mat1_t,
-          typename unpack_mat_t<mat2_t>::mat2_t> >, ViewType> res_t;
+          typename unpack_mat_t<mat1_t>::mat_t,
+          typename unpack_mat_t<mat2_t>::mat_t> >, ViewType> res_t;
     };
     template <class U>
     struct check_op_t<void, void, U> {
-      // When both left and right hand side terms are none operator
+      // active when both left and right hand side terms are none operator
+      // This may be overwritten by (M * M) if its MatrixBuilder specialization exists
       typedef typename MatrixBuilder<mat1_t>::template view_apply_t<ViewType>::applied_t res_t;
     };
     typedef typename check_op_t<>::res_t mat_t;

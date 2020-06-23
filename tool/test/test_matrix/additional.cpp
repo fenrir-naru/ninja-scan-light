@@ -72,6 +72,15 @@ BOOST_AUTO_TEST_CASE(fixed_types){
       Matrix_Fixed<content_t, 16, 2> >::value));
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
+        ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t::builder_t::transpose_t
+        ::template Multiply_Matrix_by_Matrix<
+          Matrix_Fixed<content_t, 16, 8>
+            ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 2>::frozen_t>::mat_t
+          ::builder_t::transpose_t>::mat_t
+        ::builder_t::transpose_t::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 16, 8> >::value)); // < [(2, 4) * (4, 8)]^{t} * [(16, 8) * (8, 2)]^{t} >^{t} => (16, 8)
+  BOOST_CHECK((boost::is_same<
+      Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
         ::template Add_Matrix_to_Matrix<Matrix_Fixed<content_t, 3, 7>::frozen_t>::mat_t
         ::template Multiply_Matrix_by_Scalar<int>::mat_t
