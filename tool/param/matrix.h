@@ -60,6 +60,7 @@
 #include <cmath>
 #include <cfloat>
 #include <ostream>
+#include <limits>
 #include "param/complex.h"
 
 #if (__cplusplus < 201103L) && !defined(noexcept)
@@ -234,15 +235,28 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     T *values; ///< array for values
     int *ref;  ///< reference counter
 
+    template <class T2, bool do_memory_op = std::numeric_limits<T2>::is_specialized>
+    struct setup_t {
+      static void copy(Array2D_Dense<T2> &dest, const T2 *src){
+        for(int i(dest.rows() * dest.columns() - 1); i >= 0; --i){
+          dest.values[i] = src[i];
+        }
+      }
+      static void clear(Array2D_Dense<T2> &target){
+        for(int i(target.rows() * target.columns() - 1); i >= 0; --i){
+          target.values[i] = T2();
+        }
+      }
+    };
     template <class T2>
-    static void copy_raw(Array2D_Dense<T2> &dest, const T2 *src){
-      std::memcpy(dest.values, src, sizeof(T2) * dest.rows() * dest.columns());
-    }
-
-    template <class T2>
-    static void clear_raw(Array2D_Dense<T2> &target){
-      std::memset(target.values, 0, sizeof(T2) * target.rows() * target.columns());
-    }
+    struct setup_t<T2, true> {
+      static void copy(Array2D_Dense<T2> &dest, const T2 *src){
+        std::memcpy(dest.values, src, sizeof(T2) * dest.rows() * dest.columns());
+      }
+      static void clear(Array2D_Dense<T2> &target){
+        std::memset(target.values, 0, sizeof(T2) * target.rows() * target.columns());
+      }
+    };
 
   public:
     Array2D_Dense() : super_t(0, 0), values(NULL), ref(NULL) {
@@ -273,7 +287,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const T *serialized)
         : super_t(rows, columns),
         values(new T[rows * columns]), ref(new int(1)) {
-      copy_raw(*this, serialized);
+      setup_t<T>::copy(*this, serialized);
     }
     /**
      * Copy constructor, which performs shallow copy.
@@ -363,7 +377,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     }
 
     void clear(){
-      clear_raw(*this);
+      setup_t<T>::clear(*this);
     }
 
     /**
