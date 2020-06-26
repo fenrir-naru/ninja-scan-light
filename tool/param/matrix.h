@@ -1655,15 +1655,13 @@ class Matrix_Frozen {
 
     template <class RHS_T, class LHS_MatrixT = self_t>
     struct Multiply_Matrix_by_Scalar {
-      typedef Array2D_Operator_Multiply<self_t, RHS_T, LHS_MatrixT> op_t;
 
-      /*
-       * Optimization policy: If upper pattern is M * scalar, then reuse it.
-       * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
-       */
-
-      template <bool, class U = void>
-      struct optimizer_t {
+      template <
+          bool is_lhs_multi_mat_by_scalar
+            = (OperatorProperty<self_t>::tag == OPERATOR_2_Multiply_Matrix_by_Scalar),
+          class U = void>
+      struct check_lhs_t {
+        typedef Array2D_Operator_Multiply<self_t, RHS_T, LHS_MatrixT> op_t;
         typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
         static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
           return res_t(
@@ -1672,8 +1670,12 @@ class Matrix_Frozen {
         }
       };
 #if 1 // 0 = Remove optimization
+      /*
+       * Optimization policy: If upper pattern is M * scalar, then reuse it.
+       * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
+       */
       template <class U>
-      struct optimizer_t<true, U> {
+      struct check_lhs_t<true, U> {
         typedef self_t res_t;
         static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
           return res_t(
@@ -1684,13 +1686,9 @@ class Matrix_Frozen {
         }
       };
 #endif
-
-      typedef optimizer_t<
-          OperatorProperty<self_t>::tag
-            == OPERATOR_2_Multiply_Matrix_by_Scalar> opt_t;
-      typedef typename opt_t::res_t mat_t;
+      typedef typename check_lhs_t<>::res_t mat_t;
       static mat_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
-        return opt_t::generate(mat, scalar);
+        return check_lhs_t<>::generate(mat, scalar);
       }
     };
     template <class RHS_T>
