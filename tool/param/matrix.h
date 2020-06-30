@@ -2254,6 +2254,76 @@ class Matrix_Frozen {
       return UD;
     }
 
+    template <class MatrixT = self_t, class U = void>
+    struct Inverse_Matrix {
+      typedef typename MatrixT::builder_t::assignable_t mat_t;
+      static mat_t generate(const MatrixT &mat) {
+        if(!mat.isSquare()){throw std::logic_error("rows() != columns()");}
+
+#if 0
+        // Cramer (slow); クラメール
+        mat_t result(rows(), columns());
+        T det;
+        if((det = mat.determinant()) == 0){throw std::runtime_error("Operation void!!");}
+        for(unsigned int i(0); i < mat.rows(); i++){
+          for(unsigned int j(0); j < mat.columns(); j++){
+            result(i, j) = mat.matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
+          }
+        }
+        return result.transpose() / det;
+#endif
+
+        // Gaussian elimination; ガウス消去法
+        mat_t left(mat.operator mat_t());
+        mat_t right(getI(mat.rows()));
+        for(unsigned int i(0); i < left.rows(); i++){
+          if(left(i, i) == T(0)){
+            unsigned int i2(i);
+            do{
+              if(++i2 == left.rows()){
+                throw std::runtime_error("invert matrix not exist");
+              }
+            }while(left(i2, i) == T(0));
+            // exchange i-th and i2-th rows
+            for(unsigned int j(i); j < left.columns(); ++j){
+              T temp(left(i, j));
+              left(i, j) = left(i2, j);
+              left(i2, j) = temp;
+            }
+            right.exchangeRows(i, i2);
+          }
+          if(left(i, i) != T(1)){
+            for(unsigned int j(0); j < left.columns(); j++){right(i, j) /= left(i, i);}
+            for(unsigned int j(i+1); j < left.columns(); j++){left(i, j) /= left(i, i);}
+            left(i, i) = T(1);
+          }
+          for(unsigned int k(0); k < left.rows(); k++){
+            if(k == i){continue;}
+            if(left(k, i) != T(0)){
+              for(unsigned int j(0); j < left.columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
+              for(unsigned int j(i+1); j < left.columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
+              left(k, i) = T(0);
+            }
+          }
+        }
+        //std::cout << "L:" << left << std::endl;
+        //std::cout << "R:" << right << std::endl;
+
+        return right;
+
+        // TODO: method to use LU decomposition
+        /*
+        */
+      }
+    };
+    template <class U>
+    struct Inverse_Matrix<scalar_matrix_t, U> {
+      typedef scalar_matrix_t mat_t;
+      static mat_t generate(const scalar_matrix_t &mat) noexcept {
+        return getScalar(mat.rows(), T(1) / mat(0, 0));
+      }
+    };
+
     /**
      * Calculate inverse matrix
      *
@@ -2261,63 +2331,8 @@ class Matrix_Frozen {
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename builder_t::assignable_t inverse() const {
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
-
-#if 0
-      // Cramer (slow); クラメール
-      typename builder_t::assignable_t result(rows(), columns());
-      T det;
-      if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          result(i, j) = matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
-        }
-      }
-      return result.transpose() / det;
-#endif
-
-      // Gaussian elimination; ガウス消去法
-      typename builder_t::assignable_t left(this->operator typename builder_t::assignable_t());
-      typename builder_t::assignable_t right(getI(rows()));
-      for(unsigned int i(0); i < rows(); i++){
-        if(left(i, i) == T(0)){
-          unsigned int i2(i);
-          do{
-            if(++i2 == rows()){
-              throw std::runtime_error("invert matrix not exist");
-            }
-          }while(left(i2, i) == T(0));
-          // exchange i-th and i2-th rows
-          for(unsigned int j(i); j < columns(); ++j){
-            T temp(left(i, j));
-            left(i, j) = left(i2, j);
-            left(i2, j) = temp;
-          }
-          right.exchangeRows(i, i2);
-        }
-        if(left(i, i) != T(1)){
-          for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}
-          for(unsigned int j(i+1); j < columns(); j++){left(i, j) /= left(i, i);}
-          left(i, i) = T(1);
-        }
-        for(unsigned int k(0); k < rows(); k++){
-          if(k == i){continue;}
-          if(left(k, i) != T(0)){
-            for(unsigned int j(0); j < columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
-            for(unsigned int j(i+1); j < columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
-            left(k, i) = T(0);
-          }
-        }
-      }
-      //std::cout << "L:" << left << std::endl;
-      //std::cout << "R:" << right << std::endl;
-
-      return right;
-
-      // TODO: method to use LU decomposition
-      /*
-      */
+    typename Inverse_Matrix<>::mat_t inverse() const {
+      return Inverse_Matrix<>::generate(*this);
     }
 
     /**
@@ -2328,10 +2343,10 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t>::mat_t
+          typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>::mat_t
         operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
       return Multiply_Matrix_by_Matrix<
-            typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t>
+            typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>
           ::generate(*this, matrix.inverse()); // equal to (*this) * matrix.inverse()
     }
 
@@ -2342,9 +2357,9 @@ class Matrix_Frozen {
      * @param matrix
      * @return result matrix
      */
-    friend typename Multiply_Matrix_by_Scalar<T, typename self_t::builder_t::assignable_t>::mat_t
+    friend typename Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>::mat_t
         operator/(const T &scalar, const self_t &matrix) {
-      return Multiply_Matrix_by_Scalar<T, typename self_t::builder_t::assignable_t>
+      return Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>
           ::generate(matrix.inverse(), scalar); // equal to matrix.inverse() * scalar
     }
 

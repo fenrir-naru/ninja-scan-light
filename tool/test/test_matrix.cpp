@@ -331,6 +331,11 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(inv, 2){
   prologue_print();
   check_inv(*A);
 }
+BOOST_AUTO_TEST_CASE(inv_scalar){
+  matrix_t::scalar_matrix_t a(matrix_t::getScalar(A->rows(), 2));
+  BOOST_TEST_MESSAGE("scalar:" << a);
+  check_inv(a);
+}
 BOOST_AUTO_TEST_CASE(view_property){
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::transposed);
