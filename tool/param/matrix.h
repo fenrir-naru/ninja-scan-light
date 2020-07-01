@@ -1985,7 +1985,7 @@ class Matrix_Frozen {
 
     /**
      * Multiply matrix by matrix
-     * If this matrix is scalar matrix, then right hand side matrix multipled by this will be returned.
+     * If this matrix is scalar matrix, then right hand side matrix multiplied by this will be returned.
      * Otherwise, matrix * matrix will be returned.
      *
      * @param matrix matrix to multiply
