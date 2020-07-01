@@ -60,6 +60,7 @@
 #include <cmath>
 #include <cfloat>
 #include <ostream>
+#include <limits>
 #include "param/complex.h"
 
 #if (__cplusplus < 201103L) && !defined(noexcept)
@@ -69,6 +70,12 @@
 #define throws_when_debug
 #else
 #define throws_when_debug noexcept
+#endif
+
+#if defined(_MSC_VER)
+#define DELETE_IF_MSC(x)
+#else
+#define DELETE_IF_MSC(x) x
 #endif
 
 /**
@@ -228,15 +235,28 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     T *values; ///< array for values
     int *ref;  ///< reference counter
 
+    template <class T2, bool do_memory_op = std::numeric_limits<T2>::is_specialized>
+    struct setup_t {
+      static void copy(Array2D_Dense<T2> &dest, const T2 *src){
+        for(int i(dest.rows() * dest.columns() - 1); i >= 0; --i){
+          dest.values[i] = src[i];
+        }
+      }
+      static void clear(Array2D_Dense<T2> &target){
+        for(int i(target.rows() * target.columns() - 1); i >= 0; --i){
+          target.values[i] = T2();
+        }
+      }
+    };
     template <class T2>
-    static void copy_raw(Array2D_Dense<T2> &dest, const T2 *src){
-      std::memcpy(dest.values, src, sizeof(T2) * dest.rows() * dest.columns());
-    }
-
-    template <class T2>
-    static void clear_raw(Array2D_Dense<T2> &target){
-      std::memset(target.values, 0, sizeof(T2) * target.rows() * target.columns());
-    }
+    struct setup_t<T2, true> {
+      static void copy(Array2D_Dense<T2> &dest, const T2 *src){
+        std::memcpy(dest.values, src, sizeof(T2) * dest.rows() * dest.columns());
+      }
+      static void clear(Array2D_Dense<T2> &target){
+        std::memset(target.values, 0, sizeof(T2) * target.rows() * target.columns());
+      }
+    };
 
   public:
     Array2D_Dense() : super_t(0, 0), values(NULL), ref(NULL) {
@@ -267,7 +287,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const T *serialized)
         : super_t(rows, columns),
         values(new T[rows * columns]), ref(new int(1)) {
-      copy_raw(*this, serialized);
+      setup_t<T>::copy(*this, serialized);
     }
     /**
      * Copy constructor, which performs shallow copy.
@@ -285,10 +305,11 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     template <class T2>
     Array2D_Dense(const Array2D_Frozen<T2> &array)
-        : values(new T[array.rows() * array.columns()]), ref(new int(1)) {
+        : super_t(array.rows(), array.columns()),
+        values(new T[array.rows() * array.columns()]), ref(new int(1)) {
       T *buf(values);
       for(unsigned int i(0); i < array.rows(); ++i){
-        for(unsigned int j(0); j < array.rows(); ++j){
+        for(unsigned int j(0); j < array.columns(); ++j){
           *(buf++) = array(i, j);
         }
       }
@@ -356,7 +377,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     }
 
     void clear(){
-      clear_raw(*this);
+      setup_t<T>::clear(*this);
     }
 
     /**
@@ -468,7 +489,9 @@ struct Array2D_Operator_Binary {
       : lhs(_lhs), rhs(_rhs) {}
 };
 
-template <class LHS_T, class RHS_T>
+template <
+    class LHS_T, class RHS_T,
+    class LHS_BufferT = LHS_T, class RHS_BufferT = RHS_T>
 struct Array2D_Operator_Multiply;
 
 template <class LHS_T, class RHS_T, bool rhs_positive>
@@ -496,13 +519,13 @@ struct MatrixViewBase {
       const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return _columns;
   }
-  inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return i;
+  template <class T, class Array2D_Type>
+  inline T operator()(const Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return storage.Array2D_Type::operator()(i, j); // direct call instead of via vtable
   }
-  inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return j;
+  template <class T, class Array2D_Type>
+  inline T operator()(Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return storage.Array2D_Type::operator()(i, j); // direct call instead of via vtable
   }
 
   void update_size(const unsigned int &rows, const unsigned int &columns){}
@@ -729,6 +752,38 @@ struct priority_t<MatrixView ## name, U> { \
   };
   typedef typename reverse_op_t::res_t reverse_t;
 
+  /**
+   * Calculate view to which another view is applied
+   * For example, current = [Transpose(2)] [Offset(0)],
+   * and applied = [Transpose(2)] [VariableSize(1)],
+   * then intermediate = [Transpose(2)] [Transpose(2)] [VariableSize(1)] [Offset(0)],
+   * and finally, result = [VariableSize(1)] [Offset(0)].
+   * Here, each view elements are applied in accordance with their characteristics.
+   * @param SrcView view to be applied to current view
+   */
+  template <class SrcView>
+  struct apply_t {
+    template <class SrcView_Reverse, class DestView>
+    struct next_t {
+      typedef DestView res_t;
+    };
+    template <template <class> class V1, class V2, class DestView>
+    struct next_t<V1<V2>, DestView> {
+      typedef typename next_t<V2, DestView>::res_t res_t;
+    };
+#define make_entry(view_name, result_type) \
+template <class V, class DestView> \
+struct next_t<view_name<V>, DestView> { \
+  typedef typename next_t<V, typename MatrixViewBuilder<DestView>::result_type>::res_t res_t; \
+};
+    make_entry(MatrixViewTranspose, transpose_t);
+    make_entry(MatrixViewOffset, offset_t);
+    make_entry(MatrixViewSizeVariable, size_variable_t);
+    make_entry(MatrixViewLoop, loop_t);
+#undef make_entry
+    typedef typename next_t<typename MatrixViewBuilder<SrcView>::reverse_t, View>::res_t res_t;
+  };
+
   template <
       class DestView, class DestView_Reverse,
       class SrcView, class SrcView_Reverse>
@@ -813,55 +868,7 @@ struct priority_t<MatrixView ## name, U> { \
     copy_t<
         void, reverse_t,
         void, typename MatrixViewBuilder<View2>::reverse_t>::run(&dest, &src);
-
   }
-
-  template <class View2>
-  struct merge_t {
-    template <class ViewA_R, class ViewB_R, class ViewMerged>
-    struct downcast_merge_t {
-      typedef ViewMerged res_t;
-    };
-    template <template <class> class ViewA_R1, class ViewA_R2, class ViewB_R, class ViewMerged>
-    struct downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R, ViewMerged> {
-      // catch if A has more views
-      typedef typename downcast_merge_t<ViewA_R2, ViewB_R, ViewA_R1<ViewMerged> >::res_t res_t;
-    };
-    template <class ViewA_R, template <class> class ViewB_R1, class ViewB_R2, class ViewMerged>
-    struct downcast_merge_t<ViewA_R, ViewB_R1<ViewB_R2>, ViewMerged> {
-      // catch if B has more views
-      typedef typename downcast_merge_t<ViewA_R, ViewB_R2, ViewB_R1<ViewMerged> >::res_t res_t;
-    };
-    template <
-        template <class> class ViewAB_R1,
-        class ViewA_R2, class ViewB_R2, class ViewMerged>
-    struct downcast_merge_t<ViewAB_R1<ViewA_R2>, ViewAB_R1<ViewB_R2>, ViewMerged> {
-      // catch if same views exist at the same (reverse) top level in both A and B
-      typedef typename downcast_merge_t<ViewA_R2, ViewB_R2, ViewAB_R1<ViewMerged> >::res_t res_t;
-    };
-    template <
-        template <class> class ViewA_R1, class ViewA_R2,
-        template <class> class ViewB_R1, class ViewB_R2,
-        class ViewMerged>
-    struct downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R1<ViewB_R2>, ViewMerged> {
-      // catch if A and B has multiple views and the views at the (reversed) top level are different
-      template<
-          bool is_ViewA_R1_higher = (priority_t<ViewA_R1>::priority > priority_t<ViewB_R1>::priority),
-          class U = void>
-      struct next_t { // catch A_R1.priority <= B_R1.priority
-        typedef typename downcast_merge_t<ViewA_R2, ViewB_R1<ViewB_R2>, ViewA_R1<ViewMerged> >::res_t res_t;
-      };
-      template<class U>
-      struct next_t<true, U> { // catch A_R1.priority > B_R1.priority
-        typedef typename downcast_merge_t<ViewA_R1<ViewA_R2>, ViewB_R2, ViewB_R1<ViewMerged> >::res_t res_t;
-      };
-      typedef typename next_t<>::res_t res_t;
-    };
-    typedef typename downcast_merge_t<
-        reverse_t,
-        typename MatrixViewBuilder<View2>::reverse_t,
-        void>::res_t res_t;
-  };
 };
 
 template <class BaseView>
@@ -893,13 +900,10 @@ struct MatrixViewTranspose : public BaseView {
       const unsigned int &_rows, const unsigned int &_columns) const noexcept {
     return BaseView::rows(_rows, _columns);
   }
-  inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::i(j, i);
-  }
-  inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::j(j, i);
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, j, i);
   }
 
   void update_size(const unsigned int &rows, const unsigned int &columns){
@@ -944,13 +948,11 @@ struct MatrixViewOffset : public BaseView {
          << (const BaseView &)view;
   }
 
-  inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::i(i + prop.row, j + prop.column);
-  }
-  inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::j(i + prop.row, j + prop.column);
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(
+        storage, i + prop.row, j + prop.column);
   }
 
   void update_offset(const unsigned int &row, const unsigned int &column){
@@ -1036,13 +1038,11 @@ struct MatrixViewLoop : public BaseView {
          << (const BaseView &)view;
   }
 
-  inline unsigned int i(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::i(i % prop.rows, j % prop.columns);
-  }
-  inline unsigned int j(
-      const unsigned int &i, const unsigned int &j) const noexcept {
-    return BaseView::j(i % prop.rows, j % prop.columns);
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(
+        storage, i % prop.rows, j % prop.columns);
   }
 
   void update_loop(const unsigned int &rows, const unsigned int &columns){
@@ -1086,9 +1086,9 @@ struct MatrixBuilder_ViewTransformerBase<
           typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
   template <class ViewType2>
-  struct view_merge_t {
+  struct view_apply_t {
     typedef MatrixT<T, Array2D_Type,
-        typename view_builder_t::template merge_t<ViewType2>::res_t> merged_t;
+        typename view_builder_t::template apply_t<ViewType2>::res_t> applied_t;
   };
 };
 
@@ -1118,13 +1118,13 @@ struct MatrixBuilder_ValueCopier {
 };
 
 template <class MatrixT>
-struct MatrixBuilder_Assignable;
+struct MatrixBuilder_Dependency;
 
 template <class MatrixT>
 struct MatrixBuilderBase
     : public MatrixBuilder_ViewTransformer<MatrixT>,
     public MatrixBuilder_ValueCopier<MatrixT>,
-    public MatrixBuilder_Assignable<MatrixT> {};
+    public MatrixBuilder_Dependency<MatrixT> {};
 
 template <
     class MatrixT,
@@ -1134,7 +1134,7 @@ struct MatrixBuilder;
 template <
     template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType>
-struct MatrixBuilder_Assignable<MatrixT<T, Array2D_Type, ViewType> > {
+struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Type, ViewType> > {
   template <class T2, bool is_writable_array = Array2D_Type::writable>
   struct assignable_matrix_t {
     typedef Matrix<T2> res_t;
@@ -1163,7 +1163,7 @@ struct MatrixBuilder<
 };
 
 /**
- * @brief Matrix for fixed content
+ * @brief Matrix for unchangeable content
  *
  * @see Matrix
  */
@@ -1175,11 +1175,16 @@ class Matrix_Frozen {
     typedef Array2D_Type storage_t;
     typedef ViewType view_t;
     typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
+    typedef self_t frozen_t;
 
     typedef MatrixBuilder<self_t> builder_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
+
+    static char (&check_storage(Array2D_Frozen<T> *) )[1];
+    static const int storage_t_should_be_derived_from_Array2D_Frozen
+        = sizeof(check_storage(static_cast<storage_t *>(0)));
 
   protected:
     storage_t storage; ///< 2D storage
@@ -1196,8 +1201,8 @@ class Matrix_Frozen {
      *
      * @param storage new storage
      */
-    Matrix_Frozen(const Array2D_Frozen<T> &new_storage)
-        : storage(static_cast<const storage_t &>(new_storage)),
+    Matrix_Frozen(const storage_t &new_storage)
+        : storage(new_storage),
         view() {}
   public:
     /**
@@ -1228,8 +1233,7 @@ class Matrix_Frozen {
     T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      return storage.storage_t::operator()(
-          view.i(row, column), view.j(row, column));
+      return view.DELETE_IF_MSC(template) operator()<T>((const storage_t &)storage, row, column);
     }
 
     /**
@@ -1651,27 +1655,29 @@ class Matrix_Frozen {
 
     template <class RHS_T, class LHS_MatrixT = self_t>
     struct Multiply_Matrix_by_Scalar {
-      typedef Array2D_Operator_Multiply<self_t, RHS_T> op_t;
 
-      /*
-       * Optimization policy: If upper pattern is M * scalar, then reuse it.
-       * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
-       */
-
-      template <bool, class U = void>
-      struct optimizer_t {
+      template <
+          bool is_lhs_multi_mat_by_scalar
+            = (OperatorProperty<self_t>::tag == OPERATOR_2_Multiply_Matrix_by_Scalar),
+          class U = void>
+      struct check_lhs_t {
+        typedef Array2D_Operator_Multiply<self_t, RHS_T, LHS_MatrixT> op_t;
         typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
-        static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+        static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
           return res_t(
               typename res_t::storage_t(
                 mat.rows(), mat.columns(), op_t(mat, scalar)));
         }
       };
 #if 1 // 0 = Remove optimization
+      /*
+       * Optimization policy: If upper pattern is M * scalar, then reuse it.
+       * For example, (M * scalar) * scalar is transformed to M * (scalar * scalar).
+       */
       template <class U>
-      struct optimizer_t<true, U> {
+      struct check_lhs_t<true, U> {
         typedef self_t res_t;
-        static res_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
+        static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
           return res_t(
               typename res_t::storage_t(
                 mat.rows(), mat.columns(),
@@ -1680,13 +1686,9 @@ class Matrix_Frozen {
         }
       };
 #endif
-
-      typedef optimizer_t<
-          OperatorProperty<self_t>::tag
-            == OPERATOR_2_Multiply_Matrix_by_Scalar> opt_t;
-      typedef typename opt_t::res_t mat_t;
-      static mat_t generate(const self_t &mat, const RHS_T &scalar) noexcept {
-        return opt_t::generate(mat, scalar);
+      typedef typename check_lhs_t<>::res_t mat_t;
+      static mat_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
+        return check_lhs_t<>::generate(mat, scalar);
       }
     };
     template <class RHS_T>
@@ -1876,7 +1878,8 @@ class Matrix_Frozen {
       typedef typename optimizer1_t<self_t>::res_t lhs_opt_t;
       typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_opt_t;
 
-      typedef Array2D_Operator_Multiply<self_t, RHS_MatrixT> op_t;
+      typedef Array2D_Operator_Multiply<
+          self_t, typename RHS_MatrixT::frozen_t, lhs_opt_t, rhs_opt_t> op_t;
 
       /*
        * [Optimization policy 2]
@@ -1973,7 +1976,7 @@ class Matrix_Frozen {
     template <class RHS_MatrixT>
     struct Multiply_Matrix_by_Matrix<RHS_MatrixT, scalar_matrix_t> {
       // Specialization for (Scalar_M * M)
-      typedef typename RHS_MatrixT::template Multiply_Matrix_by_Scalar<T> generator_t;
+      typedef typename RHS_MatrixT::template Multiply_Matrix_by_Scalar<T, RHS_MatrixT> generator_t;
       typedef typename generator_t::mat_t mat_t;
       static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2) noexcept {
         return generator_t::generate(mat2, mat1(0, 0));
@@ -1982,7 +1985,7 @@ class Matrix_Frozen {
 
     /**
      * Multiply matrix by matrix
-     * If this matrix is scalar matrix, then right hand side matrix multipled by this will be returned.
+     * If this matrix is scalar matrix, then right hand side matrix multiplied by this will be returned.
      * Otherwise, matrix * matrix will be returned.
      *
      * @param matrix matrix to multiply
@@ -2178,7 +2181,7 @@ class Matrix_Frozen {
       typename builder_t::partial_t U(partial(rows(), rows(), 0, rows()));
       typedef typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t y_t;
       // By using L(Ux) = y, firstly y' = (Ux) will be solved; L(Ux) = y で y' = (Ux)をまず解く
-      y_t y_copy(y);
+      y_t y_copy(y.operator y_t());
       y_t y_prime(y_t::blank(y.rows(), 1));
       for(unsigned i(0); i < rows(); i++){
         y_prime(i, 0) = y_copy(i, 0) / L(i, i);
@@ -2233,7 +2236,7 @@ class Matrix_Frozen {
      */
     typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t decomposeUD(const bool &do_check = true) const {
       if(do_check && !isSymmetric()){throw std::logic_error("not symmetric");}
-      typename builder_t::assignable_t P(*this);
+      typename builder_t::assignable_t P(this->operator typename builder_t::assignable_t());
       typedef typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t res_t;
       res_t UD(rows(), columns() * 2);
       typename res_t::partial_offsetless_t U(UD.partial(rows(), columns()));
@@ -2251,6 +2254,76 @@ class Matrix_Frozen {
       return UD;
     }
 
+    template <class MatrixT = self_t, class U = void>
+    struct Inverse_Matrix {
+      typedef typename MatrixT::builder_t::assignable_t mat_t;
+      static mat_t generate(const MatrixT &mat) {
+        if(!mat.isSquare()){throw std::logic_error("rows() != columns()");}
+
+#if 0
+        // Cramer (slow); クラメール
+        mat_t result(rows(), columns());
+        T det;
+        if((det = mat.determinant()) == 0){throw std::runtime_error("Operation void!!");}
+        for(unsigned int i(0); i < mat.rows(); i++){
+          for(unsigned int j(0); j < mat.columns(); j++){
+            result(i, j) = mat.matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
+          }
+        }
+        return result.transpose() / det;
+#endif
+
+        // Gaussian elimination; ガウス消去法
+        mat_t left(mat.operator mat_t());
+        mat_t right(getI(mat.rows()));
+        for(unsigned int i(0); i < left.rows(); i++){
+          if(left(i, i) == T(0)){
+            unsigned int i2(i);
+            do{
+              if(++i2 == left.rows()){
+                throw std::runtime_error("invert matrix not exist");
+              }
+            }while(left(i2, i) == T(0));
+            // exchange i-th and i2-th rows
+            for(unsigned int j(i); j < left.columns(); ++j){
+              T temp(left(i, j));
+              left(i, j) = left(i2, j);
+              left(i2, j) = temp;
+            }
+            right.exchangeRows(i, i2);
+          }
+          if(left(i, i) != T(1)){
+            for(unsigned int j(0); j < left.columns(); j++){right(i, j) /= left(i, i);}
+            for(unsigned int j(i+1); j < left.columns(); j++){left(i, j) /= left(i, i);}
+            left(i, i) = T(1);
+          }
+          for(unsigned int k(0); k < left.rows(); k++){
+            if(k == i){continue;}
+            if(left(k, i) != T(0)){
+              for(unsigned int j(0); j < left.columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
+              for(unsigned int j(i+1); j < left.columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
+              left(k, i) = T(0);
+            }
+          }
+        }
+        //std::cout << "L:" << left << std::endl;
+        //std::cout << "R:" << right << std::endl;
+
+        return right;
+
+        // TODO: method to use LU decomposition
+        /*
+        */
+      }
+    };
+    template <class U>
+    struct Inverse_Matrix<scalar_matrix_t, U> {
+      typedef scalar_matrix_t mat_t;
+      static mat_t generate(const scalar_matrix_t &mat) noexcept {
+        return getScalar(mat.rows(), T(1) / mat(0, 0));
+      }
+    };
+
     /**
      * Calculate inverse matrix
      *
@@ -2258,63 +2331,8 @@ class Matrix_Frozen {
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename builder_t::assignable_t inverse() const {
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
-
-#if 0
-      // Cramer (slow); クラメール
-      typename builder_t::assignable_t result(rows(), columns());
-      T det;
-      if((det = determinant()) == 0){throw std::runtime_error("Operation void!!");}
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
-          result(i, j) = matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
-        }
-      }
-      return result.transpose() / det;
-#endif
-
-      // Gaussian elimination; ガウス消去法
-      typename builder_t::assignable_t left(*this);
-      typename builder_t::assignable_t right(getI(rows()));
-      for(unsigned int i(0); i < rows(); i++){
-        if(left(i, i) == T(0)){
-          unsigned int i2(i);
-          do{
-            if(++i2 == rows()){
-              throw std::runtime_error("invert matrix not exist");
-            }
-          }while(left(i2, i) == T(0));
-          // exchange i-th and i2-th rows
-          for(unsigned int j(i); j < columns(); ++j){
-            T temp(left(i, j));
-            left(i, j) = left(i2, j);
-            left(i2, j) = temp;
-          }
-          right.exchangeRows(i, i2);
-        }
-        if(left(i, i) != T(1)){
-          for(unsigned int j(0); j < columns(); j++){right(i, j) /= left(i, i);}
-          for(unsigned int j(i+1); j < columns(); j++){left(i, j) /= left(i, i);}
-          left(i, i) = T(1);
-        }
-        for(unsigned int k(0); k < rows(); k++){
-          if(k == i){continue;}
-          if(left(k, i) != T(0)){
-            for(unsigned int j(0); j < columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
-            for(unsigned int j(i+1); j < columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
-            left(k, i) = T(0);
-          }
-        }
-      }
-      //std::cout << "L:" << left << std::endl;
-      //std::cout << "R:" << right << std::endl;
-
-      return right;
-
-      // TODO: method to use LU decomposition
-      /*
-      */
+    typename Inverse_Matrix<>::mat_t inverse() const {
+      return Inverse_Matrix<>::generate(*this);
     }
 
     /**
@@ -2325,9 +2343,11 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t::super_t>::mat_t
+          typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>::mat_t
         operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return *this * matrix.inverse();
+      return Multiply_Matrix_by_Matrix<
+            typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>
+          ::generate(*this, matrix.inverse()); // equal to (*this) * matrix.inverse()
     }
 
     /**
@@ -2337,9 +2357,10 @@ class Matrix_Frozen {
      * @param matrix
      * @return result matrix
      */
-    friend typename mul_mat_scalar_t::mat_t
+    friend typename Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>::mat_t
         operator/(const T &scalar, const self_t &matrix) {
-      return matrix.inverse() * scalar;
+      return Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>
+          ::generate(matrix.inverse(), scalar); // equal to matrix.inverse() * scalar
     }
 
     /**
@@ -2354,7 +2375,7 @@ class Matrix_Frozen {
     typename builder_t::assignable_t pivotAdd(
         const unsigned int &row, const unsigned int &column,
         const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const{
-      return ((typename builder_t::assignable_t)(*this)).pivotMerge(row, column, matrix);
+      return this->operator typename builder_t::assignable_t().pivotMerge(row, column, matrix);
     }
 
     /**
@@ -2370,7 +2391,7 @@ class Matrix_Frozen {
         Matrix<T2, Array2D_Type2, ViewType2> *transform = NULL) const {
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
-      typename builder_t::assignable_t result(*this);
+      typename builder_t::assignable_t result(this->operator typename builder_t::assignable_t());
       typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
       omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
       for(unsigned int j(0); j < columns() - 2; j++){
@@ -2480,7 +2501,7 @@ class Matrix_Frozen {
 #if 0
       //パワー法(べき乗法)
       typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows(), rows() + 1);
-      typename builder_t::assignable_t source(*this);
+      typename builder_t::assignable_t source(this->operator typename builder_t::assignable_t());
       for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
       for(unsigned int i(0); i < columns(); i++){
         while(true){
@@ -2827,19 +2848,53 @@ class Matrix_Frozen {
         }
 
         template <class T2, class Array2D_Type2, class View_Type2>
-        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
-          return (*this) << "M"
+        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *m){
+          (*this) << "M"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
-              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "")
-              << "(" << m.rows() << "," << m.columns() << ")";
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
+          if(m){
+            (*this) << "(" << m->rows() << "," << m->columns() << ")";
+          }
+          return *this;
+        }
+
+        template <class LHS_T, class RHS_T, bool rhs_positive>
+        format_t &operator<<(const Array2D_Operator_Add<LHS_T, RHS_T, rhs_positive> *op){
+          return (*this) << (const LHS_T *)(op ? &(op->lhs) : 0) << ", " << (const RHS_T *)(op ? &(op->rhs) : 0);
+        }
+
+        template <class U>
+        static const U &check_scalar(const U *u){return *u;}
+        template <class T2, class Array2D_Type2, class View_Type2>
+        static const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *check_scalar(
+            const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *m){
+          return m;
+        }
+
+        template <class LHS_T, class RHS_T, class LHS_BufferT, class RHS_BufferT>
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_BufferT, RHS_BufferT> *){
+          return (*this) << (const LHS_T *)0 << ", " << (const RHS_T *)0;
+        }
+        template <class LHS_T, class RHS_T, class LHS_BufferT>
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_BufferT, RHS_T> *op){
+          return (*this)
+              << (const LHS_T *)0 << ", "
+              << check_scalar((const RHS_T *)(op ? &(op->rhs) : 0));
+        }
+        template <class LHS_T, class RHS_T, class RHS_BufferT>
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_T, RHS_BufferT> *op){
+          return (*this) << (const LHS_T *)(op ? &(op->lhs) : 0) << ", " << (const RHS_T *)0;
         }
         template <class LHS_T, class RHS_T>
-        format_t &operator<<(const Array2D_Operator_Binary<LHS_T, RHS_T> &op){
-          return (*this) << op.lhs << ", " << op.rhs;
+        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_T, RHS_T> *op){
+          return (*this)
+              << (const LHS_T *)(op ? &(op->lhs) : 0) << ", "
+              << check_scalar((const RHS_T *)(op ? &(op->rhs) : 0));
         }
+
         template <class T2, class OperatorT, class View_Type2>
         format_t &operator<<(
-            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
+            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> *m){
           const char *symbol = "";
           switch(OperatorProperty<
               Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> >::tag){
@@ -2854,7 +2909,9 @@ class Matrix_Frozen {
               return (*this) << "(?)";
           }
           return (*this) << "(" << symbol << ", "
-              << (typename OperatorT::super_t)m.storage.op << ")"; // cast to Array2D_Operator_Binary
+              << (const OperatorT *)(m ? &(m->storage.op) : 0) << ")"
+              << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
         }
       };
 
@@ -2864,7 +2921,7 @@ class Matrix_Frozen {
             << "prop: {" << std::endl
             << "  *(R,C): (" << mat.rows() << "," << mat.columns() << ")" << std::endl
             << "  *view: " << mat.view << std::endl
-            << "  *storage: " << mat << std::endl
+            << "  *storage: " << &mat << std::endl
             << "}";
         return out;
       }
@@ -2880,16 +2937,14 @@ class Matrix_Frozen {
 
 template <
     class T, class Array2D_Type, class ViewType,
-    class RHS_T>
+    class RHS_T,
+    class LHS_BufferT, class RHS_BufferT>
 struct Array2D_Operator_Multiply<
       Matrix_Frozen<T, Array2D_Type, ViewType>,
-      RHS_T>
-    : public Array2D_Operator_Binary<
-        Matrix_Frozen<T, Array2D_Type, ViewType>,
-        RHS_T>{
-  typedef Array2D_Operator_Binary<
-      Matrix_Frozen<T, Array2D_Type, ViewType>,
-      RHS_T> super_t;
+      RHS_T,
+      LHS_BufferT, RHS_BufferT>
+    : public Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT>{
+  typedef Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT> super_t;
   static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Scalar;
   Array2D_Operator_Multiply(
       const typename super_t::lhs_t &_lhs,
@@ -2932,28 +2987,23 @@ struct Array2D_Operator_Add<
 
 template <
     class T, class Array2D_Type, class ViewType,
-    class T2, class Array2D_Type2, class ViewType2>
+    class T2, class Array2D_Type2, class ViewType2,
+    class LHS_BufferT, class RHS_BufferT>
 struct Array2D_Operator_Multiply<
       Matrix_Frozen<T, Array2D_Type, ViewType>,
-      Matrix_Frozen<T2, Array2D_Type2, ViewType2> >
-    : public Array2D_Operator_Binary<
-        Matrix_Frozen<T, Array2D_Type, ViewType>,
-        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
-  typedef Array2D_Operator_Binary<
-      Matrix_Frozen<T, Array2D_Type, ViewType>,
-      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2>,
+      LHS_BufferT, RHS_BufferT>
+    : public Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT>{
+  typedef Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT> super_t;
   static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix;
-  typedef typename super_t::lhs_t::template Multiply_Matrix_by_Matrix<typename super_t::rhs_t> gen_t;
-  typename gen_t::lhs_opt_t lhs_opt;
-  typename gen_t::rhs_opt_t rhs_opt;
   Array2D_Operator_Multiply(
       const typename super_t::lhs_t &_lhs,
       const typename super_t::rhs_t &_rhs) noexcept
-      : super_t(_lhs, _rhs), lhs_opt(_lhs), rhs_opt(_rhs) {}
+      : super_t(_lhs, _rhs) {}
   T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
     T res(0);
-    for(unsigned int i(0); i < lhs_opt.columns(); ++i){
-      res += lhs_opt(row, i) * rhs_opt(i, column);
+    for(unsigned int i(0); i < super_t::lhs.columns(); ++i){
+      res += super_t::lhs(row, i) * super_t::rhs(i, column);
     }
     return res;
   }
@@ -2979,81 +3029,58 @@ struct MatrixBuilder<
       Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
   template <class MatrixT>
-  struct previous_t {
-    typedef MatrixT mat1_t;
-    typedef MatrixT mat2_t;
+  struct unpack_mat_t {
+    typedef MatrixT mat_t;
   };
   template <class T2, class OperatorT2, class ViewType2>
-  struct previous_t<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> > {
-    template <class OperatorT3 = OperatorT2>
-    struct check_op_t {
-      // consequently, M * S, M + M are captured
-      typedef typename OperatorT2::first_t mat1_t;
-      typedef typename OperatorT2::first_t mat2_t;
-    };
-    template <
-        class LHS_T,
-        class T_R, class Array2D_Type_R, class ViewType_R>
-    struct check_op_t<Array2D_Operator_Multiply<
-        LHS_T,
-        Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> > > { // specialization for M * M
-      typedef typename OperatorT2::lhs_t mat1_t;
-      typedef typename OperatorT2::rhs_t mat2_t;
-    };
-
-    typedef typename check_op_t<>::mat1_t mat1_t;
-    typedef typename check_op_t<>::mat2_t mat2_t;
+  struct unpack_mat_t<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> > {
+    typedef typename MatrixBuilder<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> >
+        ::assignable_t::frozen_t mat_t;
   };
 
-
-  template <class OperatorT2 = OperatorT>
-  struct check_t {
+  template <class OperatorT2>
+  struct unpack_op_t {
     // consequently, M * S, M + M are captured
-    // (op, M1, M2, ...) => M1
-    typedef typename OperatorT::first_t mat_t;
+    // (op, M1, M2, ...) => M1, then apply ViewType
+    typedef typename MatrixBuilder<typename OperatorT2::first_t::frozen_t>
+        ::template view_apply_t<ViewType>::applied_t mat_t;
   };
   template <
       class LHS_T,
-      class T_R, class Array2D_Type_R, class ViewType_R>
-  struct check_t<Array2D_Operator_Multiply<
+      class T_R, class Array2D_Type_R, class ViewType_R,
+      class LHS_BufferT, class RHS_BufferT>
+  struct unpack_op_t<Array2D_Operator_Multiply<
       LHS_T,
-      Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> > > { // (M or M') * M
-    template <class OperatorT2 = typename LHS_T::template OperatorProperty<>::operator_t, class U = void>
-    struct check2_t {
-      // (op, M1, M2, ...) * Mr => M1 * Mr
+      Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R>,
+      LHS_BufferT, RHS_BufferT> > { // M * M
+    typedef LHS_T mat1_t;
+    typedef Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> mat2_t;
+    
+    template <
+        class OperatorT_L = typename mat1_t::template OperatorProperty<>::operator_t,
+        class OperatorT_R = typename mat2_t::template OperatorProperty<>::operator_t,
+        class U = void>
+    struct check_op_t {
       typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
-          typename MatrixBuilder<typename previous_t<LHS_T>::mat1_t>
-            ::template view_merge_t<typename LHS_T::view_t>::merged_t,
-         typename OperatorT::rhs_t> > > res_t;
+          typename unpack_mat_t<mat1_t>::mat_t,
+          typename unpack_mat_t<mat2_t>::mat_t> >, ViewType> res_t;
     };
     template <class U>
-    struct check2_t<void, U> { // Non operator case
-      // Ml * Mr => Ml
-      typedef LHS_T res_t;
+    struct check_op_t<void, void, U> {
+      // active when both left and right hand side terms are none operator
+      // This may be overwritten by (M * M) if its MatrixBuilder specialization exists
+      typedef typename MatrixBuilder<mat1_t>::template view_apply_t<ViewType>::applied_t res_t;
     };
-    typedef typename check2_t<>::res_t mat_t;
+    typedef typename check_op_t<>::res_t mat_t;
   };
-  template <
-      class LHS_T,
-      class T_R, class OperatorT_R, class ViewType_R>
-  struct check_t<Array2D_Operator_Multiply<
-      LHS_T,
-      Matrix_Frozen<T_R, Array2D_Operator<T_R, OperatorT_R>, ViewType_R> > > { // (M or M') * M'
-    // [Ml * (op, M1, M2, ...) => Ml * M1], or [Ml * (M1 * M2) => Ml * M2]
-    typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
-        LHS_T,
-        typename MatrixBuilder<typename previous_t<typename OperatorT::rhs_t>::mat2_t>
-          ::template view_merge_t<ViewType_R>::merged_t> > > mat_t;
-  };
-
 
   typedef typename MatrixBuilder<
-      typename MatrixBuilder<typename check_t<>::mat_t>::template view_merge_t<ViewType>::merged_t,
+      typename unpack_op_t<OperatorT>::mat_t,
       nR_add, nC_add, nR_multiply, nC_multiply>::assignable_t assignable_t;
 };
 // Remove default assignable_t, and make family_t depend on assignable_t defined in sub class
 template <class T, class OperatorT, class ViewType>
-struct MatrixBuilder_Assignable<
+struct MatrixBuilder_Dependency<
     Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
 
   template <class T2>
@@ -3102,7 +3129,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     typedef typename builder_t::partial_t partial_t;
     typedef typename builder_t::circular_bijective_t circular_bijective_t;
-    typedef typename super_t::builder_t::circular_t circular_t;
+    typedef typename builder_t::circular_t circular_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
@@ -3110,13 +3137,18 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
 
+    template <class ImplementedT>
+    static char (&check_storage(Array2D<T, ImplementedT> *) )[1];
+    static const int storage_t_should_be_derived_from_Array2D
+        = sizeof(check_storage(static_cast<storage_t *>(0)));
+
   protected:
     /**
      * Constructor with storage
      *
      * @param storage new storage
      */
-    Matrix(const Array2D<T, Array2D_Type> &new_storage) : super_t(new_storage) {}
+    Matrix(const storage_t &new_storage) : super_t(new_storage) {}
 
     using super_t::storage;
 
@@ -3132,8 +3164,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     T &operator()(
         const unsigned int &row,
         const unsigned int &column){
-      return storage.storage_t::operator()(
-            super_t::view.i(row, column), super_t::view.j(row, column));
+      return super_t::view.DELETE_IF_MSC(template) operator()<T &>(
+          (storage_t &)storage, row, column);
     }
 
     using super_t::rows;
@@ -3203,7 +3235,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         : super_t(matrix){}
 
     template <class T2, class Array2D_Type2>
-    Matrix(const Matrix<T2, Array2D_Type2, ViewType> &matrix)
+    Matrix(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
         : super_t(matrix) {}
   protected:
     template <class ViewType2>
@@ -3246,12 +3278,12 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      * @return myself
      */
     self_t &operator=(const self_t &matrix){
-      super_t::operator=(matrix);
+      super_t::operator=(matrix); // frozen_t::operator=(const frozen_t &) is exactly called
       return *this;
     }
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
-      super_t::operator=(matrix);
+      super_t::operator=(matrix); // frozen_t::operator=(const another_frozen_t &) is exactly called
       return *this;
     }
 
@@ -3561,6 +3593,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
 };
 
+#undef DELETE_IF_MSC
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)
 #undef noexcept
