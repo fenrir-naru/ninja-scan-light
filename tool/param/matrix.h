@@ -902,8 +902,8 @@ struct MatrixViewTranspose : public BaseView {
   }
   template <class T, class Array2D_Type>
   inline T operator()(
-      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, j, i);
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T>(storage, j, i);
   }
 
   void update_size(const unsigned int &rows, const unsigned int &columns){
@@ -950,8 +950,8 @@ struct MatrixViewOffset : public BaseView {
 
   template <class T, class Array2D_Type>
   inline T operator()(
-      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T>(
         storage, i + prop.row, j + prop.column);
   }
 
@@ -1040,8 +1040,8 @@ struct MatrixViewLoop : public BaseView {
 
   template <class T, class Array2D_Type>
   inline T operator()(
-      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T>(
         storage, i % prop.rows, j % prop.columns);
   }
 
@@ -1233,7 +1233,7 @@ class Matrix_Frozen {
     T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      return view.DELETE_IF_MSC(template) operator()<T>((const storage_t &)storage, row, column);
+      return view.DELETE_IF_MSC(template) operator()<T>(storage, row, column);
     }
 
     /**
@@ -3164,8 +3164,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     T &operator()(
         const unsigned int &row,
         const unsigned int &column){
-      return super_t::view.DELETE_IF_MSC(template) operator()<T &>(
-          (storage_t &)storage, row, column);
+      return super_t::view.DELETE_IF_MSC(template) operator()<T &>(storage, row, column);
     }
 
     using super_t::rows;
