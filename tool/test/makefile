@@ -40,7 +40,7 @@ BUILD_DIR ?= build_GCC
 SRCS_COMMON = $(filter-out $(addsuffix .cpp,$(PACKAGES)),$(shell ls *.cpp))
 OBJS_COMMON = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_COMMON))
 SRCS_DEPEND = $(shell find $(PACKAGES) -name "*.cpp" 2>/dev/null)
-OBJS_DEPEND = $(addsuffix %.cpp,$(BUILD_DIR)/%.o,$(SRCS_DEPEND))
+OBJS_DEPEND = $(patsubst %.cpp,$(BUILD_DIR)/%.o,$(SRCS_DEPEND))
 SRCS = $(addsuffix .cpp,$(PACKAGES)) $(SRCS_COMMON) $(SRCS_DEPEND)
 
 BUILD_DIRS = $(sort $(BUILD_DIR) $(dir $(OBJS_COMMON) $(OBJS_DEPEND)))
