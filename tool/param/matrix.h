@@ -1875,11 +1875,8 @@ class Matrix_Frozen {
         typedef typename MatrixT::builder_t::assignable_t res_t;
       };
 #endif
-      typedef typename optimizer1_t<self_t>::res_t lhs_opt_t;
-      typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_opt_t;
-
-      typedef Array2D_Operator_Multiply<
-          self_t, typename RHS_MatrixT::frozen_t, lhs_opt_t, rhs_opt_t> op_t;
+      typedef typename optimizer1_t<self_t>::res_t lhs_buf_t;
+      typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_buf_t;
 
       /*
        * [Optimization policy 2]
@@ -1891,6 +1888,8 @@ class Matrix_Frozen {
           class U = void>
       struct optimizer2_t {
         // M * M
+        typedef Array2D_Operator_Multiply<
+            self_t, typename RHS_MatrixT::frozen_t, lhs_buf_t, rhs_buf_t> op_t;
         typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
           return res_t(
