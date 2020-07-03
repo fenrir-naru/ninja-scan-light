@@ -1666,20 +1666,20 @@ class Matrix_Frozen {
           class U = void>
       struct check_lhs_t {
         typedef Array2D_Operator_Multiply_by_Scalar<LHS_MatrixT, RHS_T> op_t;
-#if 0
-        typedef typename op_t::mat_t res_t;
+
+        // Type check for resolution of circular reference.
+        template <class LHS_T = LHS_MatrixT, class U2 = void>
+        struct check2_lhs_t {
+          typedef typename op_t::mat_t mat_t;
+        };
+        template <class U2>
+        struct check2_lhs_t<self_t, U2> { // This specialization is essential
+          typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+        };
+        typedef typename check2_lhs_t<>::mat_t res_t;
         static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
           return op_t::generate(mat, scalar);
         }
-#else
-        // The above code fails build. This may results from circular reference.
-        typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
-        static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
-          return res_t(
-              typename res_t::storage_t(
-                mat.rows(), mat.columns(), op_t(mat, scalar)));
-        }
-#endif
       };
 #if 1 // 0 = Remove optimization
       /*
@@ -3601,14 +3601,14 @@ typename Matrix_Frozen<T, Array2D_Type, ViewType>::template Inverse_Matrix<>::ma
 }
 #endif
 
-/*template <class LHS_T, class RHS_T>
+template <class LHS_T, class RHS_T>
 struct Array2D_Operator_Multiply_by_Scalar
     : public Array2D_Operator_Multiply_by_Scalar<typename LHS_T::frozen_t, RHS_T> {
   typedef Array2D_Operator_Multiply_by_Scalar<typename LHS_T::frozen_t, RHS_T> super_t;
   static typename super_t::mat_t generate(const LHS_T &mat, const RHS_T &scalar) {
     return super_t::generate(mat, scalar);
   }
-};*/
+};
 
 template <class LHS_T, class RHS_T>
 struct Array2D_Operator_Multiply_by_Matrix
