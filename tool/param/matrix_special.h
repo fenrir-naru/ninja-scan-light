@@ -427,30 +427,35 @@ struct MatrixBuilder_ValueCopier<
 #define upgrade_mul_mat_mat(view_lhs, view_rhs) \
 template < \
     class T, class Array2D_Type, class ViewType, \
-    class T2, class Array2D_Type2, class ViewType2, \
-    class LHS_BufferT, class RHS_BufferT> \
-struct Array2D_Operator_Multiply< \
+    class T2, class Array2D_Type2, class ViewType2> \
+struct Array2D_Operator_Multiply_by_Matrix< \
       Matrix_Frozen<T, Array2D_Type, view_lhs >, \
-      Matrix_Frozen<T2, Array2D_Type2, view_rhs >, \
-      LHS_BufferT, RHS_BufferT> \
-    : public Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT>{ \
-  typedef Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT> super_t; \
-  static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix; \
-  Array2D_Operator_Multiply( \
-      const typename super_t::lhs_t &_lhs, \
-      const typename super_t::rhs_t &_rhs) noexcept \
+      Matrix_Frozen<T2, Array2D_Type2, view_rhs > > \
+    : public Array2D_Operator_Binary< \
+        Matrix_Frozen<T, Array2D_Type, view_lhs >, \
+        Matrix_Frozen<T2, Array2D_Type2, view_rhs > >{ \
+  typedef Matrix_Frozen<T, Array2D_Type, view_lhs > lhs_t; \
+  typedef Matrix_Frozen<T2, Array2D_Type2, view_rhs > rhs_t; \
+  typedef Array2D_Operator_Multiply_by_Matrix<lhs_t, rhs_t> self_t; \
+  typedef Array2D_Operator_Binary<lhs_t, rhs_t> super_t; \
+  static const int tag = lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix; \
+  Array2D_Operator_Multiply_by_Matrix(const lhs_t &_lhs, const rhs_t &_rhs) noexcept \
       : super_t(_lhs, _rhs) {} \
   T operator()(const unsigned int &row, const unsigned int &column) const noexcept; \
+  typedef Matrix_Frozen<T, Array2D_Operator<T, self_t> > mat_t; \
+  static mat_t generate(const lhs_t &mat1, const rhs_t &mat2) { \
+    return mat_t( \
+        typename mat_t::storage_t( \
+          mat1.rows(), mat2.columns(), self_t(mat1, mat2))); \
+  } \
 };
 #define upgrade_mul_mat_mat_function(view_lhs, view_rhs, fname, out_type) \
 template < \
     class T, class Array2D_Type, class ViewType, \
-    class T2, class Array2D_Type2, class ViewType2, \
-    class LHS_BufferT, class RHS_BufferT> \
-out_type Array2D_Operator_Multiply< \
+    class T2, class Array2D_Type2, class ViewType2> \
+out_type Array2D_Operator_Multiply_by_Matrix< \
     Matrix_Frozen<T, Array2D_Type, view_lhs >, \
-    Matrix_Frozen<T2, Array2D_Type2, view_rhs >, \
-    LHS_BufferT, RHS_BufferT>::fname
+    Matrix_Frozen<T2, Array2D_Type2, view_rhs > >::fname
 
 upgrade_mul_mat_mat(ViewType, MatrixViewSpecial_Diagonal<ViewType2>);
 upgrade_mul_mat_mat_function(ViewType, MatrixViewSpecial_Diagonal<ViewType2>, operator(), T)
