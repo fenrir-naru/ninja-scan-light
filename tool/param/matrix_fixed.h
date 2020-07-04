@@ -409,6 +409,29 @@ struct MatrixBuilder<
             * nC_multiply + nC_add> assignable_t;
 };
 
+template <class T, int nR_L, int nC_L, class RHS_T>
+struct Array2D_Operator_Multiply_by_Scalar<Matrix_Fixed<T, nR_L, nC_L>, RHS_T> {
+  typedef Matrix_Fixed<T, nR_L, nC_L> lhs_t;
+  typedef RHS_T rhs_t;
+  typedef typename Array2D_Operator_Multiply_by_Scalar<
+      Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L> >, rhs_t>::impl_t impl_t;
+  typedef Matrix_Frozen<T, Array2D_Operator<T, impl_t> > frozen_t;
+  struct buf_t {
+    lhs_t lhs;
+    buf_t(const lhs_t &lhs_) : lhs(lhs_) {}
+  };
+  struct mat_t : public buf_t, frozen_t {
+    mat_t(const lhs_t &mat, const rhs_t &scalar)
+        : buf_t(mat),
+        frozen_t(typename mat_t::storage_t(
+          buf_t::lhs.rows(), buf_t::lhs.columns(), impl_t(buf_t::lhs, scalar))) {
+    }
+  };
+  static mat_t generate(const lhs_t &mat, const rhs_t &scalar) {
+    return mat_t(mat, scalar);
+  }
+};
+
 template <
     class T, class Array2D_Type, class ViewType,
     int nR_R, int nC_R>

@@ -1666,17 +1666,7 @@ class Matrix_Frozen {
           class U = void>
       struct check_lhs_t {
         typedef Array2D_Operator_Multiply_by_Scalar<LHS_MatrixT, RHS_T> op_t;
-
-        // Type check for resolution of circular reference.
-        template <class LHS_T = LHS_MatrixT, class U2 = void>
-        struct check2_lhs_t {
-          typedef typename op_t::mat_t mat_t;
-        };
-        template <class U2>
-        struct check2_lhs_t<self_t, U2> { // This specialization is essential
-          typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
-        };
-        typedef typename check2_lhs_t<>::mat_t res_t;
+        typedef typename op_t::mat_t res_t;
         static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
           return op_t::generate(mat, scalar);
         }
@@ -2360,7 +2350,6 @@ class Matrix_Frozen {
           ::generate(*this, matrix.inverse()); // equal to (*this) * matrix.inverse()
     }
 
-#if 0
     /**
      * Divide scalar by matrix, which is equivalent to inverted matrix multiplied by scalar
      *
@@ -2373,7 +2362,6 @@ class Matrix_Frozen {
       return Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>
           ::generate(matrix.inverse(), scalar); // equal to matrix.inverse() * scalar
     }
-#endif
 
     /**
      * Add matrix to matrix with specified pivot
@@ -2937,23 +2925,28 @@ template <
     class RHS_T>
 struct Array2D_Operator_Multiply_by_Scalar<
       Matrix_Frozen<T, Array2D_Type, ViewType>,
-      RHS_T>
-    : public Array2D_Operator_Binary<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T> {
+      RHS_T> {
   typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
   typedef RHS_T rhs_t;
-  typedef Array2D_Operator_Multiply_by_Scalar<lhs_t, rhs_t> self_t;
-  typedef Array2D_Operator_Binary<lhs_t, rhs_t> super_t;
-  static const int tag = lhs_t::OPERATOR_2_Multiply_Matrix_by_Scalar;
-  Array2D_Operator_Multiply_by_Scalar(const lhs_t &_lhs, const rhs_t &_rhs) noexcept
-      : super_t(_lhs, _rhs) {}
-  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
-    return super_t::lhs(row, column) * super_t::rhs;
-  }
-  typedef Matrix_Frozen<T, Array2D_Operator<T, self_t> > mat_t;
+  struct impl_t : public Array2D_Operator_Binary<lhs_t, rhs_t> {
+    /* Array2D_Operator_Multiply_by_Scalar is not a subclass of
+     * Array2D_Operator_Binary to work around of build error due to
+     * incomplete type. This may be caused by circular reference.
+     * Thus, implt_t is defined.
+     */
+    static const int tag = lhs_t::OPERATOR_2_Multiply_Matrix_by_Scalar;
+    typedef Array2D_Operator_Binary<lhs_t, rhs_t> super_t;
+    impl_t(const lhs_t &_lhs, const rhs_t &_rhs) noexcept
+          : super_t(_lhs, _rhs) {}
+    T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+      return super_t::lhs(row, column) * super_t::rhs;
+    }
+  };
+  typedef Matrix_Frozen<T, Array2D_Operator<T, impl_t> > mat_t;
   static mat_t generate(const lhs_t &mat, const rhs_t &scalar) {
     return mat_t(
         typename mat_t::storage_t(
-          mat.rows(), mat.columns(), self_t(mat, scalar)));
+          mat.rows(), mat.columns(), impl_t(mat, scalar)));
   }
 };
 
@@ -3592,22 +3585,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
 };
 
-#if 0
-template <class T, class Array2D_Type, class ViewType>
-typename Matrix_Frozen<T, Array2D_Type, ViewType>::template Inverse_Matrix<>::mat_t
-    ::template Multiply_Matrix_by_Scalar<T>::mat_t
-    operator/(const T &scalar, const Matrix_Frozen<T, Array2D_Type, ViewType> &matrix) {
-  return matrix.inverse() * scalar;
-}
-#endif
-
-template <class LHS_T, class RHS_T>
-struct Array2D_Operator_Multiply_by_Scalar
-    : public Array2D_Operator_Multiply_by_Scalar<typename LHS_T::frozen_t, RHS_T> {
-  typedef Array2D_Operator_Multiply_by_Scalar<typename LHS_T::frozen_t, RHS_T> super_t;
-  static typename super_t::mat_t generate(const LHS_T &mat, const RHS_T &scalar) {
-    return super_t::generate(mat, scalar);
-  }
+template <class T, class Array2D_Type, class ViewType, class RHS_T>
+struct Array2D_Operator_Multiply_by_Scalar<Matrix<T, Array2D_Type, ViewType>, RHS_T>
+    : public Array2D_Operator_Multiply_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T> {
 };
 
 template <class LHS_T, class RHS_T>
