@@ -410,11 +410,11 @@ struct MatrixBuilder<
 };
 
 template <class T, int nR_L, int nC_L, class RHS_T>
-struct Array2D_Operator_Multiply_by_Scalar<Matrix_Fixed<T, nR_L, nC_L>, RHS_T> {
+struct Matrix_multiplied_by_Scalar<Matrix_Fixed<T, nR_L, nC_L>, RHS_T> {
   typedef Matrix_Fixed<T, nR_L, nC_L> lhs_t;
   typedef RHS_T rhs_t;
-  typedef typename Array2D_Operator_Multiply_by_Scalar<
-      Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L> >, rhs_t>::impl_t impl_t;
+  typedef Array2D_Operator_Multiply_by_Scalar<
+      Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L> >, rhs_t> impl_t;
   typedef Matrix_Frozen<T, Array2D_Operator<T, impl_t> > frozen_t;
   struct buf_t {
     lhs_t lhs;
