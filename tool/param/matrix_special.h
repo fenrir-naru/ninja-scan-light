@@ -202,22 +202,18 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
           Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> >, rhs_positive>::mat_t,
         ViewType_Special>::special_t res_t;
   };
-  template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
-  struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, MatrixViewSpecial_Diagonal, MatrixViewSpecial_Symmetric, rhs_positive> {
-    // (diagonal) + (symmetric) => (symmetric)
-    typedef typename MatrixBuilderSpecial<
-        typename super_t::template Add_Matrix_to_Matrix<
-          Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_Symmetric<ViewType2> >, rhs_positive>::mat_t,
-        MatrixViewSpecial_Symmetric>::special_t res_t;
-  };
-  template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
-  struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, MatrixViewSpecial_Symmetric, MatrixViewSpecial_Diagonal, rhs_positive> {
-    // (symmetric) + (diagonal) => (symmetric)
-    typedef typename MatrixBuilderSpecial<
-        typename super_t::template Add_Matrix_to_Matrix<
-          Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_Diagonal<ViewType2> >, rhs_positive>::mat_t,
-        MatrixViewSpecial_Symmetric>::special_t res_t;
-  };
+#define make_entry(self, another, result) \
+template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive> \
+struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, \
+    MatrixViewSpecial_ ## self, MatrixViewSpecial_ ## another, rhs_positive> { \
+  typedef typename MatrixBuilderSpecial< \
+      typename super_t::template Add_Matrix_to_Matrix< \
+        Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## another<ViewType2> >, rhs_positive>::mat_t, \
+      MatrixViewSpecial_ ## result>::special_t res_t; \
+};
+  make_entry(Diagonal, Symmetric, Symmetric); // (diagonal) + (symmetric) => (symmetric)
+  make_entry(Symmetric, Diagonal, Symmetric); // (symmetric) + (diagonal) => (symmetric)
+#undef make_entry
 
   template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
   typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t operator+(
@@ -248,22 +244,18 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
           Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> > >::mat_t,
         ViewType_Special>::special_t res_t;
   };
-  template <class T2, class Array2D_Type2, class ViewType2>
-  struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, MatrixViewSpecial_Diagonal, MatrixViewSpecial_Symmetric> {
-    // (diagonal) * (symmetric) => (symmetric)
-    typedef typename MatrixBuilderSpecial<
-        typename super_t::template Multiply_Matrix_by_Matrix<
-          Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_Symmetric<ViewType2> > >::mat_t,
-        MatrixViewSpecial_Symmetric>::special_t res_t;
-  };
-  template <class T2, class Array2D_Type2, class ViewType2>
-  struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, MatrixViewSpecial_Symmetric, MatrixViewSpecial_Diagonal> {
-    // (symmetric) * (diagonal) => (symmetric)
-    typedef typename MatrixBuilderSpecial<
-        typename super_t::template Multiply_Matrix_by_Matrix<
-          Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_Diagonal<ViewType2> > >::mat_t,
-        MatrixViewSpecial_Symmetric>::special_t res_t;
-  };
+#define make_entry(self, another, result) \
+template <class T2, class Array2D_Type2, class ViewType2> \
+struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, \
+    MatrixViewSpecial_ ## self, MatrixViewSpecial_ ## another> { \
+  typedef typename MatrixBuilderSpecial< \
+      typename super_t::template Multiply_Matrix_by_Matrix< \
+        Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_## another<ViewType2> > >::mat_t, \
+      MatrixViewSpecial_ ## result>::special_t res_t; \
+};
+  make_entry(Diagonal, Symmetric, Symmetric); // (diagonal) * (symmetric) => (symmetric)
+  make_entry(Symmetric, Diagonal, Symmetric); // (symmetric) * (diagonal) => (symmetric)
+#undef make_entry
 
   template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
   typename mul_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t operator*(
