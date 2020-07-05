@@ -489,10 +489,11 @@ struct Array2D_Operator_Binary {
       : lhs(_lhs), rhs(_rhs) {}
 };
 
-template <
-    class LHS_T, class RHS_T,
-    class LHS_BufferT = LHS_T, class RHS_BufferT = RHS_T>
-struct Array2D_Operator_Multiply;
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_Multiply_by_Matrix;
+
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_Multiply_by_Scalar;
 
 template <class LHS_T, class RHS_T, bool rhs_positive>
 struct Array2D_Operator_Add;
@@ -1162,6 +1163,9 @@ struct MatrixBuilder<
     : public MatrixBuilderBase<MatrixT<T, Array2D_Type, ViewType> > {
 };
 
+template <class LHS_MatrixT, class RHS_T>
+struct Matrix_multiplied_by_Scalar;
+
 /**
  * @brief Matrix for unchangeable content
  *
@@ -1653,20 +1657,21 @@ class Matrix_Frozen {
       typedef typename check1_t<MatrixT>::operator_t operator_t;
     };
 
+    template <class LHS_MatrixT, class RHS_T>
+    friend struct Matrix_multiplied_by_Scalar;
+
     template <class RHS_T, class LHS_MatrixT = self_t>
     struct Multiply_Matrix_by_Scalar {
 
       template <
           bool is_lhs_multi_mat_by_scalar
-            = (OperatorProperty<self_t>::tag == OPERATOR_2_Multiply_Matrix_by_Scalar),
+            = (OperatorProperty<LHS_MatrixT>::tag == OPERATOR_2_Multiply_Matrix_by_Scalar),
           class U = void>
       struct check_lhs_t {
-        typedef Array2D_Operator_Multiply<self_t, RHS_T, LHS_MatrixT> op_t;
-        typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
+        typedef Matrix_multiplied_by_Scalar<LHS_MatrixT, RHS_T> op_t;
+        typedef typename op_t::mat_t res_t;
         static res_t generate(const LHS_MatrixT &mat, const RHS_T &scalar) noexcept {
-          return res_t(
-              typename res_t::storage_t(
-                mat.rows(), mat.columns(), op_t(mat, scalar)));
+          return op_t::generate(mat, scalar);
         }
       };
 #if 1 // 0 = Remove optimization
@@ -1830,6 +1835,9 @@ class Matrix_Frozen {
     }
 
 
+    template <class LHS_T, class RHS_T>
+    friend struct Array2D_Operator_Multiply_by_Matrix;
+
     template <class RHS_MatrixT, class LHS_MatrixT = self_t>
     struct Multiply_Matrix_by_Matrix {
 
@@ -1875,11 +1883,8 @@ class Matrix_Frozen {
         typedef typename MatrixT::builder_t::assignable_t res_t;
       };
 #endif
-      typedef typename optimizer1_t<self_t>::res_t lhs_opt_t;
-      typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_opt_t;
-
-      typedef Array2D_Operator_Multiply<
-          self_t, typename RHS_MatrixT::frozen_t, lhs_opt_t, rhs_opt_t> op_t;
+      typedef typename optimizer1_t<self_t>::res_t lhs_buf_t;
+      typedef typename optimizer1_t<RHS_MatrixT>::res_t rhs_buf_t;
 
       /*
        * [Optimization policy 2]
@@ -1891,12 +1896,10 @@ class Matrix_Frozen {
           class U = void>
       struct optimizer2_t {
         // M * M
-        typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > res_t;
+        typedef Array2D_Operator_Multiply_by_Matrix<lhs_buf_t, rhs_buf_t> op_t;
+        typedef typename op_t::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
-          return res_t(
-              typename res_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<res_t>::operator_t(mat1, mat2)));
+          return op_t::generate(mat1, mat2);
         }
       };
 #if 1 // 0 = remove optimizer
@@ -2848,53 +2851,36 @@ class Matrix_Frozen {
         }
 
         template <class T2, class Array2D_Type2, class View_Type2>
-        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *m){
+        format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
           (*this) << "M"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
-              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
-          if(m){
-            (*this) << "(" << m->rows() << "," << m->columns() << ")";
-          }
+              << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "")
+              << "(" << m.rows() << "," << m.columns() << ")";
           return *this;
         }
 
         template <class LHS_T, class RHS_T, bool rhs_positive>
-        format_t &operator<<(const Array2D_Operator_Add<LHS_T, RHS_T, rhs_positive> *op){
-          return (*this) << (const LHS_T *)(op ? &(op->lhs) : 0) << ", " << (const RHS_T *)(op ? &(op->rhs) : 0);
-        }
-
-        template <class U>
-        static const U &check_scalar(const U *u){return *u;}
-        template <class T2, class Array2D_Type2, class View_Type2>
-        static const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *check_scalar(
-            const Matrix_Frozen<T2, Array2D_Type2, View_Type2> *m){
-          return m;
-        }
-
-        template <class LHS_T, class RHS_T, class LHS_BufferT, class RHS_BufferT>
-        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_BufferT, RHS_BufferT> *){
-          return (*this) << (const LHS_T *)0 << ", " << (const RHS_T *)0;
-        }
-        template <class LHS_T, class RHS_T, class LHS_BufferT>
-        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_BufferT, RHS_T> *op){
+        format_t &operator<<(const Array2D_Operator_Add<LHS_T, RHS_T, rhs_positive> &op){
           return (*this)
-              << (const LHS_T *)0 << ", "
-              << check_scalar((const RHS_T *)(op ? &(op->rhs) : 0));
-        }
-        template <class LHS_T, class RHS_T, class RHS_BufferT>
-        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_T, RHS_BufferT> *op){
-          return (*this) << (const LHS_T *)(op ? &(op->lhs) : 0) << ", " << (const RHS_T *)0;
+              << (const LHS_T &)(op.lhs) << ", "
+              << (const RHS_T &)(op.rhs);
         }
         template <class LHS_T, class RHS_T>
-        format_t &operator<<(const Array2D_Operator_Multiply<LHS_T, RHS_T, LHS_T, RHS_T> *op){
+        format_t &operator<<(const Array2D_Operator_Multiply_by_Scalar<LHS_T, RHS_T> &op){
           return (*this)
-              << (const LHS_T *)(op ? &(op->lhs) : 0) << ", "
-              << check_scalar((const RHS_T *)(op ? &(op->rhs) : 0));
+              << (const LHS_T &)(op.lhs) << ", "
+              << op.rhs;
+        }
+        template <class LHS_T, class RHS_T>
+        format_t &operator<<(const Array2D_Operator_Multiply_by_Matrix<LHS_T, RHS_T> &op){
+          return (*this)
+              << (const LHS_T &)(op.lhs) << ", "
+              << (const RHS_T &)(op.rhs);
         }
 
         template <class T2, class OperatorT, class View_Type2>
         format_t &operator<<(
-            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> *m){
+            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
           const char *symbol = "";
           switch(OperatorProperty<
               Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> >::tag){
@@ -2909,7 +2895,7 @@ class Matrix_Frozen {
               return (*this) << "(?)";
           }
           return (*this) << "(" << symbol << ", "
-              << (const OperatorT *)(m ? &(m->storage.op) : 0) << ")"
+              << (const OperatorT &)(m.storage.op) << ")"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
               << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
         }
@@ -2921,7 +2907,7 @@ class Matrix_Frozen {
             << "prop: {" << std::endl
             << "  *(R,C): (" << mat.rows() << "," << mat.columns() << ")" << std::endl
             << "  *view: " << mat.view << std::endl
-            << "  *storage: " << &mat << std::endl
+            << "  *storage: " << mat << std::endl
             << "}";
         return out;
       }
@@ -2937,21 +2923,31 @@ class Matrix_Frozen {
 
 template <
     class T, class Array2D_Type, class ViewType,
-    class RHS_T,
-    class LHS_BufferT, class RHS_BufferT>
-struct Array2D_Operator_Multiply<
-      Matrix_Frozen<T, Array2D_Type, ViewType>,
-      RHS_T,
-      LHS_BufferT, RHS_BufferT>
-    : public Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT>{
-  typedef Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT> super_t;
-  static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Scalar;
-  Array2D_Operator_Multiply(
-      const typename super_t::lhs_t &_lhs,
-      const typename super_t::rhs_t &_rhs) noexcept
-      : super_t(_lhs, _rhs) {}
+    class RHS_T>
+struct Array2D_Operator_Multiply_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T>
+    : public Array2D_Operator_Binary<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T>{
+  typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
+  static const int tag = lhs_t::OPERATOR_2_Multiply_Matrix_by_Scalar;
+  typedef Array2D_Operator_Binary<lhs_t, RHS_T> super_t;
+  Array2D_Operator_Multiply_by_Scalar(const lhs_t &_lhs, const RHS_T &_rhs) noexcept
+        : super_t(_lhs, _rhs) {}
   T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
     return super_t::lhs(row, column) * super_t::rhs;
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class RHS_T>
+struct Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T> {
+  typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
+  typedef RHS_T rhs_t;
+  typedef Array2D_Operator_Multiply_by_Scalar<lhs_t, rhs_t> impl_t;
+  typedef Matrix_Frozen<T, Array2D_Operator<T, impl_t> > mat_t;
+  static mat_t generate(const lhs_t &mat, const rhs_t &scalar) {
+    return mat_t(
+        typename mat_t::storage_t(
+          mat.rows(), mat.columns(), impl_t(mat, scalar)));
   }
 };
 
@@ -2987,18 +2983,19 @@ struct Array2D_Operator_Add<
 
 template <
     class T, class Array2D_Type, class ViewType,
-    class T2, class Array2D_Type2, class ViewType2,
-    class LHS_BufferT, class RHS_BufferT>
-struct Array2D_Operator_Multiply<
+    class T2, class Array2D_Type2, class ViewType2>
+struct Array2D_Operator_Multiply_by_Matrix<
       Matrix_Frozen<T, Array2D_Type, ViewType>,
-      Matrix_Frozen<T2, Array2D_Type2, ViewType2>,
-      LHS_BufferT, RHS_BufferT>
-    : public Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT>{
-  typedef Array2D_Operator_Binary<LHS_BufferT, RHS_BufferT> super_t;
-  static const int tag = super_t::lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix;
-  Array2D_Operator_Multiply(
-      const typename super_t::lhs_t &_lhs,
-      const typename super_t::rhs_t &_rhs) noexcept
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> >
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
+  typedef Matrix_Frozen<T2, Array2D_Type2, ViewType2> rhs_t;
+  typedef Array2D_Operator_Multiply_by_Matrix<lhs_t, rhs_t> self_t;
+  typedef Array2D_Operator_Binary<lhs_t, rhs_t> super_t;
+  static const int tag = lhs_t::OPERATOR_2_Multiply_Matrix_by_Matrix;
+  Array2D_Operator_Multiply_by_Matrix(const lhs_t &_lhs, const rhs_t &_rhs) noexcept
       : super_t(_lhs, _rhs) {}
   T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
     T res(0);
@@ -3006,6 +3003,12 @@ struct Array2D_Operator_Multiply<
       res += super_t::lhs(row, i) * super_t::rhs(i, column);
     }
     return res;
+  }
+  typedef Matrix_Frozen<T, Array2D_Operator<T, self_t> > mat_t;
+  static mat_t generate(const lhs_t &mat1, const rhs_t &mat2) {
+    return mat_t(
+        typename mat_t::storage_t(
+          mat1.rows(), mat2.columns(), self_t(mat1, mat2)));
   }
 };
 
@@ -3045,31 +3048,22 @@ struct MatrixBuilder<
     typedef typename MatrixBuilder<typename OperatorT2::first_t::frozen_t>
         ::template view_apply_t<ViewType>::applied_t mat_t;
   };
-  template <
-      class LHS_T,
-      class T_R, class Array2D_Type_R, class ViewType_R,
-      class LHS_BufferT, class RHS_BufferT>
-  struct unpack_op_t<Array2D_Operator_Multiply<
-      LHS_T,
-      Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R>,
-      LHS_BufferT, RHS_BufferT> > { // M * M
-    typedef LHS_T mat1_t;
-    typedef Matrix_Frozen<T_R, Array2D_Type_R, ViewType_R> mat2_t;
-    
+  template <class LHS_T, class RHS_T>
+  struct unpack_op_t<Array2D_Operator_Multiply_by_Matrix<LHS_T, RHS_T> > { // M * M
     template <
-        class OperatorT_L = typename mat1_t::template OperatorProperty<>::operator_t,
-        class OperatorT_R = typename mat2_t::template OperatorProperty<>::operator_t,
+        class OperatorT_L = typename LHS_T::template OperatorProperty<>::operator_t,
+        class OperatorT_R = typename RHS_T::template OperatorProperty<>::operator_t,
         class U = void>
     struct check_op_t {
-      typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply<
-          typename unpack_mat_t<mat1_t>::mat_t,
-          typename unpack_mat_t<mat2_t>::mat_t> >, ViewType> res_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply_by_Matrix<
+          typename unpack_mat_t<LHS_T>::mat_t,
+          typename unpack_mat_t<RHS_T>::mat_t> >, ViewType> res_t;
     };
     template <class U>
     struct check_op_t<void, void, U> {
       // active when both left and right hand side terms are none operator
       // This may be overwritten by (M * M) if its MatrixBuilder specialization exists
-      typedef typename MatrixBuilder<mat1_t>::template view_apply_t<ViewType>::applied_t res_t;
+      typedef typename MatrixBuilder<LHS_T>::template view_apply_t<ViewType>::applied_t res_t;
     };
     typedef typename check_op_t<>::res_t mat_t;
   };
@@ -3590,6 +3584,20 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return *this;
     }
 
+};
+
+template <class T, class Array2D_Type, class ViewType, class RHS_T>
+struct Matrix_multiplied_by_Scalar<Matrix<T, Array2D_Type, ViewType>, RHS_T>
+    : public Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T> {
+};
+
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_Multiply_by_Matrix
+    : public Array2D_Operator_Multiply_by_Matrix<typename LHS_T::frozen_t, typename RHS_T::frozen_t> {
+  typedef Array2D_Operator_Multiply_by_Matrix<typename LHS_T::frozen_t, typename RHS_T::frozen_t> super_t;
+  static typename super_t::mat_t generate(const LHS_T &mat1, const RHS_T &mat2) {
+    return super_t::generate(mat1, mat2);
+  }
 };
 
 #undef DELETE_IF_MSC

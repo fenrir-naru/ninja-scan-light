@@ -287,9 +287,6 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       ((*A) * (*B)),
       (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
-      ((*A) * (*B) * (*A)),
-      (format("*storage: (*, (*, M, M), M(%1%,%1%))") % SIZE).str());
-  matrix_inspect_contains(
       (((*A) * (*B)) + (*A)),
       (format("*storage: (+, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
@@ -309,6 +306,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A * 2) * (matrix_t::getScalar(B->rows(), 2) * 2)), // should be *A * 8
       (format("*storage: (*, M(%1%,%1%), 8)") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A) * (*B) * (*A)),
+      (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str()); // should be M * M
 }
 
 void check_inv(const matrix_t &mat){
@@ -317,6 +317,8 @@ void check_inv(const matrix_t &mat){
     BOOST_TEST_MESSAGE("inv:" << inv);
     matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
     matrix_compare_delta(mat, matrix_t::getI(SIZE) / inv, 1E-5);
+    matrix_compare_delta(matrix_t::getI(SIZE), inv / inv, 1E-5);
+    matrix_compare_delta(matrix_t::getI(SIZE), (inv * inv) / (inv * inv), 1E-5);
     matrix_t inv2(1 / mat);
     BOOST_CHECK(inv == inv2);
   }catch(std::runtime_error &e){
