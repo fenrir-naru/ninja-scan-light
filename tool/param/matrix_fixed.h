@@ -107,8 +107,8 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
     }
 
     Array2D_Fixed(
-        T (*buf)[nR][nC], const unsigned int &rows = 0, const unsigned int &columns = 0)
-        : super_t(rows, columns), values(buf) {
+        T (&buf)[nR][nC], const unsigned int &rows = 0, const unsigned int &columns = 0)
+        : super_t(rows, columns), values(&buf) {
       check_size();
     }
 
@@ -176,19 +176,64 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
           const_cast<const self_t *>(this)->get(row, column));
     }
 
+  protected:
+    template <class T2, bool do_memory_op = std::numeric_limits<T2>::is_specialized>
+    struct setup_t {
+      static void copy(T2 *dest, const T2 *src, const unsigned int &length){
+        for(unsigned int i(0); i < length; ++i){
+          dest[i] = src[i];
+        }
+      }
+      static void clear(T2 *target){
+        for(unsigned int i(0); i < nR * nC; ++i){
+          target[i] = T2();
+        }
+      }
+    };
+    template <class T2>
+    struct setup_t<T2, true> {
+      static void copy(T2 *dest, const T2 *src, const unsigned int &length){
+        std::memcpy(dest, src, sizeof(T2) * length);
+      }
+      static void clear(T2 *target){
+        std::memset(target, 0, sizeof(T2) * nR * nC);
+      }
+    };
+
+  public:
     void clear() noexcept {
-      std::memset(values, 0, sizeof(T) * nR * nC);
+      setup_t<T>::clear((T *)values);
     }
 
   protected:
     self_t copy(const bool &is_deep = false) const {
       return self_t(*this); ///< is_deep flag will be ignored, and return shallow copy
     }
+
+  public:
+    struct buf_t {
+      T buf[nR][nC]; ///< fixed size buffer
+      buf_t() noexcept {}
+      buf_t(
+          const unsigned int &rows, const unsigned int &columns,
+          const T *serialized) noexcept {
+        if(serialized){
+          for(unsigned int i(0), idx(0); i < rows; ++i, idx += columns){
+            setup_t<T>::copy(buf[i], &serialized[idx], columns);
+          }
+        }else{
+          setup_t<T>::clear((T *)&buf);
+        }
+      }
+    };
 };
 
 template <class T, int nR, int nC = nR>
-class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
+class Matrix_Fixed
+    : protected Array2D_Fixed<T, nR, nC>::buf_t,
+    public Matrix<T, Array2D_Fixed<T, nR, nC> > {
   public:
+    typedef typename Array2D_Fixed<T, nR, nC>::buf_t buf_t;
     typedef Matrix<T, Array2D_Fixed<T, nR, nC> > super_t;
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
@@ -203,35 +248,22 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
     typedef Matrix_Fixed<T, nR, nC> self_t;
 
   protected:
-    T buf[nR][nC]; ///< fixed size buffer
-
     Matrix_Fixed(const storage_t &storage) noexcept
-        : super_t(storage_t(&buf)) {
+        : buf_t(), super_t(storage_t(buf_t::buf)) {
       super_t::storage = storage;
     }
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
 
-    struct BufferInitializer : public Array2D_Frozen<T> {
-      const T * const src;
-      BufferInitializer(
-          const unsigned int &rows, const unsigned int &columns,
-          const T *serialized = NULL)
-          : Array2D_Frozen<T>(rows, columns), src(serialized) {}
-      T operator()(const unsigned int &row, const unsigned int &column) const {
-        return src[(row * this->columns()) + column];
-      }
-    };
   public:
     /**
      * Constructor without customization.
      * The elements will be cleared with T(0).
      *
      */
-    Matrix_Fixed() noexcept : super_t(storage_t(&buf)){
-      super_t::clear();
-    }
+    Matrix_Fixed() noexcept
+        : buf_t(), super_t(storage_t(buf_t::buf)){}
 
     /**
      * Constructor with specified row and column numbers, and values.
@@ -246,25 +278,20 @@ class Matrix_Fixed : public Matrix<T, Array2D_Fixed<T, nR, nC> > {
     Matrix_Fixed(
         const unsigned int &rows, const unsigned int &columns,
         const T *serialized = NULL)
-        : super_t(storage_t(&buf, rows, columns)) {
-      if(serialized){
-        super_t::storage = BufferInitializer(rows, columns, serialized);
-      }else{
-        super_t::clear();
-      }
-    }
+        : buf_t(rows, columns, serialized),
+        super_t(storage_t(buf_t::buf, rows, columns)) {}
 
     /**
      * Copy constructor generating deep copy.
      */
     Matrix_Fixed(const self_t &matrix) noexcept
-        : super_t(storage_t(&buf)) {
+        : buf_t(), super_t(storage_t(buf_t::buf)) {
       super_t::storage = matrix.storage;
     }
 
     template <class T2, class Array2D_Type2, class ViewType2>
     Matrix_Fixed(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
-        : super_t(storage_t(&buf, matrix.rows(), matrix.columns())){
+        : buf_t(), super_t(storage_t(buf_t::buf, matrix.rows(), matrix.columns())){
       super_t::replace(matrix);
     }
     /**
