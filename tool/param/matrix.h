@@ -2861,21 +2861,15 @@ class Matrix_Frozen {
 
         template <class LHS_T, class RHS_T, bool rhs_positive>
         format_t &operator<<(const Array2D_Operator_Add<LHS_T, RHS_T, rhs_positive> &op){
-          return (*this)
-              << (const LHS_T &)(op.lhs) << ", "
-              << (const RHS_T &)(op.rhs);
+          return (*this) << op.lhs << ", " << op.rhs;
         }
         template <class LHS_T, class RHS_T>
         format_t &operator<<(const Array2D_Operator_Multiply_by_Scalar<LHS_T, RHS_T> &op){
-          return (*this)
-              << (const LHS_T &)(op.lhs) << ", "
-              << op.rhs;
+          return (*this) << op.lhs << ", " << op.rhs;
         }
         template <class LHS_T, class RHS_T>
         format_t &operator<<(const Array2D_Operator_Multiply_by_Matrix<LHS_T, RHS_T> &op){
-          return (*this)
-              << (const LHS_T &)(op.lhs) << ", "
-              << (const RHS_T &)(op.rhs);
+          return (*this) << op.lhs << ", " << op.rhs;
         }
 
         template <class T2, class OperatorT, class View_Type2>
@@ -2895,7 +2889,7 @@ class Matrix_Frozen {
               return (*this) << "(?)";
           }
           return (*this) << "(" << symbol << ", "
-              << (const OperatorT &)(m.storage.op) << ")"
+              << m.storage.op << ")"
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
               << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "");
         }
