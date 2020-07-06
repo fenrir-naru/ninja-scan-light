@@ -3582,17 +3582,11 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
 template <class T, class Array2D_Type, class ViewType, class RHS_T>
 struct Matrix_multiplied_by_Scalar<Matrix<T, Array2D_Type, ViewType>, RHS_T>
-    : public Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T> {
-};
+    : public Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS_T> {};
 
 template <class LHS_T, class RHS_T>
 struct Array2D_Operator_Multiply_by_Matrix
-    : public Array2D_Operator_Multiply_by_Matrix<typename LHS_T::frozen_t, typename RHS_T::frozen_t> {
-  typedef Array2D_Operator_Multiply_by_Matrix<typename LHS_T::frozen_t, typename RHS_T::frozen_t> super_t;
-  static typename super_t::mat_t generate(const LHS_T &mat1, const RHS_T &mat2) {
-    return super_t::generate(mat1, mat2);
-  }
-};
+    : public Array2D_Operator_Multiply_by_Matrix<typename LHS_T::frozen_t, typename RHS_T::frozen_t> {};
 
 #undef DELETE_IF_MSC
 #undef throws_when_debug
