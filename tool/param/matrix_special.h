@@ -411,6 +411,14 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
   typename super_t::special_t transpose() const noexcept {
     return typename super_t::special_t(*this);
   }
+  typename super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const noexcept {
+    // TODO optimize by returning unary operation
+    typename super_t::template Inverse_Matrix<>::mat_t res(this->rows(), this->rows());
+    for(unsigned int i(0); i < this->rows(); ++i){
+      res(i, i) = T(1) / (*this)(i, i);
+    }
+    return res;
+  }
 };
 template <class T, class Array2D_Type, class ViewType>
 struct MatrixBuilder_ValueCopier<
