@@ -535,6 +535,29 @@ struct Array2D_Operator_Multiply_by_Matrix<
   }
 };
 
+// { /* For matrix_special.h */
+template <class MatrixT, template <class> class ViewType_Special>
+struct MatrixBuilderSpecial;
+
+template <
+    class T, int nR, int nC,
+    template <class> class ViewType_Special>
+struct MatrixBuilderSpecial<Matrix_Fixed<T, nR, nC>, ViewType_Special> {
+  typedef Matrix_Fixed<T, nR, nC> fixed_t;
+  typedef typename MatrixBuilderSpecial<
+      typename fixed_t::frozen_t, ViewType_Special>::special_t frozen_special_t;
+  struct buf_t {
+    fixed_t buf;
+    buf_t(const fixed_t &fixed) : buf(fixed) {}
+  };
+  struct special_t : public buf_t, frozen_special_t {
+    special_t(const fixed_t &fixed)
+        : buf_t(fixed),
+        frozen_special_t(buf_t::buf) {}
+  };
+};
+// }
+
 #undef throws_when_debug
 #if (__cplusplus < 201103L) && defined(noexcept)
 #undef noexcept

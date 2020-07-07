@@ -88,6 +88,11 @@ template <class T, template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_ScaledUnit<T>, MatrixViewBase<> >, ViewType_Special> {
   typedef Matrix_Frozen<T, Array2D_ScaledUnit<T>, MatrixViewBase<> > special_t;
 };
+template <
+    class T, class Array2D_Type, class ViewType,
+    template <class> class ViewType_Special>
+struct MatrixBuilderSpecial<Matrix<T, Array2D_Type, ViewType>, ViewType_Special>
+    : public MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special> {};
 
 template <
     class T, class Array2D_Type, class ViewType,
@@ -262,6 +267,19 @@ struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, \
       const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special2<ViewType2> > &matrix) const {
     return typename mul_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t(
         super_t::operator*(matrix));
+  }
+  // }]
+
+  // inverse {
+  typename MatrixBuilderSpecial<
+      typename super_t::template Inverse_Matrix<>::mat_t, ViewType_Special>::special_t
+      inverse() const {
+    return typename MatrixBuilderSpecial<
+        typename super_t::template Inverse_Matrix<>::mat_t, ViewType_Special>
+        ::special_t(static_cast<const special_t *>(this)->inverse_optimized());
+  }
+  typename super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const {
+    return super_t::inverse();
   }
   // }
 

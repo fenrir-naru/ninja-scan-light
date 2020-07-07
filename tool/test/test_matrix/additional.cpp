@@ -99,6 +99,7 @@ BOOST_AUTO_TEST_CASE(fixed_types){
 #if !defined(SKIP_SPECIAL_MATRIX_TESTS) // tests for special
 BOOST_AUTO_TEST_CASE(force_symmetric){
   assign_linear();
+  (*A)(0, 0) = 1; // To ensure inversion, (0, 0) = 1
   prologue_print();
 
   matrix_t A_(as_symmetric(*A));
@@ -120,6 +121,7 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(2 + as_symmetric(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(2 - as_symmetric(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) * matrix_t::getI(A->columns()), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(as_symmetric(*A).inverse(), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) + (*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) - (*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) * (*A), "*view: [Base]");
@@ -137,11 +139,14 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_compare(A_fixed_, as_symmetric(A_fixed));
   BOOST_CHECK(A_fixed.isSymmetric() == false);
   BOOST_CHECK(A_fixed_.isSymmetric() == true);
+  matrix_inspect_contains(as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
+  matrix_compare_delta(A_fixed_.inverse(), as_symmetric(A_fixed).inverse(), 1E-5);
 #endif
 }
 
 BOOST_AUTO_TEST_CASE(force_diagonal){
   assign_linear();
+  (*A)(0, 0) = 1; // To ensure inversion, (0, 0) = 1
   prologue_print();
 
   matrix_t A_(as_diagonal(*A));
@@ -163,6 +168,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(2 + as_diagonal(*A), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(2 - as_diagonal(*A), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) * matrix_t::getI(A->columns()), "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(as_diagonal(*A).inverse(), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) + (*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) - (*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) * (*A), "*view: [Base]");
@@ -184,6 +190,8 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_compare(A_fixed_, as_diagonal(A_fixed));
   BOOST_CHECK(A_fixed.isDiagonal() == false);
   BOOST_CHECK(A_fixed_.isDiagonal() == true);
+  matrix_inspect_contains(as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
+  matrix_compare_delta(A_fixed_.inverse(), as_diagonal(A_fixed).inverse(), 1E-5);
 #endif
 }
 
