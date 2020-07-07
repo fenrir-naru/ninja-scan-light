@@ -139,8 +139,14 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_compare(A_fixed_, as_symmetric(A_fixed));
   BOOST_CHECK(A_fixed.isSymmetric() == false);
   BOOST_CHECK(A_fixed_.isSymmetric() == true);
-  matrix_inspect_contains(as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
-  matrix_compare_delta(A_fixed_.inverse(), as_symmetric(A_fixed).inverse(), 1E-5);
+  // Template deduction fails with GCC
+  matrix_inspect_contains
+#if !defined(_MSC_VER)
+      // If explicitly template parameters are specified, the build successes.
+      <content_t, typename fixed_t::storage_t, MatrixViewSpecial_Symmetric<MatrixViewBase<> > >
+#endif
+      (as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
+  matrix_compare_delta(as_symmetric(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 #endif
 }
 
@@ -190,8 +196,12 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_compare(A_fixed_, as_diagonal(A_fixed));
   BOOST_CHECK(A_fixed.isDiagonal() == false);
   BOOST_CHECK(A_fixed_.isDiagonal() == true);
-  matrix_inspect_contains(as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
-  matrix_compare_delta(A_fixed_.inverse(), as_diagonal(A_fixed).inverse(), 1E-5);
+  matrix_inspect_contains
+#if !defined(_MSC_VER)
+      <content_t, typename fixed_t::storage_t, MatrixViewSpecial_Diagonal<MatrixViewBase<> > >
+#endif
+      (as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
+  matrix_compare_delta(as_diagonal(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 #endif
 }
 

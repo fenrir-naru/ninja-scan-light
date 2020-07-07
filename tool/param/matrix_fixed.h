@@ -550,7 +550,7 @@ struct MatrixBuilderSpecial<Matrix_Fixed<T, nR, nC>, ViewType_Special> {
     fixed_t buf;
     buf_t(const fixed_t &fixed) : buf(fixed) {}
   };
-  struct special_t : public buf_t, frozen_special_t {
+  struct special_t : protected buf_t, public frozen_special_t {
     special_t(const fixed_t &fixed)
         : buf_t(fixed),
         frozen_special_t(buf_t::buf) {}
