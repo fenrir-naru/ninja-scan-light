@@ -445,10 +445,11 @@ class Array2D_ScaledUnit : public Array2D_Frozen<T> {
 template <class T, class OperatorT>
 struct Array2D_Operator : public Array2D_Frozen<T> {
   public:
-    typedef Array2D_Operator<T, OperatorT> self_t;
+    typedef OperatorT op_t;
+    typedef Array2D_Operator<T, op_t> self_t;
     typedef Array2D_Frozen<T> super_t;
 
-    const OperatorT op;
+    const op_t op;
 
     /**
      * Constructor
@@ -458,7 +459,7 @@ struct Array2D_Operator : public Array2D_Frozen<T> {
      */
     Array2D_Operator(
         const unsigned int &r, const unsigned int &c,
-        const OperatorT &_op)
+        const op_t &_op)
         : super_t(r, c), op(_op){}
 
     /**
