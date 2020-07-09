@@ -194,15 +194,13 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
 
 
   // Adding / Subtracting a matrix having same or different special feature {
-  template <
-      class T2, class Array2D_Type2, class ViewType2,
-      template <class> class ViewType_Special_self, template <class> class ViewType_Special_other,
-      bool rhs_positive = true>
+  template <class MatrixT, template <class> class ViewType_Special_other, bool rhs_positive = true>
   struct add_mat_mat_t {
     // default: error and call original due to SFINAE, consequently special feature is removed from return type
   };
   template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
-  struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special, rhs_positive> {
+  struct add_mat_mat_t<
+      Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> >, ViewType_Special, rhs_positive> {
     // (same feature) + (same feature) => (same feature), ex) (symmetric) + (symmetric) => (symmetric)
     typedef typename MatrixBuilderSpecial<
         typename super_t::template Add_Matrix_to_Matrix<
@@ -211,40 +209,39 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
   };
 #define make_entry(self, another, result) \
 template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive> \
-struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, \
-    MatrixViewSpecial_ ## self, MatrixViewSpecial_ ## another, rhs_positive> { \
+struct add_mat_mat_t< \
+    Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## another <ViewType2> >, \
+    MatrixViewSpecial_ ## self, rhs_positive> { \
   typedef typename MatrixBuilderSpecial< \
       typename super_t::template Add_Matrix_to_Matrix< \
-        Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## another<ViewType2> >, rhs_positive>::mat_t, \
+        Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## another <ViewType2> >, rhs_positive>::mat_t, \
       MatrixViewSpecial_ ## result>::special_t res_t; \
 };
   make_entry(Diagonal, Symmetric, Symmetric); // (diagonal) + (symmetric) => (symmetric)
   make_entry(Symmetric, Diagonal, Symmetric); // (symmetric) + (diagonal) => (symmetric)
 #undef make_entry
 
-  template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
-  typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t operator+(
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special2<ViewType2> > &matrix) const {
-    return typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t(
+  template <class T2, class Array2D_Type2, class ViewType2>
+  typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t operator+(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t(
         super_t::operator+(matrix));
   }
-  template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
-  typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2, false>::res_t operator-(
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special2<ViewType2> > &matrix) const {
-    return typename add_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2, false>::res_t(
+  template <class T2, class Array2D_Type2, class ViewType2>
+  typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special, false>::res_t operator-(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special, false>::res_t(
         super_t::operator-(matrix));
   }
   // }
 
   // Multiplying a matrix having same or different special feature {
-  template <
-  class T2, class Array2D_Type2, class ViewType2,
-  template <class> class ViewType_Special_self, template <class> class ViewType_Special_other>
+  template <class MatrixT, template <class> class ViewType_Special_self>
   struct mul_mat_mat_t {
     // default: error and call original due to SFINAE, consequently special feature is removed from return type
   };
   template <class T2, class Array2D_Type2, class ViewType2>
-  struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special> {
+  struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> >, ViewType_Special> {
     // (same feature) * (same feature) => (same feature), ex) (symmetric) * (symmetric) => (symmetric)
     typedef typename MatrixBuilderSpecial<
         typename super_t::template Multiply_Matrix_by_Matrix<
@@ -253,8 +250,8 @@ struct add_mat_mat_t<T2, Array2D_Type2, ViewType2, \
   };
 #define make_entry(self, another, result) \
 template <class T2, class Array2D_Type2, class ViewType2> \
-struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, \
-    MatrixViewSpecial_ ## self, MatrixViewSpecial_ ## another> { \
+struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## another <ViewType2> >, \
+    MatrixViewSpecial_ ## self > { \
   typedef typename MatrixBuilderSpecial< \
       typename super_t::template Multiply_Matrix_by_Matrix< \
         Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_## another<ViewType2> > >::mat_t, \
@@ -264,10 +261,10 @@ struct mul_mat_mat_t<T2, Array2D_Type2, ViewType2, \
   make_entry(Symmetric, Diagonal, Symmetric); // (symmetric) * (diagonal) => (symmetric)
 #undef make_entry
 
-  template <class T2, class Array2D_Type2, class ViewType2, template <class> class ViewType_Special2>
-  typename mul_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t operator*(
-      const Matrix_Frozen<T2, Array2D_Type2, ViewType_Special2<ViewType2> > &matrix) const {
-    return typename mul_mat_mat_t<T2, Array2D_Type2, ViewType2, ViewType_Special, ViewType_Special2>::res_t(
+  template <class T2, class Array2D_Type2, class ViewType2>
+  typename mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t operator*(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return typename mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t(
         super_t::operator*(matrix));
   }
   // }]
