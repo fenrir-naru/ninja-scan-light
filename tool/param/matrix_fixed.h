@@ -596,6 +596,23 @@ struct Array2D_Operator_Multiply_by_Matrix<
   }
 };
 
+template <class MatrixT>
+struct Matrix_Fixed_UnaryOperator_buffer {
+  MatrixT mat;
+  Matrix_Fixed_UnaryOperator_buffer(const MatrixT &mat_) noexcept
+      : mat(mat_) {}
+};
+
+template <class MatrixT, class Result_FrozenT = typename MatrixT::frozen_t>
+struct Matrix_Fixed_UnaryOperator
+    : protected Matrix_Fixed_UnaryOperator_buffer<MatrixT>,
+    public Result_FrozenT {
+  typedef Matrix_Fixed_UnaryOperator_buffer<MatrixT> buf_t;
+  Matrix_Fixed_UnaryOperator(const MatrixT &mat) noexcept
+      : buf_t(mat),
+      Result_FrozenT(buf_t::mat) {}
+};
+
 // { /* For matrix_special.h */
 template <class MatrixT, template <class> class ViewType_Special>
 struct MatrixBuilderSpecial;
@@ -605,17 +622,9 @@ template <
     template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<Matrix_Fixed<T, nR, nC>, ViewType_Special> {
   typedef Matrix_Fixed<T, nR, nC> fixed_t;
-  typedef typename MatrixBuilderSpecial<
-      typename fixed_t::frozen_t, ViewType_Special>::special_t frozen_special_t;
-  struct buf_t {
-    fixed_t buf;
-    buf_t(const fixed_t &fixed) : buf(fixed) {}
-  };
-  struct special_t : protected buf_t, public frozen_special_t {
-    special_t(const fixed_t &fixed)
-        : buf_t(fixed),
-        frozen_special_t(buf_t::buf) {}
-  };
+  typedef Matrix_Fixed_UnaryOperator<fixed_t,
+      typename MatrixBuilderSpecial<
+        typename fixed_t::frozen_t, ViewType_Special>::special_t> special_t;
 };
 
 template <

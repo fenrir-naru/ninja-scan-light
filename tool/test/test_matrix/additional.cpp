@@ -106,6 +106,13 @@ void matrix_inspect_contains(
     const bool &is_negative = false){
   matrix_inspect_contains(static_cast<const Result_FrozenT &>(m), cmp, is_negative);
 }
+template <class MatrixT, class Result_FrozenT, class U>
+void matrix_inspect_contains(
+    const Matrix_Fixed_UnaryOperator<MatrixT, Result_FrozenT> &m,
+    const U &cmp,
+    const bool &is_negative = false){
+  matrix_inspect_contains(static_cast<const Result_FrozenT &>(m), cmp, is_negative);
+}
 #endif
 
 
@@ -169,12 +176,7 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(
       (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
       "*view: [Symmetric] [Base]");
-  matrix_inspect_contains
-#if !defined(_MSC_VER) // Template deduction fails with GCC
-      // If explicitly template parameters are specified, the build successes.
-      <content_t, typename fixed_t::storage_t, MatrixViewSpecial_Symmetric<MatrixViewBase<> > >
-#endif
-      (as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
   matrix_compare_delta(as_symmetric(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 #endif
 }
@@ -243,11 +245,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(
       (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
       "*view: [Diagonal] [Base]");
-  matrix_inspect_contains
-#if !defined(_MSC_VER)
-      <content_t, typename fixed_t::storage_t, MatrixViewSpecial_Diagonal<MatrixViewBase<> > >
-#endif
-      (as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
   matrix_compare_delta(as_diagonal(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 #endif
 }
