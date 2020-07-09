@@ -112,6 +112,8 @@ struct Matrix_Frozen_Special
      * ViewType2 == Symmetric<AnotherBaseView> different from ViewType = AnotherBaseView.
      */
   }
+  Matrix_Frozen_Special(const Array2D_Type &storage) noexcept
+      : super_t(storage) {}
   operator typename builder_t::assignable_t() const {
     typedef typename builder_t::assignable_t res_t;
     res_t res(res_t::blank(super_t::rows(), super_t::columns()));
@@ -339,6 +341,7 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Symmetric<ViewType> >
   Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
   }
+  Matrix_Frozen(const Array2D_Type &storage) noexcept : super_t(storage){}
   bool isSquare() const noexcept {return true;}
   bool isDiagonal() const noexcept {return false;}
   bool isSymmetric() const noexcept {return true;}
@@ -405,6 +408,7 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
   Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &mat) noexcept
       : super_t(mat){
   }
+  Matrix_Frozen(const Array2D_Type &storage) noexcept : super_t(storage){}
   bool isSquare() const noexcept {return true;}
   bool isDiagonal() const noexcept {return true;}
   bool isSymmetric() const noexcept {return true;}

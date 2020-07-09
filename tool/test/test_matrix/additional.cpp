@@ -97,6 +97,18 @@ BOOST_AUTO_TEST_CASE(fixed_types){
 #endif
 
 #if !defined(SKIP_SPECIAL_MATRIX_TESTS) // tests for special
+
+#if defined(__GNUC__) // in case of template deduction failure with GCC
+template <class Result_FrozenT, class LHS_T, class RHS_T, bool lhs_buffered, bool rhs_buffered, class U>
+void matrix_inspect_contains(
+    const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, lhs_buffered, rhs_buffered> &m,
+    const U &cmp,
+    const bool &is_negative = false){
+  matrix_inspect_contains(static_cast<const Result_FrozenT &>(m), cmp, is_negative);
+}
+#endif
+
+
 BOOST_AUTO_TEST_CASE(force_symmetric){
   assign_linear();
   (*A)(0, 0) = 1; // To ensure inversion, (0, 0) = 1
@@ -121,6 +133,15 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(2 + as_symmetric(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(2 - as_symmetric(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) * matrix_t::getI(A->columns()), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      as_symmetric(*A) * as_symmetric(*A),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      as_symmetric(*A) * (as_symmetric(*A) * as_symmetric(*A)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      (as_symmetric(*A) * as_symmetric(*A)) * (as_symmetric(*A) * as_symmetric(*A)),
+      "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A).inverse(), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) + (*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) - (*A), "*view: [Base]");
@@ -139,9 +160,17 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_compare(A_fixed_, as_symmetric(A_fixed));
   BOOST_CHECK(A_fixed.isSymmetric() == false);
   BOOST_CHECK(A_fixed_.isSymmetric() == true);
-  // Template deduction fails with GCC
+  matrix_inspect_contains(
+      as_symmetric(A_fixed) * as_symmetric(A_fixed),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      as_symmetric(A_fixed) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
+      "*view: [Symmetric] [Base]");
   matrix_inspect_contains
-#if !defined(_MSC_VER)
+#if !defined(_MSC_VER) // Template deduction fails with GCC
       // If explicitly template parameters are specified, the build successes.
       <content_t, typename fixed_t::storage_t, MatrixViewSpecial_Symmetric<MatrixViewBase<> > >
 #endif
@@ -174,6 +203,15 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(2 + as_diagonal(*A), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(2 - as_diagonal(*A), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) * matrix_t::getI(A->columns()), "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      as_diagonal(*A) * as_diagonal(*A),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      as_diagonal(*A) * (as_diagonal(*A) * as_diagonal(*A)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      (as_diagonal(*A) * as_diagonal(*A)) * (as_diagonal(*A) * as_diagonal(*A)),
+      "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A).inverse(), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) + (*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) - (*A), "*view: [Base]");
@@ -196,6 +234,15 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_compare(A_fixed_, as_diagonal(A_fixed));
   BOOST_CHECK(A_fixed.isDiagonal() == false);
   BOOST_CHECK(A_fixed_.isDiagonal() == true);
+  matrix_inspect_contains(
+      as_diagonal(A_fixed) * as_diagonal(A_fixed),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      as_diagonal(A_fixed) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
+      "*view: [Diagonal] [Base]");
   matrix_inspect_contains
 #if !defined(_MSC_VER)
       <content_t, typename fixed_t::storage_t, MatrixViewSpecial_Diagonal<MatrixViewBase<> > >
