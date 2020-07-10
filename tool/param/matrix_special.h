@@ -307,10 +307,10 @@ struct MatrixViewSpecial_SymmetricBase : public BaseView {
   struct {} prop;
   template <class T, class Array2D_Type>
   inline T operator()(
-      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
     return (i > j) // use upper triangle forcedly
-        ? BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, j, i)
-        : BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, i, j);
+        ? BaseView::DELETE_IF_MSC(template) operator()<T>(storage, j, i)
+        : BaseView::DELETE_IF_MSC(template) operator()<T>(storage, i, j);
   }
   static const char *name;
   template<class CharT, class Traits>
@@ -374,10 +374,10 @@ struct MatrixViewSpecial_DiagonalBase : public BaseView {
   struct {} prop;
   template <class T, class Array2D_Type>
   inline T operator()(
-      Array2D_Type storage, const unsigned int &i, const unsigned int &j) const {
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
     return (i != j) // use upper triangle forcedly
         ? 0
-        : BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, i, i);
+        : BaseView::DELETE_IF_MSC(template) operator()<T>(storage, i, i);
   }
   static const char *name;
   template<class CharT, class Traits>
