@@ -124,9 +124,6 @@ struct Matrix_Frozen_Special
     return special_t(mat);
   }
 
-  using super_t::operator+;
-  using super_t::operator-;
-  using super_t::operator*;
   using super_t::operator/;
 
   template<typename U> struct arg_type;
@@ -171,32 +168,18 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
   upgrade_friend_operator(-, T,
       (typename super_t::scalar_matrix_t::template Add_Matrix_to_Matrix<super_t, false>::mat_t));
 
-  // Preserve feature even if scalar is multiplied
-#if !(defined(__GNUC__) && (__GNUC__ <= 5))
-  template <class T2>
-  typename MatrixBuilderSpecial<
-      typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
-      ViewType_Special>::special_t operator*(
-        const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &in) const {
-    return typename MatrixBuilderSpecial<
-        typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
-        ViewType_Special>::special_t(super_t::operator*(in));
-  }
-#else
-  /* The below code is ideal, however, it cannot be applied to T2 instead of T,
-   * due to macro expansion and overload deduction.
-   * In addition, g++-5.4 raises build error (maybe bug?) of ambiguous overload
-   * against super class functions, therefore, only T overload is applied.
-   */
-  upgrade_function(operator*, (Matrix_Frozen<T, Array2D_ScaledUnit<T> >),
-      typename super_t::template Multiply_Matrix_by_Scalar<T>::mat_t);
-#endif
-
-
   // Adding / Subtracting a matrix having same or different special feature {
-  template <class MatrixT, template <class> class ViewType_Special_other, bool rhs_positive = true>
+  template <class MatrixT, template <class> class ViewType_Special_self, bool rhs_positive = true>
   struct add_mat_mat_t {
-    // default: error and call original due to SFINAE, consequently special feature is removed from return type
+    typedef typename super_t::template Add_Matrix_to_Matrix<MatrixT, rhs_positive>::mat_t res_t;
+  };
+  template <class T2, bool rhs_positive>
+  struct add_mat_mat_t<Matrix_Frozen<T2, Array2D_ScaledUnit<T2> >, ViewType_Special, rhs_positive> {
+    // Preserve feature even if scalar is added / subtracted
+    typedef typename MatrixBuilderSpecial<
+        typename super_t::template Add_Matrix_to_Matrix<
+          Matrix_Frozen<T2, Array2D_ScaledUnit<T2> >, rhs_positive>::mat_t,
+        ViewType_Special>::special_t res_t;
   };
   template <class T2, class Array2D_Type2, class ViewType2, bool rhs_positive>
   struct add_mat_mat_t<
@@ -238,7 +221,14 @@ struct add_mat_mat_t< \
   // Multiplying a matrix having same or different special feature {
   template <class MatrixT, template <class> class ViewType_Special_self>
   struct mul_mat_mat_t {
-    // default: error and call original due to SFINAE, consequently special feature is removed from return type
+    typedef typename super_t::template Multiply_Matrix_by_Matrix<MatrixT>::mat_t res_t;
+  };
+  template <class T2>
+  struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_ScaledUnit<T2> >, ViewType_Special> {
+    // Preserve feature even if scalar is multiplied
+    typedef typename MatrixBuilderSpecial<
+        typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
+        ViewType_Special>::special_t res_t;
   };
   template <class T2, class Array2D_Type2, class ViewType2>
   struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> >, ViewType_Special> {
