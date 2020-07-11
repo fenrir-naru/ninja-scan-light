@@ -260,16 +260,36 @@ struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## anot
   // }]
 
   // inverse {
-  typename MatrixBuilderSpecial<
-      typename super_t::template Inverse_Matrix<>::mat_t, ViewType_Special>::special_t
-      inverse() const {
-    return typename MatrixBuilderSpecial<
-        typename super_t::template Inverse_Matrix<>::mat_t, ViewType_Special>
-        ::special_t(static_cast<const special_t *>(this)->inverse_optimized());
+  template <class MatrixT = self_t, class U = void>
+  struct Inverse_Matrix {
+    typedef typename MatrixT::template Inverse_Matrix<>::mat_t mat_t;
+  };
+  template <class U>
+  struct Inverse_Matrix<self_t, U> {
+    typedef typename MatrixBuilderSpecial<
+        typename super_t::template Inverse_Matrix<super_t>::mat_t, ViewType_Special>::special_t mat_t;
+  };
+
+  typename Inverse_Matrix<>::mat_t inverse() const {
+    return typename Inverse_Matrix<>::mat_t(static_cast<const special_t *>(this)->inverse_optimized());
   }
   typename super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const {
     return super_t::inverse();
   }
+  template <class T2, class Array2D_Type2, class ViewType2>
+  typename mul_mat_mat_t<
+      typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t,
+      ViewType_Special>::res_t operator/(
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return operator*(matrix.inverse());
+  }
+#if 0 // TODO
+  friend typename Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>::mat_t
+      operator/(const T &scalar, const self_t &matrix) {
+    return Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_t>
+        ::generate(matrix.inverse(), scalar); // equal to matrix.inverse() * scalar
+  }
+#endif
   // }
 
 #undef upgrade_function
@@ -402,9 +422,9 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
   typename super_t::special_t transpose() const noexcept {
     return typename super_t::special_t(*this);
   }
-  typename super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const noexcept {
+  typename super_t::super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const noexcept {
     // TODO optimize by returning unary operation
-    typename super_t::template Inverse_Matrix<>::mat_t res(this->rows(), this->rows());
+    typename super_t::super_t::template Inverse_Matrix<>::mat_t res(this->rows(), this->rows());
     for(unsigned int i(0); i < this->rows(); ++i){
       res(i, i) = T(1) / (*this)(i, i);
     }
