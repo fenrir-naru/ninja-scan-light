@@ -98,7 +98,14 @@ BOOST_AUTO_TEST_CASE(fixed_types){
 
 #if !defined(SKIP_SPECIAL_MATRIX_TESTS) // tests for special
 
-#if defined(__GNUC__) // in case of template deduction failure with GCC
+#if (!defined(SKIP_FIXED_MATRIX_TESTS)) && defined(__GNUC__) // in case of template deduction failure with GCC
+template <class Result_FrozenT, class LHS_T, class RHS_T, bool lhs_buffered, class U>
+void matrix_inspect_contains(
+    const Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, lhs_buffered> &m,
+    const U &cmp,
+    const bool &is_negative = false){
+  matrix_inspect_contains(static_cast<const Result_FrozenT &>(m), cmp, is_negative);
+}
 template <class Result_FrozenT, class LHS_T, class RHS_T, bool lhs_buffered, bool rhs_buffered, class U>
 void matrix_inspect_contains(
     const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, lhs_buffered, rhs_buffered> &m,
@@ -156,7 +163,7 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(as_symmetric(*A).inverse(), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) / as_symmetric(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) / matrix_t::getI(A->rows()), "*view: [Symmetric] [Base]");
-  //matrix_inspect_contains(1 / as_symmetric(*A), "*view: [Symmetric] [Base]"); // TODO
+  matrix_inspect_contains(1 / as_symmetric(*A), "*view: [Symmetric] [Base]");
 
   matrix_inspect_contains(as_symmetric(*A) + (*A), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(*A) - (*A), "*view: [Base]");
@@ -190,8 +197,8 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
 #if 0 // TODO
   matrix_inspect_contains(as_symmetric(A_fixed) / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / matrix_t::getI(A->rows()), "*view: [Symmetric] [Base]");
-  matrix_inspect_contains(1 / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
 #endif
+  matrix_inspect_contains(1 / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
 #endif
 }
 
@@ -235,7 +242,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(as_diagonal(*A).inverse(), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) / as_diagonal(*A), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) / matrix_t::getI(A->rows()), "*view: [Diagonal] [Base]");
-  //matrix_inspect_contains(1 / as_diagonal(*A), "*view: [Diagonal] [Base]"); // TODO
+  matrix_inspect_contains(1 / as_diagonal(*A), "*view: [Diagonal] [Base]");
 
   matrix_inspect_contains(as_diagonal(*A) + (*A), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(*A) - (*A), "*view: [Base]");
@@ -273,8 +280,8 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
 #if 0 // TODO
   matrix_inspect_contains(as_diagonal(A_fixed) / as_diagonal(A_fixed), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / matrix_t::getI(A->rows()), "*view: [Diagonal] [Base]");
-  matrix_inspect_contains(1 / as_diagonal(A_fixed), "*view: [Diagonal] [Base]");
 #endif
+  matrix_inspect_contains(1 / as_diagonal(A_fixed), "*view: [Diagonal] [Base]");
 #endif
 }
 

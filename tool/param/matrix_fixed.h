@@ -476,6 +476,12 @@ struct Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, true>
       Result_FrozenT(typename Result_FrozenT::storage_t(
         lhs.rows(), lhs.columns(),
         typename Result_FrozenT::storage_t::op_t(buf_t::lhs, rhs))) {}
+  template <class Result_FrozenT2>
+  operator Matrix_Fixed_multipled_by_Scalar<
+      Result_FrozenT2, LHS_T, RHS_T, true>() const noexcept {
+    return Matrix_Fixed_multipled_by_Scalar<Result_FrozenT2, LHS_T, RHS_T, true>(
+        buf_t::lhs, Result_FrozenT::storage.op.rhs);
+  }
 };
 
 template <class T, int nR_L, int nC_L, class RHS_T>
@@ -637,6 +643,18 @@ struct MatrixBuilderSpecial<
   typedef Matrix_Fixed_multipled_by_Matrix<
       typename MatrixBuilderSpecial<Result_FrozenT, ViewType_Special>::special_t,
       LHS_T, RHS_T, lhs_buffered, rhs_buffered> special_t;
+};
+
+// for friend operator/(scalar, special(Matrix_Fixed))
+template <
+    class Result_FrozenT, class LHS_T, class RHS_T,
+    template <class> class ViewType_Special>
+struct MatrixBuilderSpecial<
+    Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, true>,
+    ViewType_Special>{
+  typedef Matrix_Fixed_multipled_by_Scalar<
+      typename MatrixBuilderSpecial<Result_FrozenT, ViewType_Special>::special_t,
+      LHS_T, RHS_T, true> special_t;
 };
 // }
 

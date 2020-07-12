@@ -83,9 +83,6 @@ struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_S
   typedef ViewType_Special<
       typename MatrixViewSpecialBuilder<ViewType>::none_special_t> view_special_t;
   typedef Matrix_Frozen<T, Array2D_Type, view_special_t> special_t;
-#if defined(OLD_OPERATOR_FRIEND_DIV)
-  typedef Matrix_Frozen<T, Array2D_Type, typename view_special_t::base_t> special_base_t;
-#endif
 };
 template <class T, template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_ScaledUnit<T>, MatrixViewBase<> >, ViewType_Special> {
@@ -126,8 +123,6 @@ struct Matrix_Frozen_Special
   static special_t as_special(const Matrix_Frozen<T, Array2D_Type, ViewType> &mat){
     return special_t(mat);
   }
-
-  //using super_t::operator/;
 
   template<typename U> struct arg_type;
   template<typename U, typename V> struct arg_type<U(V)>{typedef V type;};
@@ -272,11 +267,6 @@ struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## anot
     typedef typename MatrixBuilderSpecial<
         typename super_t::template Inverse_Matrix<super_t>::mat_t,
         ViewType_Special>::special_t mat_t;
-#if defined(OLD_OPERATOR_FRIEND_DIV)
-    typedef typename MatrixBuilderSpecial<
-        typename super_t::template Inverse_Matrix<super_t>::mat_t,
-        ViewType_Special>::special_base_t mat_base_t;
-#endif
   };
 
   typename Inverse_Matrix<>::mat_t inverse() const {
@@ -292,13 +282,16 @@ struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## anot
         const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
     return operator*(matrix.inverse());
   }
-#if defined(OLD_OPERATOR_FRIEND_DIV)
   friend typename MatrixBuilderSpecial<
-      typename super_t::template Multiply_Matrix_by_Scalar<T, typename Inverse_Matrix<>::mat_base_t>::mat_t,
+      typename super_t::template Multiply_Matrix_by_Scalar<
+        T, typename super_t::template Inverse_Matrix<>::mat_t>::mat_t,
       ViewType_Special>::special_t operator/(const T &scalar, const self_t &matrix) {
-    return matrix.inverse() * scalar;
+    typedef typename super_t::template Inverse_Matrix<>::mat_t inv_t;
+    return typename MatrixBuilderSpecial<
+        typename super_t::template Multiply_Matrix_by_Scalar<T, inv_t>::mat_t,
+        ViewType_Special>::special_t(
+          super_t::template Multiply_Matrix_by_Scalar<T, inv_t>::generate(matrix.inverse_optimized(), scalar));
   }
-#endif
   // }
 
 #undef upgrade_function
