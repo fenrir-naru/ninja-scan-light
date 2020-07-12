@@ -80,8 +80,8 @@ template <
     class T, class Array2D_Type, class ViewType,
     template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<Matrix_Frozen<T, Array2D_Type, ViewType>, ViewType_Special> {
-  typedef ViewType_Special<
-      typename MatrixViewSpecialBuilder<ViewType>::none_special_t> view_special_t;
+  typedef typename MatrixViewSpecialBuilder<ViewType_Special<
+      typename MatrixViewSpecialBuilder<ViewType>::none_special_t> >::view_t view_special_t;
   typedef Matrix_Frozen<T, Array2D_Type, view_special_t> special_t;
 };
 template <class T, template <class> class ViewType_Special>
@@ -508,6 +508,22 @@ upgrade_mul_mat_mat_function(
 #undef upgrade_mul_mat_mat
 #undef upgrade_mul_mat_mat_function
 // }
+
+
+/* The following specializations are required to treat with internal reuse of expression type
+ * for optimization. Their typical example is (mat * scalar) * scalar => (mat * (scalar * scalar)),
+ * whose result type before as_special is special_Base<View>. as_special() may result in
+ * special<special_Base<View> > without these specializations.
+ */
+#define resolve_redundant_special(special) \
+template <class BaseView> \
+struct MatrixViewSpecialBuilder< \
+    MatrixViewSpecial_ ## special<MatrixViewSpecial_ ## special ## Base<BaseView> > > { \
+  typedef MatrixViewSpecial_ ## special<BaseView> view_t; \
+};
+resolve_redundant_special(Symmetric);
+resolve_redundant_special(Diagonal);
+#undef resolve_redundant_special
 
 #undef upgrade_square_matrix
 
