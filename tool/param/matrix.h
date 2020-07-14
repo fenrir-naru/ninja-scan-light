@@ -2354,6 +2354,12 @@ class Matrix_Frozen {
           ::generate(*this, matrix.inverse()); // equal to (*this) * matrix.inverse()
     }
 
+    template <class T2>
+    typename Multiply_Matrix_by_Scalar<T2>::mat_t
+        operator/(const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &matrix) const {
+      return operator*(matrix.inverse());
+    }
+
     /**
      * Divide scalar by matrix, which is equivalent to inverted matrix multiplied by scalar
      *

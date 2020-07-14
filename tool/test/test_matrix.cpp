@@ -309,6 +309,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A) * (*B) * (*A)),
       (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str()); // should be M * M
+  matrix_inspect_contains(
+      ((*A) / matrix_t::getScalar(A->rows(), 2)),
+      (format("*storage: (*, M(%1%,%1%), 0.5)") % SIZE).str()); // should be M * 0.5
 }
 
 void check_inv(const matrix_t &mat){
@@ -317,6 +320,7 @@ void check_inv(const matrix_t &mat){
     BOOST_TEST_MESSAGE("inv:" << inv);
     matrix_compare_delta(matrix_t::getI(SIZE), mat * inv, 1E-5);
     matrix_compare_delta(mat, matrix_t::getI(SIZE) / inv, 1E-5);
+    matrix_compare_delta(mat, mat / matrix_t::getI(SIZE), 1E-5);
     matrix_compare_delta(matrix_t::getI(SIZE), inv / inv, 1E-5);
     matrix_compare_delta(matrix_t::getI(SIZE), (inv * inv) / (inv * inv), 1E-5);
     matrix_t inv2(1 / mat);
