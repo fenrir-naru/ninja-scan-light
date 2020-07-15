@@ -1908,21 +1908,14 @@ class Matrix_Frozen {
       struct optimizer2_t<true, false, U> {
         // (M * S) * M => (M * M) * S
         typedef typename OperatorProperty<self_t>::operator_t::lhs_t
-            ::template Multiply_Matrix_by_Matrix<RHS_MatrixT>::mat_t stage1_t;
-        typedef typename stage1_t
+            ::template Multiply_Matrix_by_Matrix<RHS_MatrixT> stage1_t;
+        typedef typename stage1_t::mat_t
             ::template Multiply_Matrix_by_Scalar<
-              typename OperatorProperty<self_t>::operator_t::rhs_t>::mat_t res_t;
+              typename OperatorProperty<self_t>::operator_t::rhs_t> stage2_t;
+        typedef typename stage2_t::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
-          stage1_t mat_stage1(
-              typename stage1_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<stage1_t>::operator_t(
-                  mat1.storage.op.lhs, mat2)));
-          return res_t(
-              typename res_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<res_t>::operator_t(
-                  mat_stage1, mat1.storage.op.rhs)));
+          return stage2_t::generate(
+              stage1_t::generate(mat1.storage.op.lhs, mat2), mat1.storage.op.rhs);
         }
       };
       template <class U>
@@ -1930,21 +1923,14 @@ class Matrix_Frozen {
         // M * (M * S) => (M * M) * S
         typedef typename self_t
             ::template Multiply_Matrix_by_Matrix<
-              typename OperatorProperty<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
-        typedef typename stage1_t
+              typename OperatorProperty<RHS_MatrixT>::operator_t::lhs_t> stage1_t;
+        typedef typename stage1_t::mat_t
             ::template Multiply_Matrix_by_Scalar<
-              typename OperatorProperty<RHS_MatrixT>::operator_t::rhs_t>::mat_t res_t;
+              typename OperatorProperty<RHS_MatrixT>::operator_t::rhs_t> stage2_t;
+        typedef typename stage2_t::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
-          stage1_t mat_stage1(
-              typename stage1_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<stage1_t>::operator_t(
-                  mat1, mat2.storage.op.lhs)));
-          return res_t(
-              typename res_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<res_t>::operator_t(
-                  mat_stage1, mat2.storage.op.rhs)));
+          return stage2_t::generate(
+              stage1_t::generate(mat1, mat2.storage.op.lhs), mat2.storage.op.rhs);
         }
       };
       template <class U>
@@ -1952,21 +1938,15 @@ class Matrix_Frozen {
         // (M * S) * (M * S) => (M * M) * (S * S)
         typedef typename OperatorProperty<self_t>::operator_t::lhs_t
             ::template Multiply_Matrix_by_Matrix<
-              typename OperatorProperty<RHS_MatrixT>::operator_t::lhs_t>::mat_t stage1_t;
-        typedef typename stage1_t
+              typename OperatorProperty<RHS_MatrixT>::operator_t::lhs_t> stage1_t;
+        typedef typename stage1_t::mat_t
             ::template Multiply_Matrix_by_Scalar<
-              typename OperatorProperty<self_t>::operator_t::rhs_t>::mat_t res_t;
+              typename OperatorProperty<self_t>::operator_t::rhs_t> stage2_t;
+        typedef typename stage2_t::mat_t res_t;
         static res_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
-          stage1_t mat_stage1(
-              typename stage1_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<stage1_t>::operator_t(
-                  mat1.storage.op.lhs, mat2.storage.op.lhs)));
-          return res_t(
-              typename res_t::storage_t(
-                mat1.rows(), mat2.columns(),
-                typename OperatorProperty<res_t>::operator_t(
-                  mat_stage1, mat1.storage.op.rhs * mat2.storage.op.rhs)));
+          return stage2_t::generate(
+              stage1_t::generate(mat1.storage.op.lhs, mat2.storage.op.lhs),
+              mat1.storage.op.rhs * mat2.storage.op.rhs);
         }
       };
 #endif
@@ -1989,7 +1969,12 @@ class Matrix_Frozen {
 
     /**
      * Multiply matrix by matrix
-     * If this matrix is scalar matrix, then right hand side matrix multiplied by this will be returned.
+     * The following special cases are in consideration.
+     * If this matrix is a scalar matrix, and if the right hand side matrix is also a scalar matrix,
+     * multiplied scalar matrix will be returned; otherwise, then right hand side matrix
+     * multiplied by this (as scalar) will be returned.
+     * Only If the right hand side matrix is a scalar matrix,
+     * matrix multiplied by scalar will be returned.
      * Otherwise, matrix * matrix will be returned.
      *
      * @param matrix matrix to multiply
@@ -2002,21 +1987,6 @@ class Matrix_Frozen {
       if(columns() != matrix.rows()){throw std::invalid_argument("Incorrect size");}
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
     }
-
-    /**
-     * Multiply matrix by scalar matrix
-     *
-     * @param matrix scalar matrix to multiply
-     * @return multiplied matrix
-     * @throw std::invalid_argument When operation is undefined
-     */
-    template <class T2>
-    typename Multiply_Matrix_by_Scalar<T2>::mat_t
-        operator*(const /*typename Matrix<T2>::scalar_matrix_t*/ Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &matrix) const {
-      if(columns() != matrix.rows()){throw std::invalid_argument("Incorrect size");}
-      return Multiply_Matrix_by_Scalar<T2>::generate(*this, matrix(0,0));
-    }
-
 
     /**
      * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
@@ -2952,6 +2922,16 @@ struct Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, RHS
   }
 };
 
+template <class LHS_T, class RHS_T>
+struct Matrix_multiplied_by_Scalar<Matrix_Frozen<LHS_T, Array2D_ScaledUnit<LHS_T> >, RHS_T> {
+  typedef Matrix_Frozen<LHS_T, Array2D_ScaledUnit<LHS_T> > lhs_t;
+  typedef RHS_T rhs_t;
+  typedef lhs_t mat_t;
+  static mat_t generate(const lhs_t &mat, const rhs_t &scalar) {
+    return mat_t(mat.rows(), mat(0, 0) * scalar);
+  }
+};
+
 template <
     class T, class Array2D_Type, class ViewType,
     class T2, class Array2D_Type2, class ViewType2,
@@ -3010,6 +2990,20 @@ struct Array2D_Operator_Multiply_by_Matrix<
     return mat_t(
         typename mat_t::storage_t(
           mat1.rows(), mat2.columns(), self_t(mat1, mat2)));
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2>
+struct Array2D_Operator_Multiply_by_Matrix<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > >
+    : public Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, T2> {
+  typedef Matrix_multiplied_by_Scalar<Matrix_Frozen<T, Array2D_Type, ViewType>, T2> super_t;
+  static typename super_t::mat_t generate(
+      const typename super_t::lhs_t &mat1, const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &mat2) {
+    return super_t::generate(mat1, mat2(0, 0));
   }
 };
 

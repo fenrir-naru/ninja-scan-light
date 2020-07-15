@@ -505,6 +505,24 @@ upgrade_mul_mat_mat_function(
   return (row == column) ? (super_t::lhs(row, row) * super_t::rhs(column, column)) : T(0);
 }
 
+// For ambiguity resolution (diagonal_M * scalar_M)
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2>
+struct Array2D_Operator_Multiply_by_Matrix<
+      Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_DiagonalBase<ViewType> >,
+      Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > >
+    : public Matrix_multiplied_by_Scalar<
+        Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_DiagonalBase<ViewType> >, T2> {
+  typedef Matrix_multiplied_by_Scalar<
+      Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_DiagonalBase<ViewType> >, T2> super_t;
+  static typename super_t::mat_t generate(
+      const typename super_t::lhs_t &mat1, const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &mat2) {
+    return super_t::generate(mat1, mat2(0, 0));
+  }
+};
+
+
 #undef upgrade_mul_mat_mat
 #undef upgrade_mul_mat_mat_function
 // }

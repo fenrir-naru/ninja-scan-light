@@ -295,6 +295,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
 
   // optimized cases
   matrix_inspect_contains(
+      (matrix_t::getScalar(A->rows(), 2) * matrix_t::getScalar(A->rows(), 2)), // should be 4_I
+      (format("*storage: M(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
       ((*A * 2) * 2), // should be *A * 4
       (format("*storage: (*, M(%1%,%1%), 4)") % SIZE).str());
   matrix_inspect_contains(
