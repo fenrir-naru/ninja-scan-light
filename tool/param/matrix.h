@@ -2317,17 +2317,13 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename Multiply_Matrix_by_Matrix<
-          typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>::mat_t
+        typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>
+          ::template Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>::mat_t
         operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-      return Multiply_Matrix_by_Matrix<
-            typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>
-          ::generate(*this, matrix.inverse()); // equal to (*this) * matrix.inverse()
-    }
-
-    template <class T2>
-    typename Multiply_Matrix_by_Scalar<T2>::mat_t
-        operator/(const Matrix_Frozen<T2, Array2D_ScaledUnit<T2> > &matrix) const {
-      return operator*(matrix.inverse());
+      typedef typename Matrix_Frozen<T2, Array2D_Type2, ViewType2>
+          ::template Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t inv_t;
+      return Multiply_Matrix_by_Matrix<inv_t>::generate(
+          *this, matrix.inverse()); // equal to (*this) * matrix.inverse()
     }
 
     /**
