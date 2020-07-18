@@ -1088,6 +1088,10 @@ struct MatrixBuilder_ViewTransformerBase<
           typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
   template <class ViewType2>
+  struct view_replace_t {
+    typedef MatrixT<T, Array2D_Type, ViewType2> replaced_t;
+  };
+  template <class ViewType2>
   struct view_apply_t {
     typedef MatrixT<T, Array2D_Type,
         typename view_builder_t::template apply_t<ViewType2>::res_t> applied_t;

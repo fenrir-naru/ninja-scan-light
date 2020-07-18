@@ -136,8 +136,7 @@ typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::special_t \
 #define upgrade_friend_operator(op, in_type, out_type) \
 friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::special_t \
     operator op(const get_type(in_type) &in, const self_t &matrix) { \
-  return typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special> \
-      ::special_t(in op (const super_t &)matrix); \
+  return in op (const super_t &)matrix; \
 }
 
   upgrade_function(operator*, T, typename super_t::mul_mat_scalar_t::mat_t);
@@ -149,9 +148,7 @@ friend typename MatrixBuilderSpecial<get_type(out_type), ViewType_Special>::spec
   typename MatrixBuilderSpecial<
       typename super_t::mul_mat_scalar_t::mat_t, ViewType_Special>::special_t
       operator-() const noexcept {
-    return typename MatrixBuilderSpecial<
-        typename super_t::mul_mat_scalar_t::mat_t, ViewType_Special>
-        ::special_t(super_t::operator-());
+    return super_t::operator-();
   }
 
   upgrade_function(operator+, T,
@@ -205,14 +202,12 @@ struct add_mat_mat_t< \
   template <class T2, class Array2D_Type2, class ViewType2>
   typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t operator+(
         const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-    return typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t(
-        super_t::operator+(matrix));
+    return super_t::operator+(matrix);
   }
   template <class T2, class Array2D_Type2, class ViewType2>
   typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special, false>::res_t operator-(
         const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-    return typename add_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special, false>::res_t(
-        super_t::operator-(matrix));
+    return super_t::operator-(matrix);
   }
   // }
 
@@ -220,30 +215,37 @@ struct add_mat_mat_t< \
   template <class MatrixT, template <class> class ViewType_Special_self>
   struct mul_mat_mat_t {
     typedef typename super_t::template Multiply_Matrix_by_Matrix<MatrixT>::mat_t res_t;
+    typedef typename res_t::view_t res_view_t;
   };
   template <class T2>
   struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_ScaledUnit<T2> >, ViewType_Special> {
     // Preserve feature even if scalar is multiplied
-    typedef typename MatrixBuilderSpecial<
+    typedef MatrixBuilderSpecial<
         typename super_t::template Multiply_Matrix_by_Scalar<T2>::mat_t,
-        ViewType_Special>::special_t res_t;
+        ViewType_Special> builder_t;
+    typedef typename builder_t::special_t res_t;
+    typedef typename builder_t::view_special_t res_view_t;
   };
   template <class T2, class Array2D_Type2, class ViewType2>
   struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> >, ViewType_Special> {
     // (same feature) * (same feature) => (same feature), ex) (symmetric) * (symmetric) => (symmetric)
-    typedef typename MatrixBuilderSpecial<
+    typedef MatrixBuilderSpecial<
         typename super_t::template Multiply_Matrix_by_Matrix<
           Matrix_Frozen<T2, Array2D_Type2, ViewType_Special<ViewType2> > >::mat_t,
-        ViewType_Special>::special_t res_t;
+        ViewType_Special> builder_t;
+    typedef typename builder_t::special_t res_t;
+    typedef typename builder_t::view_special_t res_view_t;
   };
 #define make_entry(self, another, result) \
 template <class T2, class Array2D_Type2, class ViewType2> \
 struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## another <ViewType2> >, \
     MatrixViewSpecial_ ## self > { \
-  typedef typename MatrixBuilderSpecial< \
+  typedef MatrixBuilderSpecial< \
       typename super_t::template Multiply_Matrix_by_Matrix< \
         Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_## another<ViewType2> > >::mat_t, \
-      MatrixViewSpecial_ ## result>::special_t res_t; \
+      MatrixViewSpecial_ ## result> builder_t; \
+      typedef typename builder_t::special_t res_t; \
+      typedef typename builder_t::view_special_t res_view_t; \
 };
   make_entry(Diagonal, Symmetric, Symmetric); // (diagonal) * (symmetric) => (symmetric)
   make_entry(Symmetric, Diagonal, Symmetric); // (symmetric) * (diagonal) => (symmetric)
@@ -252,8 +254,7 @@ struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## anot
   template <class T2, class Array2D_Type2, class ViewType2>
   typename mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t operator*(
       const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-    return typename mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, ViewType_Special>::res_t(
-        super_t::operator*(matrix));
+    return super_t::operator*(matrix);
   }
   // }]
 
@@ -275,22 +276,26 @@ struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## anot
   typename super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const {
     return super_t::inverse();
   }
+
   template <class T2, class Array2D_Type2, class ViewType2>
-  typename mul_mat_mat_t<
-      typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t,
-      ViewType_Special>::res_t operator/(
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
-    return operator*(matrix.inverse());
+  typename MatrixBuilder<
+      typename super_t::template Multiply_Matrix_by_Matrix<
+        typename Inverse_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t>::mat_t>
+      ::template view_replace_t<typename mul_mat_mat_t<
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2>,
+        ViewType_Special>::res_view_t>::replaced_t
+      operator/(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    typedef Matrix_Frozen<T2, Array2D_Type2, ViewType2> input_t;
+    typedef typename Inverse_Matrix<input_t>::mat_t inv_t;
+    return super_t::template Multiply_Matrix_by_Matrix<inv_t>::generate(*this, matrix.inverse());
   }
   friend typename MatrixBuilderSpecial<
       typename super_t::template Multiply_Matrix_by_Scalar<
         T, typename super_t::template Inverse_Matrix<>::mat_t>::mat_t,
       ViewType_Special>::special_t operator/(const T &scalar, const self_t &matrix) {
     typedef typename super_t::template Inverse_Matrix<>::mat_t inv_t;
-    return typename MatrixBuilderSpecial<
-        typename super_t::template Multiply_Matrix_by_Scalar<T, inv_t>::mat_t,
-        ViewType_Special>::special_t(
-          super_t::template Multiply_Matrix_by_Scalar<T, inv_t>::generate(matrix.inverse_optimized(), scalar));
+    return super_t::template Multiply_Matrix_by_Scalar<T, inv_t>::generate(
+        matrix.inverse_optimized(), scalar);
   }
   // }
 

@@ -626,7 +626,9 @@ struct MatrixBuilderSpecial;
 template <
     class T, int nR, int nC,
     template <class> class ViewType_Special>
-struct MatrixBuilderSpecial<Matrix_Fixed<T, nR, nC>, ViewType_Special> {
+struct MatrixBuilderSpecial<Matrix_Fixed<T, nR, nC>, ViewType_Special>
+    : public MatrixBuilderSpecial<
+        typename Matrix_Fixed<T, nR, nC>::super_t, ViewType_Special> {
   typedef Matrix_Fixed<T, nR, nC> fixed_t;
   typedef Matrix_Fixed_UnaryOperator<fixed_t,
       typename MatrixBuilderSpecial<
@@ -639,7 +641,8 @@ template <
     template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<
     Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, lhs_buffered, rhs_buffered>,
-    ViewType_Special>{
+    ViewType_Special>
+    : public MatrixBuilderSpecial<Result_FrozenT, ViewType_Special> {
   typedef Matrix_Fixed_multipled_by_Matrix<
       typename MatrixBuilderSpecial<Result_FrozenT, ViewType_Special>::special_t,
       LHS_T, RHS_T, lhs_buffered, rhs_buffered> special_t;
@@ -651,7 +654,8 @@ template <
     template <class> class ViewType_Special>
 struct MatrixBuilderSpecial<
     Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, true>,
-    ViewType_Special>{
+    ViewType_Special>
+    : public MatrixBuilderSpecial<Result_FrozenT, ViewType_Special> {
   typedef Matrix_Fixed_multipled_by_Scalar<
       typename MatrixBuilderSpecial<Result_FrozenT, ViewType_Special>::special_t,
       LHS_T, RHS_T, true> special_t;
