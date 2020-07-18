@@ -648,6 +648,37 @@ struct MatrixBuilderSpecial<
       LHS_T, RHS_T, lhs_buffered, rhs_buffered> special_t;
 };
 
+// { /* for operator/(special(Matrix_Fixed)) */
+template <
+    class T, class Array2D_Type, class ViewType,
+    class MatrixT, class Result_FrozenT>
+struct Array2D_Operator_Multiply_by_Matrix<
+    Matrix_Frozen<T, Array2D_Type, ViewType>,
+    Matrix_Fixed_UnaryOperator<MatrixT, Result_FrozenT> > {
+  typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
+  typedef Matrix_Fixed_UnaryOperator<MatrixT, Result_FrozenT> rhs_t;
+  typedef Array2D_Operator_Multiply_by_Matrix<lhs_t, Result_FrozenT> op_t;
+  typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > frozen_t;
+  typedef Matrix_Fixed_multipled_by_Matrix<frozen_t, lhs_t, rhs_t, false, true> mat_t;
+  static mat_t generate(const lhs_t &lhs, const rhs_t &rhs) noexcept {
+    return mat_t(lhs, rhs);
+  }
+};
+template <
+    class Result_FrozenT, class LHS_T, class RHS_T,
+    bool lhs_buffered, bool rhs_buffered>
+struct MatrixBuilder<
+    Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, lhs_buffered, rhs_buffered>,
+    0, 0, 1, 1> {
+  template <class ViewType>
+  struct view_replace_t {
+    typedef Matrix_Fixed_multipled_by_Matrix<
+        typename MatrixBuilder<Result_FrozenT>::template view_replace_t<ViewType>::replaced_t,
+        LHS_T, RHS_T, lhs_buffered, rhs_buffered> replaced_t;
+  };
+};
+// }
+
 // for friend operator/(scalar, special(Matrix_Fixed))
 template <
     class Result_FrozenT, class LHS_T, class RHS_T,
