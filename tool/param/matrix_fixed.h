@@ -482,6 +482,7 @@ struct Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, true>
       Result_FrozenT(typename Result_FrozenT::storage_t(
         lhs.rows(), lhs.columns(),
         typename Result_FrozenT::storage_t::op_t(buf_t::lhs, rhs))) {}
+  const RHS_T &rhs() const noexcept {return Result_FrozenT::storage.op.rhs;}
   template <class, class, class, bool> friend struct Matrix_Fixed_multipled_by_Scalar;
   template <class Result_FrozenT2>
   Matrix_Fixed_multipled_by_Scalar(
@@ -489,8 +490,7 @@ struct Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, true>
       : buf_t(another.buf_t::lhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
         buf_t::lhs.rows(), buf_t::lhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(
-          buf_t::lhs, another.Result_FrozenT2::storage.op.rhs))) {}
+        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, another.rhs()))) {}
 };
 
 template <class T, int nR_L, int nC_L, class RHS_T>
@@ -521,14 +521,15 @@ struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, false, tru
       Result_FrozenT(typename Result_FrozenT::storage_t(
         lhs.rows(), rhs.columns(),
         typename Result_FrozenT::storage_t::op_t(lhs, buf_t::rhs))) {}
+  const LHS_T &lhs() const noexcept {return Result_FrozenT::storage.op.lhs;}
   template <class, class, class, bool, bool> friend struct Matrix_Fixed_multipled_by_Matrix;
   template <class Result_FrozenT2>
   Matrix_Fixed_multipled_by_Matrix(
       const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT2, LHS_T, RHS_T, false, true> &another) noexcept
       : buf_t(another.buf_t::rhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
-        another.Result_FrozenT2::storage.op.lhs.rows(), buf_t::rhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(another.Result_FrozenT2::storage.op.lhs, buf_t::rhs))) {}
+        another.lhs().rows(), buf_t::rhs.columns(),
+        typename Result_FrozenT::storage_t::op_t(another.lhs(), buf_t::rhs))) {}
 };
 template <class Result_FrozenT, class LHS_T, class RHS_T>
 struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, true, false>
@@ -540,14 +541,15 @@ struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, true, fals
       Result_FrozenT(typename Result_FrozenT::storage_t(
         lhs.rows(), rhs.columns(),
         typename Result_FrozenT::storage_t::op_t(buf_t::lhs, rhs))) {}
+  const RHS_T &rhs() const noexcept {return Result_FrozenT::storage.op.rhs;}
   template <class, class, class, bool, bool> friend struct Matrix_Fixed_multipled_by_Matrix;
   template <class Result_FrozenT2>
   Matrix_Fixed_multipled_by_Matrix(
       const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT2, LHS_T, RHS_T, true, false> &another) noexcept
       : buf_t(another.buf_t::lhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
-        buf_t::lhs.rows(), another.Result_FrozenT2::storage.op.rhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, another.Result_FrozenT2::storage.op.rhs))) {}
+        buf_t::lhs.rows(), another.rhs().columns(),
+        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, another.rhs()))) {}
 };
 template <class Result_FrozenT, class LHS_T, class RHS_T>
 struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, true, true>
