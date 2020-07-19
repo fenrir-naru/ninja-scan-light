@@ -355,6 +355,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
 
 BOOST_AUTO_TEST_CASE(force_special_intersection){
   assign_linear();
+  (*A)(0, 0) = 1; // To ensure inversion, (0, 0) = 1
   prologue_print();
 
   matrix_inspect_contains(as_symmetric(*A) + as_symmetric(*A), "*view: [Symmetric] [Base]");
@@ -373,6 +374,16 @@ BOOST_AUTO_TEST_CASE(force_special_intersection){
   matrix_inspect_contains(as_diagonal(*A) / as_diagonal(*A), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_symmetric(*A) / as_diagonal(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_diagonal(*A) / as_symmetric(*A), "*view: [Symmetric] [Base]");
+
+#if !defined(SKIP_FIXED_MATRIX_TESTS)
+  typedef Matrix_Fixed<content_t, SIZE> fixed_t;
+  fixed_t A_fixed(*A);
+
+  matrix_inspect_contains(as_symmetric(A_fixed) / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(as_diagonal(A_fixed) / as_diagonal(A_fixed), "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(as_symmetric(A_fixed) / as_diagonal(A_fixed), "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(as_diagonal(A_fixed) / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
+#endif
 }
 
 #endif
