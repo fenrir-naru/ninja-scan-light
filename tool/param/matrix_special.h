@@ -291,11 +291,11 @@ struct mul_mat_mat_t<Matrix_Frozen<T2, Array2D_Type2, MatrixViewSpecial_ ## anot
   }
   friend typename MatrixBuilderSpecial<
       typename super_t::template Multiply_Matrix_by_Scalar<
-        T, typename super_t::template Inverse_Matrix<>::mat_t>::mat_t,
+        T, typename Inverse_Matrix<>::mat_t>::mat_t,
       ViewType_Special>::special_t operator/(const T &scalar, const self_t &matrix) {
-    typedef typename super_t::template Inverse_Matrix<>::mat_t inv_t;
+    typedef typename Inverse_Matrix<>::mat_t inv_t;
     return super_t::template Multiply_Matrix_by_Scalar<T, inv_t>::generate(
-        matrix.inverse_optimized(), scalar);
+        matrix.inverse(), scalar);
   }
   // }
 

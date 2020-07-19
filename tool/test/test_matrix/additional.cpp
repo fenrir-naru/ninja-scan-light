@@ -113,9 +113,9 @@ void matrix_inspect_contains(
     const bool &is_negative = false){
   matrix_inspect_contains(static_cast<const Result_FrozenT &>(m), cmp, is_negative);
 }
-template <class MatrixT, class Result_FrozenT, class U>
+template <class T, int nR, int nC, class Result_FrozenT, class U>
 void matrix_inspect_contains(
-    const Matrix_Fixed_UnaryOperator<MatrixT, Result_FrozenT> &m,
+    const Matrix_Fixed_Wrapped<T, nR, nC, Result_FrozenT> &m,
     const U &cmp,
     const bool &is_negative = false){
   matrix_inspect_contains(static_cast<const Result_FrozenT &>(m), cmp, is_negative);
