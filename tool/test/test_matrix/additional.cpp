@@ -207,6 +207,12 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(as_symmetric(as_symmetric(*A)), "*view: [Symmetric] [Base]"); // as_symmetric should be effective only once
   matrix_inspect_contains(as_symmetric(matrix_t::getI(A->rows())), "*view: [Base]");
 
+  matrix_compare_delta(A_ * (*A), as_symmetric(*A) * (*A), 1E-10);
+  matrix_compare_delta((*A) * A_, (*A) * as_symmetric(*A), 1E-10);
+  matrix_compare_delta(A_ * A_, as_symmetric(*A) * as_symmetric(*A), 1E-10);
+
+  matrix_compare_delta(A_.inverse(), as_symmetric(*A).inverse(), 1E-5);
+
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t A_fixed(*A);
@@ -320,9 +326,11 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(as_diagonal(as_diagonal(*A)), "*view: [Diagonal] [Base]"); // as_diagonal should be effective only once
   matrix_inspect_contains(as_diagonal(matrix_t::getI(A->rows())), "*view: [Base]");
 
-  matrix_compare(A_ * (*A), as_diagonal(*A) * (*A));
-  matrix_compare((*A) * A_, (*A) * as_diagonal(*A));
-  matrix_compare(A_ * A_, as_diagonal(*A) * as_diagonal(*A));
+  matrix_compare_delta(A_ * (*A), as_diagonal(*A) * (*A), 1E-10);
+  matrix_compare_delta((*A) * A_, (*A) * as_diagonal(*A), 1E-10);
+  matrix_compare_delta(A_ * A_, as_diagonal(*A) * as_diagonal(*A), 1E-10);
+
+  matrix_compare_delta(A_.inverse(), as_diagonal(*A).inverse(), 1E-5);
 
 #if !defined(SKIP_FIXED_MATRIX_TESTS)
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
