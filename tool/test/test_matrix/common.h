@@ -87,8 +87,8 @@ struct Fixture {
       B_array[row][j] = (*B)(row, j) = ElementT(0);
     }
   }
-  void assign_linear(){
-    int counter(0);
+  void assign_linear(const int &base = 0){
+    int counter(base);
     for(unsigned int i(0); i < A->rows(); i++){
       for(unsigned int j(0); j < A->columns(); j++){
         A_array[i][j] = (*A)(i, j) = counter++;
