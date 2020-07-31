@@ -450,14 +450,16 @@ struct Matrix_Fixed_BinaryOperator_buffer;
 template <class LHS_T, class RHS_T>
 struct Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, false> {
   LHS_T lhs;
-  Matrix_Fixed_BinaryOperator_buffer(const LHS_T &lhs_) noexcept
-      : lhs(lhs_) {}
+  const RHS_T &rhs;
+  Matrix_Fixed_BinaryOperator_buffer(const LHS_T &lhs_, const RHS_T &rhs_) noexcept
+      : lhs(lhs_), rhs(rhs_) {}
 };
 template <class LHS_T, class RHS_T>
 struct Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, false, true> {
+  const LHS_T &lhs;
   RHS_T rhs;
-  Matrix_Fixed_BinaryOperator_buffer(const RHS_T &rhs_) noexcept
-      : rhs(rhs_) {}
+  Matrix_Fixed_BinaryOperator_buffer(const LHS_T &lhs_, const RHS_T &rhs_) noexcept
+      : lhs(lhs_), rhs(rhs_) {}
 };
 template <class LHS_T, class RHS_T>
 struct Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, true> {
@@ -470,27 +472,24 @@ struct Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, true> {
 template <
     class Result_FrozenT, class LHS_T, class RHS_T,
     bool lhs_buffered = false>
-struct Matrix_Fixed_multipled_by_Scalar;
-
-template <class Result_FrozenT, class LHS_T, class RHS_T>
-struct Matrix_Fixed_multipled_by_Scalar<Result_FrozenT, LHS_T, RHS_T, true>
-    : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true>,
+struct Matrix_Fixed_multipled_by_Scalar
+    : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered>,
     public Result_FrozenT {
-  typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, false> buf_t;
+  typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered> buf_t;
   Matrix_Fixed_multipled_by_Scalar(const LHS_T &lhs, const RHS_T &rhs) noexcept
-      : buf_t(lhs),
+      : buf_t(lhs, rhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
         lhs.rows(), lhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, rhs))) {}
-  const RHS_T &rhs() const noexcept {return Result_FrozenT::storage.op.rhs;}
+        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, buf_t::rhs))) {}
   template <class, class, class, bool> friend struct Matrix_Fixed_multipled_by_Scalar;
   template <class Result_FrozenT2>
   Matrix_Fixed_multipled_by_Scalar(
-      const Matrix_Fixed_multipled_by_Scalar<Result_FrozenT2, LHS_T, RHS_T, true> &another) noexcept
-      : buf_t(another.buf_t::lhs),
+      const Matrix_Fixed_multipled_by_Scalar<
+          Result_FrozenT2, LHS_T, RHS_T, lhs_buffered> &another) noexcept
+      : buf_t(another), // use default copy constructor
       Result_FrozenT(typename Result_FrozenT::storage_t(
         buf_t::lhs.rows(), buf_t::lhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, another.rhs()))) {}
+        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, buf_t::rhs))) {}
 };
 
 template <class T, int nR_L, int nC_L, class RHS_T>
@@ -509,53 +508,10 @@ struct Matrix_multiplied_by_Scalar<Matrix_Fixed<T, nR_L, nC_L>, RHS_T> {
 template <
     class Result_FrozenT, class LHS_T, class RHS_T,
     bool lhs_buffered = false, bool rhs_buffered = false>
-struct Matrix_Fixed_multipled_by_Matrix;
-
-template <class Result_FrozenT, class LHS_T, class RHS_T>
-struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, false, true>
-    : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, false, true>,
+struct Matrix_Fixed_multipled_by_Matrix
+    : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered, rhs_buffered>,
     public Result_FrozenT {
-  typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, false, true> buf_t;
-  Matrix_Fixed_multipled_by_Matrix(const LHS_T &lhs, const RHS_T &rhs) noexcept
-      : buf_t(rhs),
-      Result_FrozenT(typename Result_FrozenT::storage_t(
-        lhs.rows(), rhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(lhs, buf_t::rhs))) {}
-  const LHS_T &lhs() const noexcept {return Result_FrozenT::storage.op.lhs;}
-  template <class, class, class, bool, bool> friend struct Matrix_Fixed_multipled_by_Matrix;
-  template <class Result_FrozenT2>
-  Matrix_Fixed_multipled_by_Matrix(
-      const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT2, LHS_T, RHS_T, false, true> &another) noexcept
-      : buf_t(another.buf_t::rhs),
-      Result_FrozenT(typename Result_FrozenT::storage_t(
-        another.lhs().rows(), buf_t::rhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(another.lhs(), buf_t::rhs))) {}
-};
-template <class Result_FrozenT, class LHS_T, class RHS_T>
-struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, true, false>
-    : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, false>,
-    public Result_FrozenT {
-  typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, false> buf_t;
-  Matrix_Fixed_multipled_by_Matrix(const LHS_T &lhs, const RHS_T &rhs) noexcept
-      : buf_t(lhs),
-      Result_FrozenT(typename Result_FrozenT::storage_t(
-        lhs.rows(), rhs.columns(),
-        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, rhs))) {}
-  const RHS_T &rhs() const noexcept {return Result_FrozenT::storage.op.rhs;}
-  template <class, class, class, bool, bool> friend struct Matrix_Fixed_multipled_by_Matrix;
-  template <class Result_FrozenT2>
-  Matrix_Fixed_multipled_by_Matrix(
-      const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT2, LHS_T, RHS_T, true, false> &another) noexcept
-      : buf_t(another.buf_t::lhs),
-      Result_FrozenT(typename Result_FrozenT::storage_t(
-        buf_t::lhs.rows(), another.rhs().columns(),
-        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, another.rhs()))) {}
-};
-template <class Result_FrozenT, class LHS_T, class RHS_T>
-struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, true, true>
-    : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, true>,
-    public Result_FrozenT {
-  typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, true, true> buf_t;
+  typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered, rhs_buffered> buf_t;
   Matrix_Fixed_multipled_by_Matrix(const LHS_T &lhs, const RHS_T &rhs) noexcept
       : buf_t(lhs, rhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
@@ -564,10 +520,11 @@ struct Matrix_Fixed_multipled_by_Matrix<Result_FrozenT, LHS_T, RHS_T, true, true
   template <class, class, class, bool, bool> friend struct Matrix_Fixed_multipled_by_Matrix;
   template <class Result_FrozenT2>
   Matrix_Fixed_multipled_by_Matrix(
-      const Matrix_Fixed_multipled_by_Matrix<Result_FrozenT2, LHS_T, RHS_T, true, true> &another) noexcept
-      : buf_t(another.buf_t::lhs, another.buf_t::rhs),
+      const Matrix_Fixed_multipled_by_Matrix<
+          Result_FrozenT2, LHS_T, RHS_T, lhs_buffered, rhs_buffered> &another) noexcept
+      : buf_t(another), // use default copy constructor
       Result_FrozenT(typename Result_FrozenT::storage_t(
-        buf_t::lhs.rows(), buf_t::rhs.columns(),
+          buf_t::lhs.rows(), buf_t::rhs.columns(),
         typename Result_FrozenT::storage_t::op_t(buf_t::lhs, buf_t::rhs))) {}
 };
 
@@ -706,6 +663,7 @@ struct Matrix_multiplied_by_Scalar<Matrix_Fixed_Wrapped<T, nR, nC, Result_Frozen
     return mat_t(mat, scalar);
   }
 };
+
 template <
     class Result_FrozenT, class LHS_T, class RHS_T,
     template <class> class ViewType_Special>
