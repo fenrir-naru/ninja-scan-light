@@ -45,6 +45,10 @@ class UBX
     ck_b &= 0xFF
     [ck_a, ck_b]
   end
+  def UBX.update_checksum(packet)
+    packet[-2..-1] = checksum(packet)
+    packet
+  end
   def read_packet
     while !@io.eof?
       if @buf.size < 8 then
@@ -78,5 +82,41 @@ class UBX
       return packet
     end
     return nil
+  end
+  
+  GNSS_ID = {
+    :GPS => 0,
+    :SBAS => 1,
+    :Galileo => 2,
+    :BeiDou => 3,
+    :QZSS => 5,
+    :GLONASS => 6,
+  }
+  
+  SIGNAL_ID = {
+    :GPS      => {:L1CA => 0, :L2CL => 3, :L2CM => 4},
+    :SBAS     => {:L1CA => 0},
+    :Galileo  => {:E1C => 0, :E1B => 1, :E5_bI => 5, :E5_bQ => 6},
+    :BeiDou   => {:B1I_D1 => 0, :B1I_D2 => 1, :B2I_D1 => 2, :B2I_D2 => 3},
+    :QZSS     => {:L1CA => 0, :L2CL => 4, :L2CM => 5},
+    :GLONASS  => {:L1OF => 0, :L2OF => 2},
+  }
+  
+  def UBX.svid(id, gnss = :GPS)
+    gnss = GNSS_ID[gnss] if gnss.kind_of?(Symbol)
+    case gnss
+    when GNSS_ID[:GPS], GNSS_ID[:SBAS]
+      id
+    when GNSS_ID[:Galileo]
+      id + 210
+    when GNSS_ID[:Beido]
+      (id < 6) ? (id + 158) : (id + 27)
+    when GNSS_ID[:QZSS]
+      id + 192
+    when GNSS_ID[:GLONASS]
+      id + 64
+    else
+      nil
+    end
   end
 end
