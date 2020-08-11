@@ -72,7 +72,7 @@ type get_ ## name () {
 
 MAKE_TO_S(Complex);
 
-%extend Complex{
+%extend Complex {
   MAKE_SETTER(real, FloatT);
   MAKE_GETTER(real, FloatT);
   MAKE_SETTER(imaginary, FloatT);
@@ -90,8 +90,89 @@ MAKE_TO_S(Complex);
   // rect,rectangle // TODO
 };
 
-%define CONCRETIZE_COMPLEX(type, suffix)
+%define INSTANTIATE_COMPLEX(type, suffix)
 %template(Complex ## suffix) Complex<type>;
 %enddef
 
-CONCRETIZE_COMPLEX(double, D);
+INSTANTIATE_COMPLEX(double, Complex);
+
+template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
+class Matrix_Frozen {
+  protected:
+    Matrix_Frozen();
+  public:
+    const unsigned int rows();
+    const unsigned int columns();
+    
+    typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
+    static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
+    static scalar_matrix_t getI(const unsigned int &size);
+    
+    template <class T2, class Array2D_Type2, class ViewType2>
+    bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept;
+    // bool operator!= // automatically defined
+    
+    bool isSquare() const noexcept;
+    bool isDiagonal() const noexcept;
+    bool isSymmetric() const noexcept;
+    
+    template <class T2, class Array2D_Type2, class ViewType2>
+    bool isDifferentSize(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept;
+    
+    T trace(const bool &do_check = true) const;
+    
+    // bool isLU() const noexcept
+    
+    // transpose, ...
+};
+
+template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
+class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
+  public:
+    Matrix(const unsigned int &rows, const unsigned int &columns);
+};
+
+%extend Matrix_Frozen {
+  T get_element(const unsigned int &row, const unsigned int &column) const {
+    return ($self)->operator()(row, column);
+  }
+  %alias get_element "[]"
+  
+  %template(__eq__) operator==<T, Array2D_Dense<T>, ViewType>;
+  %template(__eq__) operator==<T, Array2D_ScaledUnit<T>, ViewType>;
+
+#ifdef SWIGRUBY
+  %rename("is_square?") isSquare;
+  %rename("is_diagonal?") isDiagonal;
+  %rename("is_symmetric?") isSymmetric;
+#endif
+
+  //%template(isDifferentSize) isDifferentSize<T, Array2D_Dense<T>, ViewType>;
+  //%template(isDifferentSize) isDifferentSize<T, Array2D_ScaledUnit<T>, ViewType>;
+  
+  Matrix<T, Array2D_Dense<T> > operator*(const T &scalar) const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(scalar));
+  }
+  Matrix<T, Array2D_Dense<T> > operator/(const T &scalar) const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator/(scalar));
+  }
+  Matrix<T, Array2D_Dense<T> > operator-() const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-());
+  }
+};
+
+%extend Matrix {
+  T &set_element(const unsigned int &row, const unsigned int &column, const T &value) {
+    return (($self)->operator()(row, column) = value);
+  }
+  %alias set_element "[]="
+};
+
+%define INSTANTIATE_MATRIX(type, suffix)
+%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type> >;
+%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type> >;
+%template(Matrix ## suffix) Matrix<type, Array2D_Dense<type> >;
+%enddef
+
+INSTANTIATE_MATRIX(double, D);
+
