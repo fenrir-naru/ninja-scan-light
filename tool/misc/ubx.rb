@@ -49,6 +49,18 @@ class UBX
     packet[-2..-1] = checksum(packet)
     packet
   end
+  def UBX.update_size(packet, size = nil)
+    size ||= packet.size - 8
+    size = size.divmod(0x100)
+    packet[4] = size[1]
+    packet[5] = size[0]
+    packet
+  end
+  def UBX.update(packet)
+    [:update_size, :update_checksum].inject(packet){|arg, f|
+      UBX.send(f, arg)
+    }
+  end
   def read_packet
     while !@io.eof?
       if @buf.size < 8 then
