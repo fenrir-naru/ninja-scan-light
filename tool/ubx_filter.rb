@@ -49,6 +49,15 @@ class UBX_Filter
         end
         item[2] = UBX::SIGNAL_ID[gnss][item[2]] if item[2] && item[2].kind_of?(Symbol) # Symbol => int
         item
+      }.collect{|item|
+        # Handle special keyword :all
+        if item == :all then # global :all
+          Class::new{def ==(another); true; end}::new
+        elsif item.kind_of?(Array) && item[1] == :all  # :all for each GNSS
+          Class::new{GNSS = item[0]; def ==(another); another[0] == GNSS; end}::new
+        else
+          item
+        end
       }
       proc{|packet, prop|
         idx_measurements = nil
@@ -86,8 +95,10 @@ class UBX_Filter
   
   def initialize(io, opt = {})
     @ubx = UBX::new(io)
-    @prop = {:itow => nil, :week => nil, :gates => opt[:gates] || []}
-    @prop[:gates] << FILTERS[:pass_all] # Anchor to accept all packets
+    @prop = {
+      :itow => nil, :week => nil, 
+      :gates => opt[:gates] || [FILTERS[:pass_all]] # default: accept all packets
+    }
   end
   
   ITOW_PARSER = proc{
@@ -120,12 +131,13 @@ class UBX_Filter
         class_id_list.collect{|class_id| [class_id, parser]}
       }.flatten(2))]
   
-  def run
+  def run(&b)
     while true
       break unless (@prop[:packet] = @ubx.read_packet)
       @prop[:class_id] = @prop[:packet][2..3]
       @prop[:itow] = (ITOW_PARSER[@prop[:packet][2..3]].call(@prop[:packet]) rescue @prop[:itow])
       @prop[:week] = (WEEK_PARSER[@prop[:packet][2..3]].call(@prop[:packet]) rescue @prop[:week])
+      b.call(@prop) if b
       next unless filtered = @prop[:gates].inject(@prop[:packet]){|packet, gate|
         break nil unless packet
         gate.call(packet, @prop)
@@ -141,25 +153,124 @@ if $0 == __FILE__ then
 $stderr.puts <<-__STRING__
 UBX filter
   Usage: #{__FILE__} [--option_key[=option_value]] [original.ubx, otherwise stdin] > filtered.ubx
+    --cmdfile=cmdfile.txt is the most useful option.
+    Example cmdfile.txt content is the following.
+
+      # The default filter is to pass all packets
+      drop,GPS:01 # (text after # is comment) always drop GPS 1
+      drop,GPS:04,GPS:05 # always drop GPS 4, 5 (multiple satellites in a line)
+      drop,QZSS:all # always drop any QZSS
+      event,1000,drop,GPS:02 
+          # after GPS time 1000[s] (any week), dropping GPS:02 is activated
+          # Warning: event lines must be sorted in time order
+          # Note: GPS 1,4,5, and any QZSS has still been dropped
+      event,2000,drop,GPS:03
+          # after GPS time 2000[s] (any week), dropping GPS:03 is activated
+          # In addition, the previous event command is reseted, 
+          # which means stop dropping GPS:02.
+          # Note: GPS 1,4,5, and any QZSS has still been dropped
+      event,3000,pass,all
+          # after GPS time 3000[s] (any week), 
+          # pass all except for GPS 1,4,5, and any QZSS 
+      event,2100:2000,drop,GPS:03 
+          # start dropping GPS 3 after GPS time 2100[week] 300000[s]
+
 __STRING__
 
 options = {
-  :out => nil,
-  :gates => [], # default is empty, which is identical to accept all packets
+  :out => nil, 
+  :cmd => [],
 }
 ARGV.reject!{|arg|
   if arg =~ /--([^=]+)=?/ then
     k, v = [$1.to_sym, $']
-    options[k] = v
+    case k
+    when :cmd
+      act, *specs = v.split(/ *, */)
+      options[:cmd] << [act.to_sym, specs]
+    when :drop, :pass, :event
+      options[:cmd] << [k, v.split(/ *, */)]
+    when :cmdfile
+      open(v, 'r').each{|line|
+        line = line.sub(/^\s*/, '').sub(/\s*$/, '').sub(/#.+$/, '') # text followed by '#' means comments
+        next if line =~ /^\s*$/ # skip of empty line
+        act, *specs = line.split(/ *, */)
+        options[:cmd] << [act.to_sym, specs]
+      }
+    when :out
+      options[k] = (v == "" ? true : v)
+    else
+      raise "Unknown option: #{arg}"
+    end
     true
   else
     false
   end
 }
 
-options[:gates] = [
-  UBX_Filter::FILTERS[:drop_measurement].call([25, [:GPS, 10], [:GPS, 31]])
-]
+gates = []
+scenario = nil
+
+proc{ # Build filter elements
+  parse_sat = proc{|spec|
+    spec =~ /^ *(?:([A-Za-z]+):?)?(\d+|all)/ # each satellite, (GNSS:)sat and special keyword, "all"
+    gnss, sat = [$1, ($2 == 'all') ? :all : $2.to_i]
+    next sat unless gnss
+    raise "Unknown satellites: #{spec}" unless gnss = {
+      'G' => :GPS, 'S' => :SBAS, 'E' => :Galileo, 'B' => :Beisou, 'Q' => :QZSS, 'R' => :GLONASS,
+      'GPS' => :GPS, 'SBAS' => :SBAS, 'GALILEO' => :Galileo, 
+      'BEIDOU' => :Beisou, 'QZSS' => :QZSS, 'GLONASS' => :GLONASS,
+    }[gnss.upcase]
+    [gnss, sat]
+  }
+  
+  make_gates = proc{|act, specs|
+    case act
+    when :drop
+      [UBX_Filter::FILTERS[:drop_measurement].call(specs.collect{|spec| parse_sat.call(spec)})]
+    #when :pass # ignore, because default is to accept all packets
+    else
+      []
+    end
+  }
+  
+  events = []
+  options[:cmd].each{|act, specs|
+    case act
+    when :event
+      t = case specs[0]
+      when /(\d+:)?(\d+\.?\d+)/ # GPSTime == (week:)sec
+        $1 ? [$1.to_i, $2.to_f] : $2.to_f
+      else # Other time spec
+        GPSTime::new(specs[0]).to_a
+      end
+      events << [t, *make_gates.call(specs[1].to_sym, specs[2..-1])]
+    else
+      gates += make_gates.call(act, specs)
+    end
+  }
+  $stderr.puts events.inspect
+
+  generate_scenario = proc{|event|
+    next nil unless event
+    cmp = event[0].kind_of?(Array) \
+        ? proc{|prop|
+          delta_week = event[0][0] - prop[:week]
+          next false if delta_week < 0
+          delta_week == 0 ? (event[0][1] > prop[:itow]) : false
+        } \
+        : proc{|prop| event[0] > prop[:itow]}
+    proc{|prop|
+      next if (cmp.call(prop) rescue true)
+      $stderr.puts "Check point, GPS Time #{[:week, :itow].collect{|k| prop[k]}.join(':')} ..."
+      prop[:gates] = event[1..-1] + gates
+      scenario = generate_scenario.call(events.shift)
+    }
+  }
+  scenario = generate_scenario.call(events.shift)
+}.call
+
+gates << UBX_Filter::FILTERS[:pass_all] # default; accept all packets
 
 filter = UBX_Filter::new(proc{
   src = ARGV.shift
@@ -172,7 +283,7 @@ filter = UBX_Filter::new(proc{
     $stderr.puts "Reading from #{src} ..."
     open(src, 'rb')
   end
-}.call, options)
+}.call, {:gates => gates})
 
 dest = if options[:out] then
   $stderr.puts "#{File::exist?(options[:out]) ? 'Appending' : 'Writing'} to #{options[:out]} ..."
@@ -183,7 +294,7 @@ else
   $stdout
 end
 
-while packet = filter.run
+while packet = filter.run(&scenario)
   dest << packet
 end
 
