@@ -92,6 +92,10 @@ class GPSTime
     @week, @sec = @sec.divmod(SEC_PER_WEEK)
   end
   
+  def to_a
+    [@seek, @sec]
+  end
+  
   def cycle_week
     @week.divmod(WEEK_PER_CYCLE)
   end
