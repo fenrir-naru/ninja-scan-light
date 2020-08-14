@@ -104,10 +104,6 @@ class Matrix_Frozen {
     const unsigned int rows();
     const unsigned int columns();
     
-    typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
-    static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
-    static scalar_matrix_t getI(const unsigned int &size);
-    
     template <class T2, class Array2D_Type2, class ViewType2>
     bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept;
     // bool operator!= // automatically defined
@@ -119,12 +115,18 @@ class Matrix_Frozen {
     T trace(const bool &do_check = true) const;
     
     // bool isLU() const noexcept
+    
+    T determinant(const bool &do_check = true) const;
 };
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   public:
     Matrix(const unsigned int &rows, const unsigned int &columns);
+
+    typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
+    static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
+    static scalar_matrix_t getI(const unsigned int &size);
 };
 
 %inline %{
@@ -211,10 +213,14 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   }
 
 #ifdef SWIGRUBY
-  %rename("is_square?") isSquare;
-  %rename("is_diagonal?") isDiagonal;
-  %rename("is_symmetric?") isSymmetric;
-  %rename("is_different_size?") isDifferentSize;
+  %rename("square?") isSquare;
+  %rename("diagonal?") isDiagonal;
+  %rename("symmetric?") isSymmetric;
+  %rename("different_size?") isDifferentSize;
+  %alias trace "tr";
+  %alias determinant "det";
+  %alias inverse "inv";
+  %alias transpose "t";
 #endif
 };
 
@@ -224,6 +230,8 @@ MAKE_TO_S(Matrix_Frozen)
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
   }
+  %rename("scalar") getScalar;
+  %rename("I") getI;
 };
 
 %define INSTANTIATE_MATRIX_TRANSPOSE(type, storage, view_from, view_to)
@@ -231,7 +239,6 @@ MAKE_TO_S(Matrix_Frozen)
   Matrix_Frozen<type, storage, view_to> transpose() const {
     return $self->transpose();
   }
-  %alias transpose "t";
 };
 %enddef
 
@@ -256,7 +263,6 @@ MAKE_TO_S(Matrix_Frozen)
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
     return *($self);
   }
-  %alias transpose "t";
   Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> inverse() const {
     return $self->inverse();
   }
@@ -286,7 +292,15 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
+%init %{
+#if SWIGRUBY
+  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(SwigClassMatrix ## suffix ## .klass);
+    rb_define_alias(singleton, "identity", "I");
+    rb_define_alias(singleton, "unit", "I");
+  }
+#endif
+%}
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
-
