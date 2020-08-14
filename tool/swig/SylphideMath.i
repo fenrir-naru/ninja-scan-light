@@ -26,7 +26,7 @@
 %}
 
 %include std_string.i
-%include std_vector.i
+//%include std_vector.i
 %include exception.i
 
 %exception {
@@ -119,8 +119,6 @@ class Matrix_Frozen {
     T trace(const bool &do_check = true) const;
     
     // bool isLU() const noexcept
-    
-    // transpose, ...
 };
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
@@ -129,9 +127,21 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     Matrix(const unsigned int &rows, const unsigned int &columns);
 };
 
+%inline %{
+typedef MatrixViewBase<> MatViewBase;
+typedef MatrixViewTranspose<MatrixViewBase<> > MatView_t;
+typedef MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > MatView_p;
+typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > MatView_pt;
+%}
+
 %define INSTANTIATE_MATRIX_FUNC(func_orig, func_new)
-%template(func_new) func_orig<T, Array2D_Dense<T>, ViewType>;
-%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, ViewType>;
+%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatViewBase>;
+%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_p>;
+%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_pt>;
+%template(func_new) func_orig<T, Array2D_Dense<T>, MatViewBase>;
+%template(func_new) func_orig<T, Array2D_Dense<T>, MatView_t>;
+%template(func_new) func_orig<T, Array2D_Dense<T>, MatView_p>;
+%template(func_new) func_orig<T, Array2D_Dense<T>, MatView_pt>;
 %enddef
 
 %extend Matrix_Frozen {
@@ -216,14 +226,65 @@ MAKE_TO_S(Matrix_Frozen)
   }
 };
 
-%define INSTANTIATE_MATRIX(type, suffix)
-%extend Matrix_Frozen<type, Array2D_ScaledUnit<type > > {
-  Matrix_Frozen<type, Array2D_ScaledUnit<type > > inverse() const {
-    return ($self)->inverse();
+%define INSTANTIATE_MATRIX_TRANSPOSE(type, storage, view_from, view_to)
+%extend Matrix_Frozen<type, storage, view_from> {
+  Matrix_Frozen<type, storage, view_to> transpose() const {
+    return $self->transpose();
+  }
+  %alias transpose "t";
+};
+%enddef
+
+%define INSTANTIATE_MATRIX_PARTIAL(type, storage, view_from, view_to)
+%extend Matrix_Frozen<type, storage, view_from> {
+  Matrix_Frozen<type, storage, view_to> partial(
+      const unsigned int &new_rows, const unsigned int &new_columns,
+      const unsigned int &row_offset, const unsigned int &column_offset) const {
+    return $self->partial(new_rows, new_columns, row_offset, column_offset);
+  }
+  Matrix_Frozen<type, storage, view_to> row_vector(const unsigned int &row) const {
+    return $self->rowVector(row);
+  }
+  Matrix_Frozen<type, storage, view_to> column_vector(const unsigned int &column) const {
+    return $self->columnVector(column);
   }
 };
-%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type > >;
-%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type > >;
+%enddef
+
+%define INSTANTIATE_MATRIX(type, suffix)
+%extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
+  const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
+    return *($self);
+  }
+  %alias transpose "t";
+  Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> inverse() const {
+    return $self->inverse();
+  }
+};
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_p, MatView_pt);
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_p);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatViewBase, MatView_p);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_p, MatView_p);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_pt);
+
+%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase>;
+%template(Matrix_Scalar ## suffix ## _p) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_p>;
+%template(Matrix_Scalar ## suffix ## _pt) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_pt>;
+
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_t);
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_t, MatViewBase);
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_p, MatView_pt);
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_pt, MatView_p);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatViewBase, MatView_p);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_p, MatView_p);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_t, MatView_pt);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
+
+%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase>;
+%template(Matrix_Frozen ## suffix ## _t) Matrix_Frozen<type, Array2D_Dense<type >, MatView_t>;
+%template(Matrix_Frozen ## suffix ## _p) Matrix_Frozen<type, Array2D_Dense<type >, MatView_p>;
+%template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
+
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
 %enddef
 
