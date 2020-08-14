@@ -1330,7 +1330,7 @@ class Matrix_Frozen {
         class T2, class Array2D_Type2,
         class ViewType2>
     bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept {
-      if(this == &matrix){return true;}
+      if(static_cast<const void *>(this) == static_cast<const void *>(&matrix)){return true;}
       if((rows() != matrix.rows())
           || columns() != matrix.columns()){
         return false;
