@@ -54,7 +54,7 @@ type get_ ## name () {
 %enddef
 %define MAKE_TO_S(type)
 %extend type{
-  std::string to_s() const {
+  std::string __str__() const {
     std::stringstream s;
     s << (*self);
     return s.str();
@@ -116,9 +116,6 @@ class Matrix_Frozen {
     bool isDiagonal() const noexcept;
     bool isSymmetric() const noexcept;
     
-    template <class T2, class Array2D_Type2, class ViewType2>
-    bool isDifferentSize(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept;
-    
     T trace(const bool &do_check = true) const;
     
     // bool isLU() const noexcept
@@ -132,23 +129,23 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     Matrix(const unsigned int &rows, const unsigned int &columns);
 };
 
+%define INSTANTIATE_MATRIX_FUNC(func_orig, func_new)
+%template(func_new) func_orig<T, Array2D_Dense<T>, ViewType>;
+%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, ViewType>;
+%enddef
+
 %extend Matrix_Frozen {
-  T get_element(const unsigned int &row, const unsigned int &column) const {
+  T __getitem__(const unsigned int &row, const unsigned int &column) const {
     return ($self)->operator()(row, column);
   }
-  %alias get_element "[]"
   
-  %template(__eq__) operator==<T, Array2D_Dense<T>, ViewType>;
-  %template(__eq__) operator==<T, Array2D_ScaledUnit<T>, ViewType>;
+  INSTANTIATE_MATRIX_FUNC(operator==, __eq__);
 
-#ifdef SWIGRUBY
-  %rename("is_square?") isSquare;
-  %rename("is_diagonal?") isDiagonal;
-  %rename("is_symmetric?") isSymmetric;
-#endif
-
-  //%template(isDifferentSize) isDifferentSize<T, Array2D_Dense<T>, ViewType>;
-  //%template(isDifferentSize) isDifferentSize<T, Array2D_ScaledUnit<T>, ViewType>;
+  template <class T2, class Array2D_Type2, class ViewType2>
+  bool isDifferentSize(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return ($self)->isDifferentSize(matrix);
+  }
+  INSTANTIATE_MATRIX_FUNC(isDifferentSize, isDifferentSize);
   
   Matrix<T, Array2D_Dense<T> > operator*(const T &scalar) const noexcept {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(scalar));
@@ -159,19 +156,75 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   Matrix<T, Array2D_Dense<T> > operator-() const noexcept {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-());
   }
+  
+  template <class T2, class Array2D_Type2, class ViewType2>
+  Matrix<T, Array2D_Dense<T> > operator+(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator+(matrix));
+  }
+  INSTANTIATE_MATRIX_FUNC(operator+, __add__);
+  Matrix<T, Array2D_Dense<T> > operator+(const T &scalar) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator+(scalar));
+  }
+  
+  template <class T2, class Array2D_Type2, class ViewType2>
+  Matrix<T, Array2D_Dense<T> > operator-(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-(matrix));
+  }
+  INSTANTIATE_MATRIX_FUNC(operator-, __sub__);
+  Matrix<T, Array2D_Dense<T> > operator-(const T &scalar) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-(scalar));
+  }
+  
+  template <class T2, class Array2D_Type2, class ViewType2>
+  Matrix<T, Array2D_Dense<T> > operator*(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(matrix));
+  }
+  INSTANTIATE_MATRIX_FUNC(operator*, __mul__);
+  
+  Matrix<T, Array2D_Dense<T> > inverse() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->inverse());
+  }
+  template <class T2, class Array2D_Type2, class ViewType2>
+  Matrix<T, Array2D_Dense<T> > operator/(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->operator/(matrix));
+  }
+  INSTANTIATE_MATRIX_FUNC(operator/, __div__);
+  
+  std::string debug() const {
+    std::stringstream s;
+    s << $self->inspect();
+    return s.str();
+  }
+
+#ifdef SWIGRUBY
+  %rename("is_square?") isSquare;
+  %rename("is_diagonal?") isDiagonal;
+  %rename("is_symmetric?") isSymmetric;
+  %rename("is_different_size?") isDifferentSize;
+#endif
 };
 
+MAKE_TO_S(Matrix_Frozen)
+
 %extend Matrix {
-  T &set_element(const unsigned int &row, const unsigned int &column, const T &value) {
+  T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
   }
-  %alias set_element "[]="
 };
 
 %define INSTANTIATE_MATRIX(type, suffix)
-%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type> >;
-%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type> >;
-%template(Matrix ## suffix) Matrix<type, Array2D_Dense<type> >;
+%extend Matrix_Frozen<type, Array2D_ScaledUnit<type > > {
+  Matrix_Frozen<type, Array2D_ScaledUnit<type > > inverse() const {
+    return ($self)->inverse();
+  }
+};
+%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type > >;
+%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type > >;
+%template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
