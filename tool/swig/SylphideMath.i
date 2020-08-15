@@ -127,6 +127,10 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
     static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
     static scalar_matrix_t getI(const unsigned int &size);
+    
+    typedef Matrix<T, Array2D_Type, ViewType> self_t;
+    self_t &swapRows(const unsigned int &row1, const unsigned int &row2);
+    self_t &swapColumns(const unsigned int &column1, const unsigned int &column2);
 };
 
 %inline %{
@@ -151,6 +155,21 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
     return ($self)->operator()(row, column);
   }
   
+  Matrix<T, Array2D_Dense<T> > copy() const {
+    return $self->operator Matrix<T, Array2D_Dense<T> >();
+  }
+
+  Matrix<T, Array2D_Dense<T> > circular(
+      const unsigned int &row_offset, const unsigned int &column_offset,
+      const unsigned int &new_rows, const unsigned int &new_columns) const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->circular(
+        row_offset, column_offset, new_rows, new_columns));
+  }
+  Matrix<T, Array2D_Dense<T> > circular(
+      const unsigned int &row_offset, const unsigned int &column_offset) const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->circular(row_offset, column_offset));
+  }
+
   INSTANTIATE_MATRIX_FUNC(operator==, __eq__);
 
   template <class T2, class Array2D_Type2, class ViewType2>
@@ -232,6 +251,19 @@ MAKE_TO_S(Matrix_Frozen)
   }
   %rename("scalar") getScalar;
   %rename("I") getI;
+  %rename("swap_rows") swapRows;
+  %rename("swap_columns") swapColumns;
+  
+  template <class T2, class Array2D_Type2, class ViewType2>
+  self_t &replace(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+    return $self->replace(matrix);
+  }
+  INSTANTIATE_MATRIX_FUNC(replace, replace);
+#ifdef SWIGRUBY
+  %bang swapRows(const unsigned int &, const unsigned int &);
+  %bang swapColumns(const unsigned int &, const unsigned int &);
+  %rename("replace!") replace;
+#endif
 };
 
 %define INSTANTIATE_MATRIX_TRANSPOSE(type, storage, view_from, view_to)
