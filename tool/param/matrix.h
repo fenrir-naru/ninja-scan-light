@@ -2104,7 +2104,7 @@ class Matrix_Frozen {
               throw std::runtime_error("LU decomposition cannot be performed");
             }
           }while(U(i, j) == T(0));
-          for(unsigned int i2(0); i2 < rows(); ++i2){ // exchange i-th and j-th columns
+          for(unsigned int i2(0); i2 < rows(); ++i2){ // swap i-th and j-th columns
             T temp(U(i2, i));
             U(i2, i) = U(i2, j);
             U(i2, j) = temp;
@@ -2262,13 +2262,13 @@ class Matrix_Frozen {
                 throw std::runtime_error("invert matrix not exist");
               }
             }while(left(i2, i) == T(0));
-            // exchange i-th and i2-th rows
+            // swap i-th and i2-th rows
             for(unsigned int j(i); j < left.columns(); ++j){
               T temp(left(i, j));
               left(i, j) = left(i2, j);
               left(i2, j) = temp;
             }
-            right.exchangeRows(i, i2);
+            right.swapRows(i, i2);
           }
           if(left(i, i) != T(1)){
             for(unsigned int j(0); j < left.columns(); j++){right(i, j) /= left(i, i);}
@@ -3404,14 +3404,14 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Exchange rows (bang method).
+     * Swap rows (bang method).
      *
      * @param row1 Target row (1)
      * @param row2 Target row (2)
      * @return myself
      * @throw std::out_of_range When row1 or row2 exceeds bound
      */
-    self_t &exchangeRows(
+    self_t &swapRows(
         const unsigned int &row1, const unsigned int &row2){
       if(row1 >= rows() || row2 >= rows()){
         throw std::out_of_range("Row index incorrect");
@@ -3426,14 +3426,14 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Exchange columns (bang method).
+     * Swap columns (bang method).
      *
      * @param column1 Target column (1)
      * @param column2 Target column (2)
      * @return myself
      * @throw std::out_of_range When column1 or column2 exceeds bound
      */
-    self_t &exchangeColumns(
+    self_t &swapColumns(
         const unsigned int &column1, const unsigned int &column2){
       if(column1 >= columns() || column2 >= columns()){
         throw std::out_of_range("Column index incorrect");

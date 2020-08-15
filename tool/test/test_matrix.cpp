@@ -116,23 +116,23 @@ BOOST_AUTO_TEST_CASE(getI){
       Matrix_Frozen<content_t, Array2D_ScaledUnit<content_t> >::builder_t::transpose_t>::value));
 }
 
-BOOST_AUTO_TEST_CASE(exchange_row){
+BOOST_AUTO_TEST_CASE(swap_row){
   assign_linear();
   prologue_print();
   direct_t a(A->copy());
   a.row[0] = 1;
   a.row[1] = 0;
-  matrix_t _A(A->exchangeRows(0, 1));
+  matrix_t _A(A->swapRows(0, 1));
   BOOST_TEST_MESSAGE("ex_rows:" << _A);
   matrix_compare(a, _A);
 }
-BOOST_AUTO_TEST_CASE(exchange_column){
+BOOST_AUTO_TEST_CASE(swap_column){
   assign_linear();
   prologue_print();
   direct_t a(A->copy());
   a.column[1] = 0;
   a.column[0] = 1;
-  matrix_t _A(A->exchangeColumns(0, 1));
+  matrix_t _A(A->swapColumns(0, 1));
   BOOST_TEST_MESSAGE("ex_columns:" << _A);
   matrix_compare(a, _A);
 }
