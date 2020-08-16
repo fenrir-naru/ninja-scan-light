@@ -94,7 +94,7 @@ MAKE_TO_S(Complex);
 %template(Complex ## suffix) Complex<type>;
 %enddef
 
-INSTANTIATE_COMPLEX(double, Complex);
+INSTANTIATE_COMPLEX(double, D);
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix_Frozen {
@@ -290,7 +290,32 @@ MAKE_TO_S(Matrix_Frozen)
 };
 %enddef
 
+#if defined(SWIGRUBY)
+%define INSTANTIATE_MATRIX_EACH(type)
+%extend Matrix_Frozen {
+  const Matrix_Frozen<T, Array2D_Type, ViewType> &each() const {
+    if(rb_block_given_p()){
+      for(unsigned int i(0); i < $self->rows(); ++i){
+        for(unsigned int j(0); j < $self->columns(); ++j){
+          rb_yield_values(3,
+              SWIG_From(type)(self->operator()(i, j)),
+              SWIG_From(unsigned int)(i), 
+              SWIG_From(unsigned int)(j));
+        }
+      }
+    }
+    return *($self);
+  }
+};
+%mixin Matrix_Frozen "Enumerable";
+%enddef
+#else
+%define INSTANTIATE_MATRIX_EACH(type)
+%enddef
+#endif
+
 %define INSTANTIATE_MATRIX(type, suffix)
+INSTANTIATE_MATRIX_EACH(type);
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
     return *($self);
@@ -336,3 +361,4 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
+//INSTANTIATE_MATRIX(Complex<double>, ComplexD);
