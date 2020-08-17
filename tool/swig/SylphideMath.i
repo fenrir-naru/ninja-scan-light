@@ -25,6 +25,7 @@
 #endif
 %}
 
+//%include std_common.i
 %include std_string.i
 //%include std_vector.i
 %include exception.i
@@ -240,8 +241,41 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias determinant "det";
   %alias inverse "inv";
   %alias transpose "t";
+  
+  %typemap(in,numinputs=0) int RUBY_EACH {
+    if(!rb_block_given_p()){
+      return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
+    }
+  }
+  %typemap(argout) int RUBY_EACH {
+    $result = self;
+  }
+  void each(int RUBY_EACH) const {
+    Matrix_Frozen_each(*($self));
+  }
 #endif
 };
+
+#if defined(SWIGRUBY)
+%{
+template <class Array2D_Type, class ViewType>
+void Matrix_Frozen_each(const Matrix_Frozen<double, Array2D_Type, ViewType> &mat);
+%}
+%wrapper %{
+template <class Array2D_Type, class ViewType>
+void Matrix_Frozen_each(const Matrix_Frozen<double, Array2D_Type, ViewType> &mat){
+  for(unsigned int i(0); i < mat.rows(); ++i){
+    for(unsigned int j(0); j < mat.columns(); ++j){
+      rb_yield_values(3,
+          SWIG_From_double(mat(i, j)),
+          SWIG_From_unsigned_SS_int(i), 
+          SWIG_From_unsigned_SS_int(j));
+    }
+  }
+}
+%}
+%mixin Matrix_Frozen "Enumerable";
+#endif
 
 MAKE_TO_S(Matrix_Frozen)
 
@@ -290,32 +324,7 @@ MAKE_TO_S(Matrix_Frozen)
 };
 %enddef
 
-#if defined(SWIGRUBY)
-%define INSTANTIATE_MATRIX_EACH(type)
-%extend Matrix_Frozen {
-  const Matrix_Frozen<T, Array2D_Type, ViewType> &each() const {
-    if(rb_block_given_p()){
-      for(unsigned int i(0); i < $self->rows(); ++i){
-        for(unsigned int j(0); j < $self->columns(); ++j){
-          rb_yield_values(3,
-              SWIG_From(type)(self->operator()(i, j)),
-              SWIG_From(unsigned int)(i), 
-              SWIG_From(unsigned int)(j));
-        }
-      }
-    }
-    return *($self);
-  }
-};
-%mixin Matrix_Frozen "Enumerable";
-%enddef
-#else
-%define INSTANTIATE_MATRIX_EACH(type)
-%enddef
-#endif
-
 %define INSTANTIATE_MATRIX(type, suffix)
-INSTANTIATE_MATRIX_EACH(type);
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
     return *($self);
