@@ -125,6 +125,46 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   public:
     Matrix(const unsigned int &rows, const unsigned int &columns);
 
+    %typemap(in) const T *serialized {
+      $1 = NULL;
+      if(RB_TYPE_P($input, T_ARRAY)){
+        int length(RARRAY_LEN($input));
+        $1 = new T [length];
+        T *ptr;
+        for(unsigned int i(0); i < length; ++i){
+          VALUE rb_obj(RARRAY_AREF($input, i));
+          switch(TYPE(rb_obj)){
+            case T_FIXNUM:
+              $1[i] = NUM2INT(rb_obj);
+              break;
+            case T_BIGNUM:
+            case T_FLOAT:
+            case T_RATIONAL:
+              $1[i] = NUM2DBL(rb_obj);
+              break;
+            case T_COMPLEX:
+              // TODO
+              break;
+            default: {
+              int res(SWIG_ConvertPtr(
+                  RARRAY_AREF($input, i), (void **)&ptr, $1_descriptor, 1));
+              if(SWIG_IsOK(res)){
+                $1[i] = *ptr;
+                if(SWIG_IsNewObj(res)){delete ptr;}
+              }
+            }
+          }
+        }
+      }
+    }
+    %typemap(freearg) const T *serialized {
+      delete [] $1;
+    }
+    %typemap(typecheck) const T *serialized {
+      $1 = RB_TYPE_P($input, T_ARRAY);
+    }
+    Matrix(const unsigned int &rows, const unsigned int &columns, const T *serialized);
+
     typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
     static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
     static scalar_matrix_t getI(const unsigned int &size);
@@ -294,6 +334,24 @@ MAKE_TO_S(Matrix_Frozen)
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 #ifdef SWIGRUBY
+#if 0
+  Matrix(const unsigned int &rows, const unsigned int &columns, VALUE rb_obj){
+    Matrix<T, Array2D_Type, ViewType> *res(NULL);
+    unsigned int length(rows * columns);
+    if(RB_TYPE_P(rb_obj, T_ARRAY) && (RARRAY_LEN(rb_obj) >= length)){
+      T *serialized(new T [length]);
+      for(unsigned int i(0); i < length; ++i){
+        SWIG_AsVal(double)(RARRAY_AREF(rb_obj, i), &serialized[i]);
+      }
+      res = new Matrix<T, Array2D_Type, ViewType>(rows, columns, serialized);
+      delete [] serialized;
+    }else{
+      throw std::runtime_error("Unsupported initialization!");
+    }
+    return res;
+  }
+#endif
+
   %bang swapRows(const unsigned int &, const unsigned int &);
   %bang swapColumns(const unsigned int &, const unsigned int &);
   %rename("replace!") replace;
