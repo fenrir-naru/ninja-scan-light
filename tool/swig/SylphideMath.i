@@ -63,6 +63,20 @@ type get_ ## name () {
 };
 %enddef
 
+
+#ifdef SWIGRUBY
+%{
+template <class T>
+VALUE to_value(swig_type_info *info, const T &v){
+  return SWIG_NewPointerObj((void *)&v, info, 0);
+}
+template <>
+VALUE to_value(swig_type_info *info, const double &v){
+  return DBL2NUM(v);
+}
+%}
+#endif
+
 %feature("autodoc", "1");
 
 %ignore Complex::real;
@@ -282,38 +296,28 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias inverse "inv";
   %alias transpose "t";
   
-  %typemap(in,numinputs=0) int RUBY_EACH {
+  %typemap(in,numinputs=0) (swig_type_info *info_for_each, T) {
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
     }
+    $1 = $1_descriptor;
   }
-  %typemap(argout) int RUBY_EACH {
+  %typemap(argout) (swig_type_info *info_for_each, T) {
     $result = self;
   }
-  void each(int RUBY_EACH) const {
-    Matrix_Frozen_each(*($self));
+  void each(swig_type_info *info_for_each, T) const {
+    for(unsigned int i(0); i < $self->rows(); ++i){
+      for(unsigned int j(0); j < $self->columns(); ++j){
+        rb_yield_values(3,
+            to_value(info_for_each, (*($self))(i, j)),
+            UINT2NUM(i), UINT2NUM(j));
+      }
+    }
   }
 #endif
 };
 
 #if defined(SWIGRUBY)
-%{
-template <class Array2D_Type, class ViewType>
-void Matrix_Frozen_each(const Matrix_Frozen<double, Array2D_Type, ViewType> &mat);
-%}
-%wrapper %{
-template <class Array2D_Type, class ViewType>
-void Matrix_Frozen_each(const Matrix_Frozen<double, Array2D_Type, ViewType> &mat){
-  for(unsigned int i(0); i < mat.rows(); ++i){
-    for(unsigned int j(0); j < mat.columns(); ++j){
-      rb_yield_values(3,
-          SWIG_From_double(mat(i, j)),
-          SWIG_From_unsigned_SS_int(i), 
-          SWIG_From_unsigned_SS_int(j));
-    }
-  }
-}
-%}
 %mixin Matrix_Frozen "Enumerable";
 #endif
 
@@ -334,24 +338,6 @@ MAKE_TO_S(Matrix_Frozen)
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 #ifdef SWIGRUBY
-#if 0
-  Matrix(const unsigned int &rows, const unsigned int &columns, VALUE rb_obj){
-    Matrix<T, Array2D_Type, ViewType> *res(NULL);
-    unsigned int length(rows * columns);
-    if(RB_TYPE_P(rb_obj, T_ARRAY) && (RARRAY_LEN(rb_obj) >= length)){
-      T *serialized(new T [length]);
-      for(unsigned int i(0); i < length; ++i){
-        SWIG_AsVal(double)(RARRAY_AREF(rb_obj, i), &serialized[i]);
-      }
-      res = new Matrix<T, Array2D_Type, ViewType>(rows, columns, serialized);
-      delete [] serialized;
-    }else{
-      throw std::runtime_error("Unsupported initialization!");
-    }
-    return res;
-  }
-#endif
-
   %bang swapRows(const unsigned int &, const unsigned int &);
   %bang swapColumns(const unsigned int &, const unsigned int &);
   %rename("replace!") replace;
