@@ -74,6 +74,28 @@ template <>
 VALUE to_value(swig_type_info *info, const double &v){
   return DBL2NUM(v);
 }
+template <class T>
+void from_value(VALUE obj, swig_type_info *info, T &v){
+  void *ptr;
+  int res(SWIG_ConvertPtr(obj, &ptr, info, 1));
+  if(SWIG_IsOK(res)){
+    v = *(T *)ptr;
+    if(SWIG_IsNewObj(res)){delete ptr;}
+  }
+}
+template <>
+void from_value(VALUE obj, swig_type_info *info, double &v){
+  switch(TYPE(obj)){
+    case T_FIXNUM:
+      v = NUM2INT(obj);
+      break;
+    case T_BIGNUM:
+    case T_FLOAT:
+    case T_RATIONAL:
+      v = NUM2DBL(obj);
+      break;
+  }
+}
 %}
 #endif
 
@@ -137,48 +159,6 @@ class Matrix_Frozen {
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   public:
-    Matrix(const unsigned int &rows, const unsigned int &columns);
-
-    %typemap(in) const T *serialized {
-      $1 = NULL;
-      if(RB_TYPE_P($input, T_ARRAY)){
-        int length(RARRAY_LEN($input));
-        $1 = new T [length];
-        T *ptr;
-        for(unsigned int i(0); i < length; ++i){
-          VALUE rb_obj(RARRAY_AREF($input, i));
-          switch(TYPE(rb_obj)){
-            case T_FIXNUM:
-              $1[i] = NUM2INT(rb_obj);
-              break;
-            case T_BIGNUM:
-            case T_FLOAT:
-            case T_RATIONAL:
-              $1[i] = NUM2DBL(rb_obj);
-              break;
-            case T_COMPLEX:
-              // TODO
-              break;
-            default: {
-              int res(SWIG_ConvertPtr(
-                  RARRAY_AREF($input, i), (void **)&ptr, $1_descriptor, 1));
-              if(SWIG_IsOK(res)){
-                $1[i] = *ptr;
-                if(SWIG_IsNewObj(res)){delete ptr;}
-              }
-            }
-          }
-        }
-      }
-    }
-    %typemap(freearg) const T *serialized {
-      delete [] $1;
-    }
-    %typemap(typecheck) const T *serialized {
-      $1 = RB_TYPE_P($input, T_ARRAY);
-    }
-    Matrix(const unsigned int &rows, const unsigned int &columns, const T *serialized);
-
     typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
     static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
     static scalar_matrix_t getI(const unsigned int &size);
@@ -324,6 +304,51 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 MAKE_TO_S(Matrix_Frozen)
 
 %extend Matrix {
+  %typemap(default) (const T *serialized, int length, swig_type_info *info, T) {
+    $1 = NULL;
+    $2 = 0;
+    $3 = $4_descriptor;
+  }
+#ifdef SWIGRUBY
+  %typemap(in) (const T *serialized, int length, swig_type_info *info, T) {
+    if(RB_TYPE_P($input, T_ARRAY)){
+      $2 = RARRAY_LEN($input);
+      $1 = new T [$2];
+      for(unsigned int i(0); i < $2; ++i){
+        VALUE rb_obj(RARRAY_AREF($input, i));
+        from_value(rb_obj, $1_descriptor, $1[i]);
+      }
+    }
+  }
+#endif
+  %typemap(freearg) (const T *serialized, int length, swig_type_info *info, T) {
+    delete [] $1;
+  }
+  Matrix(
+      const unsigned int &rows, const unsigned int &columns, 
+      const T *serialized, int length, swig_type_info *info, T){
+    if(serialized){
+      if(length < (rows * columns)){
+        throw std::runtime_error("Length is too short");
+      }
+      return new Matrix<T, Array2D_Type, ViewType>(rows, columns, serialized);
+    }
+    Matrix<T, Array2D_Type, ViewType> *res(
+        new Matrix<T, Array2D_Type, ViewType>(rows, columns));
+#ifdef SWIGRUBY
+    if(rb_block_given_p()){
+      for(unsigned int i(0); i < rows; ++i){
+        for(unsigned int j(0); j < columns; ++j){
+          from_value(
+              rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)),
+              info, (*res)(i, j));
+        }
+      }
+    }
+#endif
+    return res;
+  }
+
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
   }
