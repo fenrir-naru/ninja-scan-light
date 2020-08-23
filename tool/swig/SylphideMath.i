@@ -110,6 +110,21 @@ void from_value(VALUE obj, swig_type_info *info, double &v){
 MAKE_TO_S(Complex);
 
 %extend Complex {
+#ifdef SWIGRUBY
+  %typemap(typecheck) (const FloatT &real, const FloatT &imaginary, FloatT) {
+    $1 = RB_TYPE_P($input, T_COMPLEX);
+  }
+  %typemap(in,numinputs=1) (const FloatT &real, const FloatT &imaginary, FloatT)
+      (FloatT temp_r, FloatT temp_i) {
+    from_value(rb_complex_real($input), $3_descriptor, temp_r);
+    from_value(rb_complex_imag($input), $3_descriptor, temp_i);
+    $1 = &temp_r;
+    $2 = &temp_i;
+  }
+  Complex(const FloatT &real, const FloatT &imaginary, FloatT) noexcept {
+    return new Complex<FloatT>(real, imaginary);
+  }
+#endif
   MAKE_SETTER(real, FloatT);
   MAKE_GETTER(real, FloatT);
   MAKE_SETTER(imaginary, FloatT);
