@@ -111,18 +111,16 @@ MAKE_TO_S(Complex);
 
 %extend Complex {
 #ifdef SWIGRUBY
-  %typemap(typecheck) (const FloatT &real, const FloatT &imaginary, FloatT) {
+  %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const FloatT real_imag[2] {
     $1 = RB_TYPE_P($input, T_COMPLEX);
   }
-  %typemap(in,numinputs=1) (const FloatT &real, const FloatT &imaginary, FloatT)
-      (FloatT temp_r, FloatT temp_i) {
-    from_value(rb_complex_real($input), $3_descriptor, temp_r);
-    from_value(rb_complex_imag($input), $3_descriptor, temp_i);
-    $1 = &temp_r;
-    $2 = &temp_i;
+  %typemap(in) const FloatT real_imag[2] (FloatT temp[2]) {
+    from_value(rb_complex_real($input), $*1_descriptor, temp[0]);
+    from_value(rb_complex_imag($input), $*1_descriptor, temp[1]);
+    $1 = temp;
   }
-  Complex(const FloatT &real, const FloatT &imaginary, FloatT) noexcept {
-    return new Complex<FloatT>(real, imaginary);
+  Complex(const FloatT real_imag[2]) noexcept {
+    return new Complex<FloatT>(real_imag[0], real_imag[1]);
   }
 #endif
   MAKE_SETTER(real, FloatT);
@@ -295,7 +293,7 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
     }
-    $1 = $1_descriptor;
+    $1 = $2_descriptor;
   }
   %typemap(argout) (swig_type_info *info_for_each, T) {
     $result = self;
@@ -319,29 +317,29 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 MAKE_TO_S(Matrix_Frozen)
 
 %extend Matrix {
-  %typemap(default) (const T *serialized, int length, swig_type_info *info, T) {
+  %typemap(default) (const T *serialized, int length, swig_type_info *info) {
     $1 = NULL;
     $2 = 0;
-    $3 = $4_descriptor;
+    $3 = $*1_descriptor;
   }
 #ifdef SWIGRUBY
-  %typemap(in) (const T *serialized, int length, swig_type_info *info, T) {
+  %typemap(in) (const T *serialized, int length, swig_type_info *info) {
     if(RB_TYPE_P($input, T_ARRAY)){
       $2 = RARRAY_LEN($input);
       $1 = new T [$2];
       for(unsigned int i(0); i < $2; ++i){
         VALUE rb_obj(RARRAY_AREF($input, i));
-        from_value(rb_obj, $1_descriptor, $1[i]);
+        from_value(rb_obj, $3, $1[i]);
       }
     }
   }
 #endif
-  %typemap(freearg) (const T *serialized, int length, swig_type_info *info, T) {
+  %typemap(freearg) (const T *serialized, int length, swig_type_info *info) {
     delete [] $1;
   }
   Matrix(
       const unsigned int &rows, const unsigned int &columns, 
-      const T *serialized, int length, swig_type_info *info, T){
+      const T *serialized, int length, swig_type_info *info){
     if(serialized){
       if(length < (rows * columns)){
         throw std::runtime_error("Length is too short");
