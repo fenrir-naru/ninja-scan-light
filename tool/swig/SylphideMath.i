@@ -262,7 +262,58 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(matrix));
   }
   INSTANTIATE_MATRIX_FUNC(operator*, __mul__);
-  
+
+  %typemap(in,numinputs=0)
+      Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_U (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_P (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_D (Matrix<T, Array2D_Dense<T> > temp) %{
+    $1 = &temp;
+  %}
+  %typemap(argout)
+      Matrix<T, Array2D_Dense<T> > &output_L,
+      Matrix<T, Array2D_Dense<T> > &output_U,
+      Matrix<T, Array2D_Dense<T> > &output_P,
+      Matrix<T, Array2D_Dense<T> > &output_D %{ {
+    Matrix<T, Array2D_Dense<T> > *mat(new Matrix<T, Array2D_Dense<T> >(*$1));
+#ifdef SWIGRUBY
+    $result = SWIG_Ruby_AppendOutput($result,
+        SWIG_NewPointerObj(mat, $1_descriptor, SWIG_POINTER_OWN));
+#endif
+  } %}
+  void lup(
+      Matrix<T, Array2D_Dense<T> > &output_L, 
+      Matrix<T, Array2D_Dense<T> > &output_U, 
+      Matrix<T, Array2D_Dense<T> > &output_P) const {
+    struct buf_t {
+      unsigned int pivot_len, pivot_num;
+      unsigned int *pivot;
+      buf_t(const unsigned int &size) 
+          : pivot_len(size), pivot(new unsigned int[size]) {}
+      ~buf_t(){
+        delete [] pivot;
+      }
+      Matrix<T, Array2D_Dense<T> > P() const {
+        Matrix<T, Array2D_Dense<T> > res(pivot_len, pivot_len);
+        for(unsigned int i(0); i < pivot_len; ++i){
+          res(i, pivot[i]) = 1;
+        }
+        return res;
+      }
+    } buf($self->rows());
+    Matrix<T, Array2D_Dense<T> > LU($self->decomposeLUP(buf.pivot_num, buf.pivot));
+    output_L = LU.partial($self->rows(), $self->columns()).copy();
+    output_U = LU.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
+    output_P = buf.P();
+  }
+  void ud( 
+      Matrix<T, Array2D_Dense<T> > &output_U, 
+      Matrix<T, Array2D_Dense<T> > &output_D) const {
+    Matrix<T, Array2D_Dense<T> > UD($self->decomposeUD());
+    output_U = UD.partial($self->rows(), $self->columns()).copy();
+    output_D = UD.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
+  }
+
   Matrix<T, Array2D_Dense<T> > inverse() const {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->inverse());
   }
@@ -288,6 +339,8 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias determinant "det";
   %alias inverse "inv";
   %alias transpose "t";
+  %alias lup "lup_decomposition";
+  %alias ud "ud_decomposition";
   
   %typemap(in,numinputs=0) (swig_type_info *info_for_each, T) {
     if(!rb_block_given_p()){
