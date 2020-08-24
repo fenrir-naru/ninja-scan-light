@@ -34,7 +34,7 @@
 
 #include <string.h>
 
-#include "f38x_i2c0.h"
+#include "f38x_i2c.h"
 #include "data_hub.h"
 
 #define I2C_ADDRESS_RW (0x0E << 1)

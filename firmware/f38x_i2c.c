@@ -31,7 +31,7 @@
 
 #include "c8051f380.h"    // SFR declarations
 
-#include "f38x_i2c0.h"
+#include "f38x_i2c.h"
 #include "type.h"
 
 /**

@@ -40,7 +40,7 @@
 #include "f38x_usb.h"
 #include "f38x_uart0.h"
 #include "f38x_uart1.h"
-#include "f38x_i2c0.h"
+#include "f38x_i2c.h"
 #include "f38x_spi.h"
 
 #include "data_hub.h"
