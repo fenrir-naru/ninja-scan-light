@@ -429,7 +429,12 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   static u8 snapshot_state = 0;
   static u8 loop_10s = 0;
 
-  TMR3CN &= ~0x80; // Clear interrupt
+  {
+    u8 sfrpage_backup = SFRPAGE;
+    SFRPAGE = 0;
+    TMR3CN &= ~0x80; // Clear interrupt
+    SFRPAGE = sfrpage_backup;
+  }
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
   mpu9250_capture = TRUE;
 #else
