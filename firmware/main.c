@@ -281,7 +281,7 @@ void main() {
   timer_init();
   uart0_init();
   uart1_init();
-  i2c0_init();
+  i2c_init();
 
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
   mpu9250_init();

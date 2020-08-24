@@ -38,7 +38,7 @@
  * Configure i2c0 with Timer 0
  * 
  */
-void i2c0_init(){
+void i2c_init(){
   // timer 0 setup => mode 2, 8bit w autoreload
   TMOD &= ~0x0F;
   TMOD |=  0x02;
@@ -48,11 +48,19 @@ void i2c0_init(){
   //TH0 = TL0 = 0x00; // => freq: 48M / 256 
   TR0 = 1;
   
-  // inhibit slave, extend setup / hold time, use timer 0 overflow
-  SMB0CF = 0x40; // => 1.2M / 3clk = 400KHz (Eq. 22.2)
-  //SMB0CF = (0x40 | 0x10); // => 1.2M / 12+11clk = 50KHz
-  
-  SMB0CF |= 0x80; // enable
+  { // I2C0
+    // inhibit slave, extend setup / hold time, use timer 0 overflow
+    SMB0CF = 0x40; // => 1.2M / 3clk = 400KHz (Eq. 22.2)
+    //SMB0CF = (0x40 | 0x10); // => 1.2M / 12+11clk = 50KHz
+    SMB0CF |= 0x80; // enable
+  }
+
+  { // I2C1
+    SFRPAGE = 0xF;
+    SMB1CF = 0x40; // => 1.2M / 3clk = 400KHz (Eq. 22.2)
+    SMB1CF |= 0x80; // enable
+    SFRPAGE = 0x0;
+  }
 }
 
 /**
@@ -104,3 +112,19 @@ u8 i2c0_read_write(u8 address_wr_flag, u8 *buf, u8 size){
   
   return size;
 }
+
+u8 i2c1_read_write(u8 address_wr_flag, u8 *buf, u8 size){
+  u8 res;
+  SFRPAGE = 0xF;
+  /*
+   * SMB0CN => SMB1CN
+   *   STA0 => STA1 (bit.5)
+   *   ACK0 => ACK1 (bit.1)
+   *   AI0  => AI1  (bit.0)
+   * SMB0DAT => SMB1DAT
+   */
+  res = i2c0_read_write(address_wr_flag, buf, size);
+  SFRPAGE = 0x0;
+  return res;
+}
+
