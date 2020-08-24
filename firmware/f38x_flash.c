@@ -50,7 +50,7 @@ static void prologue(backup_t *res){
   backup_t orig;
 
   orig.ea = EA; // Preserve EA
-  EA = 0; // Disable interrupts
+  EA = 0; // Disable interrupts; Need more EA = 0; ? @see 16. Interrupts
 
   orig.flscl = FLSCL & 0x90;
   if(SYSCLK > 25000000UL){ // check clock speed
