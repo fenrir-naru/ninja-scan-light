@@ -336,7 +336,7 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
     output_U = LU.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
     output_P = buf.P();
   }
-  void ud( 
+  void ud(
       Matrix<T, Array2D_Dense<T> > &output_U, 
       Matrix<T, Array2D_Dense<T> > &output_D) const {
     Matrix<T, Array2D_Dense<T> > UD($self->decomposeUD());
@@ -521,6 +521,49 @@ bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type
 };
 %enddef
 
+%define INSTANTIATE_MATRIX_EIGEN2(type, storage, view)
+%extend Matrix_Frozen<type, storage, view> {
+  %typemap(in,numinputs=0)
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D 
+        (Matrix<Complex<type>, Array2D_Dense<Complex<type> > > temp),
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V 
+        (Matrix<Complex<type>, Array2D_Dense<Complex<type> > > temp) %{
+    $1 = &temp;
+  %}
+  %typemap(argout)
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D,
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V %{ {
+    Matrix<Complex<type>, Array2D_Dense<Complex<type> > > *mat(
+        new Matrix<Complex<type>, Array2D_Dense<Complex<type> > >(*$1));
+#if SWIGRUBY
+    $result = SWIG_Ruby_AppendOutput($result,
+        SWIG_NewPointerObj(mat, $1_descriptor, SWIG_POINTER_OWN));
+#endif
+  } %}
+  void eigen(
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V, 
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D) const {
+    typedef typename Matrix_Frozen<type, storage, view >::complex_t::m_t cmat_t;
+    cmat_t VD($self->eigen());
+    output_V = VD.partial($self->rows(), $self->rows()).copy();
+    cmat_t D($self->rows(), $self->rows());
+    for(unsigned int i(0); i < $self->rows(); ++i){
+      D(i, i) = VD(i, $self->rows());
+    }
+    output_D = D;
+  }
+};
+%enddef
+%define INSTANTIATE_MATRIX_EIGEN(type)
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatViewBase);
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_p);
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_pt);
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatViewBase);
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_p);
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_t);
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
+%enddef
+
 %define INSTANTIATE_MATRIX(type, suffix)
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
@@ -567,4 +610,6 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
+INSTANTIATE_MATRIX_EIGEN(double);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);
+
