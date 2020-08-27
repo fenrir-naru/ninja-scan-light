@@ -75,26 +75,51 @@ VALUE to_value(swig_type_info *info, const double &v){
   return DBL2NUM(v);
 }
 template <class T>
-void from_value(VALUE obj, swig_type_info *info, T &v){
-  void *ptr;
-  int res(SWIG_ConvertPtr(obj, &ptr, info, 1));
-  if(SWIG_IsOK(res)){
-    v = *(T *)ptr;
-    if(SWIG_IsNewObj(res)){delete ptr;}
-  }
+VALUE to_value(swig_type_info *info, const Complex<T> &v){
+  return rb_complex_new(
+      to_value(info, v.real()), 
+      to_value(info, v.imaginary()));
 }
-template <>
-void from_value(VALUE obj, swig_type_info *info, double &v){
+template <class T>
+bool from_value_object(const VALUE &obj, swig_type_info *info, T &v){
+  T *ptr;
+  int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 1) : SWIG_ERROR);
+  if(SWIG_IsOK(res)){
+    v = *ptr;
+    if(SWIG_IsNewObj(res)){delete ptr;}
+    return true;
+  }
+  return false;
+}
+template <class T>
+bool from_value_primitive(const VALUE &obj, swig_type_info *info, T &v){
   switch(TYPE(obj)){
     case T_FIXNUM:
       v = NUM2INT(obj);
-      break;
+      return true;
     case T_BIGNUM:
     case T_FLOAT:
     case T_RATIONAL:
       v = NUM2DBL(obj);
-      break;
+      return true;
   }
+  return false;
+}
+template <class T>
+bool from_value(const VALUE &obj, swig_type_info *info, T &v){
+  return from_value_object(obj, info, v);
+}
+template <>
+bool from_value(const VALUE &obj, swig_type_info *info, double &v){
+  return from_value_primitive(obj, info, v);
+}
+template <class T>
+bool from_value(const VALUE &obj, swig_type_info *info, Complex<T> &v){
+  if(RB_TYPE_P(obj, T_COMPLEX)){
+    return from_value(rb_complex_real(obj), NULL, v.real())
+        && from_value(rb_complex_imag(obj), NULL, v.imaginary());
+  }
+  return from_value_object(obj, info, v);
 }
 %}
 #endif
@@ -105,24 +130,25 @@ void from_value(VALUE obj, swig_type_info *info, double &v){
 %ignore Complex::imaginary;
 %ignore operator<<(std::ostream &, const Complex &);
 
-%include param/complex.h
-
-MAKE_TO_S(Complex);
+template <class FloatT>
+class Complex;
 
 %extend Complex {
 #ifdef SWIGRUBY
-  %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const FloatT real_imag[2] {
-    $1 = RB_TYPE_P($input, T_COMPLEX);
+  %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const Complex<FloatT> & {
+    void *vptr = 0;
+    $1 = RB_TYPE_P($input, T_COMPLEX)
+        || SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
   }
-  %typemap(in) const FloatT real_imag[2] (FloatT temp[2]) {
-    from_value(rb_complex_real($input), $*1_descriptor, temp[0]);
-    from_value(rb_complex_imag($input), $*1_descriptor, temp[1]);
-    $1 = temp;
-  }
-  Complex(const FloatT real_imag[2]) noexcept {
-    return new Complex<FloatT>(real_imag[0], real_imag[1]);
+  %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
+    from_value($input, $1_descriptor, temp);
+    $1 = &temp;
   }
 #endif
+  Complex(const Complex<FloatT> &complex) noexcept {
+    return new Complex<FloatT>(complex);
+  }
+
   MAKE_SETTER(real, FloatT);
   MAKE_GETTER(real, FloatT);
   MAKE_SETTER(imaginary, FloatT);
@@ -139,6 +165,10 @@ MAKE_TO_S(Complex);
   // polar // TOOO
   // rect,rectangle // TODO
 };
+
+%include param/complex.h
+
+MAKE_TO_S(Complex);
 
 %define INSTANTIATE_COMPLEX(type, suffix)
 %template(Complex ## suffix) Complex<type>;
@@ -369,20 +399,42 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 
 MAKE_TO_S(Matrix_Frozen)
 
+#ifdef SWIGRUBY
+%{
+template <class T, class Array2D_Type, class ViewType>
+bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type_info *info){
+  if(!rb_block_given_p()){return false;}
+  for(unsigned int i(0); i < mat.rows(); ++i){
+    for(unsigned int j(0); j < mat.columns(); ++j){
+      from_value(
+          rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)),
+          info, mat(i, j));
+    }
+  }
+  return true;
+}
+%}
+#endif
+
 %extend Matrix {
   %typemap(default) (const T *serialized, int length, swig_type_info *info) {
     $1 = NULL;
     $2 = 0;
-    $3 = $*1_descriptor;
+    $3 = $1_descriptor;
   }
 #ifdef SWIGRUBY
+  %typemap(typecheck) (const T *serialized, int length, swig_type_info *info) {
+    $1 = RB_TYPE_P($input, T_ARRAY);
+  }
   %typemap(in) (const T *serialized, int length, swig_type_info *info) {
     if(RB_TYPE_P($input, T_ARRAY)){
       $2 = RARRAY_LEN($input);
       $1 = new T [$2];
-      for(unsigned int i(0); i < $2; ++i){
+      for(int i(0); i < $2; ++i){
         VALUE rb_obj(RARRAY_AREF($input, i));
-        from_value(rb_obj, $3, $1[i]);
+        if(!from_value(rb_obj, $3, $1[i])){
+          //SWIG_exception(SWIG_TypeError, ); // TODO
+        }
       }
     }
   }
@@ -390,29 +442,21 @@ MAKE_TO_S(Matrix_Frozen)
   %typemap(freearg) (const T *serialized, int length, swig_type_info *info) {
     delete [] $1;
   }
+
   Matrix(
       const unsigned int &rows, const unsigned int &columns, 
       const T *serialized, int length, swig_type_info *info){
     if(serialized){
-      if(length < (rows * columns)){
+      if((unsigned int)length < (rows * columns)){
         throw std::runtime_error("Length is too short");
       }
       return new Matrix<T, Array2D_Type, ViewType>(rows, columns, serialized);
+    }else{
+      Matrix<T, Array2D_Type, ViewType> *res(
+         new Matrix<T, Array2D_Type, ViewType>(rows, columns));
+      Matrix_replace_with_block(*res, info);
+      return res;
     }
-    Matrix<T, Array2D_Type, ViewType> *res(
-        new Matrix<T, Array2D_Type, ViewType>(rows, columns));
-#ifdef SWIGRUBY
-    if(rb_block_given_p()){
-      for(unsigned int i(0); i < rows; ++i){
-        for(unsigned int j(0); j < columns; ++j){
-          from_value(
-              rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)),
-              info, (*res)(i, j));
-        }
-      }
-    }
-#endif
-    return res;
   }
 
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
@@ -426,6 +470,24 @@ MAKE_TO_S(Matrix_Frozen)
   template <class T2, class Array2D_Type2, class ViewType2>
   self_t &replace(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
     return $self->replace(matrix);
+  }
+  self_t &replace(const T *serialized, int length, swig_type_info *info){
+    unsigned int r($self->rows()), c($self->columns());
+    if(serialized){
+      if((unsigned int)length < (r * c)){
+        throw std::runtime_error("Length is too short");
+      }
+      for(unsigned int i(0); i < r; ++i){
+        for(unsigned int j(0); j < c; ++j){
+          (*($self))(i, j) = *(serialized++);
+        }
+      }
+    }else if(Matrix_replace_with_block(*($self), info)){
+      
+    }else{
+      throw std::runtime_error("Unsupported replacement");
+    }
+    return *($self);
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 #ifdef SWIGRUBY
@@ -505,4 +567,4 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
-//INSTANTIATE_MATRIX(Complex<double>, ComplexD);
+INSTANTIATE_MATRIX(Complex<double>, ComplexD);
