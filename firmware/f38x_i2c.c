@@ -45,7 +45,7 @@ void i2c_init(){
   
   CKCON |= 0x04; // => use SYSCLK
   TH0 = TL0 = (0x100 - 40); // => freq: 48M / 40 = 1.2M
-  //TH0 = TL0 = 0x00; // => freq: 48M / 256 
+  //TH0 = TL0 = 0x00; // => freq: 48M / 256
   TR0 = 1;
   
   //SMBTC = 0x0F;
@@ -60,6 +60,7 @@ void i2c_init(){
   { // I2C1
     SFRPAGE = 0xF;
     SMB1CF = 0x40; // => 1.2M / 3clk = 400KHz (Eq. 22.2)
+    //SMB1CF = (0x40 | 0x10); // => 1.2M / 12+11clk = 50KHz
     SMB1CF |= 0x80; // enable
     SFRPAGE = 0x0;
   }
