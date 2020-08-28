@@ -85,7 +85,7 @@ bool from_value_object(const VALUE &obj, swig_type_info *info, T &v){
   T *ptr;
   int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 1) : SWIG_ERROR);
   if(SWIG_IsOK(res)){
-    v = *ptr;
+    if(ptr){v = *ptr;} // if nil, then keep current v
     if(SWIG_IsNewObj(res)){delete ptr;}
     return true;
   }
@@ -94,6 +94,8 @@ bool from_value_object(const VALUE &obj, swig_type_info *info, T &v){
 template <class T>
 bool from_value_primitive(const VALUE &obj, swig_type_info *info, T &v){
   switch(TYPE(obj)){
+    case T_NIL: // if nil, then keep current v
+      return true;
     case T_FIXNUM:
       v = NUM2INT(obj);
       return true;
@@ -118,6 +120,9 @@ bool from_value(const VALUE &obj, swig_type_info *info, Complex<T> &v){
   if(RB_TYPE_P(obj, T_COMPLEX)){
     return from_value(rb_complex_real(obj), NULL, v.real())
         && from_value(rb_complex_imag(obj), NULL, v.imaginary());
+  }else if(from_value(obj, NULL, v.real())){
+    v.imaginary() = T(0);
+    return true;
   }
   return from_value_object(obj, info, v);
 }
@@ -406,9 +411,14 @@ bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type
   if(!rb_block_given_p()){return false;}
   for(unsigned int i(0); i < mat.rows(); ++i){
     for(unsigned int j(0); j < mat.columns(); ++j){
-      from_value(
-          rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)),
-          info, mat(i, j));
+      VALUE v(rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)));
+      if(!from_value(v, info, mat(i, j))){
+        VALUE v_inspect(rb_inspect(v));
+        std::stringstream s;
+        s << "Unknown input [" << i << "," << j << "]: ";
+        throw std::runtime_error(
+            s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+      }
     }
   }
   return true;
@@ -433,7 +443,7 @@ bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type
       for(int i(0); i < $2; ++i){
         VALUE rb_obj(RARRAY_AREF($input, i));
         if(!from_value(rb_obj, $3, $1[i])){
-          //SWIG_exception(SWIG_TypeError, ); // TODO
+          SWIG_exception(SWIG_TypeError, "$*1_ltype expected");
         }
       }
     }
