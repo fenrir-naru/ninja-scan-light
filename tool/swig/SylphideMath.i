@@ -154,21 +154,26 @@ class Complex;
     return new Complex<FloatT>(complex);
   }
 
+  static Complex<FloatT> rectangular(const FloatT &r, const FloatT &i = FloatT(0)) noexcept {
+    return Complex<FloatT>(r, i);
+  }
+
   MAKE_SETTER(real, FloatT);
   MAKE_GETTER(real, FloatT);
   MAKE_SETTER(imaginary, FloatT);
   MAKE_GETTER(imaginary, FloatT);
+  // fdiv // TODO
+
+#ifdef SWIGRUBY
   %alias power "**"
   %alias arg "angle,phase"
   %alias conjugate "conj"
-  // fdiv // TODO
   // finite? // TODO
   %alias set_imaginary "imag=";
   %alias get_imaginary "imag";
   // infinite? // TODO
   %alias abs "magnitude"
-  // polar // TOOO
-  // rect,rectangle // TODO
+#endif
 };
 
 %include param/complex.h
@@ -177,6 +182,14 @@ MAKE_TO_S(Complex);
 
 %define INSTANTIATE_COMPLEX(type, suffix)
 %template(Complex ## suffix) Complex<type>;
+%init %{
+#if SWIGRUBY
+  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(SwigClassComplex ## suffix ## .klass);
+    rb_define_alias(singleton, "rect", "rectangular");
+  }
+#endif
+%}
 %enddef
 
 INSTANTIATE_COMPLEX(double, D);

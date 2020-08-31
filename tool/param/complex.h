@@ -91,6 +91,10 @@ class Complex{
      */
     ~Complex() noexcept {}
 
+    static Complex<FloatT> polar(const FloatT &r, const FloatT &theta = FloatT(0)){
+      return Complex<FloatT>(r * std::cos(theta), r * std::sin(theta));
+    }
+
     /**
      * À”•”‚ğ•Ô‚µ‚Ü‚·B
      *
