@@ -133,6 +133,7 @@ bool from_value(const VALUE &obj, swig_type_info *info, Complex<T> &v){
 
 %ignore Complex::real;
 %ignore Complex::imaginary;
+%ignore Complex::check_infinity_t;
 %ignore operator<<(std::ostream &, const Complex &);
 
 template <class FloatT>
@@ -162,16 +163,16 @@ class Complex;
   MAKE_GETTER(real, FloatT);
   MAKE_SETTER(imaginary, FloatT);
   MAKE_GETTER(imaginary, FloatT);
-  // fdiv // TODO
 
 #ifdef SWIGRUBY
-  %alias power "**"
-  %alias arg "angle,phase"
-  %alias conjugate "conj"
-  // finite? // TODO
+  %alias power "**";
+  %alias arg "angle,phase";
+  %alias conjugate "conj";
+  %alias operator/ "fdiv";
+  %rename("finite?") isfinite;
+  %rename("infinite?") isinf;
   %alias set_imaginary "imag=";
   %alias get_imaginary "imag";
-  // infinite? // TODO
   %alias abs "magnitude"
 #endif
 };
