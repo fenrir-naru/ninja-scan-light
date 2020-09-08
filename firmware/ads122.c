@@ -23,18 +23,22 @@ static __xdata u8 ads122_data[SYLPHIDE_PAGESIZE - 8];
 volatile __bit ads122_capture;
 static u8 capture_cycle;
 
+//#define i2c_read_write i2c0_read_write
+#define i2c_read_write i2c1_read_write
+
 static void send_cmd(u8 cmd){
-  i2c1_read_write(I2C_WRITE(I2C_ADDRESS_RW), &cmd, sizeof(cmd));
+  i2c_read_write(I2C_WRITE(I2C_ADDRESS_RW), &cmd, sizeof(cmd));
 }
 
 static void write_register(u8 addr, u8 value){
   u8 buf[] = {(0x40 | addr << 2), value};
-  i2c1_read_write(I2C_WRITE(I2C_ADDRESS_RW), buf, sizeof(buf));
+  i2c_read_write(I2C_WRITE(I2C_ADDRESS_RW), buf, sizeof(buf));
 }
 
 void ads122_init(){
   write_register(0, 0x80); // Register 0, AINP = AIN0, AINN = AVSS
   write_register(1, 0x68); // Register 1, 175SPS, Continuous conversion
+  //write_register(1, 0x60); // Register 1, 175SPS, Single conversion
   send_cmd(0x08); // START/SYNC
   capture_cycle = 0;
   ads122_capture = FALSE;
@@ -70,11 +74,9 @@ void ads122_polling(){
   if(ads122_capture){
     ads122_capture = FALSE;
     
-    EA = 0; EA = 0;
     send_cmd(0x10);
-    i2c1_read_write(I2C_READ(I2C_ADDRESS_RW), next_buf, 3);
+    i2c_read_write(I2C_READ(I2C_ADDRESS_RW), next_buf, 3);
     next_buf += 3;
-    EA = 1;
     
     switch(capture_cycle++){
       case 0:
