@@ -48,6 +48,8 @@ void i2c_init(){
   //TH0 = TL0 = 0x00; // => freq: 48M / 256 
   TR0 = 1;
   
+  //SMBTC = 0x0F;
+
   { // I2C0
     // inhibit slave, extend setup / hold time, use timer 0 overflow
     SMB0CF = 0x40; // => 1.2M / 3clk = 400KHz (Eq. 22.2)
@@ -64,7 +66,7 @@ void i2c_init(){
 }
 
 /**
- * Read or Write via i2c0
+ * Read or Write via i2c0(or i2c1)
  * 
  * @return remain bytes
  */
@@ -72,21 +74,21 @@ u8 i2c0_read_write(u8 address_wr_flag, u8 *buf, u8 size){
   
   // start bit
   STA0 = 1;
-  while(!(SMB0CN & 0x05));
+  while(!SI0);
   STA0 = 0;
   
   if((SMB0CN & 0xDC) == 0xC0){
     // address + R/W flag
     SMB0DAT = address_wr_flag;
     SI0 = 0;
-    while(!(SMB0CN & 0x05));
+    while(!SI0);
     
     if((SMB0CN & 0xFE) == 0xC2){
-      // Read / Write
+      // Read(1) / Write(0)
       if(address_wr_flag & 0x01){ 
         while(1){
           SI0 = 0;
-          while(!(SMB0CN & 0x05));
+          while(!SI0);
           if((SMB0CN & 0xFC) == 0x88){
             *(buf++) = SMB0DAT;
             if(--size){
@@ -101,7 +103,7 @@ u8 i2c0_read_write(u8 address_wr_flag, u8 *buf, u8 size){
         while(size--){
           SMB0DAT = *(buf++);
           SI0 = 0;
-          while(!(SMB0CN & 0x05));
+          while(!SI0);
           if((SMB0CN & 0xFE) != 0xC2){break;}
         }
       }
@@ -109,7 +111,8 @@ u8 i2c0_read_write(u8 address_wr_flag, u8 *buf, u8 size){
   }
   STO0 = 1;
   SI0 = 0;
-  
+  //while(STO0);
+
   return size;
 }
 
