@@ -161,19 +161,21 @@ UBX filter
       drop,GPS:04,GPS:05 # always drop GPS 4, 5 (multiple satellites in a line)
       drop,QZSS:all # always drop any QZSS
       event,1000,drop,GPS:02 
-          # after GPS time 1000[s] (any week), dropping GPS:02 is activated
+          # after GPS time 1000[s] (any week) (i.e., GPS_sec > 1000), dropping GPS:02 is activated
           # Warning: event lines must be sorted in time order
           # Note: GPS 1,4,5, and any QZSS has still been dropped
+          # Note2: If this filter is intended to be active no less than 1000 (i.e, >= 1000),
+          # pleas use smaller seconds such as 999.9.
       event,2000,drop,GPS:03
           # after GPS time 2000[s] (any week), dropping GPS:03 is activated
-          # In addition, the previous event command is reseted, 
+          # In addition, all previous event commands are cleared, 
           # which means stop dropping GPS:02.
           # Note: GPS 1,4,5, and any QZSS has still been dropped
       event,3000,pass,all
           # after GPS time 3000[s] (any week), 
           # pass all except for GPS 1,4,5, and any QZSS 
       event,2100:2000,drop,GPS:03 
-          # start dropping GPS 3 after GPS time 2100[week] 300000[s]
+          # start dropping GPS 3 after GPS time 2100[week] 20000[s]
 
 __STRING__
 
