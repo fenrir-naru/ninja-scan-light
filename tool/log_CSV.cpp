@@ -558,8 +558,8 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       }
       HandlerM() : formatter(&HandlerM::dump_raw) {}
     } handler_M;
+
     /**
-    
      * check N page (navigation information), which is not used for NinjaScan
      * 
      * @param observer M page observer
@@ -592,13 +592,13 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         }
       }
     } handler_N;
-    
+
 #if 0
     /**
      * checker for C page in SylphideProtocol format
-     * 
+     *
      */
-    class SylphideStreamHandler 
+    class SylphideStreamHandler
         : public Sylphide_Packet_Observer<float_sylph_t> {
       protected:
         typedef Sylphide_Packet_Observer<float_sylph_t> super_t;
@@ -606,21 +606,75 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       public:
         bool previous_seek;
         unsigned int invoked;
-        SylphideStreamHandler() 
+        SylphideStreamHandler()
             : super_t(SYLPHIDE_PAGE_SIZE),
             previous_seek(false), invoked(0) {}
         ~SylphideStreamHandler() {}
-        
+
         /**
          * callback function when packet is found
-         * 
+         *
          */
         void operator()(const self_t &observer){
           if(!observer.validate()){return;}
-          
+
         }
     } handler_C;
 #endif
+    
+    /**
+     * check X page (ADS122)
+     *
+     * @param observer X page observer
+     */
+    struct HandlerX : public Data24Bytes_Packet_Observer<float_sylph_t> {
+      typedef Data24Bytes_Packet_Observer<float_sylph_t> super_t;
+
+      bool previous_seek;
+      unsigned int invoked;
+      void (HandlerX::*formatter)(const float_sylph_t &current) const;
+
+      void operator()(const HandlerX &observer){
+        if(!observer.validate()){return;}
+        float_sylph_t current(StreamProcessor::get_corrected_ITOW(observer));
+        if(!options.is_time_in_range(current)){return;}
+        (this->*formatter)(current);
+      }
+      super_t::u32_t get_3bytesBE(const int &index) const {
+        super_t::v8_t buf[sizeof(super_t::u32_t)] = {0};
+        this->inspect(&buf[1], 3, 7 + (3 * index));
+        return be_char4_2_num<super_t::u32_t>(buf[0]);
+      }
+      void dump_raw(const float_sylph_t &current) const {
+        for(int i(-1), k(0); i <= 0; i++){
+          options.out() << options.format_time(current) << ", " << i;
+          for(int j(0); j < 4; ++j){
+            options.out() << ", " << get_3bytesBE(k++);
+          }
+          options.out() << endl;
+        }
+      }
+      void dump_physical(const float_sylph_t &current) const {
+        for(int i(-1), k(0); i <= 0; i++){
+          options.out() << options.format_time(current) << ", " << i;
+          for(int j(0); j < 3; ++j){ // voltage
+            options.out() << ", "
+                << (float_sylph_t)get_3bytesBE(k++) / (1 << (23 - 11)) / 1000;
+            // 0x800000 = (1 << 23), Vref = 2.048V
+          }
+          { // temperature
+            super_t::u32_t v(get_3bytesBE(k++) >> 10);
+            options.out() << ", " << (float_sylph_t)(((v & 0x2000) ? -(int)0x4000 : (int)0) + v) / 32;
+          }
+          options.out() << endl;
+        }
+      }
+      HandlerX()
+          : super_t(SYLPHIDE_PAGE_SIZE),
+          previous_seek(false), invoked(0),
+          formatter(&HandlerX::dump_raw) {}
+      ~HandlerX() {}
+    } handler_X;
     
   public:
     StreamProcessor()
@@ -657,7 +711,11 @@ break;
           break;
 #endif
         default: if(options.page_selected[Options::PAGE_OTHER] > Options::PAGE_SELECTED_DEFAULT){
-          if(buf[0] == 'T'){
+          if(buf[0] == 'X'){
+            super_t::process_packet(
+                buf, buf_size,
+                handler_X, handler_X.previous_seek, handler_X);
+          }else if(buf[0] == 'T'){
             stringstream ss;
             ss << hex;
             for(int i(0); i < buf_size; i++){
@@ -709,8 +767,9 @@ case mark: if(options.page_selected[Options::PAGE_ ## type] < Options::PAGE_SELE
         handler_A.formatter = &HandlerA::dump_physical;
         handler_P.formatter = &HandlerP::dump_physical;
         handler_M.formatter = &HandlerM::dump_physical;
-        cerr << "Units are [m/s^2], [deg/s], [Pa], and [degC] "
-            "for acceleration, angular speed, pressure, and temperature, respectively."
+        handler_X.formatter = &HandlerX::dump_physical;
+        cerr << "Units are [m/s^2], [deg/s], [Pa], [degC], and [V] "
+            "for acceleration, angular speed, pressure, temperature, and voltage respectively."
             << endl;
       }
 
