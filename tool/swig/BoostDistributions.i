@@ -14,6 +14,7 @@
   }
 }
 
+%include std_pair.i
 
 %{
 #include <boost/math/distributions.hpp>
@@ -39,6 +40,16 @@ using namespace boost::math;
   RealType skewness() const {return skewness(*$self);}
   RealType kurtosis() const {return kurtosis(*$self);}
   RealType kurtosis_excess() const {return kurtosis_excess(*$self);}
+#if defined(SWIGRUBY)
+  %typemap(out) std::pair<RealType, RealType> {
+    VALUE arr(rb_ary_new2(2));
+    rb_ary_push(arr, DBL2NUM($1.first));
+    rb_ary_push(arr, DBL2NUM($1.second));
+    $result = arr;
+  }
+#endif
+  std::pair<RealType, RealType> range() const {return range(*$self);}
+  std::pair<RealType, RealType> support() const {return support(*$self);}
 };
 %enddef
 
