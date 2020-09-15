@@ -59,11 +59,25 @@ ADD_BASIC_METHODS(dist_name ## _distribution);
 %template(class_name) boost::math:: ## dist_name ## _distribution<type, policies::policy<> >;
 %enddef
 
+%extend boost::math::cauchy_distribution {
+  %ignore mean;
+  %ignore standard_deviation;
+  %ignore variance;
+  %ignore skewness;
+  %ignore kurtosis;
+  %ignore kurtosis_excess;
+};
+%extend boost::math::non_central_beta_distribution {
+  %ignore skewness;
+  %ignore kurtosis;
+  %ignore kurtosis_excess;
+};
+
 INSTANTIATE(arcsine, double, Arcsine);
 INSTANTIATE(bernoulli, double, Bernoulli);
 INSTANTIATE(beta, double, Beta);
 INSTANTIATE(binomial, double, Binomial);
-//INSTANTIATE(cauchy, double, Cauchy); // TODO due to mean()
+INSTANTIATE(cauchy, double, Cauchy);
 INSTANTIATE(chi_squared, double, ChiSquared);
 INSTANTIATE(exponential, double, Exponential);
 INSTANTIATE(extreme_value, double, ExtremeValue);
@@ -79,7 +93,7 @@ INSTANTIATE(laplace, double, Laplace);
 INSTANTIATE(logistic, double, Logistic);
 INSTANTIATE(lognormal, double, Lognormal);
 INSTANTIATE(negative_binomial, double, NegativeBinomial);
-//INSTANTIATE(non_central_beta, double, NonCentralBeta); // TODO due to skewness()
+INSTANTIATE(non_central_beta, double, NonCentralBeta);
 INSTANTIATE(non_central_chi_squared, double, NonCentralChiSquared);
 INSTANTIATE(non_central_f, double, NonCentralF);
 INSTANTIATE(non_central_t, double, NonCentralT);
