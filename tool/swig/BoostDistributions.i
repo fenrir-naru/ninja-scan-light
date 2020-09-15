@@ -31,6 +31,14 @@ using namespace boost::math;
   RealType quantile(const RealType &p, const bool &is_complement = false) const {
     return is_complement ? quantile(complement(*$self, p)) : quantile(*$self, p);
   }
+  RealType mean() const {return mean(*$self);}
+  RealType median() const {return median(*$self);}
+  RealType mode() const {return mode(*$self);}
+  RealType standard_deviation() const {return standard_deviation(*$self);}
+  RealType variance() const {return variance(*$self);}
+  RealType skewness() const {return skewness(*$self);}
+  RealType kurtosis() const {return kurtosis(*$self);}
+  RealType kurtosis_excess() const {return kurtosis_excess(*$self);}
 };
 %enddef
 
@@ -44,14 +52,14 @@ INSTANTIATE(arcsine, double, Arcsine);
 INSTANTIATE(bernoulli, double, Bernoulli);
 INSTANTIATE(beta, double, Beta);
 INSTANTIATE(binomial, double, Binomial);
-INSTANTIATE(cauchy, double, Cauchy);
+//INSTANTIATE(cauchy, double, Cauchy); // TODO due to mean()
 INSTANTIATE(chi_squared, double, ChiSquared);
 INSTANTIATE(exponential, double, Exponential);
 INSTANTIATE(extreme_value, double, ExtremeValue);
 INSTANTIATE(fisher_f, double, FisherF);
 INSTANTIATE(gamma, double, Gamma);
 INSTANTIATE(geometric, double, Geometric);
-//INSTANTIATE(hyperexponential, double, Hyperexponential); // TODO
+//INSTANTIATE(hyperexponential, double, Hyperexponential); // TODO due to initializer list
 INSTANTIATE(hypergeometric, double, Hypergeometric);
 INSTANTIATE(inverse_chi_squared, double, InverseChiSquared);
 INSTANTIATE(inverse_gamma, double, InverseGamma);
@@ -60,7 +68,7 @@ INSTANTIATE(laplace, double, Laplace);
 INSTANTIATE(logistic, double, Logistic);
 INSTANTIATE(lognormal, double, Lognormal);
 INSTANTIATE(negative_binomial, double, NegativeBinomial);
-INSTANTIATE(non_central_beta, double, NonCentralBeta);
+//INSTANTIATE(non_central_beta, double, NonCentralBeta); // TODO due to skewness()
 INSTANTIATE(non_central_chi_squared, double, NonCentralChiSquared);
 INSTANTIATE(non_central_f, double, NonCentralF);
 INSTANTIATE(non_central_t, double, NonCentralT);
