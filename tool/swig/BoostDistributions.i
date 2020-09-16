@@ -73,6 +73,41 @@ ADD_BASIC_METHODS(dist_name ## _distribution);
   %ignore kurtosis_excess;
 };
 
+// workaround for hyperexponential haaving RealT template parameter instead of RealType
+%extend boost::math::hyperexponential_distribution {
+  %ignore hyperexponential_distribution(std::initializer_list<RealT>, std::initializer_list<RealT>);
+  %ignore hyperexponential_distribution(std::initializer_list<RealT>);
+  RealT pdf(const RealT &x) const {
+    return pdf(*$self, x);
+  }
+  RealT cdf(const RealT &x, const bool &is_complement = false) const {
+    return is_complement ? cdf(complement(*$self, x)) : cdf(*$self, x);
+  }
+  RealT quantile(const RealT &p, const bool &is_complement = false) const {
+    return is_complement ? quantile(complement(*$self, p)) : quantile(*$self, p);
+  }
+  RealT mean() const {return mean(*$self);}
+  RealT median() const {return median(*$self);}
+  RealT mode() const {return mode(*$self);}
+  RealT standard_deviation() const {return standard_deviation(*$self);}
+  RealT variance() const {return variance(*$self);}
+  RealT skewness() const {return skewness(*$self);}
+  RealT kurtosis() const {return kurtosis(*$self);}
+  RealT kurtosis_excess() const {return kurtosis_excess(*$self);}
+#if defined(SWIGRUBY)
+  %typemap(out) std::pair<RealT, RealT> {
+    VALUE arr(rb_ary_new2(2));
+    rb_ary_push(arr, DBL2NUM($1.first));
+    rb_ary_push(arr, DBL2NUM($1.second));
+    $result = arr;
+  }
+#endif
+  std::pair<RealT, RealT> range() const {return range(*$self);}
+  std::pair<RealT, RealT> support() const {return support(*$self);}
+};
+%include /usr/include/boost/math/distributions/hyperexponential.hpp
+%template(Hyperexponential) boost::math::hyperexponential_distribution<double, policies::policy<> >;
+
 INSTANTIATE(arcsine, double, Arcsine);
 INSTANTIATE(bernoulli, double, Bernoulli);
 INSTANTIATE(beta, double, Beta);
