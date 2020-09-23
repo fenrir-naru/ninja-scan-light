@@ -301,7 +301,9 @@ struct G_health_utc_iono_t {
 %extend G_Packet_Observer{
   %ignore packet_type;
   %ignore fetch_position;
+  %ignore fetch_position_hp;
   %ignore fetch_position_acc;
+  %ignore fetch_position_acc_hp;
   %ignore fetch_velocity;
   %ignore fetch_velocity_acc;
   %ignore fetch_status;
@@ -354,7 +356,9 @@ PROXY_TO_FUNC_WITH_NESTED_STRUCT(F, values_t, F_values_t, fetch_values, values);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(P, values_t, P_values_t, fetch_values, values);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(M, values_t, M_values_t, fetch_values, values);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, position_t, G_position_t<FloatType>, fetch_position, position);
+PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, position_t, G_position_t<FloatType>, fetch_position, position_hp);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, position_acc_t, G_position_acc_t<FloatType>, fetch_position_acc, position_acc);
+PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, position_acc_t, G_position_acc_t<FloatType>, fetch_position_acc, position_acc_hp);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, velocity_t, G_velocity_t<FloatType>, fetch_velocity, velocity);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, velocity_acc_t, G_velocity_acc_t<FloatType>, fetch_velocity_acc, velocity_acc);
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, status_t, G_status_t<FloatType>, fetch_status, status);
