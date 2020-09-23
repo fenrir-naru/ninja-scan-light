@@ -394,13 +394,13 @@ class G_Packet_Observer : public Packet_Observer<>{
       return packet_type_t((unsigned char)((*this)[2]), (unsigned char)((*this)[3]));
     }
     
-    unsigned int fetch_ITOW_ms() const {
+    unsigned int fetch_ITOW_ms(const unsigned int &offset = 0) const {
       v8_t buf[4];
-      this->inspect(buf, 4, 6);
+      this->inspect(buf, 4, 6 + offset);
       return le_char4_2_num<u32_t>(*buf);
     }
-    FloatType fetch_ITOW() const {
-      return (FloatType)1E-3 * fetch_ITOW_ms();
+    FloatType fetch_ITOW(const unsigned int &offset = 0) const {
+      return (FloatType)1E-3 * fetch_ITOW_ms(offset);
     }
     unsigned short fetch_WN() const {
       v8_t buf[2];
