@@ -104,7 +104,7 @@ read_block = proc{|sector_start, sectors|
 }
 
 $stderr.puts "Save to #{opt[:dst_fname]}."
-open(opt[:dst_fname], 'a+'){|dst|
+open(opt[:dst_fname], "a+" + (/mswin|mingw/ =~ RUBY_PLATFORM ? 'b' : '')){|dst|
   bs, es, sectors = [:begin_sector, :end_sector, :sectors].collect{|k| opt[k]}
   es = bs + sectors if es < 0
   es = [property[:count], es].min
