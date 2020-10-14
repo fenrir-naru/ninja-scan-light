@@ -55,7 +55,7 @@ opt[:port][:name] = proc{
   RUBY_PLATFORM =~ /win32/ ? "\\\\.\\COM#{opt[:port][:num]}" : "tty#{opt[:port][:num]}"
 }.call
 
-opt[:dst_fname] ||= File::basename("#{opt[:port][:name]}_#{Time::now.strftime("%Y%d%m_%H%M%S")}.bin")
+opt[:dst_fname] ||= File::basename("#{opt[:port][:name]}_#{Time::now.strftime("%Y%m%d_%H%M%S")}.bin")
 
 open_proc = proc{
   io = SerialPort.new(*([:num, :bps, :nbits, :stopb, :parity].collect{|k| opt[:port][k]}))
