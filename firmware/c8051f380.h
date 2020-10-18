@@ -275,7 +275,7 @@ __sbit __at (0xCA) TR2          ; /* Timer2 Run Enable                        */
 __sbit __at (0xC9) T2CSS        ; /* Timer 2 Capture Source Select            */
 __sbit __at (0xC8) T2XCLK       ; /* Timer 2 Clk/8 Clock Source               */
 
-/* TMR2CN 0xC8 SFR Page=F */
+/* TMR5CN 0xC8 SFR Page=F */
 __sbit __at (0xCF) TF5H         ; /* Timer 5 High-Byte Overflow Flag          */
 __sbit __at (0xCE) TF5L         ; /* Timer 5 Low-Byte  Overflow Flag          */
 __sbit __at (0xCD) TF5LEN       ; /* Timer 5 Low-Byte Flag Enable             */

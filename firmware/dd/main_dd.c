@@ -97,6 +97,8 @@ static void mkfs_monitor(FMKFS_PHASE phase, void *ptr){
   cdc_tx(NULL, 0);
 }
 
+static volatile u8 tx_done = 0;
+
 void main() {
   sysclk_init(); // Initialize oscillator
   wait_ms(1000);
@@ -135,6 +137,7 @@ void main() {
         sector_start++; sectors--;
         cdc_tx(cdc_buf, sizeof(cdc_buf));
       }while((--i) > 0);
+      if((i == 0) && (tx_done < 0x10)){tx_done++;}
     }
 
     if(sectors == 0){ // parse input
@@ -308,6 +311,7 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
 
   static u8 loop_50ms = 0;
   static u8 snapshot_state = 0;
+  static u8 snapshot_tx_done = 0;
   static u8 loop_10s = 0;
 
   TMR3CN &= ~0x80; // Clear interrupt
@@ -327,10 +331,16 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
         sys_state = 0;
         if(loop_10s >= 200){ // 50 * 200 = 10000 [ms]
           loop_10s = 0;
+          snapshot_tx_done = tx_done;
+          tx_done = 0;
         }
       }
       if(snapshot_state & 0x01){
         led3_on();
+      }
+      if(snapshot_tx_done > 0){
+        snapshot_tx_done--;
+        led4_on();
       }
       break;
     case 1:

@@ -40,7 +40,7 @@
 #include "f38x_usb.h"
 #include "f38x_uart0.h"
 #include "f38x_uart1.h"
-#include "f38x_i2c0.h"
+#include "f38x_i2c.h"
 #include "f38x_spi.h"
 
 #include "data_hub.h"
@@ -281,7 +281,7 @@ void main() {
   timer_init();
   uart0_init();
   uart1_init();
-  i2c0_init();
+  i2c_init();
 
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
   mpu9250_init();
@@ -429,7 +429,12 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   static u8 snapshot_state = 0;
   static u8 loop_10s = 0;
 
-  TMR3CN &= ~0x80; // Clear interrupt
+  {
+    u8 sfrpage_backup = SFRPAGE;
+    SFRPAGE = 0;
+    TMR3CN &= ~0x80; // Clear interrupt
+    SFRPAGE = sfrpage_backup;
+  }
 #if defined(NINJA_VER) && (NINJA_VER >= 200)
   mpu9250_capture = TRUE;
 #else

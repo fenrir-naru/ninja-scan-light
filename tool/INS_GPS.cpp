@@ -1674,15 +1674,29 @@ class StreamProcessor
        */
       void check_nav(const G_Observer_t &observer, const G_Observer_t::packet_type_t &packet_type){
         switch(packet_type.mid){
-          case 0x02: { // NAV-POSLLH
-            G_Observer_t::position_t
-              position(observer.fetch_position());
-            G_Observer_t::position_acc_t
-              position_acc(observer.fetch_position_acc());
+          case 0x02:   // NAV-POSLLH
+          case 0x14: { // NAV-HPPOSLLH
+
+            int itow_ms;
+            G_Observer_t::position_t position;
+            G_Observer_t::position_acc_t position_acc;
+
+            if(packet_type.mid == 0x14){
+              // Assumption, 0x02 and 0x14 are generated before 0x12
+              if((observer[6 + 3] & 0x01) != 0){return;} // invalid?
+              itow_ms = observer.fetch_ITOW_ms(4);
+              position = observer.fetch_position_hp();
+              position_acc = observer.fetch_position_acc_hp();
+            }else{
+              itow_ms = observer.fetch_ITOW_ms();
+              if(itow_ms == itow_ms_0x0102){return;}
+              position = observer.fetch_position();
+              position_acc = observer.fetch_position_acc();
+            }
 
             //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
 
-            itow_ms_0x0102 = observer.fetch_ITOW_ms();
+            itow_ms_0x0102 = itow_ms;
 
             packet_latest.latitude = deg2rad(position.latitude);
             packet_latest.longitude = deg2rad(position.longitude);

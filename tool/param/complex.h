@@ -36,6 +36,7 @@
 #include <string>
 
 #include <cmath>
+#include <limits>
 
 #if (__cplusplus < 201103L) && !defined(noexcept)
 #define noexcept throw()
@@ -91,6 +92,10 @@ class Complex{
      */
     ~Complex() noexcept {}
 
+    static Complex<FloatT> polar(const FloatT &r, const FloatT &theta = FloatT(0)){
+      return Complex<FloatT>(r * std::cos(theta), r * std::sin(theta));
+    }
+
     /**
      * é¿êîïîÇï‘ÇµÇ‹Ç∑ÅB
      *
@@ -119,6 +124,37 @@ class Complex{
       m_Real = another;
       m_Imaginary = 0;
       return *this;
+    }
+
+  protected:
+#if (__cplusplus < 201103L)
+    // @see https://stackoverflow.com/a/411781
+    template <class T = FloatT, bool has_infinity = std::numeric_limits<T>::has_infinity>
+    struct check_infinity_t;
+    template <class T>
+    struct check_infinity_t<T, true> {
+      static bool isinf(const Complex<T> &value) noexcept {
+        return (value.m_Real == std::numeric_limits<T>::infinity())
+            || (value.m_Real == -std::numeric_limits<T>::infinity())
+            || (value.m_Imaginary == std::numeric_limits<T>::infinity())
+            || (value.m_Imaginary == -std::numeric_limits<T>::infinity());
+      }
+    };
+#else
+    template <class T = FloatT>
+    struct check_infinity_t {
+      static bool isinf(const Complex<T> &value) noexcept {
+        return std::isinf(value.m_Real) || std::isinf(value.m_Imaginary);
+      }
+    };
+#endif
+
+  public:
+    bool isinf() const noexcept {
+      return check_infinity_t<>::isinf(*this);
+    }
+    bool isfinite() const noexcept {
+      return !isinf();
     }
 
     /**

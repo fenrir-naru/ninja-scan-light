@@ -394,13 +394,13 @@ class G_Packet_Observer : public Packet_Observer<>{
       return packet_type_t((unsigned char)((*this)[2]), (unsigned char)((*this)[3]));
     }
     
-    unsigned int fetch_ITOW_ms() const {
+    unsigned int fetch_ITOW_ms(const unsigned int &offset = 0) const {
       v8_t buf[4];
-      this->inspect(buf, 4, 6);
+      this->inspect(buf, 4, 6 + offset);
       return le_char4_2_num<u32_t>(*buf);
     }
-    FloatType fetch_ITOW() const {
-      return (FloatType)1E-3 * fetch_ITOW_ms();
+    FloatType fetch_ITOW(const unsigned int &offset = 0) const {
+      return (FloatType)1E-3 * fetch_ITOW_ms(offset);
     }
     unsigned short fetch_WN() const {
       v8_t buf[2];
@@ -428,6 +428,25 @@ class G_Packet_Observer : public Packet_Observer<>{
       
       return pos;
     }
+    position_t fetch_position_hp() const {
+      //if(!packet_type().equals(0x01, 0x14)){}
+
+      v8_t buf[4];
+      position_t pos;
+      this->inspect(buf, 4, 6 + 8);
+      pos.longitude = (FloatType)1E-7 * le_char4_2_num<s32_t>(*buf);
+      this->inspect(buf, 4, 6 + 12);
+      pos.latitude = (FloatType)1E-7 * le_char4_2_num<s32_t>(*buf);
+      this->inspect(buf, 4, 6 + 16);
+      pos.altitude = (FloatType)1E-3 * le_char4_2_num<s32_t>(*buf);
+
+      this->inspect(buf, 3, 6 + 24);
+      pos.longitude = (FloatType)1E-9 * ((s8_t)buf[0]);
+      pos.latitude = (FloatType)1E-9 * ((s8_t)buf[1]);
+      pos.altitude = (FloatType)1E-4 * ((s8_t)buf[2]);
+
+      return pos;
+    }
     
     struct position_acc_t {
       FloatType horizontal, vertical;
@@ -445,6 +464,18 @@ class G_Packet_Observer : public Packet_Observer<>{
       this->inspect(buf, 4, 6 + 24);
       pos_acc.vertical = (FloatType)1E-3 * le_char4_2_num<u32_t>(*buf);
       
+      return pos_acc;
+    }
+    position_acc_t fetch_position_acc_hp() const {
+      //if(!packet_type().equals(0x01, 0x14)){}
+
+      v8_t buf[4];
+      position_acc_t pos_acc;
+      this->inspect(buf, 4, 6 + 28);
+      pos_acc.horizontal = (FloatType)1E-4 * le_char4_2_num<u32_t>(*buf);
+      this->inspect(buf, 4, 6 + 32);
+      pos_acc.vertical = (FloatType)1E-4 * le_char4_2_num<u32_t>(*buf);
+
       return pos_acc;
     }
     
