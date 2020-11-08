@@ -304,7 +304,7 @@ data.gps.solver_options. expr
 
     /* --GNSS_with[out]=(system|[system:][+-]sat_id)
      *    --GNSS_without=GPS excludes all GPS satellites
-     *    --GNSS_without=GPS:4, --GNSS_with=GPS:-4, or --GNSS_without=-4 exclude GPS(4).
+     *    --GNSS_without=GPS:4, --GNSS_with=GPS:-4, or --GNSS_without=4 exclude GPS(4).
      */
     while(true){
       bool without(true);
