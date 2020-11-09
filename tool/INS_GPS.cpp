@@ -699,7 +699,7 @@ struct Packet{
    * in consideration of one week roll over
    *
    * @param another
-   * @return The returned number range is [-one_week/2, +one_week/2)
+   * @return The returned value ranges [-one_week/2, +one_week/2)
    * if another is bigger, positive number will be returned.
    */
   float_sylph_t interval_rollover(const Packet &another) const {
@@ -2591,6 +2591,18 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       nav.ins_gps->set_header("MU");
     }
 
+    bool check_time_synchronization(const Packet &packet) const {
+      if(recent_a.buf.empty()){return false;}
+      float_t
+          delta_base(recent_a.buf.front().interval_rollover(recent_a.buf.back())), // a.newest - a.oldest
+          delta(recent_a.buf.back().interval_rollover(packet)); // packet - a.newest
+      return (delta_base >= 0) // newest > oldest
+          && (delta_base <= recent_a.buf.size()) // A packet frequency is expected to be larger than 1 Hz
+          && ((delta < 0)
+            ? (-(delta_base + 5) <= delta)  // Case packet, then a.newest; most cases are applicable
+            : (10 >= delta));   // Case a.newest, then packet;
+    }
+
   public:
     /**
      * Perform measurement update by using position and velocity obtained with GPS receiver.
@@ -2605,7 +2617,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       if(status >= JUST_INITIALIZED){
         measurement_update_common(g_packet);
       }else if(((int)recent_a.buf.size() >= min_a_packets_for_init)
-          && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
+          && check_time_synchronization(g_packet)
           && (g_packet.sigma_2d <= options.gps_threshold.init_acc_2d)
           && (g_packet.sigma_height <= options.gps_threshold.init_acc_v)){
 
@@ -2669,7 +2681,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
             break;
         }
       }else if(((int)recent_a.buf.size() >= min_a_packets_for_init)
-          && (std::abs(recent_a.buf.front().itow - g_packet.itow) < (0.1 * recent_a.buf.size())) // time synchronization check
+          && check_time_synchronization(g_packet)
           && ((gps_raw_pvt = g_packet.pvt(gps_raw_pvt))
             .error_code == G_Packet_Measurement::pvt_t::ERROR_NO)){
 
