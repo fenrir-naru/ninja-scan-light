@@ -451,29 +451,29 @@ class INS {
      */
     virtual void update(const vec3_t &accel, const vec3_t &gyro, const float_t &deltaT){
       
-      //速度の運動方程式
-      vec3_t delta_v_2e_4n((q_n2b * accel * q_n2b.conj()).vector());
-      delta_v_2e_4n += gravity_total();
-      delta_v_2e_4n -= (omega_e2i_4n * 2 + omega_n2e_4n) * v_2e_4n;
+      // Kinematic Eq. of velocity 速度の運動方程式
+      vec3_t dot_v_2e_4n((q_n2b * accel * q_n2b.conj()).vector());
+      dot_v_2e_4n += gravity_total();
+      dot_v_2e_4n -= (omega_e2i_4n * 2 + omega_n2e_4n) * v_2e_4n;
       
-      //位置の運動方程式
-      quat_t delta_q_e2n(q_e2n * omega_n2e_4n);
-      delta_q_e2n /= 2;
-      float_t delta_h(v_2e_4n[2] * -1);
+      // Kinematic Eq. of position 位置の運動方程式
+      quat_t dot_q_e2n(q_e2n * omega_n2e_4n);
+      dot_q_e2n /= 2;
+      float_t dot_h(v_2e_4n[2] * -1);
       
-      //姿勢の運動方程式
+      // Kinematic Eq. of attitude 姿勢の運動方程式
       quat_t dot_q_n2b(0, omega_e2i_4n + omega_n2e_4n);
       dot_q_n2b *= q_n2b;
       dot_q_n2b -= q_n2b * gyro;
       dot_q_n2b /= (-2);
       
-      //更新
-      v_2e_4n += delta_v_2e_4n * deltaT;
-      q_e2n += delta_q_e2n * deltaT;
-      h += delta_h * deltaT;
+      // Update principal variables 更新
+      v_2e_4n += dot_v_2e_4n * deltaT;
+      q_e2n += dot_q_e2n * deltaT;
+      h += dot_h * deltaT;
       q_n2b += dot_q_n2b * deltaT;
       
-      //付随的情報の再計算
+      // Recalculation of additional properties 付随的情報の再計算
       recalc();
     }
     
