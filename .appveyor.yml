@@ -1,6 +1,7 @@
 version: 1.0.{build}.{branch}
 configuration: AppVeyor
 install:
+  - set SSL_CERT_FILE=C:/ruby24-x64/ssl/cert.pem
   - set PATH=C:\Ruby21\bin;%PATH%
   - gem install ocra serialport
 before_build:

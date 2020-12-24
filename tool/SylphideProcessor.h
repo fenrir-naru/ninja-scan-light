@@ -118,11 +118,20 @@ class A_Packet_Observer : public Packet_Observer<>{
       
       {
         v8_t buf[4];
+#if 1
         buf[0] = 0x00;
         for(int i = 0; i < 8; i++){
           this->inspect(&(buf[1]), 3, 5 + (3 * i));
           result.values[i] = be_char4_2_num<u32_t>(*buf);
         }
+#elif
+        // TODO This is Experimental.
+        // For high resolution acclerometer and gyroscope, 32-bit mode.
+        for(int i = 0; i < 6; i++){
+          this->inspect(&(buf[0]), 4, 5 + (4 * i));
+          result.values[i] = be_char4_2_num<u32_t>(*buf);
+        }
+#endif
       }
       
       {
