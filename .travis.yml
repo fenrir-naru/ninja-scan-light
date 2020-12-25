@@ -1,4 +1,4 @@
-sudo: false
+#sudo: false
 language: cpp
 
 addons:
@@ -47,21 +47,20 @@ before_deploy:
 
 deploy:
   - provider: releases
-    api_key:
-      secure: $GITHUB_TOKEN
+    token: $GITHUB_TOKEN
     file: 
       - ./firmware/ver1/build_by_sdcc/NinjaScanLight.hex
       - ./firmware/ver1/build_by_sdcc/NinjaScanLight.omf
       - ./firmware/ver2/build_by_sdcc/NinjaScanLight2.hex
       - ./firmware/ver2/build_by_sdcc/NinjaScanLight2.omf
-    skip_cleanup: true
-    all_branches: true  # https://github.com/travis-ci/travis-ci/issues/1675
+    edge: true # opt in to dpl v2
+    #all_branches: true  # https://github.com/travis-ci/travis-ci/issues/1675
     on:
       tags: true
+    overwrite: true
   - provider: bintray
-    skip_cleanup: true
     user: fenrir-naru
-    key:
-      secure: $BINTRAY_TOKEN
+    key: $BINTRAY_TOKEN
     file: .travis.bintray.json
     on: master
+    edge: true # opt in to dpl v2
