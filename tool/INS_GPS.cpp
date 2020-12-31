@@ -1840,6 +1840,12 @@ class StreamProcessor
               dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, src.pseudo_range));
               dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, src.carrier_phase));
               dst.insert(std::make_pair(items_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
+              dst.insert(std::make_pair(items_t::SIGNAL_STRENGTH_dBHz, src.signal_strength));
+              /* According to RINEX, Loss of lock indicator (LLI)
+               * Bit 0 set : Lost lock between previous and current observation: cycle slip possible
+               * Thus, "bit 0 set" is mapped to negative lock seconds
+               */
+              dst.insert(std::make_pair(items_t::LOCK_SEC, (src.lock_indicator & 0x01) ? -1 : 0));
             }
 
             packet_raw_latest.update_measurement(current, measurement);
@@ -1918,6 +1924,9 @@ class StreamProcessor
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
               dst.insert(std::make_pair(signal->doppler.i, doppler));
               dst.insert(std::make_pair(signal->doppler.i_sigma, 2E-3 * (1 << (0xF & observer[6 + 45 + (32 * i)]))));
+              dst.insert(std::make_pair(items_t::SIGNAL_STRENGTH_dBHz, observer[6 + 42 + (32 * i)]));
+              observer.inspect(buf, 2, 6 + 40 + (32 * i));
+              dst.insert(std::make_pair(items_t::LOCK_SEC, 1E-3 * le_char2_2_num<G_Observer_t::u16_t>(*buf)));
             }
 
             packet_raw_latest.update_measurement(current, measurement);

@@ -94,6 +94,8 @@ struct GPS_Solver_Base {
       L1_DOPPLER_SIGMA,
       L1_CARRIER_PHASE_SIGMA,
       L1_RANGE_RATE_SIGMA,
+      SIGNAL_STRENGTH_dBHz,
+      LOCK_SEC,
       MEASUREMENT_ITEMS_PREDEFINED,
     };
   };
