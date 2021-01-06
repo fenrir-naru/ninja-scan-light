@@ -198,30 +198,30 @@ struct Options : public GlobalOptions<float_sylph_t> {
       ITOW,
       CALENDAR_TIME,
     } mode;
-    const char *spec;
+    int correction_hr;
     time_stamp_t()
-        : mode(ITOW), spec(NULL) {}
-    struct calendar_spec_parsed_t {
-      int correction_hr;
-      friend std::ostream &operator<<(std::ostream &out, const calendar_spec_parsed_t &parsed){
-        out << "UTC";
-        if(parsed.correction_hr != 0){
-          out << (parsed.correction_hr > 0 ? " +" : " ")
-              << parsed.correction_hr << " [hr]";
-        }
-        return out;
+        : mode(ITOW), correction_hr(0) {}
+    friend std::ostream &operator<<(std::ostream &out, const time_stamp_t &stamp){
+      switch(stamp.mode){
+        case CALENDAR_TIME:
+          out << "UTC";
+          if(stamp.correction_hr != 0){
+            out << (stamp.correction_hr > 0 ? " +" : " ")
+                << stamp.correction_hr << " [hr]";
+          }
+          break;
       }
-    };
-    calendar_spec_parsed_t calendar_spec_parse() const {
-      calendar_spec_parsed_t res = {0};
-      if(is_true(spec)){return res;}
+      return out;
+    }
+    void parse_calendar_spec(const char *spec){
+      mode = CALENDAR_TIME;
+      if(is_true(spec)){return;}
       char *spec_end;
-      res.correction_hr = std::strtol(spec, &spec_end, 10);
+      correction_hr = std::strtol(spec, &spec_end, 10);
       if(spec == spec_end){
         std::cerr << "Invalid spec for --calendar_time[=(+/-hr)]: " << spec << std::endl;
         exit(-1);
       }
-      return res;
     }
   } time_stamp;
 
@@ -346,10 +346,9 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
 
-    CHECK_OPTION(calendar_time, true, {
-          time_stamp.mode = time_stamp_t::CALENDAR_TIME;
-          time_stamp.spec = value;
-        }, time_stamp.calendar_spec_parse());
+    CHECK_OPTION(calendar_time, true,
+        time_stamp.parse_calendar_spec(value),
+        time_stamp);
 
     CHECK_OPTION(back_propagate, true,
         if(is_true(value)){ins_gps_sync_strategy = INS_GPS_SYNC_BACK_PROPAGATION;},
@@ -1771,7 +1770,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       typename stamp_t::Converter itow2calendar;
       TimeStampGenerator() : itow2calendar() {
         itow2calendar.correction_sec
-            = 60 * 60 * options.time_stamp.calendar_spec_parse().correction_hr;
+            = 60 * 60 * options.time_stamp.correction_hr;
       }
       void update(const TimePacket &packet){
         packet.apply<FloatT>(itow2calendar);
