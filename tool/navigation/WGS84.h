@@ -83,7 +83,9 @@ class WGS84Generic{
     
     /**
      * Calculate curvature radius (east-west)
-     * 東西方向の極率半径を求めます。
+     * 東西方向の極率半径(卯酉線曲率半径)を求めます。
+     * If the radius of circle of equal latitude, then multiple returned value by cos(geodetic_latitude)
+     * 等緯度面での半径が必要な場合は返却値にcos(地理経度)をかけること。
      * 
      * @param latitude (geodetic) latitude (測地)緯度 [rad]
      * @return (FloatT) radius 東西方向の極率半径[m]
