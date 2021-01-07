@@ -70,6 +70,19 @@ FloatT deg2rad(const FloatT &degrees){return degrees * M_PI / 180;}
 template <class FloatT>
 FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
+/**
+ * Calculate value truncated between [-limit, limit)
+ * For example, bounds(310, 180) = -50
+ * @param value
+ * @param limit
+ * @return (FloatT)
+ */
+template <class FloatT1, class FloatT2>
+FloatT1 bounds(const FloatT1 &value, const FloatT2 &limit) {
+  FloatT1 rem(std::fmod(value + limit, limit * 2));
+  return (rem < 0) ? (rem + limit) : (rem - limit);
+}
+
 static std::time_t utc2time_t(
     const int &year, const int &month, const int &mday,
     const int &hour = 0, const int &min = 0, const int &sec = 0){
@@ -770,7 +783,7 @@ class NAVData {
         out << "east_west"
             << ',' << "north_south";
       }
-      FloatT east_west() const {return (nav.longitude() - base.lng_zero) * base.lng_sf;}
+      FloatT east_west() const {return bounds(nav.longitude() - base.lng_zero, M_PI) * base.lng_sf;}
       FloatT north_south() const {return (nav.latitude() - base.lat_zero) * base.lat_sf;}
       void dump(std::ostream &out) const {
         out << east_west() << ',' << north_south();

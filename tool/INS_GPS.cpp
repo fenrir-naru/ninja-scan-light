@@ -225,7 +225,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
       if(is_true(spec)){return;}
       double dummy[2];
       if(std::sscanf(spec, "%lf,%lf", &dummy[0], &dummy[1]) == 2){
-        set_base(deg2rad(dummy[0]), deg2rad(dummy[1]));
+        set_base(deg2rad(bounds(dummy[0], 90)), deg2rad(bounds(dummy[1], 180)));
       }else{
         std::cerr << "Invalid spec for --dump_relative[=lat,lng]: " << spec << std::endl;
         exit(-1);
