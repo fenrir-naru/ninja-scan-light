@@ -758,6 +758,31 @@ class NAVData {
       encode_N0(time_stamp(), buf);
     }
 
+    struct RelativePosition {
+      const NAVData<FloatT> &nav;
+      const struct base_t {
+        FloatT lng_zero, lat_zero;
+        FloatT lng_sf, lat_sf;
+        base_t() : lng_sf(0), lat_sf(0) {}
+      } &base;
+      RelativePosition(const NAVData<FloatT> &nav_, const base_t &base_) : nav(nav_), base(base_) {}
+      static void label(std::ostream &out = std::cout){
+        out << "east_west"
+            << ',' << "north_south";
+      }
+      FloatT east_west() const {return (nav.longitude() - base.lng_zero) * base.lng_sf;}
+      FloatT north_south() const {return (nav.latitude() - base.lat_zero) * base.lat_sf;}
+      void dump(std::ostream &out) const {
+        out << east_west() << ',' << north_south();
+      }
+      friend std::ostream &operator<<(std::ostream &out, const RelativePosition &rel){
+        rel.dump(out);
+        return out;
+      }
+    };
+    RelativePosition relative_position(const typename RelativePosition::base_t &base) const {
+      return RelativePosition(*this, base);
+    }
 };
 
 #endif
