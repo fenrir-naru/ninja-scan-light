@@ -1240,6 +1240,10 @@ class INS_GPS_NAVData : public INS_GPS {
             << ',' << "s1(psi)"
             << ',' << "s1(theta)"
             << ',' << "s1(phi)";
+        if(options.dump_relative){
+          out << ',' << "s1(east_west)"
+              << ',' << "s1(north_south)";
+        }
       }
     }
 
@@ -1292,6 +1296,10 @@ class INS_GPS_NAVData : public INS_GPS {
             << ',' << rad2deg(sigma.heading_rad)
             << ',' << rad2deg(sigma.pitch_rad)
             << ',' << rad2deg(sigma.roll_rad);
+        if(options.dump_relative){
+          out << ',' << options.dump_relative.base.relative_east_west(sigma.longitude_rad)
+              << ',' << options.dump_relative.base.relative_north_south(sigma.latitude_rad);
+        }
       }
     }
 

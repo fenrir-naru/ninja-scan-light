@@ -777,14 +777,20 @@ class NAVData {
         FloatT lng_zero, lat_zero;
         FloatT lng_sf, lat_sf;
         base_t() : lng_sf(0), lat_sf(0) {}
+        FloatT relative_east_west(const FloatT &lng) const {
+          return bounds(lng - lng_zero, M_PI) * lng_sf;
+        }
+        FloatT relative_north_south(const FloatT &lat) const {
+          return (lat - lat_zero) * lat_sf;
+        }
       } &base;
       RelativePosition(const NAVData<FloatT> &nav_, const base_t &base_) : nav(nav_), base(base_) {}
       static void label(std::ostream &out = std::cout){
         out << "east_west"
             << ',' << "north_south";
       }
-      FloatT east_west() const {return bounds(nav.longitude() - base.lng_zero, M_PI) * base.lng_sf;}
-      FloatT north_south() const {return (nav.latitude() - base.lat_zero) * base.lat_sf;}
+      FloatT east_west() const {return base.relative_east_west(nav.longitude());}
+      FloatT north_south() const {return base.relative_north_south(nav.latitude());}
       void dump(std::ostream &out) const {
         out << east_west() << ',' << north_south();
       }
