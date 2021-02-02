@@ -70,6 +70,19 @@ FloatT deg2rad(const FloatT &degrees){return degrees * M_PI / 180;}
 template <class FloatT>
 FloatT rad2deg(const FloatT &radians){return radians * 180 / M_PI;}
 
+/**
+ * Calculate value truncated between [-limit, limit)
+ * For example, bounds(310, 180) = -50
+ * @param value
+ * @param limit
+ * @return (FloatT)
+ */
+template <class FloatT1, class FloatT2>
+FloatT1 bounds(const FloatT1 &value, const FloatT2 &limit) {
+  FloatT1 rem(std::fmod(value + limit, limit * 2));
+  return (rem < 0) ? (rem + limit) : (rem - limit);
+}
+
 static std::time_t utc2time_t(
     const int &year, const int &month, const int &mday,
     const int &hour = 0, const int &min = 0, const int &sec = 0){
@@ -758,6 +771,37 @@ class NAVData {
       encode_N0(time_stamp(), buf);
     }
 
+    struct RelativePosition {
+      const NAVData<FloatT> &nav;
+      const struct base_t {
+        FloatT lng_zero, lat_zero;
+        FloatT lng_sf, lat_sf;
+        base_t() : lng_sf(0), lat_sf(0) {}
+        FloatT relative_east_west(const FloatT &lng) const {
+          return bounds(lng - lng_zero, M_PI) * lng_sf;
+        }
+        FloatT relative_north_south(const FloatT &lat) const {
+          return (lat - lat_zero) * lat_sf;
+        }
+      } &base;
+      RelativePosition(const NAVData<FloatT> &nav_, const base_t &base_) : nav(nav_), base(base_) {}
+      static void label(std::ostream &out = std::cout){
+        out << "east_west"
+            << ',' << "north_south";
+      }
+      FloatT east_west() const {return base.relative_east_west(nav.longitude());}
+      FloatT north_south() const {return base.relative_north_south(nav.latitude());}
+      void dump(std::ostream &out) const {
+        out << east_west() << ',' << north_south();
+      }
+      friend std::ostream &operator<<(std::ostream &out, const RelativePosition &rel){
+        rel.dump(out);
+        return out;
+      }
+    };
+    RelativePosition relative_position(const typename RelativePosition::base_t &base) const {
+      return RelativePosition(*this, base);
+    }
 };
 
 #endif

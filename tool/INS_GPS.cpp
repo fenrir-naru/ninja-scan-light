@@ -80,6 +80,10 @@
  *   --dump_correct=<off|on>
  *      specifies whether the program outputs results when information processed by a GPS receiver
  *      is obtained, (so called, results for measurement update) or not. Its default is off.
+ *   --dump_relative[=(latitude[deg]),(longitude(deg))]
+ *      additionally generates relative horizontal positions respect to the base position in meter.
+ *      If this option is specified without latitude and longitude, the initial position is used
+ *      as its base position. Its default is off.
  *
  *   --calendar_time
  *      changes time stamp of output from (internal) GPS time of week (default)
@@ -202,6 +206,7 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/GPS.h"
 
+#include "navigation/WGS84.h"
 #include "navigation/MagneticField.h"
 
 #include "analyze_common.h"
@@ -217,6 +222,52 @@ struct Options : public GlobalOptions<float_sylph_t> {
   bool dump_update; ///< True for dumping states at time updates
   bool dump_correct; ///< True for dumping states at measurement updates
   bool dump_stddev; ///< True for dumping standard deviations
+  struct dump_relative_t {
+    enum mode_t {MODE_INACTIVE, MODE_BASE_UNSET, MODE_ACTIVE} mode;
+    typedef NAVData<float_sylph_t>::RelativePosition pos_t;
+    pos_t::base_t base;
+    dump_relative_t() : mode(MODE_INACTIVE), base() {}
+    void set_base(const float_sylph_t &lat, const float_sylph_t &lng){
+      if(mode != MODE_BASE_UNSET){return;}
+      base.lat_zero = lat;
+      base.lat_sf = WGS84Generic<float_sylph_t>::R_meridian(lat);
+      base.lng_zero = lng;
+      base.lng_sf = WGS84Generic<float_sylph_t>::R_normal(lat) * std::cos(lat);
+      mode = MODE_ACTIVE;
+    }
+    friend std::ostream &operator<<(std::ostream &out, const dump_relative_t &rel){
+      switch(rel.mode){
+        case MODE_BASE_UNSET:
+          out << "on (base position will be initialized)";
+          break;
+        case MODE_ACTIVE:
+          out << "on, base(lat,lng)=("
+              << rad2deg(rel.base.lat_zero) << ',' << rad2deg(rel.base.lng_zero) << ')';
+          break;
+      }
+      return out;
+    }
+    void parse_spec(const char *spec){
+      mode = MODE_BASE_UNSET;
+      if(is_true(spec)){return;}
+      double dummy[2];
+      if(std::sscanf(spec, "%lf,%lf", &dummy[0], &dummy[1]) == 2){
+        set_base(deg2rad(bounds(dummy[0], 90)), deg2rad(bounds(dummy[1], 180)));
+      }else{
+        std::cerr << "Invalid spec for --dump_relative[=lat,lng]: " << spec << std::endl;
+        exit(-1);
+      }
+    }
+    void label(std::ostream &out) const {
+      pos_t::label(out);
+    }
+    pos_t operator()(const NAVData<float_sylph_t> &nav){
+      return nav.relative_position(base);
+    }
+    operator bool() const {
+      return mode != MODE_INACTIVE;
+    }
+  } dump_relative; ///< Controller for relative (2D) position outputs  bool out_is_N_packet; ///< True for NPacket formatted outputs
   bool out_is_N_packet; ///< True for NPacket formatted outputs
 
   // Time Stamp
@@ -225,30 +276,30 @@ struct Options : public GlobalOptions<float_sylph_t> {
       ITOW,
       CALENDAR_TIME,
     } mode;
-    const char *spec;
+    int correction_hr;
     time_stamp_t()
-        : mode(ITOW), spec(NULL) {}
-    struct calendar_spec_parsed_t {
-      int correction_hr;
-      friend std::ostream &operator<<(std::ostream &out, const calendar_spec_parsed_t &parsed){
-        out << "UTC";
-        if(parsed.correction_hr != 0){
-          out << (parsed.correction_hr > 0 ? " +" : " ")
-              << parsed.correction_hr << " [hr]";
-        }
-        return out;
+        : mode(ITOW), correction_hr(0) {}
+    friend std::ostream &operator<<(std::ostream &out, const time_stamp_t &stamp){
+      switch(stamp.mode){
+        case CALENDAR_TIME:
+          out << "UTC";
+          if(stamp.correction_hr != 0){
+            out << (stamp.correction_hr > 0 ? " +" : " ")
+                << stamp.correction_hr << " [hr]";
+          }
+          break;
       }
-    };
-    calendar_spec_parsed_t calendar_spec_parse() const {
-      calendar_spec_parsed_t res = {0};
-      if(is_true(spec)){return res;}
+      return out;
+    }
+    void parse_calendar_spec(const char *spec){
+      mode = CALENDAR_TIME;
+      if(is_true(spec)){return;}
       char *spec_end;
-      res.correction_hr = std::strtol(spec, &spec_end, 10);
+      correction_hr = std::strtol(spec, &spec_end, 10);
       if(spec == spec_end){
         std::cerr << "Invalid spec for --calendar_time[=(+/-hr)]: " << spec << std::endl;
         exit(-1);
       }
-      return res;
     }
   } time_stamp;
 
@@ -323,7 +374,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
 
   Options()
       : super_t(),
-      dump_update(true), dump_correct(false), dump_stddev(false),
+      dump_update(true), dump_correct(false), dump_stddev(false), dump_relative(),
       out_is_N_packet(false),
       time_stamp(),
       ins_gps_integration(INS_GPS_INTEGRATION_LOOSELY), ins_gps_sync_strategy(INS_GPS_SYNC_OFFLINE),
@@ -379,13 +430,15 @@ CHECK_OPTION(target, true, target = is_true(value), (target ? "on" : "off"));
     CHECK_ALIAS(dump-correct);
     CHECK_OPTION_BOOL(dump_correct);
     CHECK_OPTION_BOOL(dump_stddev);
+    CHECK_OPTION(dump_relative, true,
+        dump_relative.parse_spec(value),
+        dump_relative);
     CHECK_ALIAS(out_N_packet);
     CHECK_OPTION_BOOL(out_is_N_packet);
 
-    CHECK_OPTION(calendar_time, true, {
-          time_stamp.mode = time_stamp_t::CALENDAR_TIME;
-          time_stamp.spec = value;
-        }, time_stamp.calendar_spec_parse());
+    CHECK_OPTION(calendar_time, true,
+        time_stamp.parse_calendar_spec(value),
+        time_stamp);
 
     static const char *integration_method[INS_GPS_INTEGRATION_METHODS] = {
       "receiver_pv", "self_pv", "self_pvt", "tightly"
@@ -636,25 +689,29 @@ struct NAV_Factory {
     void label(std::ostream &out = std::cout) const {
       if(options.out_is_N_packet){return;}
       BaseNAV::label(options.out());
+      if(options.dump_relative){options.dump_relative.label(options.out() << ',');}
       options.out() << std::endl;
     }
     void updated() const {
       const NAV::updated_items_t &items(BaseNAV::updated_items());
       if(items.empty()){return;}
 
-      for(NAV::updated_items_t::const_iterator it(items.begin());
-          it != items.end(); ++it){
-        if(options.out_is_N_packet){
-          char buf[SYLPHIDE_PAGE_SIZE];
-          (*it)->encode_N0(buf);
-          options.out().write(buf, sizeof(buf));
-          return;
-        }else{
-          options.out() << (**it) << std::endl;
+      if(options.out_is_N_packet){
+        char buf[SYLPHIDE_PAGE_SIZE];
+        items.back()->encode_N0(buf);
+        options.out().write(buf, sizeof(buf));
+      }else{
+        for(NAV::updated_items_t::const_iterator it(items.begin());
+            it != items.end(); ++it){
+          options.out() << (**it);
+          if(options.dump_relative){
+            options.out() << ',' << options.dump_relative(**it);
+          }
+          options.out() << std::endl;
         }
       }
 
-      options.out_debug() << (**(items.rbegin())).time_stamp() << ',';
+      options.out_debug() << items.back()->time_stamp() << ',';
       BaseNAV::inspect(options.out_debug());
       options.out_debug() << std::endl;
     }
@@ -1400,6 +1457,10 @@ class INS_GPS_NAVData : public INS_GPS {
             << ',' << "s1(psi)"
             << ',' << "s1(theta)"
             << ',' << "s1(phi)";
+        if(options.dump_relative){
+          out << ',' << "s1(east_west)"
+              << ',' << "s1(north_south)";
+        }
       }
     }
 
@@ -1475,6 +1536,10 @@ class INS_GPS_NAVData : public INS_GPS {
             << ',' << rad2deg(sigma.heading_rad)
             << ',' << rad2deg(sigma.pitch_rad)
             << ',' << rad2deg(sigma.roll_rad);
+        if(options.dump_relative){
+          out << ',' << options.dump_relative.base.relative_east_west(sigma.longitude_rad)
+              << ',' << options.dump_relative.base.relative_north_south(sigma.latitude_rad);
+        }
       }
     }
 
@@ -2335,7 +2400,7 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       typename stamp_t::Converter itow2calendar;
       TimeStampGenerator() : itow2calendar() {
         itow2calendar.correction_sec
-            = 60 * 60 * options.time_stamp.calendar_spec_parse().correction_hr;
+            = 60 * 60 * options.time_stamp.correction_hr;
       }
       void update(const TimePacket &packet){
         packet.apply<FloatT>(itow2calendar);
@@ -2544,6 +2609,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       nav.ins_gps->initPosition(latitude, longitude, height);
       nav.ins_gps->initVelocity(v_north, v_east, v_down);
       nav.ins_gps->initAttitude(yaw, pitch, roll);
+
+      options.dump_relative.set_base(latitude, longitude);
 
       for(char buf[0x4000]; !options.init_misc->eof(); ){ // Miscellaneous setup
         options.init_misc->getline(buf, sizeof(buf));
