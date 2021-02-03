@@ -55,7 +55,7 @@ template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
-  typedef GPS_Solver_MultiFrequency<FloatT, GPS_SinglePositioning> gps_solver_t;
+  typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> > gps_solver_t;
 #else
   typedef GPS_SinglePositioning<FloatT> gps_solver_t;
 #endif
