@@ -51,6 +51,8 @@
 #include "navigation/GPS_Solver_MultiFrequency.h"
 #endif
 
+#include "INS_GPS/GPS_Solver_SignalCheck.h"
+
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
@@ -62,9 +64,11 @@ struct GNSS_Receiver {
 #endif
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
-  typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT, solver_base_t> > gps_solver_t;
+  typedef GPS_Solver_SignalCheck<
+      GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT, solver_base_t> > > gps_solver_t;
 #else
-  typedef GPS_SinglePositioning<FloatT, solver_base_t> gps_solver_t;
+  typedef GPS_Solver_SignalCheck<
+      GPS_SinglePositioning<FloatT, solver_base_t> > gps_solver_t;
 #endif
 
   struct system_t;
@@ -283,6 +287,20 @@ struct GNSS_Receiver {
       if(dry_run){return true;}
       data.out_rinex_nav = &options.spec2ostream(value);
       std::cerr << "out_rinex_nav: " << value << std::endl;
+      return true;
+    }
+
+    if(value = runtime_opt_t::get_value(spec, "signal_status", false)){
+      if(dry_run){return true;}
+      std::cerr << "Signal status file (" << value << ") reading..." << std::endl;
+      std::istream &in(options.spec2istream(value));
+      int count(data.gps.solver_options.add_signal_status(in));
+      if(count < 0){
+        std::cerr << "(error!) Invalid format!" << std::endl;
+        return false;
+      }else{
+        std::cerr << "signal_status: " << count << " items captured." << std::endl;
+      }
       return true;
     }
 
