@@ -10,7 +10,7 @@ fi
 
 if [ ! -d sdcc-${SDCC} ]; then
   if [ ! -f sdcc-src-${SDCC}.tar.bz2 ]; then
-    wget "http://downloads.sourceforge.net/project/sdcc/sdcc/${SDCC}/sdcc-src-${SDCC}.tar.bz2" -O sdcc-src-${SDCC}.tar.bz2
+    wget "https://downloads.sourceforge.net/project/sdcc/sdcc/${SDCC}/sdcc-src-${SDCC}.tar.bz2" -O sdcc-src-${SDCC}.tar.bz2
   fi
   tar jvxf sdcc-src-${SDCC}.tar.bz2
 fi
