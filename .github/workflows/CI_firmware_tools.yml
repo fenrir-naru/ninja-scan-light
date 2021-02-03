@@ -1,0 +1,34 @@
+name: CI of firmware and tools
+
+on: [push, pull_request]
+
+env:
+  SDCC: 3.3.0
+
+jobs:
+  build:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v2
+    - name: before_setup
+      env:
+        SDCC_DIR: /tmp/sdcc-${{env.SDCC}}
+      run: |
+        echo "SDCC_DIR=${SDCC_DIR}" >> $GITHUB_ENV
+        echo "${SDCC_DIR}/bin" >> $GITHUB_PATH
+        sudo apt-get update && sudo apt-get install -yq gcc-5 g++-5 libboost-all-dev
+    - name: cache
+      uses: actions/cache@v2.1.3
+      with:
+        path: ${{env.SDCC_DIR}}
+        key: sdcc-${{env.SDCC}}
+    - name: setup_sdcc
+      run: |
+        chmod +x ./scripts/build-sdcc.sh
+        CC=gcc-5 CXX=g++-5 ./scripts/build-sdcc.sh
+    - name: make
+      run: |
+        (cd ./firmware/ver1 && make clean all)
+        (cd ./firmware/ver2 && make clean all)
+        (cd ./tool/test && make clean all)
+        (cd ./tool && make clean all && (cd build_GCC && touch ${GITHUB_SHA}.commit && tar zvcf ubuntu.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
