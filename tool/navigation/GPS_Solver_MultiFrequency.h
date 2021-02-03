@@ -69,7 +69,7 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
         public GPS_Solver_MultiFrequency_Options<float_t> {
       static options_t generate(
           const typename super_t::options_t &opt_super,
-          const GPS_Solver_MultiFrequency_Options<float_t> opt_freq){
+          const GPS_Solver_MultiFrequency_Options<float_t> &opt_freq){
         options_t res;
         ((typename super_t::options_t &)res) = opt_super;
         ((GPS_Solver_MultiFrequency_Options<float_t> &)res) = opt_freq;
