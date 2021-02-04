@@ -83,7 +83,7 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
       return options_t::generate(super_t::available_options(), options_frequency);
     }
 
-    options_t available_options(options_t opt_wish) const {
+    options_t available_options(const options_t &opt_wish) const {
       return options_t::generate(super_t::available_options(opt_wish), options_frequency);
     }
 

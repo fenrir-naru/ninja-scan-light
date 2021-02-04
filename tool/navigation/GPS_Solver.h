@@ -209,9 +209,10 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       return _options;
     }
 
-    options_t available_options(options_t opt_wish) const {
-      filter_ionospheric_models(opt_wish);
-      return opt_wish;
+    options_t available_options(const options_t &opt_wish) const {
+      options_t res(opt_wish);
+      filter_ionospheric_models(res);
+      return res;
     }
 
     const options_t &update_options(const options_t &opt_wish){
