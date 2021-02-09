@@ -43,6 +43,7 @@
 #include <istream>
 #include <cstdlib>
 #include <cmath>
+#include <cctype>
 
 template <class BaseSolver = GPS_SinglePositioning<double> >
 class GPS_Solver_SignalCheck : public BaseSolver {
@@ -76,16 +77,23 @@ class GPS_Solver_SignalCheck : public BaseSolver {
       int add_signal_status(const char *line){
         typedef std::vector<float_t> values_t;
         values_t values;
+        const char *buf(line);
         char *next;
-        while(*line){
-          float_t d((float_t)std::strtod(line, &next));
-          if(line == next){
-            line++;
+        while(*buf){
+          if((*buf == '\r') || (*buf == '\n')){break;}
+          float_t d((float_t)std::strtod(buf, &next));
+          if(buf == next){
+            if(!((*buf == ',') || std::isspace(*buf))){
+              std::cerr << "Fail to parse => " << line << " ... " << std::endl;
+              return -1;
+            }
+            buf++;
             continue;
           }
           values.push_back(d);
-          line = next;
+          buf = next;
         }
+        if(values.empty()){return 0;} // empty line
         if(values.size() % 2 != 1){return -1;} // time,(prn,status)*N => odd length
         typename values_t::const_iterator it(values.begin());
         int t_msec(std::floor((1E1 * (*it++)) + 0.5) * 1E2); // time is managed in msec format with 100 ms ticks.
