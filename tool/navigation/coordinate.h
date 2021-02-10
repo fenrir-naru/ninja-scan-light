@@ -274,7 +274,7 @@ class System_LLH : public System_3D<FloatT> {
       FloatT n(xyz_t::a0 / std::sqrt(1.0 - pow2(xyz_t::e0) * pow2(slat)));
       
       return System_XYZ<FloatT, Earth>(
-          (n + height()) * clat * slng,
+          (n + height()) * clat * clng,
           (n + height()) * clat * slng,
           (n * (1.0 -pow2(xyz_t::e0)) + height()) * slat);
     }
