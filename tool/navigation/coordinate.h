@@ -254,6 +254,15 @@ class System_LLH : public System_3D<FloatT> {
     FloatT &longitude(){return non_const_ref(const_ref(this).longitude());}
     FloatT &height(){return non_const_ref(const_ref(this).height());}
 
+    void rotation_ecef2enu(FloatT (&res)[3][3]) const {
+      FloatT
+          clat(std::cos(latitude())), clng(std::cos(longitude())),
+          slat(std::sin(latitude())), slng(std::sin(longitude()));
+      res[0][0] = -       slng; res[0][1] =         clng; res[0][2] = 0;
+      res[1][0] = -slat * clng; res[1][1] = -slat * slng; res[1][2] = clat;
+      res[2][0] =  clat * clng; res[2][1] =  clat * slng; res[2][2] = slat;
+    }
+
     /**
      * Convert to ECEF (Earth-centered Earth-Fixed)
      *

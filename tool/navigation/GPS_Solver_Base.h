@@ -379,11 +379,16 @@ struct GPS_Solver_Base {
     }
 
     void update_DOP(const matrix_t &C){
+      float_t buf[3][3];
+      user_position.llh.rotation_ecef2enu(buf);
+      matrix_t rot_t(3, 3, (float_t *)buf);
+      matrix_t C_enu(rot_t * C.partial(3, 3, 0, 0) * rot_t.transpose());
+
       // Calculate DOP
       gdop = std::sqrt(C.trace());
-      pdop = std::sqrt(C.partial(3, 3, 0, 0).trace());
-      hdop = std::sqrt(C.partial(2, 2, 0, 0).trace());
-      vdop = std::sqrt(C(2, 2));
+      pdop = std::sqrt(C_enu.trace());
+      hdop = std::sqrt(C_enu.partial(2, 2, 0, 0).trace());
+      vdop = std::sqrt(C_enu(2, 2));
       tdop = std::sqrt(C(3, 3));
     }
   };
