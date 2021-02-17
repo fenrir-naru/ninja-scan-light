@@ -606,16 +606,14 @@ class Filtered_INS2
       }
 
       { // ˆÊ’u
-        float_t cl(std::cos(BaseINS::lambda)), sl(std::sin(BaseINS::lambda));
-
         mat_t M(2, 3);
 
         M(0, 0) = 0;
         M(0, 1) = 0;
         M(0, 2) = 1;
 
-        M(1, 0) = - sl * cl * 2;
-        M(1, 1) = cl * cl * 2 - 1;
+        M(1, 0) = -std::sin(BaseINS::lambda);
+        M(1, 1) = std::cos(BaseINS::lambda);
         M(1, 2) = 0;
 
         mat_t P_euler_e2n(M * P.partial(3, 3, 3, 3) * M.transpose());
