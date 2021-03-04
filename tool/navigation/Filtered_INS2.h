@@ -576,6 +576,44 @@ class Filtered_INS2
      */
     filter_t &getFilter(){return m_filter;}
 
+  protected:
+    static mat_t delta_q_e2n_to_delta_latlng(const float_t &lng){
+      mat_t M(2, 3); // assume zero fill
+
+      //M(0, 0) = 0;
+      //M(0, 1) = 0;
+      M(0, 2) = 1;
+
+      M(1, 0) = -std::sin(lng);
+      M(1, 1) = std::cos(lng);
+      //M(1, 2) = 0;
+
+      return M;
+    }
+
+  public:
+    /**
+     * Set filter covariance relatide to the Earth position, i.e., latitude and longitude
+     *
+     * @param latitude_sigma standard deviation of latitude in radians
+     * @param longitude_sigma standard deviation of longitude in radians
+     * @param longitude (optional) current longitude
+     */
+    void setFilter_latlng(
+        const float_t &latitude_sigma, const float_t &longitude_sigma,
+        const float_t &longitude = BaseINS::lambda){
+
+      mat_t M(delta_q_e2n_to_delta_latlng(longitude)), P_euler_e2n(2, 2);
+
+      P_euler_e2n(0, 0) = std::pow(longitude_sigma, 2);
+      //P_euler_e2n(0, 1) = 0;
+      //P_euler_e2n(1, 0) = 0;
+      P_euler_e2n(1, 1) = std::pow(latitude_sigma, 2);
+
+      getFilter().getP().partial(3, 3, 3, 3).replace(M.transpose() * P_euler_e2n * M);
+      // TODO If lambda = 0, (+/-)pi/2, or pi then inverse matrix may not exist.
+    }
+
     struct StandardDeviations {
       float_t v_north_ms, v_east_ms, v_down_ms;
       float_t longitude_rad, latitude_rad, height_m;
@@ -601,16 +639,7 @@ class Filtered_INS2
       }
 
       { // ˆÊ’u
-        mat_t M(2, 3);
-
-        M(0, 0) = 0;
-        M(0, 1) = 0;
-        M(0, 2) = 1;
-
-        M(1, 0) = -std::sin(BaseINS::lambda);
-        M(1, 1) = std::cos(BaseINS::lambda);
-        M(1, 2) = 0;
-
+        mat_t M(delta_q_e2n_to_delta_latlng(BaseINS::lambda));
         mat_t P_euler_e2n(M * P.partial(3, 3, 3, 3) * M.transpose());
 
         sigma.longitude_rad = std::sqrt(P_euler_e2n(0, 0)) * 2; // Œo“x
