@@ -551,6 +551,10 @@ class Filtered_INS2
       float_t H_serialized[z_size][P_SIZE] = {{0}};
 #define H(i, j) H_serialized[i][j]
       {
+        float_t psi(BaseINS::euler_psi()), theta(BaseINS::euler_theta());
+        float_t ttheta(std::tan(theta));
+        H(0, 7) = std::cos(psi) * ttheta * 2; // u_{1} {}_{n}^{b}
+        H(0, 8) = std::sin(psi) * ttheta * 2; // u_{2} {}_{n}^{b}
         H(0, 9) = 2; // u_{3} {}_{n}^{b}
       }
 #undef H
