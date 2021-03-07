@@ -556,6 +556,10 @@ class Filtered_INS2
       float_t H_serialized[z_size][P_SIZE] = {{0}};
 #define H(i, j) H_serialized[i][j]
       {
+        float_t psi(BaseINS::euler_psi()), theta(BaseINS::euler_theta());
+        float_t ttheta(std::tan(theta));
+        H(0, 7) = std::cos(psi) * ttheta * 2; // u_{1} {}_{n}^{b}
+        H(0, 8) = std::sin(psi) * ttheta * 2; // u_{2} {}_{n}^{b}
         H(0, 9) = 2; // u_{3} {}_{n}^{b}
       }
 #undef H
@@ -580,6 +584,80 @@ class Filtered_INS2
      * @return (Filter &) フィルター
      */
     filter_t &getFilter(){return m_filter;}
+
+  protected:
+    static mat_t delta_q_e2n_to_delta_latlng(const float_t &lng){
+      mat_t M(2, 3); // assume zero fill
+
+      //M(0, 0) = 0;
+      //M(0, 1) = 0;
+      M(0, 2) = 1;
+
+      M(1, 0) = -std::sin(lng);
+      M(1, 1) = std::cos(lng);
+      //M(1, 2) = 0;
+
+      return M;
+    }
+
+    static mat_t delta_q_n2b_to_delta_euler(const float_t &psi, const float_t &theta){
+      float_t cpsi(std::cos(psi)), spsi(std::sin(psi));
+      float_t ctheta(std::cos(theta)), ttheta(std::tan(theta));
+      mat_t M(3, 3); // assume zero fill
+
+      M(0, 0) =  cpsi * ttheta; M(0, 1) = spsi * ttheta; M(0, 2) = 1;
+      M(1, 0) = -spsi;          M(1, 1) = cpsi;          //M(1, 2) = 0;
+      M(2, 0) =  cpsi / ctheta; M(2, 1) = spsi / ctheta; //M(2, 2) = 0;
+
+      return M;
+    }
+
+  public:
+    /**
+     * Set filter covariance related to the Earth position, i.e., latitude and longitude
+     *
+     * @param latitude_sigma standard deviation of latitude in radians
+     * @param longitude_sigma standard deviation of longitude in radians
+     * @param longitude (optional) current longitude
+     */
+    void setFilter_latlng(
+        const float_t &latitude_sigma, const float_t &longitude_sigma,
+        const float_t &longitude = BaseINS::lambda){
+
+      mat_t M(delta_q_e2n_to_delta_latlng(longitude)), P_euler_e2n(2, 2);
+
+      P_euler_e2n(0, 0) = std::pow(longitude_sigma / 2, 2);
+      P_euler_e2n(1, 1) = std::pow(latitude_sigma / 2, 2);
+      //P_euler_e2n(0, 1) = P_euler_e2n(1, 0) = 0;
+
+      getFilter().getP().partial(3, 3, 3, 3).replace(M.transpose() * P_euler_e2n * M);
+      // TODO If lambda = 0, (+/-)pi/2, or pi then inverse matrix may not exist.
+    }
+
+    /**
+     * Set filter covariance related to Euler attitude angles; heading, pitch and roll angles
+     *
+     * @param heading_sigma standard deviation of heading in radians
+     * @param pitch_sigma standard deviation of pitch in radians
+     * @param roll_sigma standard deviation of roll in radians
+     * @param heading (optional) current heading
+     * @param pitch (optional) current pitch
+     */
+    void setFilter_attitude(
+        const float_t &heading_sigma, const float_t &pitch_sigma, const float_t &roll_sigma,
+        const float_t &heading = BaseINS::euler_psi(), const float_t &pitch = BaseINS::euler_theta()){
+
+      mat_t M(delta_q_n2b_to_delta_euler(heading, pitch)), P_euler_n2b(3, 3);
+
+      P_euler_n2b(0, 0) = std::pow(heading_sigma / 2, 2);
+      P_euler_n2b(1, 1) = std::pow(pitch_sigma / 2, 2);
+      P_euler_n2b(2, 2) = std::pow(roll_sigma / 2, 2);
+      /*P_euler_e2n(0, 1) = P_euler_e2n(0, 2)
+          = P_euler_e2n(1, 0) = P_euler_e2n(1, 2)
+          = P_euler_e2n(2, 0) = P_euler_e2n(2, 1) = 0;*/
+
+      getFilter().getP().partial(3, 3, 7, 7).replace(M.transpose() * P_euler_n2b * M);
+    }
 
     struct StandardDeviations {
       float_t v_north_ms, v_east_ms, v_down_ms;
@@ -606,16 +684,7 @@ class Filtered_INS2
       }
 
       { // 位置
-        mat_t M(2, 3);
-
-        M(0, 0) = 0;
-        M(0, 1) = 0;
-        M(0, 2) = 1;
-
-        M(1, 0) = -std::sin(BaseINS::lambda);
-        M(1, 1) = std::cos(BaseINS::lambda);
-        M(1, 2) = 0;
-
+        mat_t M(delta_q_e2n_to_delta_latlng(BaseINS::lambda));
         mat_t P_euler_e2n(M * P.partial(3, 3, 3, 3) * M.transpose());
 
         sigma.longitude_rad = std::sqrt(P_euler_e2n(0, 0)) * 2; // 経度
@@ -625,19 +694,8 @@ class Filtered_INS2
       }
 
       { // 姿勢
-        float_t psi(BaseINS::euler_psi()), theta(BaseINS::euler_theta()), phi(BaseINS::euler_phi());
-
-        // 最小二乗法(事前計算)
-        float_t cpsi(std::cos(psi)), spsi(std::sin(psi));
-        float_t ctheta(std::cos(theta)), ttheta(std::tan(theta));
-        mat_t M_conv(3, 3);
-        {
-          M_conv(0, 0) =  cpsi * ttheta; M_conv(0, 1) = spsi * ttheta; M_conv(0, 2) = 1;
-          M_conv(1, 0) = -spsi;          M_conv(1, 1) = cpsi;          M_conv(1, 2) = 0;
-          M_conv(2, 0) =  cpsi / ctheta; M_conv(2, 1) = spsi / ctheta; M_conv(2, 2) = 0;
-        }
-
-        mat_t P_euler_n2b(M_conv * P.partial(3, 3, 7, 7) * M_conv.transpose());
+        mat_t M(delta_q_n2b_to_delta_euler(BaseINS::euler_psi(), BaseINS::euler_theta()));
+        mat_t P_euler_n2b(M * P.partial(3, 3, 7, 7) * M.transpose());
 
         sigma.heading_rad = std::sqrt(P_euler_n2b(0, 0)) * 2; // ヨー
         sigma.pitch_rad = std::sqrt(P_euler_n2b(1, 1)) * 2; // ピッチ
