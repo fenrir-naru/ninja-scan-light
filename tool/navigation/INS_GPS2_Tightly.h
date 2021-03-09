@@ -21,6 +21,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <vector>
 
 #include "INS.h"
 #include "Filtered_INS2.h"
@@ -455,46 +456,83 @@ class INS_GPS2_Tightly : public BaseFINS {
       return res;
     }
 
+    struct relative_property_t : public solver_t::relative_property_t {
+      float_t sigma_range;
+      float_t rate_residual;
+      float_t sigma_rate;
+    };
+
     /**
-     * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
+     * Calculate relative property per satellite such as range and rate residuals
      *
      * @param solver residual calculator
      * @param prn GNSS satellite number used as target
      * @param measurement Measurement per satellite containg pseudorange and range rate
      * @param x receiver state represented by current position and clock properties
-     * @param z (output) pointer to be stored with residual
-     * @param H (output) pointer to be stored with correlation of state
-     * @param R_diag (output) pointer to be stored with estimated residual variance
-     * @return (int) number of used rows
+     * @return (relative_property_t) relative propertys
      */
-    int assign_z_H_R(
+    relative_property_t relative_property(
         const solver_t &solver,
         const typename solver_t::prn_t &prn,
         const typename solver_t::measurement_t::mapped_type &measurement,
-        const receiver_state_t &x,
-        float_t z[], float_t H[][P_SIZE], float_t R_diag[]) const {
+        const receiver_state_t &x) const {
+
+      relative_property_t res;
+      res.sigma_range = res.sigma_rate = -1; // initialize invalid value;
 
       const solver_t &solver_selected(solver.select(prn));
-      typename solver_t::relative_property_t prop(
-          solver_selected.relative_property(prn, measurement, x.clock_error, x.t, x.pos, x.vel));
+      (typename solver_t::relative_property_t &)res = solver_selected.relative_property(
+          prn, measurement, x.clock_error, x.t, x.pos, x.vel);
 
-      if(prop.weight <= 0){return 0;} // Intentional exclusion
+      if(res.weight <= 0){return res;}
 
-      z[0] = prop.range_residual;
-
-      float_t rate;
-      const float_t *rate_p(solver_selected.rate(measurement, rate));
-
-      for(int i(0); i < (rate_p ? 2 : 1); ++i){ // zero clear
-        for(int j(0); j < P_SIZE; ++j){
-          H[i][j] = 0;
-        }
+      if(!solver_selected.range_sigma(measurement, res.sigma_range)){
+        // If receiver's range variance is not provided
+        res.sigma_range = 1.0 / (res.weight < 1E-1 ? 1E-1 : res.weight); // TODO range error variance [m]
       }
 
-      { // setup H matrix
+      do{
+        float_t rate;
+        if(!solver_selected.rate(measurement, rate)){break;}
+        res.rate_residual = rate
+            - super_t::m_clock_error_rate[x.clock_index] + res.rate_relative_neg;
+
+        if(!solver_selected.rate_sigma(measurement, res.sigma_rate)){
+          // If receiver's rate variance is not provided
+          res.sigma_rate = res.sigma_range * 1E-1; // TODO rate error variance [m/s]
+        }
+      }while(false);
+
+      return res;
+    }
+
+    /**
+     * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
+     *
+     * @param x receiver state represented by current position and clock properties
+     * @param props relative properties
+     * @return (CorrectInfo) z, H, R
+     */
+    CorrectInfo<float_t> assign_z_H_R(
+        const receiver_state_t &x,
+        const std::vector<relative_property_t> &props) const {
+
+      struct buf_t {
+        float_t *z;
+        float_t (*H)[P_SIZE];
+        float_t *R_diag;
+        buf_t(const unsigned int &size)
+            : z(new float_t [size * (P_SIZE + 2)]),
+            R_diag(&z[size]), H((float_t (*)[P_SIZE])&z[size * 2]) {}
+        ~buf_t(){
+          delete [] z;
+        }
+      } buf(props.size() * 2); // range + rate
+
+      float_t H_uh[3][4] = {{0}};
+      {
 #define pow2(x) ((x) * (x))
 #define q_e2n(i) super_t::q_e2n.get(i)
-        float_t H_uh[3][4] = {{0}};
         const float_t
             q_alpha((pow2(q_e2n(0)) + pow2(q_e2n(3))) * 2 - 1),
             q_beta((q_e2n(0) * q_e2n(1) - q_e2n(2) * q_e2n(3)) * 2),
@@ -514,65 +552,75 @@ class INS_GPS2_Tightly : public BaseFINS {
         H_uh[1][2] = -n_h * q_gamma;
         H_uh[1][3] = q_beta;
 
-        {
-          const float_t sf2(sf * -(1.0 - pow2(e)));
-          const float_t n_h2((n * (1.0 - pow2(e)) + super_t::h) * 2);
-          H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
-          H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
-          H_uh[2][3] = -q_alpha;
-        }
+        const float_t sf2(sf * -(1.0 - pow2(e)));
+        const float_t n_h2((n * (1.0 - pow2(e)) + super_t::h) * 2);
+        H_uh[2][0] = q_alpha * q_beta * sf2 + n_h2 * q_beta;
+        H_uh[2][1] = q_alpha * q_gamma * sf2 + n_h2 * q_gamma;
+        H_uh[2][3] = -q_alpha;
+      }
 #undef pow2
 
-        for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
-          for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
-            H[0][k] -= prop.los_neg[i] * H_uh[i][j]; // polarity checked.
-          }
-        }
-        H[0][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
-      }
+      mat_t dcm_q_e2n_star(super_t::q_e2n.conj().getDCM());
 
-      float_t sigma;
-      if(solver_selected.range_sigma(measurement, sigma)){
-        // receiver's range variance is applied if exist
-        R_diag[0] = std::pow(sigma, 2);
-      }else{
-        if(prop.weight < 1E-1){prop.weight = 1E-1;}
-        R_diag[0] = std::pow(1.0 / prop.weight, 2); // TODO range error variance [m]
-      }
+      const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
 
-      if(!rate_p){return 1;}
+      // count up valid measurement, and make observation matrices
+      int i_z(0);
 
-      // rate residual
-      z[1] = rate - super_t::m_clock_error_rate[x.clock_index]
-          + prop.rate_relative_neg;
+      for(typename std::vector<relative_property_t>::const_iterator it(props.begin());
+          it != props.end(); ++it){
 
-      { // setup H matrix
-        { // velocity
-          mat_t dcm_q_e2n_star(super_t::q_e2n.conj().getDCM());
-          for(unsigned int j(0); j < dcm_q_e2n_star.columns(); ++j){
-            for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
-              H[1][j] -= prop.los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
+        { // range
+          if(it->sigma_range <= 0){continue;} // No measurement
+          for(int j(0); j < P_SIZE; ++j){buf.H[i_z][j] = 0;} // zero clear
+
+          for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
+            for(int i(0); i < sizeof(it->los_neg) / sizeof(it->los_neg[0]); ++i){
+              buf.H[i_z][k] -= it->los_neg[i] * H_uh[i][j]; // polarity checked.
             }
           }
+          buf.H[i_z][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
+
+          buf.z[i_z] = it->range_residual;
+          buf.R_diag[i_z] = std::pow(it->sigma_range, 2);
+          ++i_z;
         }
-        { // position
-          const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
-          H[1][3] -= (                        prop.los_neg[1] * -vz + prop.los_neg[2] *  vy) * 2;  // polarity checked.
-          H[1][4] -= (prop.los_neg[0] *  vz                         + prop.los_neg[2] * -vx) * 2;
-          H[1][5] -= (prop.los_neg[0] * -vy + prop.los_neg[1] *  vx                        ) * 2;
+
+        { // rate
+          if(it->sigma_rate <= 0){continue;} // No rate measurement
+          for(int j(0); j < P_SIZE; ++j){buf.H[i_z][j] = 0;} // zero clear
+
+          { // velocity
+            for(unsigned int j(0); j < dcm_q_e2n_star.columns(); ++j){
+              for(int i(0); i < sizeof(it->los_neg) / sizeof(it->los_neg[0]); ++i){
+                buf.H[i_z][j] -= it->los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
+              }
+            }
+          }
+          { // position
+            buf.H[i_z][3] -= (                       it->los_neg[1] * -vz + it->los_neg[2] *  vy) * 2;  // polarity checked.
+            buf.H[i_z][4] -= (it->los_neg[0] *  vz                        + it->los_neg[2] * -vx) * 2;
+            buf.H[i_z][5] -= (it->los_neg[0] * -vy + it->los_neg[1] *  vx                       ) * 2;
+          }
+          // error rate
+          buf.H[i_z][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
+
+          buf.z[i_z] = it->rate_residual;
+          buf.R_diag[i_z] = std::pow(it->sigma_rate, 2);
+          ++i_z;
         }
-        // error rate
-        H[1][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
       }
 
-      if(solver_selected.rate_sigma(measurement, sigma)){
-        // receiver's rate variance is applied if exist
-        R_diag[1] = std::pow(sigma, 2);
-      }else{
-        R_diag[1] = R_diag[0] * 1E-3; // TODO rate error variance
+      if(i_z <= 0){return CorrectInfo<float_t>::no_info();}
+
+      mat_t H(i_z, P_SIZE, (float_t *)buf.H);
+      mat_t z(i_z, 1, buf.z);
+      mat_t R(i_z, i_z);
+      for(int i(0); i < i_z; ++i){
+        R(i, i) = buf.R_diag[i];
       }
 
-      return 2;
+      return CorrectInfo<float_t>(H, z, R);
     }
 
   public:
@@ -597,43 +645,22 @@ class INS_GPS2_Tightly : public BaseFINS {
 
       receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error_shift));
 
-      struct buf_t {
-        float_t *z;
-        float_t (*H)[P_SIZE];
-        float_t *R_diag;
-        buf_t(const unsigned int &size)
-            : z(new float_t [size * (P_SIZE + 2)]),
-            R_diag(&z[size]), H((float_t (*)[P_SIZE])&z[size * 2]) {}
-        ~buf_t(){
-          delete [] z;
-        }
-      } buf(gps.measurement.size() * 2); // range + rate
-
-      // count up valid measurement, and make observation matrices
-      int z_index(0);
+      std::vector<relative_property_t> props;
+      props.reserve(gps.measurement.size());
 
       for(typename solver_t::measurement_t::const_iterator it(gps.measurement.begin());
           it != gps.measurement.end(); ++it){
 
-        /* Intentional exclusion, in which zero is returned,
-         * may occur during residual calculation due to no range entry,
-         * elevation mask, ... etc.
-         */
-        z_index += assign_z_H_R(*gps.solver,
-            it->first, it->second, x,
-            &buf.z[z_index], &buf.H[z_index], &buf.R_diag[z_index]);
+        props.push_back(relative_property(*gps.solver, it->first, it->second, x));
       }
 
-      if(z_index <= 0){return CorrectInfo<float_t>::no_info();}
+      /* TODO
+       * Control whether use or not use specific measurement
+       * by regulating props[n].sigma_(range|rate), whose negative or zero value yields
+       * intentional exclusion.
+       */
 
-      mat_t H(z_index, P_SIZE, (float_t *)buf.H);
-      mat_t z(z_index, 1, buf.z);
-      mat_t R(z_index, z_index);
-      for(int i(0); i < z_index; ++i){
-        R(i, i) = buf.R_diag[i];
-      }
-
-      return CorrectInfo<float_t>(H, z, R);
+      return assign_z_H_R(x, props);
     }
 
     CorrectInfo<float_t> correct_info(
