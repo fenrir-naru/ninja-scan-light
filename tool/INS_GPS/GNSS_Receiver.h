@@ -428,11 +428,11 @@ data.gps.solver_options. expr
             << ',' << rad2deg(p.pvt.user_position.llh.longitude())
             << ',' << rad2deg(p.pvt.user_position.llh.latitude())
             << ',' << p.pvt.user_position.llh.height()
-            << ',' << p.pvt.gdop
-            << ',' << p.pvt.pdop
-            << ',' << p.pvt.hdop
-            << ',' << p.pvt.vdop
-            << ',' << p.pvt.tdop;
+            << ',' << p.pvt.dop.g
+            << ',' << p.pvt.dop.p
+            << ',' << p.pvt.dop.h
+            << ',' << p.pvt.dop.v
+            << ',' << p.pvt.dop.t;
       }else{
         out << ",,,,,,,,,";
       }

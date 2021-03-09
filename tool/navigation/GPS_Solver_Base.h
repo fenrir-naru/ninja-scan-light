@@ -353,7 +353,23 @@ struct GPS_Solver_Base {
     float_t receiver_error;
     enu_t user_velocity_enu;
     float_t receiver_error_rate;
-    float_t gdop, pdop, hdop, vdop, tdop;
+    struct dop_t {
+      float_t g, p, h, v, t;
+      static dop_t get(const matrix_t &C, const pos_t &pos) {
+        float_t buf[3][3];
+        pos.llh.rotation_ecef2enu(buf);
+        matrix_t rot_t(3, 3, (float_t *)buf);
+        matrix_t C_enu(rot_t * C.partial(3, 3, 0, 0) * rot_t.transpose());
+        dop_t res = {
+          std::sqrt(C.trace()), // gdop
+          std::sqrt(C_enu.trace()), // pdop
+          std::sqrt(C_enu.partial(2, 2, 0, 0).trace()), // hdop
+          std::sqrt(C_enu(2, 2)), // vdop
+          std::sqrt(C(3, 3)) // tdop
+        };
+        return res;
+      }
+    } dop;
     unsigned int used_satellites;
     typedef bit_array_t<0x400> satellite_mask_t;
     satellite_mask_t used_satellite_mask; ///< bit pattern(use=1, otherwise=0), PRN 1(LSB) to 32 for GPS
@@ -379,17 +395,7 @@ struct GPS_Solver_Base {
     }
 
     void update_DOP(const matrix_t &C){
-      float_t buf[3][3];
-      user_position.llh.rotation_ecef2enu(buf);
-      matrix_t rot_t(3, 3, (float_t *)buf);
-      matrix_t C_enu(rot_t * C.partial(3, 3, 0, 0) * rot_t.transpose());
-
-      // Calculate DOP
-      gdop = std::sqrt(C.trace());
-      pdop = std::sqrt(C_enu.trace());
-      hdop = std::sqrt(C_enu.partial(2, 2, 0, 0).trace());
-      vdop = std::sqrt(C_enu(2, 2));
-      tdop = std::sqrt(C(3, 3));
+      dop = dop_t::get(C, user_position);
     }
   };
 

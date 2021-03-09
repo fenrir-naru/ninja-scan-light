@@ -344,10 +344,10 @@ struct GPS_RawData {
       /* Position standard deviation is roughly estimated as (DOP * 2 meters)
        * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
        */
-      res.sigma_2d = this->hdop * 2;
-      res.sigma_height = this->vdop * 2;
+      res.sigma_2d = this->dop.h * 2;
+      res.sigma_height = this->dop.v * 2;
       // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
-      res.sigma_vel = this->pdop * 0.1;
+      res.sigma_vel = this->dop.p * 0.1;
       return res;
     }
   };
