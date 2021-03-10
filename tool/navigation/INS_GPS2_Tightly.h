@@ -623,6 +623,40 @@ class INS_GPS2_Tightly : public BaseFINS {
       return CorrectInfo<float_t>(H, z, R);
     }
 
+    /**
+     * Calculate DOP
+     *
+     * @param x receiver state represented by current position and clock properties
+     * @param props relative properties
+     * @param res buffer of calculation result
+     * @return (dop_t *) unavailable when null; otherwise, DOP
+     */
+    typename solver_t::user_pvt_t::dop_t *get_DOP(
+        const receiver_state_t &x,
+        const std::vector<relative_property_t> &props,
+        typename solver_t::user_pvt_t::dop_t &res) const {
+
+      mat_t G_full(props.size(), 4); // design matrix
+
+      // count up valid measurement
+      int i_row(0);
+      for(typename std::vector<relative_property_t>::const_iterator it(props.begin());
+          it != props.end(); ++it){
+
+        if(it->sigma_range <= 0){continue;} // No measurement
+        for(int i(0); i < sizeof(it->los_neg) / sizeof(it->los_neg[0]); ++i){
+          G_full(i_row, i) = it->los_neg[i];
+        }
+        G_full(i_row, 3) = 1;
+        ++i_row;
+      }
+      if(i_row < 4){return NULL;}
+
+      typename mat_t::partial_offsetless_t G(G_full.partial(i_row, 4));
+      return &(res = solver_t::user_pvt_t::dop_t::get(
+          (G.transpose() * G).inverse(), x.pos));
+    }
+
   public:
     using super_t::correct_info;
 
@@ -659,6 +693,13 @@ class INS_GPS2_Tightly : public BaseFINS {
        * by regulating props[n].sigma_(range|rate), whose negative or zero value yields
        * intentional exclusion.
        */
+      /*{ // check DOP
+        typename solver_t::user_pvt_t::dop_t dop;
+        if(get_DOP(x, props, dop)){
+          // do something
+          std::cerr << dop.t << std::endl;
+        }
+      }*/
 
       return assign_z_H_R(x, props);
     }
