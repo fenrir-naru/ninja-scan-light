@@ -355,11 +355,8 @@ struct GPS_Solver_Base {
     float_t receiver_error_rate;
     struct dop_t {
       float_t g, p, h, v, t;
-      static dop_t get(const matrix_t &C, const pos_t &pos) {
-        float_t buf[3][3];
-        pos.llh.rotation_ecef2enu(buf);
-        matrix_t rot_t(3, 3, (float_t *)buf);
-        matrix_t C_enu(rot_t * C.partial(3, 3, 0, 0) * rot_t.transpose());
+      static dop_t get(const matrix_t &C, const matrix_t &rot_ecef2enu) {
+        matrix_t C_enu(rot_ecef2enu * C.partial(3, 3, 0, 0) * rot_ecef2enu.transpose()); // align design matrix to ENU
         dop_t res = {
           std::sqrt(C.trace()), // gdop
           std::sqrt(C_enu.trace()), // pdop
@@ -368,6 +365,11 @@ struct GPS_Solver_Base {
           std::sqrt(C(3, 3)) // tdop
         };
         return res;
+      }
+      static dop_t get(const matrix_t &C, const pos_t &pos) {
+        float_t buf[3][3];
+        pos.llh.rotation_ecef2enu(buf);
+        return get(C, matrix_t(3, 3, (float_t *)buf));
       }
     } dop;
     unsigned int used_satellites;
