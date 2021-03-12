@@ -859,7 +859,7 @@ struct G_Packet_Measurement
           break;
         }
         if(checked){continue;}
-        it->second.erase(it2); // Drop soppler entry
+        it->second.erase(it2); // Drop doppler entry
       }
 #endif
     }
