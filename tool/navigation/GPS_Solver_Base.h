@@ -227,7 +227,7 @@ struct GPS_Solver_Base {
   }
 
   struct relative_property_t {
-    float_t weight; ///< How useful this information is. only positive value activates the other values.
+    float_t weight; ///< How useful this information is. square value is required; thus, only positive value activates the other values.
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
     float_t range_residual; ///< residual range
     float_t rate_relative_neg; /// relative rate
@@ -409,12 +409,33 @@ protected:
     MatrixT delta_r; ///< Residual vector
     linear_solver_t(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_)
         : G(G_), W(W_), delta_r(delta_r_) {}
+    /**
+     * Calculate C matrix, which is required to obtain DOP
+     * C = G^t * W * G
+     *
+     * @param W2 weighting matrix corresponding to inverse of covariance
+     */
+    template <class MatrixT2>
+    inline matrix_t C(const MatrixT2 &W2) const {
+      return (G.transpose() * W2 * G).inverse();
+    }
     matrix_t C() const {
-      return (G.transpose() * G).inverse();
+      return C(W);
+    }
+    /**
+     * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
+     * where v =~ N(0, sigma), and y and G are observation delta and a design matrix, respectively.
+     * This yields x = (G^t * W2)^{-1} * (G^t * W2) y
+     *
+     * @param W2 weighting matrix, whose (i, j) element is 1/sigma_{i}^2 (i == j) or 0 (i != j)
+     */
+    template <class MatrixT2>
+    inline matrix_t least_square(const MatrixT2 &W2) const {
+      matrix_t Gt_W(G.transpose() * W2);
+      return (Gt_W * G).inverse() * Gt_W * delta_r;
     }
     matrix_t least_square() const {
-      matrix_t Gt_W(G.transpose() * W);
-      return (Gt_W * G).inverse() * Gt_W * delta_r;
+      return least_square(W);
     }
     typedef linear_solver_t<typename MatrixT::partial_offsetless_t> partial_t;
     partial_t partial(unsigned int size) const {
