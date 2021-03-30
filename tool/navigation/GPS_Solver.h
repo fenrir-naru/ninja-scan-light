@@ -317,8 +317,12 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         if(elv < _options.elevation_mask){
           residual.weight = 0; // exclude it when elevation is less than threshold
         }else{
-          // elevation weight based on "GPS実用プログラミング"
-          residual.weight = std::pow(sin(elv)/0.8, 2);
+          /* elevation weight based on "GPS実用プログラミング"
+           * elevation[deg] :   90    53    45    30    15    10    5
+           * sigma(s)       :   0.80  1.00  1.13  1.60  3.09  4.61  9.18
+           * weight(s^-2)   :   1.56  1.00  0.78  0.39  0.10  0.05  0.01
+           */
+          residual.weight = std::pow(sin(elv)/0.8, 2); // weight=1 @ elv=53[deg]
           if(residual.weight < 1E-3){residual.weight = 1E-3;}
         }
       }
