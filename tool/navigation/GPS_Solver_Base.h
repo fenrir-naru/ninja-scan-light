@@ -406,7 +406,7 @@ protected:
   struct linear_solver_t {
     MatrixT G; ///< Design matrix
     MatrixT W; ///< Weight (diagonal) matrix
-    MatrixT delta_r; ///< Residual vector
+    MatrixT delta_r; ///< Observation delta, i.e., observation minus measurement
     linear_solver_t(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_)
         : G(G_), W(W_), delta_r(delta_r_) {}
     /**
@@ -414,6 +414,7 @@ protected:
      * C = G^t * W * G
      *
      * @param W2 weighting matrix corresponding to inverse of covariance
+     * return C matrix
      */
     template <class MatrixT2>
     inline matrix_t C(const MatrixT2 &W2) const {
@@ -424,10 +425,12 @@ protected:
     }
     /**
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
-     * where v =~ N(0, sigma), and y and G are observation delta and a design matrix, respectively.
+     * where v =~ N(0, sigma), and y and G are observation delta(=delta_r variable)
+     * and a design matrix, respectively.
      * This yields x = (G^t * W2)^{-1} * (G^t * W2) y
      *
      * @param W2 weighting matrix, whose (i, j) element is 1/sigma_{i}^2 (i == j) or 0 (i != j)
+     * @return x vector
      */
     template <class MatrixT2>
     inline matrix_t least_square(const MatrixT2 &W2) const {
@@ -436,6 +439,17 @@ protected:
     }
     matrix_t least_square() const {
       return least_square(W);
+    }
+    /**
+     * Calculate weighted square sum of residual (WSSR) based on least square solution.
+     * v^t W v (= (y - G x)^t W (y - G x) )
+     *
+     * @param x solution
+     * @return WSSR scalar
+     */
+    float_t wssr(const matrix_t &x = least_square()) const {
+      matrix_t v(delta_r - G * x);
+      return (v.transpose() * W * v)(0, 0);
     }
     typedef linear_solver_t<typename MatrixT::partial_offsetless_t> partial_t;
     partial_t partial(unsigned int size) const {
