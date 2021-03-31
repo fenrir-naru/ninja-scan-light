@@ -260,10 +260,25 @@ class System_LLH : public System_3D<FloatT> {
       res[0][0] = -       slng; res[0][1] =         clng; res[0][2] = 0;
       res[1][0] = -slat * clng; res[1][1] = -slat * slng; res[1][2] = clat;
       res[2][0] =  clat * clng; res[2][1] =  clat * slng; res[2][2] = slat;
+      // identical to Eq.(6) https://gssc.esa.int/navipedia/index.php/Transformations_between_ECEF_and_ENU_coordinates
     }
 
     void rotation_ecef2enu(FloatT (&res)[3][3]) const {
       rotation_ecef2enu(
+          std::cos(latitude()), std::cos(longitude()), std::sin(latitude()), std::sin(longitude()),
+          res);
+    }
+
+    static void rotation_ecef2ned(
+        const FloatT &clat, const FloatT &clng, const FloatT &slat, const FloatT &slng,
+        FloatT (&res)[3][3]){
+      res[0][0] = -slat * clng; res[0][1] = -slat * slng; res[0][2] =  clat; // swap row[0] and row[1] of ENU
+      res[1][0] = -       slng; res[1][1] =         clng; res[1][2] =  0;
+      res[2][0] = -clat * clng; res[2][1] = -clat * slng; res[2][2] = -slat; // invert polarity of row[2] of ENU
+    }
+
+    void rotation_ecef2ned(FloatT (&res)[3][3]) const {
+      rotation_ecef2ned(
           std::cos(latitude()), std::cos(longitude()), std::sin(latitude()), std::sin(longitude()),
           res);
     }
