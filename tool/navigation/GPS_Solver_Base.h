@@ -355,21 +355,21 @@ struct GPS_Solver_Base {
     float_t receiver_error_rate;
     struct dop_t {
       float_t g, p, h, v, t;
-      static dop_t get(const matrix_t &C, const matrix_t &rot_ecef2enu) {
-        matrix_t C_enu(rot_ecef2enu * C.partial(3, 3, 0, 0) * rot_ecef2enu.transpose()); // align design matrix to ENU
+      static dop_t get(const matrix_t &C_ecef, const matrix_t &rot_ecef2enu) {
+        matrix_t C_enu(rot_ecef2enu.transpose() * C_ecef.partial(3, 3) * rot_ecef2enu); // align design matrix to ENU
         dop_t res = {
-          std::sqrt(C.trace()), // gdop
+          std::sqrt(C_ecef.trace()), // gdop
           std::sqrt(C_enu.trace()), // pdop
-          std::sqrt(C_enu.partial(2, 2, 0, 0).trace()), // hdop
+          std::sqrt(C_enu.partial(2, 2).trace()), // hdop
           std::sqrt(C_enu(2, 2)), // vdop
-          std::sqrt(C(3, 3)) // tdop
+          std::sqrt(C_ecef(3, 3)) // tdop
         };
         return res;
       }
-      static dop_t get(const matrix_t &C, const pos_t &pos) {
+      static dop_t get(const matrix_t &C_ecef, const pos_t &pos) {
         float_t buf[3][3];
         pos.llh.rotation_ecef2enu(buf);
-        return get(C, matrix_t(3, 3, (float_t *)buf));
+        return get(C_ecef, matrix_t(3, 3, (float_t *)buf));
       }
     } dop;
     unsigned int used_satellites;
@@ -396,8 +396,8 @@ struct GPS_Solver_Base {
       return error_code == ERROR_NO;
     }
 
-    void update_DOP(const matrix_t &C){
-      dop = dop_t::get(C, user_position);
+    void update_DOP(const matrix_t &C_ecef){
+      dop = dop_t::get(C_ecef, user_position);
     }
   };
 
@@ -413,15 +413,16 @@ protected:
      * Calculate C matrix, which is required to obtain DOP
      * C = G^t * W * G
      *
-     * @param W2 weighting matrix corresponding to inverse of covariance
-     * return C matrix
+     * @param G_ design matrix
+     * @param W_ weighting matrix corresponding to inverse of covariance
+     * @return C matrix
      */
-    template <class MatrixT2>
-    inline matrix_t C(const MatrixT2 &W2) const {
-      return (G.transpose() * W2 * G).inverse();
+    template <class MatrixT2, class T>
+    static matrix_t C(const MatrixT2 &G_, const T &W_ = 1){
+      return (G_.transpose() * W_ * G_).inverse();
     }
     matrix_t C() const {
-      return C(W);
+      return C(G, W);
     }
     /**
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
