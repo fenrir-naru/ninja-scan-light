@@ -405,7 +405,11 @@ protected:
   template <class MatrixT>
   struct linear_solver_t {
     MatrixT G; ///< Design matrix
-    MatrixT W; ///< Weight (diagonal) matrix
+    /**
+     * Weighting (diagonal) matrix corresponding to inverse of covariance,
+     * whose (i, j) element is assumed to be 1/sigma_{i}^2 (i == j) or 0 (i != j)
+     */
+    MatrixT W;
     MatrixT delta_r; ///< Observation delta, i.e., observation minus measurement (y)
     linear_solver_t(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_)
         : G(G_), W(W_), delta_r(delta_r_) {}
@@ -415,7 +419,6 @@ protected:
      *
      * @param rotation_matrix 3 by 3 matrix
      * @return transformed design matrix G'
-     * @see rotate_R(const matrix_t &, const matrix_t &)
      */
     matrix_t rotate_G(const matrix_t &rotation_matrix) const {
       matrix_t res(G.rows(), 4);
@@ -429,42 +432,53 @@ protected:
      * Calculate C matrix, which is required to obtain DOP
      * C = G^t * W * G
      *
-     * @param G_ design matrix
-     * @param W_ (default=1) weighting matrix corresponding to inverse of covariance
      * @return C matrix
      */
-    template <class MatrixT2, class T>
-    static matrix_t C(const MatrixT2 &G_, const T &W_ = 1){
-      return (G_.transpose() * W_ * G_).inverse();
-    }
     matrix_t C() const {
-      return C(G, W);
+      return (G.transpose() * W * G).inverse();
+    }
+    /**
+     * Transform coordinate of matrix C, which will be used to calculate HDOP/VDOP
+     * C' = (G * R)^t W * (G * R) = R^t * G^t * W * G * R = R^t * C * R,
+     * where R is a rotation matrix, for example, ECEF to ENU.
+     *
+     * @param rotation_matrix 3 by 3 matrix
+     * @return transformed matrix C'
+     */
+    static matrix_t rotate_C(const matrix_t &C, const matrix_t &rotation_matrix){
+      matrix_t res(4, 4);
+      res.partial(3, 3).replace( // upper left
+          rotation_matrix.transpose() * C.partial(3, 3) * rotation_matrix);
+      res.partial(3, 1, 0, 3).replace( // upper right
+          rotation_matrix.transpose() * C.partial(3, 1, 0, 3));
+      res.partial(1, 3, 3, 0).replace( // lower left
+          C.partial(1, 3, 3, 0) * rotation_matrix);
+      res(3, 3) = C(3, 3); // lower right
+      return res;
     }
     /**
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
      * where v =~ N(0, sigma), and y and G are observation delta (=delta_r variable)
      * and a design matrix, respectively.
-     * This yields x = (G^t * W_ * G)^{-1} * (G^t * W_) y = S y.
+     * This yields x = (G^t * W * G)^{-1} * (G^t * W) y = S y.
      *
-     * 4 by row(y) S matrix (=(G^t * W_ * G)^{-1} * (G^t * W_)) will be used to calculate protection level
+     * 4 by row(y) S matrix (=(G^t * W * G)^{-1} * (G^t * W)) will be used to calculate protection level
      * to investigate relationship between bias on each satellite and solution.
      * residual v = (I - P) = (I - G S), where P = G S, which is irrelevant to rotation,
      * because P = G R R^{t} S = G' S'.
      *
-     * @param S (output) coefficient matrix to calculate solution, i.e., (G^t * W2)^{-1} * (G^t * W2)
-     * @param W_ (default = 1) weighting matrix, whose (i, j) element is 1/sigma_{i}^2 (i == j) or 0 (i != j)
+     * @param S (output) coefficient matrix to calculate solution, i.e., (G^t * W * G)^{-1} * (G^t * W)
      * @return x vector
      * @see rotate_S()
      */
-    template <class T>
-    inline matrix_t least_square(matrix_t &S, const T &W_ = 1) const {
-      matrix_t Gt_W(G.transpose() * W_);
+    inline matrix_t least_square(matrix_t &S) const {
+      matrix_t Gt_W(G.transpose() * W);
       S = (Gt_W * G).inverse() * Gt_W;
       return S * delta_r;
     }
     matrix_t least_square() const {
       matrix_t S;
-      return least_square(S, W);
+      return least_square(S);
     }
     /**
      * Transform coordinate of coefficient matrix of solution S
@@ -481,6 +495,29 @@ protected:
       res.partial(3, S.columns()).replace(rotation_matrix.transpose() * S.partial(3, S.columns()));
       for(unsigned int j(0); j < S.columns(); ++j){
         res(3, j) = S(3, j);
+      }
+      return res;
+    }
+    /**
+     * Calculate linear effect from bias on each range measurement to horizontal/vertical estimation.
+     *
+     * @param S coefficient matrix of solution
+     * @param rotation_matrix 3 by 3 matrix, which makes S aligned to ENU or NED coordinates
+     * @return slopes matrix (1st and 2nd columns correspond to horizontal and vertical components, respectively)
+     */
+    matrix_t slope_HV(const matrix_t &S, const matrix_t &rotation_matrix = matrix_t::getI(3)) const {
+      matrix_t S_ENU_or_NED(rotate_S(S, rotation_matrix));
+      matrix_t res(G.rows(), 2); // 1st column = horizontal, 2nd column = vertical
+      matrix_t P(G * S);
+      for(unsigned int i(0); i < res.rows(); i++){
+        if(W(i, i) <= 0){
+          res(i, 0) = res(i, 1) = 0;
+          continue;
+        }
+        float_t denom(std::sqrt((-P(i, i) + 1) * W(i, i)));
+        res(i, 0) = std::sqrt(  // horizontal
+            std::pow(S_ENU_or_NED(0, i), 2) + std::pow(S_ENU_or_NED(1, i), 2)) / denom;
+        res(i, 1) = std::abs(S_ENU_or_NED(2, i)) / denom; // vertical
       }
       return res;
     }
