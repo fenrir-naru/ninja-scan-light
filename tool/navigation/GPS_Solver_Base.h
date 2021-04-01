@@ -66,6 +66,11 @@ struct GPS_Solver_Base {
   struct pos_t {
     xyz_t xyz;
     llh_t llh;
+    matrix_t ecef2enu() const {
+      float_t buf[3][3];
+      llh.rotation_ecef2enu(buf);
+      return matrix_t(3, 3, (float_t *)buf);
+    }
   };
 
   typedef std::vector<std::pair<prn_t, float_t> > prn_obs_t;
@@ -366,11 +371,6 @@ struct GPS_Solver_Base {
         };
         return res;
       }
-      static dop_t get(const matrix_t &C_ecef, const pos_t &pos) {
-        float_t buf[3][3];
-        pos.llh.rotation_ecef2enu(buf);
-        return get(C_ecef, matrix_t(3, 3, (float_t *)buf));
-      }
     } dop;
     unsigned int used_satellites;
     typedef bit_array_t<0x400> satellite_mask_t;
@@ -397,7 +397,7 @@ struct GPS_Solver_Base {
     }
 
     void update_DOP(const matrix_t &C_ecef){
-      dop = dop_t::get(C_ecef, user_position);
+      dop = dop_t::get(C_ecef, user_position.ecef2enu());
     }
   };
 
@@ -410,11 +410,27 @@ protected:
     linear_solver_t(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_)
         : G(G_), W(W_), delta_r(delta_r_) {}
     /**
+     * Transform coordinate of design matrix G
+     * y = G x + v = G (R x') + v = G' x' + v, where R is a rotation matrix, for example, ECEF to ENU.
+     *
+     * @param rotation_matrix 3 by 3 matrix
+     * @return transformed design matrix G'
+     * @see rotate_R(const matrix_t &, const matrix_t &)
+     */
+    matrix_t rotate_G(const matrix_t &rotation_matrix) const {
+      matrix_t res(G.rows(), 4);
+      res.partial(G.rows(), 3).replace(G.partial(G.rows(), 3) * rotation_matrix);
+      for(unsigned int i(0); i < G.rows(); ++i){
+        res(i, 3) = G(i, 3);
+      }
+      return res;
+    }
+    /**
      * Calculate C matrix, which is required to obtain DOP
      * C = G^t * W * G
      *
      * @param G_ design matrix
-     * @param W_ weighting matrix corresponding to inverse of covariance
+     * @param W_ (default=1) weighting matrix corresponding to inverse of covariance
      * @return C matrix
      */
     template <class MatrixT2, class T>
@@ -428,18 +444,41 @@ protected:
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
      * where v =~ N(0, sigma), and y and G are observation delta(=delta_r variable)
      * and a design matrix, respectively.
-     * This yields x = (G^t * W2)^{-1} * (G^t * W2) y
+     * This yields x = (G^t * W2)^{-1} * (G^t * W2) y = S y
+     * 4 by row(y) S matrix will be used to calculate protection level
+     * to investigate relationship between bias on each satellite ans solution.
      *
-     * @param W2 weighting matrix, whose (i, j) element is 1/sigma_{i}^2 (i == j) or 0 (i != j)
+     * @param S (output) coefficient matrix to calculate solution, i.e., (G^t * W2)^{-1} * (G^t * W2)
+     * @param W_ (default = 1) weighting matrix, whose (i, j) element is 1/sigma_{i}^2 (i == j) or 0 (i != j)
      * @return x vector
      */
-    template <class MatrixT2>
-    inline matrix_t least_square(const MatrixT2 &W2) const {
-      matrix_t Gt_W(G.transpose() * W2);
-      return (Gt_W * G).inverse() * Gt_W * delta_r;
+    template <class T>
+    inline matrix_t least_square(matrix_t &S, const T &W_ = 1) const {
+      matrix_t Gt_W(G.transpose() * W_);
+      S = (Gt_W * G).inverse() * Gt_W;
+      return S * delta_r;
     }
     matrix_t least_square() const {
-      return least_square(W);
+      matrix_t S;
+      return least_square(S, W);
+    }
+    /**
+     * Transform coordinate of coefficient matrix of solution S
+     * R x' = x = S y; S' = R^{-1} S = R^{T} S, where R is a rotation matrix, for example, ECEF to ENU.
+     * Be careful, R is not ENU to ECEF in the example, which should be consistent to rotate_G().
+     *
+     * @param S coefficient matrix of solution
+     * @param rotation_matrix 3 by 3 matrix
+     * @return transformed coefficient matrix S'
+     * @see rotate_G(const matrix_t &)
+     */
+    static matrix_t rotate_S(const matrix_t &S, const matrix_t &rotation_matrix){
+      matrix_t res(4, S.columns());
+      res.partial(3, S.columns()).replace(rotation_matrix.transpose() * S.partial(3, S.columns()));
+      for(unsigned int j(0); j < S.columns(); ++j){
+        res(3, j) = S(3, j);
+      }
+      return res;
     }
     /**
      * Calculate weighted square sum of residual (WSSR) based on least square solution.
