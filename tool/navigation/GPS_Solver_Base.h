@@ -406,7 +406,7 @@ protected:
   struct linear_solver_t {
     MatrixT G; ///< Design matrix
     MatrixT W; ///< Weight (diagonal) matrix
-    MatrixT delta_r; ///< Observation delta, i.e., observation minus measurement
+    MatrixT delta_r; ///< Observation delta, i.e., observation minus measurement (y)
     linear_solver_t(const MatrixT &G_, const MatrixT &W_, const MatrixT &delta_r_)
         : G(G_), W(W_), delta_r(delta_r_) {}
     /**
@@ -442,15 +442,19 @@ protected:
     }
     /**
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
-     * where v =~ N(0, sigma), and y and G are observation delta(=delta_r variable)
+     * where v =~ N(0, sigma), and y and G are observation delta (=delta_r variable)
      * and a design matrix, respectively.
-     * This yields x = (G^t * W2)^{-1} * (G^t * W2) y = S y
-     * 4 by row(y) S matrix will be used to calculate protection level
-     * to investigate relationship between bias on each satellite ans solution.
+     * This yields x = (G^t * W_ * G)^{-1} * (G^t * W_) y = S y.
+     *
+     * 4 by row(y) S matrix (=(G^t * W_ * G)^{-1} * (G^t * W_)) will be used to calculate protection level
+     * to investigate relationship between bias on each satellite and solution.
+     * residual v = (I - P) = (I - G S), where P = G S, which is irrelevant to rotation,
+     * because P = G R R^{t} S = G' S'.
      *
      * @param S (output) coefficient matrix to calculate solution, i.e., (G^t * W2)^{-1} * (G^t * W2)
      * @param W_ (default = 1) weighting matrix, whose (i, j) element is 1/sigma_{i}^2 (i == j) or 0 (i != j)
      * @return x vector
+     * @see rotate_S()
      */
     template <class T>
     inline matrix_t least_square(matrix_t &S, const T &W_ = 1) const {
