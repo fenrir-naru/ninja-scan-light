@@ -595,7 +595,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       }
 
       try{
-        res.update_DOP(geomat.partial(res.used_satellites).C());
+        res.dop = typename user_pvt_t::dop_t(geomat.rotate_C(
+            geomat.partial(res.used_satellites).C(), res.user_position.ecef2enu()));
       }catch(std::exception &e){
         res.error_code = user_pvt_t::ERROR_DOP;
         return res;

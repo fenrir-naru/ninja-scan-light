@@ -360,17 +360,13 @@ struct GPS_Solver_Base {
     float_t receiver_error_rate;
     struct dop_t {
       float_t g, p, h, v, t;
-      static dop_t get(const matrix_t &C_ecef, const matrix_t &rot_ecef2enu) {
-        matrix_t C_enu(rot_ecef2enu.transpose() * C_ecef.partial(3, 3) * rot_ecef2enu); // align design matrix to ENU
-        dop_t res = {
-          std::sqrt(C_ecef.trace()), // gdop
-          std::sqrt(C_enu.trace()), // pdop
-          std::sqrt(C_enu.partial(2, 2).trace()), // hdop
-          std::sqrt(C_enu(2, 2)), // vdop
-          std::sqrt(C_ecef(3, 3)) // tdop
-        };
-        return res;
-      }
+      dop_t() {}
+      dop_t(const matrix_t &C_enu)
+          : g(std::sqrt(C_enu.trace())),
+          p(std::sqrt(C_enu.trace())),
+          h(std::sqrt(C_enu.partial(2, 2).trace())),
+          v(std::sqrt(C_enu(2, 2))),
+          t(std::sqrt(C_enu(3, 3))) {}
     } dop;
     unsigned int used_satellites;
     typedef bit_array_t<0x400> satellite_mask_t;
@@ -394,10 +390,6 @@ struct GPS_Solver_Base {
     }
     bool velocity_solved() const {
       return error_code == ERROR_NO;
-    }
-
-    void update_DOP(const matrix_t &C_ecef){
-      dop = dop_t::get(C_ecef, user_position.ecef2enu());
     }
   };
 
@@ -681,7 +673,8 @@ public:
     }
 
     try{
-      res.update_DOP(geomat.partial(res.used_satellites).C());
+      res.dop = typename user_pvt_t::dop_t(geomat.rotate_C(
+          geomat.partial(res.used_satellites).C(), res.user_position.ecef2enu()));
     }catch(std::exception &e){
       res.error_code = user_pvt_t::ERROR_DOP;
       return res;
