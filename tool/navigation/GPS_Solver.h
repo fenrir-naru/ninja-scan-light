@@ -462,8 +462,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       sat_range_cache_t sat_range_cache; // [[prn, *sat_GPS], [range, range_error]]
       sat_range_cache.reserve(measurement.size());
 
-      for(typename measurement_t::const_iterator it(measurement.begin());
-          it != measurement.end();
+      for(typename measurement_t::const_iterator it(measurement.begin()), it_end(measurement.end());
+          it != it_end;
           ++it){
 
         float_t range;
@@ -499,8 +499,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         res.used_satellite_mask.clear();
 
         const bool coarse_estimation(i <= 0);
-        for(typename sat_range_cache_t::const_iterator it(sat_range_cache.begin());
-            it != sat_range_cache.end();
+        for(typename sat_range_cache_t::const_iterator it(sat_range_cache.begin()), it_end(sat_range_cache.end());
+            it != it_end;
             ++it){
 
           residual_t residual = {
@@ -543,8 +543,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         res.used_satellites = j;
 
         if(false){ // debug
-          for(typename sat_range_cache_t::const_iterator it(sat_range_cache.begin());
-              it != sat_range_cache.end();
+          for(typename sat_range_cache_t::const_iterator it(sat_range_cache.begin()), it_end(sat_range_cache.end());
+              it != it_end;
               ++it){
             std::cerr << "PRN:" << it->first.first << " => "
                 << it->second.first;
@@ -612,8 +612,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
       geometric_matrices_t geomat2(sat_range_corrected.size());
       int i_range(0), i_rate(0);
 
-      for(typename sat_range_t::const_iterator it(sat_range_corrected.begin());
-          it != sat_range_corrected.end();
+      for(typename sat_range_t::const_iterator it(sat_range_corrected.begin()), it_end(sat_range_corrected.end());
+          it != it_end;
           ++it, ++i_range){
 
         float_t rate;

@@ -79,8 +79,8 @@ struct GPS_Solver_Base {
       const prn_obs_t &operand, const prn_obs_t &argument,
       const FloatT &scaling = FloatT(1)) {
     prn_obs_t res;
-    for(typename prn_obs_t::const_iterator it(operand.begin()); it != operand.end(); ++it){
-      for(typename prn_obs_t::const_iterator it2(argument.begin()); it2 != argument.end(); ++it2){
+    for(typename prn_obs_t::const_iterator it(operand.begin()), it_end(operand.end()); it != it_end; ++it){
+      for(typename prn_obs_t::const_iterator it2(argument.begin()), it2_end(argument.end()); it2 != it2_end; ++it2){
         if(it->first != it2->first){continue;}
         res.push_back(std::make_pair(it->first, (it->second - it2->second) * scaling));
         break;
@@ -119,8 +119,8 @@ struct GPS_Solver_Base {
         const typename measurement_t::mapped_type::key_type &key,
         const FloatT &scaling = FloatT(1)){
       prn_obs_t res;
-      for(typename measurement_t::const_iterator it(measurement.begin());
-          it != measurement.end(); ++it){
+      for(typename measurement_t::const_iterator it(measurement.begin()), it_end(measurement.end());
+          it != it_end; ++it){
         typename measurement_t::mapped_type::const_iterator it2(it->second.find(key));
         if(it2 == it->second.end()){continue;}
         res.push_back(std::make_pair(it->first, it2->second * scaling));
@@ -131,8 +131,8 @@ struct GPS_Solver_Base {
         measurement_t &measurement,
         const prn_obs_t &new_item,
         const typename measurement_t::mapped_type::key_type &key) {
-      for(typename prn_obs_t::const_iterator it(new_item.begin());
-          it != new_item.end(); ++it){
+      for(typename prn_obs_t::const_iterator it(new_item.begin()), it_end(new_item.end());
+          it != it_end; ++it){
         measurement[it->first].insert(std::make_pair(key, it->second));
       }
     }
@@ -415,7 +415,7 @@ protected:
     matrix_t rotate_G(const matrix_t &rotation_matrix) const {
       matrix_t res(G.rows(), 4);
       res.partial(G.rows(), 3).replace(G.partial(G.rows(), 3) * rotation_matrix);
-      for(unsigned int i(0); i < G.rows(); ++i){
+      for(unsigned int i(0), i_end(G.rows()); i < i_end; ++i){
         res(i, 3) = G(i, 3);
       }
       return res;
@@ -485,7 +485,7 @@ protected:
     static matrix_t rotate_S(const matrix_t &S, const matrix_t &rotation_matrix){
       matrix_t res(4, S.columns());
       res.partial(3, S.columns()).replace(rotation_matrix.transpose() * S.partial(3, S.columns()));
-      for(unsigned int j(0); j < S.columns(); ++j){
+      for(unsigned int j(0), j_end(S.columns()); j < j_end; ++j){
         res(3, j) = S(3, j);
       }
       return res;
@@ -501,7 +501,7 @@ protected:
       matrix_t S_ENU_or_NED(rotate_S(S, rotation_matrix));
       matrix_t res(G.rows(), 2); // 1st column = horizontal, 2nd column = vertical
       matrix_t P(G * S);
-      for(unsigned int i(0); i < res.rows(); i++){
+      for(unsigned int i(0), i_end(res.rows()); i < i_end; i++){
         if(W(i, i) <= 0){
           res(i, 0) = res(i, 1) = 0;
           continue;
@@ -609,8 +609,8 @@ public:
       res.used_satellite_mask.clear();
 
       const bool coarse_estimation(i <= 0);
-      for(typename measurement_t::const_iterator it(measurement.begin());
-          it != measurement.end();
+      for(typename measurement_t::const_iterator it(measurement.begin()), it_end(measurement.end());
+          it != it_end;
           ++it){
 
         static const xyz_t zero(0, 0, 0);
@@ -692,8 +692,8 @@ public:
     geometric_matrices_t geomat2(res.used_satellites);
     int i_range(0), i_rate(0);
 
-    for(typename sat_range_t::const_iterator it(sat_rate_rel.begin());
-        it != sat_rate_rel.end();
+    for(typename sat_range_t::const_iterator it(sat_rate_rel.begin()), it_end(sat_rate_rel.end());
+        it != it_end;
         ++it, ++i_range){
 
       float_t rate;

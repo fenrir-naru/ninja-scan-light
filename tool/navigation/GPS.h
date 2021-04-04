@@ -1574,8 +1574,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             }
             case EACH_NO_REDUNDANT: {
               int_t t_tag(0);
-              for(typename history_t::const_iterator it(history.begin() + 1);
-                  it != history.end();
+              for(typename history_t::const_iterator it(history.begin() + 1), it_end(history.end());
+                  it != it_end;
                   ++it){
                 if(t_tag == it->t_tag){continue;}
                 functor(*it);
@@ -1585,8 +1585,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             }
             case EACH_ALL:
             default:
-              for(typename history_t::const_iterator it(history.begin() + 1);
-                  it != history.end();
+              for(typename history_t::const_iterator it(history.begin() + 1), it_end(history.end());
+                  it != it_end;
                   ++it){
                 functor(*it);
               }
@@ -1606,8 +1606,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           int t_tag_new(item_t::calc_t_tag(item));
           typename history_t::iterator it_insert(history.begin());
 
-          for(typename history_t::reverse_iterator it(history.rbegin());
-              it != history.rend();
+          for(typename history_t::reverse_iterator it(history.rbegin()), it_end(history.rend());
+              it != it_end;
               ++it){
 
             int delta_t_tag(t_tag_new - it->t_tag);
@@ -1637,8 +1637,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               item_t copy(*it);
 
               if(priority_delta > 0){ // priority increased, thus move backward
-                for(typename history_t::reverse_iterator it_previous(it + 1);
-                    it_previous != history.rend()
+                for(typename history_t::reverse_iterator it_previous(it + 1), it_previous_end(history.rend());
+                    it_previous != it_previous_end
                       && (it_previous->t_tag == t_tag_new)
                       && (it_previous->priority <= copy.priority); // if priority is same or higher, then swap.
                     ++it, ++it_previous, --shift){
@@ -1647,8 +1647,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                 if(shift != 0){*it = copy;} // moved
               }else{ // priority decreased, thus move forward
                 typename history_t::iterator it2(it.base() - 1);
-                for(typename history_t::iterator it2_next(it2 + 1);
-                    it2_next != history.end()
+                for(typename history_t::iterator it2_next(it2 + 1), it2_next_end(history.end());
+                    it2_next != it2_next_end
                       && (it2_next->t_tag == t_tag_new)
                       && (it2_next->priority > copy.priority); // if priority is lower, then swap.
                     ++it2, ++it2_next, ++shift){
@@ -1914,14 +1914,14 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       return _satellites.find(prn) !=  _satellites.end();
     }
     void update_all_ephemeris(const gps_time_t &target_time) {
-      for(typename satellites_t::iterator it(_satellites.begin());
-          it != _satellites.end(); ++it){
+      for(typename satellites_t::iterator it(_satellites.begin()), it_end(_satellites.end());
+          it != it_end; ++it){
         it->second.select_ephemeris(target_time);
       }
     }
     void merge(const self_t &another, const bool &keep_original = true){
-      for(typename satellites_t::const_iterator it(another._satellites.begin());
-          it != another._satellites.end();
+      for(typename satellites_t::const_iterator it(another._satellites.begin()), it_end(another._satellites.end());
+          it != it_end;
           ++it){
         satellite(it->first).merge(it->second, keep_original);
       }
