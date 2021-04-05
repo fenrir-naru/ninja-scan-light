@@ -454,210 +454,23 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         return res;
       }
 
-      // 1. Check satellite availability for range. The results will be cached.
-
-      typedef std::vector<std::pair<
-          std::pair<prn_t, const satellite_t *>,
-          std::pair<float_t, range_error_t> > > sat_range_cache_t;
-      sat_range_cache_t sat_range_cache; // [[prn, *sat_GPS], [range, range_error]]
-      sat_range_cache.reserve(measurement.size());
-
+      typename base_t::measurement2_t measurement2;
+      measurement2.reserve(measurement.size());
       for(typename measurement_t::const_iterator it(measurement.begin()), it_end(measurement.end());
-          it != it_end;
-          ++it){
+          it != it_end; ++it){
 
         float_t range;
-        range_error_t range_error;
-        if(!this->range(it->second, range, &range_error)){continue;} // No range entry
+        if(!this->range(it->second, range)){continue;} // No range entry
 
-        sat_range_cache.push_back(std::make_pair(
-            std::make_pair(it->first, is_available(it->first, receiver_time)),
-            std::make_pair(range, range_error)));
+        if(!is_available(it->first, receiver_time)){continue;} // No satellite
+
+        typename base_t::measurement2_t::value_type v = {
+            it->first, &(it->second), this}; // prn, measurement, solver
+        measurement2.push_back(v);
       }
-
-      // 2. Position calculation
-
-      res.user_position = user_position_init;
-      res.receiver_error = receiver_error_init;
-
-      gps_time_t time_arrival(
-          receiver_time - (res.receiver_error / space_node_t::light_speed));
-
-      geometric_matrices_t geomat(sat_range_cache.size());
-      typedef std::vector<std::pair<
-          typename sat_range_cache_t::value_type::first_type,
-          float_t> > sat_range_t;
-      sat_range_t sat_range_corrected;
-      sat_range_corrected.reserve(sat_range_cache.size());
-
-      // If initialization is not appropriate, more iteration will be performed.
-      bool converged(false);
-      for(int i(good_init ? 0 : -2); i < 10; i++){
-
-        sat_range_corrected.clear();
-        unsigned int j(0);
-        res.used_satellite_mask.clear();
-
-        const bool coarse_estimation(i <= 0);
-        for(typename sat_range_cache_t::const_iterator it(sat_range_cache.begin()), it_end(sat_range_cache.end());
-            it != it_end;
-            ++it){
-
-          residual_t residual = {
-            geomat.delta_r(j, 0),
-            geomat.G(j, 0), geomat.G(j, 1), geomat.G(j, 2),
-            geomat.W(j, j)
-          };
-
-          const satellite_t *sat(it->first.second);
-          float_t range(it->second.first);
-
-          if(sat){
-            static const range_error_t coarse_mode = {
-                range_error_t::MASK_SATELLITE_CLOCK, {0}};
-            range = range_corrected(*sat,
-                range - res.receiver_error, time_arrival,
-                res.user_position,
-                residual,
-                (coarse_estimation ? coarse_mode : it->second.second));
-          }else{
-            // TODO placeholder for non-GPS satellites
-            residual.weight = 0;
-          }
-
-          if(residual.weight <= 0){
-            continue; // intentionally excluded satellite
-          }else{
-            res.used_satellite_mask.set(it->first.first);
-          }
-
-          ++j;
-
-          if(coarse_estimation){
-            residual.weight = 1;
-          }else{
-            sat_range_corrected.push_back(std::make_pair(it->first, range));
-          }
-        }
-
-        res.used_satellites = j;
-
-        if(false){ // debug
-          for(typename sat_range_cache_t::const_iterator it(sat_range_cache.begin()), it_end(sat_range_cache.end());
-              it != it_end;
-              ++it){
-            std::cerr << "PRN:" << it->first.first << " => "
-                << it->second.first;
-            if(it->first.second){
-              std::cerr << " @ Ephemeris: t_oc => "
-                  << it->first.second->ephemeris().WN << "w "
-                  << it->first.second->ephemeris().t_oc << " +/- "
-                  << (it->first.second->ephemeris().fit_interval / 2);
-            }
-            std::cerr << std::endl;
-          }
-          typename geometric_matrices_t::partial_t geomat_filled(geomat.partial(res.used_satellites));
-          std::cerr << "G:" << geomat_filled.G << std::endl;
-          std::cerr << "W:" << geomat_filled.W << std::endl;
-          std::cerr << "delta_r:" << geomat_filled.delta_r << std::endl;
-        }
-
-        if(res.used_satellites < 4){
-          res.error_code = user_pvt_t::ERROR_INSUFFICIENT_SATELLITES;
-          return res;
-        }
-
-        try{
-          // Least square
-          matrix_t delta_x(geomat.partial(res.used_satellites).least_square());
-
-          xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
-          res.user_position.xyz += delta_user_position;
-          res.user_position.llh = res.user_position.xyz.llh();
-
-          const float_t &delta_receiver_error(delta_x(3, 0));
-          res.receiver_error += delta_receiver_error;
-          time_arrival -= (delta_receiver_error / space_node_t::light_speed);
-
-          if((!coarse_estimation) && (delta_user_position.dist() <= 1E-6)){
-            converged = true;
-            break;
-          }
-        }catch(std::exception &e){
-          res.error_code = user_pvt_t::ERROR_POSITION_LS;
-          return res;
-        }
-      }
-
-      if(!converged){
-        res.error_code = user_pvt_t::ERROR_POSITION_NOT_CONVERGED;
-        return res;
-      }
-
-      try{
-        res.dop = typename user_pvt_t::dop_t(geomat.rotate_C(
-            geomat.partial(res.used_satellites).C(), res.user_position.ecef2enu()));
-      }catch(std::exception &e){
-        res.error_code = user_pvt_t::ERROR_DOP;
-        return res;
-      }
-
-      if(!with_velocity){
-        res.error_code = user_pvt_t::ERROR_VELOCITY_SKIPPED;
-        return res;
-      }
-
-      // 3. Check consistency between range and rate for velocity calculation,
-      // then, assign design and weight matrices
-      geometric_matrices_t geomat2(sat_range_corrected.size());
-      int i_range(0), i_rate(0);
-
-      for(typename sat_range_t::const_iterator it(sat_range_corrected.begin()), it_end(sat_range_corrected.end());
-          it != it_end;
-          ++it, ++i_range){
-
-        float_t rate;
-        if(!this->rate(
-            measurement.find(it->first.first)->second, // const version of measurement[PRN]
-            rate)){continue;}
-
-        // Copy design matrix
-        geomat2.copy_G_W_row(geomat, i_range, i_rate);
-        static const xyz_t zero(0, 0, 0);
-
-        // Update range rate by subtracting LOS satellite velocity with design matrix G
-        geomat2.delta_r(i_rate, 0) = rate
-            + rate_relative_neg(
-                *(it->first.second), // satellite
-                it->second, // range
-                time_arrival,
-                zero, // user velocity to be estimated is temporary zero
-                geomat2.G(i_rate, 0), geomat2.G(i_rate, 1), geomat2.G(i_rate, 2)); // LOS
-
-        ++i_rate;
-      }
-
-      if(i_rate < 4){
-        res.error_code = user_pvt_t::ERROR_VELOCITY_INSUFFICIENT_SATELLITES;
-        return res;
-      }
-
-      // 4. Calculate velocity
-      try{
-        // Least square
-        matrix_t sol(geomat2.partial(i_rate).least_square());
-
-        xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
-        res.user_velocity_enu = enu_t::relative_rel(
-            vel_xyz, res.user_position.llh);
-        res.receiver_error_rate = sol(3, 0);
-      }catch(std::exception &e){
-        res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
-        return res;
-      }
-
-      res.error_code = user_pvt_t::ERROR_NO;
-      return res;
+      return base_t::solve_user_pvt(
+          measurement2, receiver_time, user_position_init, receiver_error_init,
+          good_init, with_velocity);
     }
 };
 

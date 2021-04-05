@@ -561,11 +561,18 @@ protected:
     }
   };
 
-public:
+  struct measurement2_item_t {
+    prn_t prn;
+    const typename measurement_t::mapped_type *k_v_map;
+    const GPS_Solver_Base<FloatT> *solver;
+  };
+  typedef std::vector<measurement2_item_t> measurement2_t;
+
   /**
    * Calculate User position/velocity with hint
    *
    * @param measurement PRN, pseudo-range, and pseudo-range rate information
+   * associated with a specific solver corresponding to a satellite system
    * @param receiver_time receiver time at measurement
    * @param user_position_init initial solution of user position in XYZ meters and LLH
    * @param receiver_error_init initial solution of receiver clock error in meters
@@ -574,8 +581,8 @@ public:
    * @return calculation results and matrices used for calculation
    * @see update_ephemeris(), register_ephemeris
    */
-  virtual user_pvt_t solve_user_pvt(
-      const measurement_t &measurement,
+  user_pvt_t solve_user_pvt(
+      const measurement2_t &measurement,
       const gps_time_t &receiver_time,
       const pos_t &user_position_init,
       const float_t &receiver_error_init,
@@ -596,51 +603,51 @@ public:
         receiver_time - (res.receiver_error / space_node_t::light_speed));
 
     geometric_matrices_t geomat(measurement.size());
-    typedef std::vector<std::pair<prn_t, float_t> > sat_range_t;
-    sat_range_t sat_rate_rel;
-    sat_rate_rel.reserve(measurement.size());
+    typedef std::vector<std::pair<unsigned int, float_t> > index_obs_t;
+    index_obs_t idx_rate_rel; // [(index of measurement, relative rate), ...]
+    idx_rate_rel.reserve(measurement.size());
 
     // If initialization is not appropriate, more iteration will be performed.
     bool converged(false);
-    for(int i(good_init ? 0 : -2); i < 10; i++){
+    for(int i_trial(good_init ? 0 : -2); i_trial < 10; i_trial++){
 
-      sat_rate_rel.clear();
-      unsigned int j(0);
+      idx_rate_rel.clear();
+      unsigned int i_row(0), i_measurement(0);
       res.used_satellite_mask.clear();
 
-      const bool coarse_estimation(i <= 0);
-      for(typename measurement_t::const_iterator it(measurement.begin()), it_end(measurement.end());
+      const bool coarse_estimation(i_trial <= 0);
+      for(typename measurement2_t::const_iterator it(measurement.begin()), it_end(measurement.end());
           it != it_end;
-          ++it){
+          ++it, ++i_measurement){
 
         static const xyz_t zero(0, 0, 0);
-        relative_property_t prop(select(it->first).relative_property(
-            it->first, it->second,
+        relative_property_t prop(it->solver->relative_property(
+            it->prn, *(it->k_v_map),
             res.receiver_error, time_arrival,
             res.user_position, zero));
 
         if(prop.weight <= 0){
           continue; // intentionally excluded satellite
         }else{
-          res.used_satellite_mask.set(it->first);
+          res.used_satellite_mask.set(it->prn);
         }
 
         if(coarse_estimation){
           prop.weight = 1;
         }else{
-          sat_rate_rel.push_back(std::make_pair(it->first, prop.rate_relative_neg));
+          idx_rate_rel.push_back(std::make_pair(i_measurement, prop.rate_relative_neg));
         }
 
-        geomat.delta_r(j, 0) = prop.range_residual;
-        geomat.G(j, 0) = prop.los_neg[0];
-        geomat.G(j, 1) = prop.los_neg[1];
-        geomat.G(j, 2) = prop.los_neg[2];
-        geomat.W(j, j) = prop.weight;
+        geomat.delta_r(i_row, 0) = prop.range_residual;
+        geomat.G(i_row, 0) = prop.los_neg[0];
+        geomat.G(i_row, 1) = prop.los_neg[1];
+        geomat.G(i_row, 2) = prop.los_neg[2];
+        geomat.W(i_row, i_row) = prop.weight;
 
-        ++j;
+        ++i_row;
       }
 
-      if((res.used_satellites = j) < 4){
+      if((res.used_satellites = i_row) < 4){
         res.error_code = user_pvt_t::ERROR_INSUFFICIENT_SATELLITES;
         return res;
       }
@@ -692,14 +699,14 @@ public:
     geometric_matrices_t geomat2(res.used_satellites);
     int i_range(0), i_rate(0);
 
-    for(typename sat_range_t::const_iterator it(sat_rate_rel.begin()), it_end(sat_rate_rel.end());
+    for(typename index_obs_t::const_iterator it(idx_rate_rel.begin()), it_end(idx_rate_rel.end());
         it != it_end;
         ++it, ++i_range){
 
       float_t rate;
-      if(!select(it->first).rate(
-          measurement.find(it->first)->second, // const version of measurement[PRN]
-          rate)){continue;}
+      if(!(measurement[it->first].solver->rate(
+          *(measurement[it->first].k_v_map), // const version of measurement[PRN]
+          rate))){continue;}
 
       // Copy design matrix and set rate
       geomat2.copy_G_W_row(geomat, i_range, i_rate);
@@ -729,6 +736,42 @@ public:
     res.error_code = user_pvt_t::ERROR_NO;
     return res;
   }
+
+public:
+  /**
+   * Calculate User position/velocity with hint
+   *
+   * @param measurement PRN, pseudo-range, and pseudo-range rate information
+   * @param receiver_time receiver time at measurement
+   * @param user_position_init initial solution of user position in XYZ meters and LLH
+   * @param receiver_error_init initial solution of receiver clock error in meters
+   * @param good_init if true, initial position and clock error are goodly guessed.
+   * @param with_velocity if true, perform velocity estimation.
+   * @return calculation results and matrices used for calculation
+   * @see update_ephemeris(), register_ephemeris
+   */
+  virtual user_pvt_t solve_user_pvt(
+      const measurement_t &measurement,
+      const gps_time_t &receiver_time,
+      const pos_t &user_position_init,
+      const float_t &receiver_error_init,
+      const bool &good_init = true,
+      const bool &with_velocity = true) const {
+
+    measurement2_t measurement2;
+    measurement2.reserve(measurement.size());
+    for(typename measurement_t::const_iterator it(measurement.begin()), it_end(measurement.end());
+        it != it_end; ++it){
+      typename measurement2_t::value_type v = {
+          it->first, &(it->second), &select(it->first)}; // prn, measurement, solver
+      if(v.solver == this){continue;} // skip because of not-implemented satellite system
+      measurement2.push_back(v);
+    }
+    return solve_user_pvt(
+        measurement2, receiver_time, user_position_init, receiver_error_init,
+        good_init, with_velocity);
+  }
+
 
   /**
    * Calculate User position/velocity with hint
