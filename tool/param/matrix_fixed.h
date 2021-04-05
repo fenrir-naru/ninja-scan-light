@@ -93,8 +93,9 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
       if(!values){
         throw std::runtime_error("No buffer");
       }
-      for(unsigned int i(0); i < array.rows(); ++i){
-        for(unsigned int j(0); j < array.columns(); ++j){
+      const unsigned int i_end(array.rows()), j_end(array.columns());
+      for(unsigned int i(0); i < i_end; ++i){
+        for(unsigned int j(0); j < j_end; ++j){
           (*values)[i][j] = array(i, j);
         }
       }

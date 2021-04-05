@@ -374,9 +374,10 @@ struct MatrixBuilder_ValueCopier<
       const Matrix_Frozen<
         T, Array2D_Type, MatrixViewSpecial_SymmetricBase<ViewType> > &src) {
     // use only upper triangle; lower one is cloned with upper one.
-    for(unsigned int i(0); i < src.rows(); ++i){
+    const unsigned int i_end(src.rows()), j_end(src.columns());
+    for(unsigned int i(0); i < i_end; ++i){
       dest(i, i) = (T2)(src(i, i));
-      for(unsigned int j(i+1); j < src.columns(); ++j){
+      for(unsigned int j(i+1); j < j_end; ++j){
         dest(i, j) = dest(j, i) = (T2)(src(i, j));
       }
     }
@@ -432,7 +433,7 @@ struct Matrix_Frozen<T, Array2D_Type, MatrixViewSpecial_Diagonal<ViewType> >
   typename super_t::super_t::template Inverse_Matrix<>::mat_t inverse_optimized() const noexcept {
     // TODO optimize by returning unary operation
     typename super_t::super_t::template Inverse_Matrix<>::mat_t res(this->rows(), this->rows());
-    for(unsigned int i(0); i < this->rows(); ++i){
+    for(unsigned int i(0), i_end(this->rows()); i < i_end; ++i){
       res(i, i) = T(1) / (*this)(i, i);
     }
     return res;
@@ -448,9 +449,10 @@ struct MatrixBuilder_ValueCopier<
       Matrix<T2, Array2D_Type2, ViewType2> &dest,
       const Matrix_Frozen<
         T, Array2D_Type, MatrixViewSpecial_DiagonalBase<ViewType> > &src) {
-    for(unsigned int i(0); i < src.rows(); ++i){
+    const unsigned int i_end(src.rows()), j_end(src.columns());
+    for(unsigned int i(0); i < i_end; ++i){
       dest(i, i) = (T2)(src(i, i));
-      for(unsigned int j(i+1); j < src.columns(); ++j){
+      for(unsigned int j(i+1); j < j_end; ++j){
         dest(i, j) = dest(j, i) = (T2)0;
       }
     }

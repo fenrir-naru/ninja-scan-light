@@ -93,7 +93,7 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
         const mat_t &A, const mat_t &B,
         const float_t &elapsedT){
       mat_t Phi(A * elapsedT);
-      for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
+      for(unsigned i(0), i_end(A.rows()); i < i_end; i++){Phi(i, i) += 1;}
       mat_t Gamma(B * elapsedT);
 
       float_t elapsedT_from_last_correct(elapsedT);
@@ -130,8 +130,8 @@ class INS_GPS_Back_Propagate : public INS_GPS, protected INS_GPS_Back_Propagate_
         if(mod_elapsedT > 0){
 
           // The latest is the first
-          for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
-              it != snapshots.rend();
+          for(typename snapshots_t::reverse_iterator it(snapshots.rbegin()), it_end(snapshots.rend());
+              it != it_end;
               ++it){
             // This statement controls depth of back propagation.
             if(it->elapsedT_from_last_correct
@@ -224,7 +224,7 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
         const mat_t &A, const mat_t &B,
         const float_t &elapsedT){
       mat_t Phi(A * elapsedT);
-      for(unsigned i(0); i < A.rows(); i++){Phi(i, i) += 1;}
+      for(unsigned i(0), i_end(A.rows()); i < i_end; i++){Phi(i, i) += 1;}
       mat_t Gamma(B * elapsedT);
 
       snapshots.push_back(
@@ -244,8 +244,8 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
     bool setup_correct(float_t advanceT){
       if(advanceT > 0){return false;} // positive value (future) is odd
 
-      for(typename snapshots_t::reverse_iterator it(snapshots.rbegin());
-          it != snapshots.rend();
+      for(typename snapshots_t::reverse_iterator it(snapshots.rbegin()), it_end(snapshots.rend());
+          it != it_end;
           ++it){
         advanceT += it->elapsedT_from_last_update;
         if(advanceT > -0.005){ // Find the closest
@@ -276,8 +276,8 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
             mat_t sum_GQGt(sum_A.rows(), sum_A.rows());
             float_t bar_delteT(0);
             int n(0);
-            for(typename snapshots_t::iterator it(snapshots.begin());
-                it != snapshots.end();
+            for(typename snapshots_t::iterator it(snapshots.begin()), it_end(snapshots.end());
+                it != it_end;
                 ++it, ++n){
               sum_A += it->A;
               sum_GQGt += it->GQGt;
@@ -293,8 +293,8 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
           break;
         case prop_t::RT_NORMAL:
         default:
-          for(typename snapshots_t::iterator it(snapshots.begin());
-              it != snapshots.end();
+          for(typename snapshots_t::iterator it(snapshots.begin()), it_end(snapshots.end());
+              it != it_end;
               ++it){
             H *= it->Phi_inv;
             R += H * it->GQGt * H.transpose();

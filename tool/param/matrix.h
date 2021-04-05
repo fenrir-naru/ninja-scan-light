@@ -308,8 +308,9 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         : super_t(array.rows(), array.columns()),
         values(new T[array.rows() * array.columns()]), ref(new int(1)) {
       T *buf(values);
-      for(unsigned int i(0); i < array.rows(); ++i){
-        for(unsigned int j(0); j < array.columns(); ++j){
+      const unsigned int i_end(array.rows()), j_end(array.columns());
+      for(unsigned int i(0); i < i_end; ++i){
+        for(unsigned int j(0); j < j_end; ++j){
           *(buf++) = array(i, j);
         }
       }
@@ -1114,8 +1115,9 @@ struct MatrixBuilder_ValueCopier {
   template <class T2, class Array2D_Type2, class ViewType2>
   static Matrix<T2, Array2D_Type2, ViewType2> &copy_value(
       Matrix<T2, Array2D_Type2, ViewType2> &dest, const MatrixT &src) {
-    for(unsigned int i(0); i < src.rows(); ++i){
-      for(unsigned int j(0); j < src.columns(); ++j){
+    const unsigned int i_end(src.rows()), j_end(src.columns());
+    for(unsigned int i(0); i < i_end; ++i){
+      for(unsigned int j(0); j < j_end; ++j){
         dest(i, j) = (T2)(src(i, j));
       }
     }
@@ -1335,8 +1337,9 @@ class Matrix_Frozen {
           || columns() != matrix.columns()){
         return false;
       }
-      for(unsigned int i(0); i < rows(); i++){
-        for(unsigned int j(0); j < columns(); j++){
+      const unsigned int i_end(rows()), j_end(columns());
+      for(unsigned int i(0); i < i_end; i++){
+        for(unsigned int j(0); j < j_end; j++){
           if((*this)(i, j) != matrix(i, j)){
             return false;
           }
@@ -1366,8 +1369,9 @@ class Matrix_Frozen {
      */
     bool isDiagonal() const noexcept {
       if(isSquare()){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(i + 1); j < columns(); j++){
+        const unsigned int i_end(rows()), j_end(columns());
+        for(unsigned int i(0); i < i_end; i++){
+          for(unsigned int j(i + 1); j < j_end; j++){
             if(((*this)(i, j) != T(0)) || ((*this)(j, i) != T(0))){
               return false;
             }
@@ -1384,8 +1388,9 @@ class Matrix_Frozen {
      */
     bool isSymmetric() const noexcept {
       if(isSquare()){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(i + 1); j < columns(); j++){
+        const unsigned int i_end(rows()), j_end(columns());
+        for(unsigned int i(0); i < i_end; i++){
+          for(unsigned int j(i + 1); j < j_end; j++){
             if((*this)(i, j) != (*this)(j, i)){return false;}
           }
         }
@@ -1414,7 +1419,7 @@ class Matrix_Frozen {
     T trace(const bool &do_check = true) const {
       if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
       T tr(0);
-      for(unsigned i(0); i < rows(); i++){
+      for(unsigned i(0), i_end(rows()); i < i_end; i++){
         tr += (*this)(i, i);
       }
       return tr;
@@ -1430,8 +1435,9 @@ class Matrix_Frozen {
      */
     bool isLU() const noexcept {
       if(rows() * 2 != columns()){return false;}
-      for(unsigned int i(0), i_U(rows()); i < rows() - 1; i++, i_U++){
-        for(unsigned int j(i + 1); j < rows(); j++){
+      const unsigned int i_end(rows() - 1), j_end(rows());
+      for(unsigned int i(0), i_U(rows()); i < i_end; i++, i_U++){
+        for(unsigned int j(i + 1); j < j_end; j++){
           if((*this)(i, j) != T(0)){return false;} // check L
           if((*this)(j, i_U) != T(0)){return false;} // check U
         }
@@ -2005,24 +2011,25 @@ class Matrix_Frozen {
       typename MatrixBuilder<self_t, -1, -1>::assignable_t res(
           MatrixBuilder<self_t, -1, -1>::assignable_t::blank(rows() - 1, columns() - 1));
       unsigned int i(0), i2(0);
+      const unsigned int i_end(res.rows()), j_end(res.columns());
       for( ; i < row; ++i, ++i2){
         unsigned int j(0), j2(0);
         for( ; j < column; ++j, ++j2){
           res(i, j) = operator()(i2, j2);
         }
         ++j2;
-        for( ; j < res.columns(); ++j, ++j2){
+        for( ; j < j_end; ++j, ++j2){
           res(i, j) = operator()(i2, j2);
         }
       }
       ++i2;
-      for( ; i < res.rows(); ++i, ++i2){
+      for( ; i < i_end; ++i, ++i2){
         unsigned int j(0), j2(0);
         for( ; j < column; ++j, ++j2){
           res(i, j) = operator()(i2, j2);
         }
         ++j2;
-        for( ; j < res.columns(); ++j, ++j2){
+        for( ; j < j_end; ++j, ++j2){
           res(i, j) = operator()(i2, j2);
         }
       }
@@ -2043,7 +2050,7 @@ class Matrix_Frozen {
       }else{
         T sum(0);
         T sign(1);
-        for(unsigned int i(0); i < rows(); i++){
+        for(unsigned int i(0), i_end(rows()); i < i_end; i++){
           if((*this)(i, 0) != T(0)){
             sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant(false)) * sign;
           }
@@ -2080,10 +2087,11 @@ class Matrix_Frozen {
 
       typename res_t::partial_offsetless_t L(LU.partial(rows(), columns()));
       typename res_t::partial_t U(LU.partial(rows(), columns(), 0, columns()));
-      for(unsigned int i(0); i < rows(); ++i){
+      const unsigned int rows_(rows());
+      for(unsigned int i(0); i < rows_; ++i){
         U(i, i) = (*this)(i, i);
         L(i, i) = T(1);
-        for(unsigned int j(i + 1); j < rows(); ++j){
+        for(unsigned int j(i + 1); j < rows_; ++j){
           U(i, j) = (*this)(i, j);
           U(j, i) = (*this)(j, i); // U is full copy
           L(i, j) = T(0);
@@ -2091,20 +2099,20 @@ class Matrix_Frozen {
       }
       pivot_num = 0;
       if(pivot){
-        for(unsigned int i(0); i < rows(); ++i){
+        for(unsigned int i(0); i < rows_; ++i){
           pivot[i] = i;
         }
       }
       // apply Gaussian elimination
-      for(unsigned int i(0); i < rows(); ++i){
+      for(unsigned int i(0); i < rows_; ++i){
         if(U(i, i) == T(0)){ // check (i, i) is not zero
           unsigned int j(i);
           do{
-            if(++j == rows()){
+            if(++j == rows_){
               throw std::runtime_error("LU decomposition cannot be performed");
             }
           }while(U(i, j) == T(0));
-          for(unsigned int i2(0); i2 < rows(); ++i2){ // swap i-th and j-th columns
+          for(unsigned int i2(0); i2 < rows_; ++i2){ // swap i-th and j-th columns
             T temp(U(i2, i));
             U(i2, i) = U(i2, j);
             U(i2, j) = temp;
@@ -2116,10 +2124,10 @@ class Matrix_Frozen {
             pivot[j] = temp;
           }
         }
-        for(unsigned int i2(i + 1); i2 < rows(); ++i2){
+        for(unsigned int i2(i + 1); i2 < rows_; ++i2){
           L(i2, i) = U(i2, i) / U(i, i);
           U(i2, i) = T(0);
-          for(unsigned int j2(i + 1); j2 < rows(); ++j2){
+          for(unsigned int j2(i + 1); j2 < rows_; ++j2){
             U(i2, j2) -= L(i2, i) * U(i, j2);
           }
         }
@@ -2161,9 +2169,9 @@ class Matrix_Frozen {
       // By using L(Ux) = y, firstly y' = (Ux) will be solved; L(Ux) = y ‚Å y' = (Ux)‚ð‚Ü‚¸‰ð‚­
       y_t y_copy(y.operator y_t());
       y_t y_prime(y_t::blank(y.rows(), 1));
-      for(unsigned i(0); i < rows(); i++){
+      for(unsigned i(0), rows_(rows()); i < rows_; i++){
         y_prime(i, 0) = y_copy(i, 0) / L(i, i);
-        for(unsigned j(i + 1); j < rows(); j++){
+        for(unsigned j(i + 1); j < rows_; j++){
           y_copy(j, 0) -= L(j, i) * y_prime(i, 0);
         }
       }
@@ -2192,7 +2200,7 @@ class Matrix_Frozen {
       unsigned int pivot_num;
       typename MatrixBuilder<self_t, 0, 0, 1, 2>::assignable_t LU(decomposeLUP(pivot_num, NULL, do_check));
       T res((pivot_num % 2 == 0) ? 1 : -1);
-      for(unsigned int i(0), j(rows()); i < rows(); ++i, ++j){
+      for(unsigned int i(0), i_end(rows()), j(rows()); i < i_end; ++i, ++j){
         res *= LU(i, i) * LU(i, j);
       }
       return res;
@@ -2243,8 +2251,9 @@ class Matrix_Frozen {
         mat_t result(rows(), columns());
         T det;
         if((det = mat.determinant()) == 0){throw std::runtime_error("Operation void!!");}
-        for(unsigned int i(0); i < mat.rows(); i++){
-          for(unsigned int j(0); j < mat.columns(); j++){
+        const unsigned int i_end(mat.rows()), j_end(mat.columns());
+        for(unsigned int i(0); i < i_end; i++){
+          for(unsigned int j(0); j < j_end; j++){
             result(i, j) = mat.matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
           }
         }
@@ -2254,16 +2263,17 @@ class Matrix_Frozen {
         // Gaussian elimination; ƒKƒEƒXÁ‹Ž–@
         mat_t left(mat.operator mat_t());
         mat_t right(getI(mat.rows()));
-        for(unsigned int i(0); i < left.rows(); i++){
+        const unsigned int rows_(left.rows()), columns_(left.columns());
+        for(unsigned int i(0); i < rows_; i++){
           if(left(i, i) == T(0)){
             unsigned int i2(i);
             do{
-              if(++i2 == left.rows()){
+              if(++i2 == rows_){
                 throw std::runtime_error("invert matrix not exist");
               }
             }while(left(i2, i) == T(0));
             // swap i-th and i2-th rows
-            for(unsigned int j(i); j < left.columns(); ++j){
+            for(unsigned int j(i); j < columns_; ++j){
               T temp(left(i, j));
               left(i, j) = left(i2, j);
               left(i2, j) = temp;
@@ -2271,15 +2281,15 @@ class Matrix_Frozen {
             right.swapRows(i, i2);
           }
           if(left(i, i) != T(1)){
-            for(unsigned int j(0); j < left.columns(); j++){right(i, j) /= left(i, i);}
-            for(unsigned int j(i+1); j < left.columns(); j++){left(i, j) /= left(i, i);}
+            for(unsigned int j(0); j < columns_; j++){right(i, j) /= left(i, i);}
+            for(unsigned int j(i+1); j < columns_; j++){left(i, j) /= left(i, i);}
             left(i, i) = T(1);
           }
-          for(unsigned int k(0); k < left.rows(); k++){
+          for(unsigned int k(0); k < rows_; k++){
             if(k == i){continue;}
             if(left(k, i) != T(0)){
-              for(unsigned int j(0); j < left.columns(); j++){right(k, j) -= right(i, j) * left(k, i);}
-              for(unsigned int j(i+1); j < left.columns(); j++){left(k, j) -= left(i, j) * left(k, i);}
+              for(unsigned int j(0); j < columns_; j++){right(k, j) -= right(i, j) * left(k, i);}
+              for(unsigned int j(i+1); j < columns_; j++){left(k, j) -= left(i, j) * left(k, i);}
               left(k, i) = T(0);
             }
           }
@@ -2374,9 +2384,9 @@ class Matrix_Frozen {
       typename builder_t::assignable_t result(this->operator typename builder_t::assignable_t());
       typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
       omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
-      for(unsigned int j(0); j < columns() - 2; j++){
+      for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
         T t(0);
-        for(unsigned int i(j + 1); i < rows(); i++){
+        for(unsigned int i(j + 1), i_end(rows()); i < i_end; i++){
           t += pow(result(i, j), 2);
         }
         T s = ::sqrt(t);
@@ -2384,7 +2394,7 @@ class Matrix_Frozen {
 
         typename omega_buf_t::partial_offsetless_t omega(omega_buf.partial(rows() - (j+1), 1));
         {
-          for(unsigned int i(0); i < omega.rows(); i++){
+          for(unsigned int i(0), i_end(omega.rows()); i < i_end; i++){
             omega(i, 0) = result(j+i+1, j);
           }
           omega(0, 0) += s;
@@ -2402,8 +2412,8 @@ class Matrix_Frozen {
 
       //ƒ[ƒˆ—
       bool sym = isSymmetric();
-      for(unsigned int j(0); j < columns() - 2; j++){
-        for(unsigned int i(j + 2); i < rows(); i++){
+      for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
+        for(unsigned int i(j + 2), i_end(rows()); i < i_end; i++){
           result(i, j) = T(0);
           if(sym){result(j, i) = T(0);}
         }
@@ -2480,22 +2490,23 @@ class Matrix_Frozen {
 
 #if 0
       //ƒpƒ[–@(‚×‚«æ–@)
-      typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows(), rows() + 1);
+      const unsigned int rows_(rows()), columns_(columns());
+      typename MatrixBuilder<self_t, 0, 1>::assignable_t result(rows_, rows_ + 1);
       typename builder_t::assignable_t source(this->operator typename builder_t::assignable_t());
-      for(unsigned int i(0); i < columns(); i++){result(0, i) = T(1);}
-      for(unsigned int i(0); i < columns(); i++){
+      for(unsigned int i(0); i < columns_; i++){result(0, i) = T(1);}
+      for(unsigned int i(0); i < columns_; i++){
         while(true){
           typename MatrixBuilder<self_t, 0, 1>::assignable_t approxVec(source * result.columnVector(i));
           T approxVal(0);
           for(unsigned int j(0); j < approxVec.rows(); j++){approxVal += pow(approxVec(j, 0), 2);}
           approxVal = sqrt(approxVal);
           for(unsigned int j(0); j < approxVec.rows(); j++){result(j, i) = approxVec(j, 0) / approxVal;}
-          T before = result(i, rows());
-          if(abs(before - (result(i, rows()) = approxVal)) < threshold){break;}
+          T before = result(i, rows_);
+          if(abs(before - (result(i, rows_) = approxVal)) < threshold){break;}
         }
-        for(unsigned int j(0); (i < rows() - 1) && (j < rows()); j++){
-          for(unsigned int k(0); k < rows(); k++){
-            source(j, k) -= result(i, rows()) * result(j, i) * result(k, i);
+        for(unsigned int j(0); (i < rows_ - 1) && (j < rows_); j++){
+          for(unsigned int k(0); k < rows_; k++){
+            source(j, k) -= result(i, rows_) * result(j, i) * result(k, i);
           }
         }
       }
@@ -2651,7 +2662,7 @@ class Matrix_Frozen {
       A = A_;
       cmat_t A_C(_rows, _rows);
       for(unsigned int i(0); i < _rows; i++){
-        for(unsigned int j(0); j < columns(); j++){
+        for(unsigned int j(0), j_end(columns()); j < j_end; j++){
           A_C(i, j) = A(i, j);
         }
       }
@@ -2710,9 +2721,9 @@ class Matrix_Frozen {
       std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
 
       // Œ‹‰Ê‚ÌŠi”[
-      for(unsigned int j(0); j < x.columns(); j++){
-        for(unsigned int i(0); i < x.rows(); i++){
-          for(unsigned int k(0); k < transform.columns(); k++){
+      for(unsigned int j(0), j_end(x.columns()); j < j_end; j++){
+        for(unsigned int i(0), i_end(x.rows()); i < i_end; i++){
+          for(unsigned int k(0), k_end(transform.columns()); k < k_end; k++){
             result(i, j) += transform(i, k) * x(k, j);
           }
         }
@@ -2795,10 +2806,11 @@ class Matrix_Frozen {
     template<class CharT, class Traits>
     friend std::basic_ostream<CharT, Traits> &operator<<(
         std::basic_ostream<CharT, Traits> &out, const self_t &matrix){
+      const unsigned int i_end(matrix.rows()), j_end(matrix.columns());
       out << "{";
-      for(unsigned int i(0); i < matrix.rows(); i++){
+      for(unsigned int i(0); i < i_end; i++){
         out << (i == 0 ? "" : ",") << std::endl << "{";
-        for(unsigned int j(0); j < matrix.columns(); j++){
+        for(unsigned int j(0); j < j_end; j++){
           out << (j == 0 ? "" : ",") << matrix(i, j);
         }
         out << "}";
@@ -2980,7 +2992,7 @@ struct Array2D_Operator_Multiply_by_Matrix<
       : super_t(_lhs, _rhs) {}
   T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
     T res(0);
-    for(unsigned int i(0); i < super_t::lhs.columns(); ++i){
+    for(unsigned int i(0), i_end(super_t::lhs.columns()); i < i_end; ++i){
       res += super_t::lhs(row, i) * super_t::rhs(i, column);
     }
     return res;
@@ -3165,8 +3177,8 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     void clear(){
       if(view_property_t::variable_size){
-        for(unsigned int i(0); i < rows(); i++){
-          for(unsigned int j(0); j < columns(); j++){
+        for(unsigned int i(0), i_end(rows()); i < i_end; i++){
+          for(unsigned int j(0), j_end(columns()); j < j_end; j++){
             (*this)(i, j) = T(0);
           }
         }
@@ -3417,7 +3429,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         throw std::out_of_range("Row index incorrect");
       }
       T temp;
-      for(unsigned int j(0); j < columns(); j++){
+      for(unsigned int j(0), j_end(columns()); j < j_end; j++){
         temp = (*this)(row1, j);
         (*this)(row1, j) = (*this)(row2, j);
         (*this)(row2, j) = temp;
@@ -3439,7 +3451,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         throw std::out_of_range("Column index incorrect");
       }
       T temp;
-      for(unsigned int i(0); i < rows(); i++){
+      for(unsigned int i(0), i_end(rows()); i < i_end; i++){
         temp = (*this)(i, column1);
         (*this)(i, column1) = (*this)(i, column2);
         (*this)(i, column2) = temp;

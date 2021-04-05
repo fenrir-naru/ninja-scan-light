@@ -701,8 +701,8 @@ struct NAV_Factory {
         items.back()->encode_N0(buf);
         options.out().write(buf, sizeof(buf));
       }else{
-        for(NAV::updated_items_t::const_iterator it(items.begin());
-            it != items.end(); ++it){
+        for(NAV::updated_items_t::const_iterator it(items.begin()), it_end(items.end());
+            it != it_end; ++it){
           options.out() << (**it);
           if(options.dump_relative){
             options.out() << ',' << options.dump_relative(**it);
@@ -1118,15 +1118,15 @@ class INS_GPS_NAV : public NAV {
   protected:
     static void set_matrix_full(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
-      for(unsigned int i(0); i < mat.rows(); i++){
-        for(unsigned int j(0); j < mat.columns(); j++){
+      for(unsigned int i(0), i_end(mat.rows()); i < i_end; i++){
+        for(unsigned int j(0), j_end(mat.columns()); j < j_end; j++){
           mat(i, j) = std::strtod(_spec, &_spec);
         }
       }
     }
     static void set_matrix_diagonal(mat_t &mat, const char *spec){
       char *_spec(const_cast<char *>(spec));
-      for(unsigned int i(0); i < mat.rows(); i++){
+      for(unsigned int i(0), i_end(mat.rows()); i < i_end; i++){
         mat(i, i) = std::strtod(_spec, &_spec);
       }
     }
@@ -2455,8 +2455,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
           typedef typename INS_GPS_Back_Propagate<Base_INS_GPS>::snapshots_t snapshots_t;
           const snapshots_t &snapshots(ins_gps->get_snapshots());
           int index(0);
-          for(typename snapshots_t::const_iterator it(snapshots.begin());
-              it != snapshots.end();
+          for(typename snapshots_t::const_iterator it(snapshots.begin()), it_end(snapshots.end());
+              it != it_end;
               ++it, index++){
             if(it->elapsedT_from_last_correct >= options.back_propagate_property.back_propagate_depth){
               break;
@@ -2542,13 +2542,13 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
   protected:
     void time_update_after_initialization(const Packet &g_packet){
-      typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin());
-      for(; it_r != recent_a.buf.rend(); ++it_r){
+      typename recent_a_t::buf_t::const_reverse_iterator it_r(recent_a.buf.rbegin()), it_r_end(recent_a.buf.rend());
+      for(; it_r != it_r_end; ++it_r){
         if(g_packet.interval_rollover(*it_r) <= 0){break;}
       }
       const Packet *packet(&g_packet);
-      for(typename recent_a_t::buf_t::const_iterator it(it_r.base()); // it_r.base() position is not it_r position!!
-          it != recent_a.buf.end(); ++it){
+      for(typename recent_a_t::buf_t::const_iterator it(it_r.base()), it_end(recent_a.buf.end()); // it_r.base() position is not it_r position!!
+          it != it_end; ++it){
         time_update(*it, packet->interval(*it));
         packet = &(*it);
       }
@@ -2574,8 +2574,8 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
         // Normalization
         vec3_t acc(0, 0, 0);
-        for(typename recent_a_t::buf_t::iterator it(recent_a.buf.begin());
-            it != recent_a.buf.end();
+        for(typename recent_a_t::buf_t::iterator it(recent_a.buf.begin()), it_end(recent_a.buf.end());
+            it != it_end;
             ++it){
           acc += it->accel;
         }
@@ -2942,8 +2942,8 @@ int main(int argc, char *argv[]){
       stream_processor.input()
           = options.in_sylphide ? new SylphideIStream(in, SYLPHIDE_PAGE_SIZE) : &in;
 
-      for(args_t::const_iterator it(args_proc.begin());
-          it != args_proc.end(); ++it){
+      for(args_t::const_iterator it(args_proc.begin()), it_end(args_proc.end());
+          it != it_end; ++it){
         if(stream_processor.check_spec(argv[*it])){continue;}
         if(receiver.check_spec(options, argv[*it])){continue;}
         exit(-1); // some error occurred
