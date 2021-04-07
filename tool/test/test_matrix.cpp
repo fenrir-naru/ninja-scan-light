@@ -961,4 +961,17 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   delete [] AB_array;
 }
 
+BOOST_AUTO_TEST_CASE(iterator){
+  assign_unsymmetric();
+  prologue_print();
+  {
+    matrix_t::const_iterator it(std::max_element(A->begin(), A->end()));
+    BOOST_TEST_MESSAGE("max:" << *(it) << " @ (" << it.row() << "," << it.column() << ")");
+  }
+  {
+    matrix_t::const_iterator it(std::min_element(A->begin(), A->end()));
+    BOOST_TEST_MESSAGE("max:" << *(it) << " @ (" << it.row() << "," << it.column() << ")");
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

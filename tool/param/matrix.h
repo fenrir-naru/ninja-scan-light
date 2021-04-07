@@ -59,9 +59,12 @@
 #include <cstring>
 #include <cmath>
 #include <cfloat>
+#include <cstdlib>
 #include <ostream>
 #include <limits>
 #include "param/complex.h"
+
+#include <iterator>
 
 #if (__cplusplus < 201103L) && !defined(noexcept)
 #define noexcept throw()
@@ -1246,6 +1249,91 @@ class Matrix_Frozen {
         const unsigned int &column) const {
       return view.DELETE_IF_MSC(template) operator()<T>(storage, row, column);
     }
+
+    class iterator_t {
+      public:
+        typedef iterator_t self_type;
+        typedef const T value_type;
+        typedef const T& reference;
+        typedef const T* pointer;
+        typedef int difference_type;
+        typedef std::random_access_iterator_tag iterator_category;
+      private:
+        self_t mat;
+        difference_type idx;
+        mutable T tmp;
+      public:
+        unsigned int row() const {return (mat.columns() > 0) ? (idx / mat.columns()) : 0;}
+        unsigned int column() const {return (mat.columns() > 0) ? (idx % mat.columns()) : idx;}
+
+        // @see http://www.cplusplus.com/reference/iterator/
+        // required for input iterator
+        iterator_t(const self_t &mat_, const difference_type &idx_ = 0)
+            : mat(mat_), idx(idx_), tmp() {}
+        self_type &operator++() {++idx; return *this;}
+        self_type operator++(int) {self_type res(*this); ++idx; return res;}
+        friend bool operator==(const self_type &lhs, const self_type &rhs) {
+          return (lhs.mat == rhs.mat) && (lhs.idx == rhs.idx);
+        }
+        friend bool operator!=(const self_type &lhs, const self_type &rhs) {return !(lhs == rhs);}
+        reference operator*() const {
+          std::div_t rc(std::div(idx, mat.columns()));
+          return tmp = mat((unsigned int)rc.quot, (unsigned int)rc.rem);
+        }
+        pointer operator->() const {
+          return &(operator*());
+        }
+
+        // not implemented for lvalue *() and ->() because of const_iterator
+
+        // required for forward iterator
+        iterator_t() : mat(), idx(0) {}
+
+        // required for bidirectional iterator
+        self_type &operator--() {--idx; return *this;}
+        self_type operator--(int) {self_type res(*this); --idx; return res;}
+
+        // required for random access iterator
+        friend bool operator<(const self_type &lhs, const self_type &rhs){
+          return lhs.idx < rhs.idx;
+        }
+        friend bool operator>(const self_type &lhs, const self_type &rhs){
+          return !((lhs < rhs) || (lhs == rhs));
+        }
+        friend bool operator<=(const self_type &lhs, const self_type &rhs){
+          return !(lhs > rhs);
+        }
+        friend bool operator>=(const self_type &lhs, const self_type &rhs){
+          return !(lhs < rhs);
+        }
+
+        self_type &operator+=(const difference_type &n){
+          idx += n;
+          return *this;
+        }
+        friend self_type operator+(const self_type &lhs, const difference_type &n){
+          return self_type(lhs.mat, lhs.idx + n);
+        }
+        friend self_type operator+(const difference_type &n, const self_type &rhs){
+          return rhs + n;
+        }
+        self_type &operator-=(const difference_type &n){
+          return operator+=(-n);
+        }
+        friend self_type operator-(const self_type &lhs, const difference_type &n){
+          return lhs + (-n);
+        }
+        friend self_type operator-(const difference_type &n, const self_type &rhs){
+          return rhs - n;
+        }
+        reference operator[](const difference_type &n) const {
+          return tmp = *((*this) + n);
+        }
+    };
+
+    typedef iterator_t const_iterator;
+    const_iterator begin() const {return const_iterator(*this);}
+    const_iterator end() const {return const_iterator(*this, rows() * columns());}
 
     /**
      * Copy constructor generating shallow copy.
