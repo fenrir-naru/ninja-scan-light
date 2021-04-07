@@ -1250,48 +1250,37 @@ class Matrix_Frozen {
       return view.DELETE_IF_MSC(template) operator()<T>(storage, row, column);
     }
 
-    class iterator_t {
+    template <class impl_t>
+    class iterator_base_t {
       public:
-        typedef iterator_t self_type;
-        typedef const T value_type;
-        typedef const T& reference;
-        typedef const T* pointer;
+        typedef impl_t self_type;
         typedef int difference_type;
         typedef std::random_access_iterator_tag iterator_category;
-      private:
-        self_t mat;
+      protected:
         difference_type idx;
-        mutable T tmp;
+        unsigned int row(const self_t &mat) const {
+          return (mat.columns() > 0) ? (idx / mat.columns()) : 0;
+        }
+        unsigned int column(const self_t &mat) const {
+          return (mat.columns() > 0) ? (idx % mat.columns()) : idx;
+        }
       public:
-        unsigned int row() const {return (mat.columns() > 0) ? (idx / mat.columns()) : 0;}
-        unsigned int column() const {return (mat.columns() > 0) ? (idx % mat.columns()) : idx;}
-
         // @see http://www.cplusplus.com/reference/iterator/
         // required for input iterator
-        iterator_t(const self_t &mat_, const difference_type &idx_ = 0)
-            : mat(mat_), idx(idx_), tmp() {}
-        self_type &operator++() {++idx; return *this;}
-        self_type operator++(int) {self_type res(*this); ++idx; return res;}
+        iterator_base_t(const difference_type &idx_ = 0) : idx(idx_) {}
+        self_type &operator++() {++idx; return static_cast<self_type &>(*this);}
+        self_type operator++(int) {self_type res(static_cast<self_type &>(*this)); ++idx; return res;}
         friend bool operator==(const self_type &lhs, const self_type &rhs) {
-          return (lhs.mat == rhs.mat) && (lhs.idx == rhs.idx);
+          return lhs.idx == rhs.idx;
         }
         friend bool operator!=(const self_type &lhs, const self_type &rhs) {return !(lhs == rhs);}
-        reference operator*() const {
-          std::div_t rc(std::div(idx, mat.columns()));
-          return tmp = mat((unsigned int)rc.quot, (unsigned int)rc.rem);
-        }
-        pointer operator->() const {
-          return &(operator*());
-        }
-
-        // not implemented for lvalue *() and ->() because of const_iterator
 
         // required for forward iterator
-        iterator_t() : mat(), idx(0) {}
+        //iterator_t() : mat(), idx(0) {}
 
         // required for bidirectional iterator
-        self_type &operator--() {--idx; return *this;}
-        self_type operator--(int) {self_type res(*this); --idx; return res;}
+        self_type &operator--() {--idx; return static_cast<self_type &>(*this);}
+        self_type operator--(int) {self_type res(static_cast<self_type &>(*this)); --idx; return res;}
 
         // required for random access iterator
         friend bool operator<(const self_type &lhs, const self_type &rhs){
@@ -1307,12 +1296,13 @@ class Matrix_Frozen {
           return !(lhs < rhs);
         }
 
+        // required for random access iterator
         self_type &operator+=(const difference_type &n){
           idx += n;
-          return *this;
+          return static_cast<self_type &>(*this);
         }
         friend self_type operator+(const self_type &lhs, const difference_type &n){
-          return self_type(lhs.mat, lhs.idx + n);
+          return self_type(lhs) += n;
         }
         friend self_type operator+(const difference_type &n, const self_type &rhs){
           return rhs + n;
@@ -1326,12 +1316,38 @@ class Matrix_Frozen {
         friend self_type operator-(const difference_type &n, const self_type &rhs){
           return rhs - n;
         }
-        reference operator[](const difference_type &n) const {
-          return tmp = *((*this) + n);
+        friend difference_type operator-(const self_type &lhs, const self_type &rhs){
+          return lhs.idx - rhs.idx;
         }
     };
 
-    typedef iterator_t const_iterator;
+    class const_iterator : public iterator_base_t<const_iterator> {
+      public:
+        typedef const T value_type;
+        typedef const T& reference;
+        typedef const T* pointer;
+      protected:
+        typedef iterator_base_t<const_iterator> base_t;
+        self_t mat;
+        mutable T tmp;
+      public:
+        unsigned int row() const {return base_t::row(mat);}
+        unsigned int column() const {return base_t::column(mat);}
+        reference operator*() const {
+          std::div_t rc(std::div(base_t::idx, mat.columns()));
+          return tmp = mat((unsigned int)rc.quot, (unsigned int)rc.rem);
+        }
+        pointer operator->() const {
+          return &(operator*());
+        }
+        const_iterator(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
+            : base_t(idx_), mat(mat_), tmp() {}
+        const_iterator()
+            : base_t(), mat(), tmp() {}
+        reference operator[](const typename base_t::difference_type &n) const {
+          return tmp = *((*this) + n);
+        }
+    };
     const_iterator begin() const {return const_iterator(*this);}
     const_iterator end() const {return const_iterator(*this, rows() * columns());}
 
@@ -3258,6 +3274,39 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     using super_t::rows;
     using super_t::columns;
+
+    class iterator : public super_t::template iterator_base_t<iterator> {
+      public:
+        typedef T value_type;
+        typedef T& reference;
+        typedef T* pointer;
+      protected:
+        self_t mat;
+        typedef typename super_t::template iterator_base_t<iterator> base_t;
+      public:
+        unsigned int row() const {return base_t::row(mat);}
+        unsigned int column() const {return base_t::column(mat);}
+        reference operator*() {
+          std::div_t rc(std::div(base_t::idx, mat.columns()));
+          return mat((unsigned int)rc.quot, (unsigned int)rc.rem);
+        }
+        pointer operator->() {
+          return &(operator*());
+        }
+        iterator(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
+            : base_t(idx_), mat(mat_) {}
+        iterator()
+            : base_t(), mat() {}
+        reference operator[](const typename base_t::difference_type &n){
+          return *((*this) + n);
+        }
+    };
+    using super_t::begin;
+    iterator begin() {return iterator(*this);}
+    typename super_t::const_iterator cbegin() const {return super_t::begin();}
+    using super_t::end;
+    iterator end() {return iterator(*this, rows() * columns());}
+    typename super_t::const_iterator cend() const {return super_t::end();}
 
     /**
      * Clear elements.
