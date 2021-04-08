@@ -961,4 +961,58 @@ BOOST_AUTO_TEST_CASE(unrolled_product){ // This test is experimental for SIMD su
   delete [] AB_array;
 }
 
+BOOST_AUTO_TEST_CASE(iterator){
+  assign_unsymmetric();
+  prologue_print();
+  {
+    const matrix_t *_A(A);
+    matrix_t::const_iterator it(std::max_element(_A->begin(), _A->end()));
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+    content_t
+        *it_cmp_begin(std::begin((content_t (&)[SIZE * SIZE])A_array)),
+        *it_cmp_end(std::end((content_t (&)[SIZE * SIZE])A_array));
+#else
+    content_t *it_cmp_begin(&A_array[0][0]), *it_cmp_end(&A_array[SIZE][0]);
+#endif
+    content_t *it_cmp(std::max_element(it_cmp_begin, it_cmp_end));
+    BOOST_TEST_MESSAGE("max:" << *(it) << " @ (" << it.row() << "," << it.column() << ")");
+    BOOST_CHECK_EQUAL(*it, *it_cmp);
+    BOOST_CHECK_EQUAL(std::distance(_A->begin(), it), std::distance(it_cmp_begin, it_cmp));
+  }
+  {
+    const matrix_t *_A(A);
+    matrix_t::const_iterator it(std::min_element(_A->begin(), _A->end()));
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+    content_t
+        *it_cmp_begin(std::begin((content_t (&)[SIZE * SIZE])A_array)),
+        *it_cmp_end(std::end((content_t (&)[SIZE * SIZE])A_array));
+#else
+    content_t *it_cmp_begin(&A_array[0][0]), *it_cmp_end(&A_array[SIZE][0]);
+#endif
+    content_t *it_cmp(std::min_element(it_cmp_begin, it_cmp_end));
+    BOOST_TEST_MESSAGE("min:" << *(it) << " @ (" << it.row() << "," << it.column() << ")");
+    BOOST_CHECK_EQUAL(*it, *it_cmp);
+    BOOST_CHECK_EQUAL(std::distance(_A->begin(), it), std::distance(it_cmp_begin, it_cmp));
+  }
+  {
+    const matrix_t *_A(A);
+    matrix_t __A(_A->copy());
+    std::sort(__A.begin(), __A.end());
+    BOOST_TEST_MESSAGE("sort:" << __A);
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+    BOOST_CHECK(std::all_of(__A.cbegin(), __A.cend(), [_A](const content_t &v){
+      return std::find(_A->begin(), _A->end(), v) != _A->end();
+    }));
+#else
+    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()); it != it_end; ++it){
+      BOOST_CHECK(std::find(_A->begin(), _A->end(), *it) != _A->end());
+    }
+#endif
+    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()), it2(it + 1);
+        it2 != it_end; ++it, ++it2){
+      BOOST_CHECK((*it) <= (*it2));
+    }
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
