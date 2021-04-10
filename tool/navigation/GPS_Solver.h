@@ -472,6 +472,15 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           measurement2, receiver_time, user_position_init, receiver_error_init,
           good_init, with_velocity);
     }
+
+    xyz_t *satellite_position(
+        const prn_t &prn,
+        const gps_time_t &time,
+        xyz_t &res) const {
+
+      const satellite_t *sat(is_available(prn, time));
+      return sat ? &(res = sat->position(time)) : NULL;
+    }
 };
 
 #endif /* __GPS_SOLVER_H__ */

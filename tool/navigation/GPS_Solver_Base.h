@@ -920,6 +920,22 @@ public:
           const gps_time_t &receiver_time) const {
     return solve_user_position(prn_range, receiver_time, xyz_t(), 0, false);
   }
+
+
+  /**
+   * Calculate satellite position
+   *
+   * @param prn satellite number
+   * @param time GPS time
+   * @param res object to which results are stored
+   * @return If position is available, &res will be returned, otherwise NULL.
+   */
+  virtual xyz_t *satellite_position(
+      const prn_t &prn,
+      const gps_time_t &time,
+      xyz_t &res) const {
+    return NULL;
+  }
 };
 
 template <class FloatT>
