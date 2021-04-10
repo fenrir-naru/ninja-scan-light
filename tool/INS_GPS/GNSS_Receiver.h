@@ -457,7 +457,11 @@ data.gps.solver_options. expr
   struct raw_data_printer_t {
     typedef GPS_RawData<FloatT> raw_t;
     const raw_t &raw;
-    raw_data_printer_t(const raw_t &_raw) : raw(_raw) {}
+    typedef typename solver_t::xyz_t xyz_t;
+    const xyz_t *xyz_base;
+    raw_data_printer_t(const raw_t &_raw) : raw(_raw), xyz_base(NULL) {}
+    raw_data_printer_t(const raw_t &_raw, const xyz_t &_xyz_base)
+        : raw(_raw), xyz_base(&_xyz_base) {}
     static struct label_t {
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         out << "clock_index";
@@ -466,7 +470,9 @@ data.gps.solver_options. expr
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
               << ',' << "L2_range(" << i << ')'
 #endif
-              << ',' << "L1_rate(" << i << ')';
+              << ',' << "L1_rate(" << i << ')'
+              << ',' << "azimuth(" << i << ')'
+              << ',' << "elevation(" << i << ')';
         }
         return out;
       }
@@ -519,6 +525,15 @@ data.gps.solver_options. expr
       out << p.raw.clock_index;
       for(int i(1); i <= 32; ++i){
         out << ',' << p(i, cmd_gps);
+        xyz_t xyz_sat;
+        if((!p.xyz_base)
+            || (!p.raw.solver->select(i).satellite_position(i, p.raw.gpstime, xyz_sat))){
+          out << ",,";
+          continue;
+        }
+        typename solver_t::enu_t enu_sat(solver_t::enu_t::relative(xyz_sat, *p.xyz_base));
+        out << ',' << rad2deg(enu_sat.azimuth())
+            << ',' << rad2deg(enu_sat.elevation());
       }
       return out;
     }

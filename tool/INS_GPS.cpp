@@ -2736,7 +2736,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
         (*(options.out_raw_pvt))
             << t_stamp_generator(g_packet.itow, gps_raw_pvt.receiver_time.week)
             << ',' << receiver_t::pvt_printer_t(gps_raw_pvt)
-            << ',' << receiver_t::raw_data_printer_t(g_packet)
+            << ',' << (gps_raw_pvt.position_solved()
+              ? receiver_t::raw_data_printer_t(g_packet, gps_raw_pvt.user_position.xyz)
+              : receiver_t::raw_data_printer_t(g_packet))
             << std::endl;
       }
 
