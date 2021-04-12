@@ -568,6 +568,31 @@ protected:
   };
   typedef std::vector<measurement2_item_t> measurement2_t;
 
+
+  /**
+   * Update position solution
+   *
+   * @param geomat residual, desgin and weight matrices
+   * @param res (in,out) current solution to be updated
+   * @return (bool) If solution will be treated as the final solution, true is returned; otherwise false.
+   */
+  virtual bool update_position_soution(
+      const geometric_matrices_t &geomat,
+      user_pvt_t &res) const {
+
+    // Least square
+    matrix_t delta_x(geomat.partial(res.used_satellites).least_square());
+
+    xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
+    res.user_position.xyz += delta_user_position;
+    res.user_position.llh = res.user_position.xyz.llh();
+
+    const float_t &delta_receiver_error(delta_x(3, 0));
+    res.receiver_error += delta_receiver_error;
+
+    return (delta_user_position.dist() <= 1E-6);
+  }
+
   /**
    * Calculate User position/velocity with hint
    *
@@ -599,9 +624,6 @@ protected:
     res.user_position = user_position_init;
     res.receiver_error = receiver_error_init;
 
-    gps_time_t time_arrival(
-        receiver_time - (res.receiver_error / space_node_t::light_speed));
-
     geometric_matrices_t geomat(measurement.size());
     typedef std::vector<std::pair<unsigned int, float_t> > index_obs_t;
     index_obs_t idx_rate_rel; // [(index of measurement, relative rate), ...]
@@ -614,6 +636,9 @@ protected:
       idx_rate_rel.clear();
       unsigned int i_row(0), i_measurement(0);
       res.used_satellite_mask.clear();
+
+      gps_time_t time_arrival(
+          receiver_time - (res.receiver_error / space_node_t::light_speed));
 
       const bool coarse_estimation(i_trial <= 0);
       for(typename measurement2_t::const_iterator it(measurement.begin()), it_end(measurement.end());
@@ -653,21 +678,8 @@ protected:
       }
 
       try{
-        // Least square
-        matrix_t delta_x(geomat.partial(res.used_satellites).least_square());
-
-        xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
-        res.user_position.xyz += delta_user_position;
-        res.user_position.llh = res.user_position.xyz.llh();
-
-        const float_t &delta_receiver_error(delta_x(3, 0));
-        res.receiver_error += delta_receiver_error;
-        time_arrival -= (delta_receiver_error / space_node_t::light_speed);
-
-        if((!coarse_estimation) && (delta_user_position.dist() <= 1E-6)){
-          converged = true;
-          break;
-        }
+        converged = update_position_soution(geomat, res);
+        if((!coarse_estimation) && converged){break;}
       }catch(std::exception &e){
         res.error_code = user_pvt_t::ERROR_POSITION_LS;
         return res;
