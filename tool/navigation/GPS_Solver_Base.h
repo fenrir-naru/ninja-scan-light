@@ -596,6 +596,7 @@ protected:
   /**
    * Calculate User position/velocity with hint
    *
+   * @param res (out) calculation results and matrices used for calculation
    * @param measurement PRN, pseudo-range, and pseudo-range rate information
    * associated with a specific solver corresponding to a satellite system
    * @param receiver_time receiver time at measurement
@@ -603,10 +604,10 @@ protected:
    * @param receiver_error_init initial solution of receiver clock error in meters
    * @param good_init if true, initial position and clock error are goodly guessed.
    * @param with_velocity if true, perform velocity estimation.
-   * @return calculation results and matrices used for calculation
    * @see update_ephemeris(), register_ephemeris
    */
-  user_pvt_t solve_user_pvt(
+  void user_pvt(
+      user_pvt_t &res,
       const measurement2_t &measurement,
       const gps_time_t &receiver_time,
       const pos_t &user_position_init,
@@ -615,8 +616,6 @@ protected:
       const bool &with_velocity = true) const {
 
     // Reference implementation (to be hidden by optimized one in sub class)
-
-    user_pvt_t res;
     res.receiver_time = receiver_time;
 
     // 1. Position calculation
@@ -674,7 +673,7 @@ protected:
 
       if((res.used_satellites = i_row) < 4){
         res.error_code = user_pvt_t::ERROR_INSUFFICIENT_SATELLITES;
-        return res;
+        return;
       }
 
       try{
@@ -682,13 +681,13 @@ protected:
         if((!coarse_estimation) && converged){break;}
       }catch(std::exception &e){
         res.error_code = user_pvt_t::ERROR_POSITION_LS;
-        return res;
+        return;
       }
     }
 
     if(!converged){
       res.error_code = user_pvt_t::ERROR_POSITION_NOT_CONVERGED;
-      return res;
+      return;
     }
 
     try{
@@ -696,12 +695,12 @@ protected:
           geomat.partial(res.used_satellites).C(), res.user_position.ecef2enu()));
     }catch(std::exception &e){
       res.error_code = user_pvt_t::ERROR_DOP;
-      return res;
+      return;
     }
 
     if(!with_velocity){
       res.error_code = user_pvt_t::ERROR_VELOCITY_SKIPPED;
-      return res;
+      return;
     }
 
     /* 2. Calculate velocity
@@ -729,7 +728,7 @@ protected:
 
     if(i_rate < 4){
       res.error_code = user_pvt_t::ERROR_VELOCITY_INSUFFICIENT_SATELLITES;
-      return res;
+      return;
     }
 
     try{
@@ -742,27 +741,27 @@ protected:
       res.receiver_error_rate = sol(3, 0);
     }catch(std::exception &e){
       res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
-      return res;
+      return;
     }
 
     res.error_code = user_pvt_t::ERROR_NO;
-    return res;
   }
 
 public:
   /**
    * Calculate User position/velocity with hint
    *
+   * @param res (out) calculation results and matrices used for calculation
    * @param measurement PRN, pseudo-range, and pseudo-range rate information
    * @param receiver_time receiver time at measurement
    * @param user_position_init initial solution of user position in XYZ meters and LLH
    * @param receiver_error_init initial solution of receiver clock error in meters
    * @param good_init if true, initial position and clock error are goodly guessed.
    * @param with_velocity if true, perform velocity estimation.
-   * @return calculation results and matrices used for calculation
    * @see update_ephemeris(), register_ephemeris
    */
-  virtual user_pvt_t solve_user_pvt(
+  virtual void user_pvt(
+      user_pvt_t &res,
       const measurement_t &measurement,
       const gps_time_t &receiver_time,
       const pos_t &user_position_init,
@@ -779,160 +778,186 @@ public:
       if(v.solver == this){continue;} // skip because of not-implemented satellite system
       measurement2.push_back(v);
     }
-    return solve_user_pvt(
+    return user_pvt(
+        res,
         measurement2, receiver_time, user_position_init, receiver_error_init,
         good_init, with_velocity);
   }
 
+  template <class SolverT>
+  struct solver_interface_t {
+    const SolverT &solver;
+    solver_interface_t(const SolverT &solver_) : solver(solver_) {}
 
-  /**
-   * Calculate User position/velocity with hint
-   *
-   * @param measurement PRN, pseudo-range, and pseudo-range rate information
-   * @param receiver_time receiver time at measurement
-   * @param user_position_init_xyz initial solution of user position in meters
-   * @param receiver_error_init initial solution of receiver clock error in meters
-   * @param good_init if true, initial position and clock error are goodly guessed.
-   * @param with_velocity if true, perform velocity estimation.
-   * @return calculation results and matrices used for calculation
-   * @see update_ephemeris(), register_ephemeris
-   */
-  user_pvt_t solve_user_pvt(
-      const measurement_t &measurement,
-      const gps_time_t &receiver_time,
-      const xyz_t &user_position_init_xyz,
-      const float_t &receiver_error_init,
-      const bool &good_init = true,
-      const bool &with_velocity = true) const {
-    pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
-    return solve_user_pvt(
-        measurement, receiver_time,
-        user_position_init, receiver_error_init,
-        good_init, with_velocity);
+    typedef typename SolverT::user_pvt_t pvt_t;
+
+    pvt_t user_pvt(
+        const measurement_t &measurement,
+        const gps_time_t &receiver_time,
+        const pos_t &user_position_init,
+        const float_t &receiver_error_init,
+        const bool &good_init = true,
+        const bool &with_velocity = true) const {
+      pvt_t res;
+      solver.user_pvt(res,
+          measurement, receiver_time,
+          user_position_init, receiver_error_init,
+          good_init, with_velocity);
+      return res;
+    }
+
+    /**
+     * Calculate User position/velocity with hint
+     *
+     * @param measurement PRN, pseudo-range, and pseudo-range rate information
+     * @param receiver_time receiver time at measurement
+     * @param user_position_init_xyz initial solution of user position in meters
+     * @param receiver_error_init initial solution of receiver clock error in meters
+     * @param good_init if true, initial position and clock error are goodly guessed.
+     * @param with_velocity if true, perform velocity estimation.
+     * @return calculation results and matrices used for calculation
+     * @see update_ephemeris(), register_ephemeris
+     */
+    pvt_t user_pvt(
+        const measurement_t &measurement,
+        const gps_time_t &receiver_time,
+        const xyz_t &user_position_init_xyz,
+        const float_t &receiver_error_init,
+        const bool &good_init = true,
+        const bool &with_velocity = true) const {
+      pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
+      return user_pvt(
+          measurement, receiver_time,
+          user_position_init, receiver_error_init,
+          good_init, with_velocity);
+    }
+
+    /**
+     * Calculate User position/velocity without hint
+     *
+     * @param measurement PRN, pseudo-range, and pseudo-range rate information
+     * @param receiver_time receiver time at measurement
+     * @return calculation results and matrices used for calculation
+     */
+    pvt_t user_pvt(
+        const measurement_t &measurement,
+        const gps_time_t &receiver_time) const {
+      return user_pvt(measurement, receiver_time, xyz_t(), 0, false);
+    }
+
+    /**
+     * Calculate User position/velocity with hint
+     *
+     * @param prn_range PRN, pseudo-range list
+     * @param prn_rate PRN, pseudo-range rate list
+     * @param receiver_time receiver time at measurement
+     * @param user_position_init initial solution of user position in XYZ meters and LLH
+     * @param receiver_error_init initial solution of receiver clock error in meters
+     * @param good_init if true, initial position and clock error are goodly guessed.
+     * @param with_velocity if true, perform velocity estimation.
+     * @return calculation results and matrices used for calculation
+     * @see update_ephemeris(), register_ephemeris
+     */
+    pvt_t user_pvt(
+        const prn_obs_t &prn_range,
+        const prn_obs_t &prn_rate,
+        const gps_time_t &receiver_time,
+        const pos_t &user_position_init,
+        const float_t &receiver_error_init,
+        const bool &good_init = true,
+        const bool &with_velocity = true) const {
+      measurement_t measurement;
+      measurement_util_t::merge(measurement, prn_range, measurement_items_t::L1_PSEUDORANGE);
+      measurement_util_t::merge(measurement, prn_rate, measurement_items_t::L1_RANGE_RATE);
+      return user_pvt(
+          measurement, receiver_time,
+          user_position_init, receiver_error_init,
+          good_init, with_velocity);
+    }
+
+    /**
+     * Calculate User position/velocity with hint
+     *
+     * @param prn_range PRN, pseudo-range list
+     * @param prn_rate PRN, pseudo-range rate list
+     * @param receiver_time receiver time at measurement
+     * @param user_position_init_xyz initial solution of user position in meters
+     * @param receiver_error_init initial solution of receiver clock error in meters
+     * @param good_init if true, initial position and clock error are goodly guessed.
+     * @param with_velocity if true, perform velocity estimation.
+     * @return calculation results and matrices used for calculation
+     * @see update_ephemeris(), register_ephemeris
+     */
+    pvt_t user_pvt(
+        const prn_obs_t &prn_range,
+        const prn_obs_t &prn_rate,
+        const gps_time_t &receiver_time,
+        const xyz_t &user_position_init_xyz,
+        const float_t &receiver_error_init,
+        const bool &good_init = true,
+        const bool &with_velocity = true) const {
+      pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
+      return user_pvt(
+          prn_range, prn_rate, receiver_time,
+          user_position_init, receiver_error_init,
+          good_init, with_velocity);
+    }
+
+    /**
+     * Calculate User position/velocity without hint
+     *
+     * @param prn_range PRN, pseudo-range list
+     * @param prn_rate PRN, pseudo-range rate list
+     * @param receiver_time receiver time at measurement
+     * @return calculation results and matrices used for calculation
+     */
+    pvt_t user_pvt(
+        const prn_obs_t &prn_range,
+        const prn_obs_t &prn_rate,
+        const gps_time_t &receiver_time) const {
+      return user_pvt(prn_range, prn_rate, receiver_time, xyz_t(), 0, false);
+    }
+
+    /**
+     * Calculate User position with hint
+     *
+     * @param prn_range PRN, pseudo-range list
+     * @param receiver_time receiver time at measurement
+     * @param user_position_init initial solution of user position in meters
+     * @param receiver_error_init initial solution of receiver clock error in meters
+     * @param good_init if true, initial position and clock error are goodly guessed.
+     * @return calculation results and matrices used for calculation
+     */
+    pvt_t user_position(
+        const prn_obs_t &prn_range,
+        const gps_time_t &receiver_time,
+        const xyz_t &user_position_init,
+        const float_t &receiver_error_init,
+        const bool &good_init = true) const {
+
+      return user_pvt(
+          prn_range, prn_obs_t(), receiver_time,
+          user_position_init, receiver_error_init,
+          good_init, false);
+    }
+
+    /**
+     * Calculate User position without hint
+     *
+     * @param prn_range PRN and pseudo range
+     * @param receiver_time receiver time at measurement
+     * @return calculation results and matrices used for calculation
+     */
+    pvt_t user_position(
+            const prn_obs_t &prn_range,
+            const gps_time_t &receiver_time) const {
+      return user_position(prn_range, receiver_time, xyz_t(), 0, false);
+    }
+  };
+
+  solver_interface_t<GPS_Solver_Base<FloatT> > solve() const {
+    return solver_interface_t<GPS_Solver_Base<FloatT> >(*this);
   }
-
-  /**
-   * Calculate User position/velocity without hint
-   *
-   * @param measurement PRN, pseudo-range, and pseudo-range rate information
-   * @param receiver_time receiver time at measurement
-   * @return calculation results and matrices used for calculation
-   */
-  user_pvt_t solve_user_pvt(
-      const measurement_t &measurement,
-      const gps_time_t &receiver_time) const {
-    return solve_user_pvt(measurement, receiver_time, xyz_t(), 0, false);
-  }
-
-  /**
-   * Calculate User position/velocity with hint
-   *
-   * @param prn_range PRN, pseudo-range list
-   * @param prn_rate PRN, pseudo-range rate list
-   * @param receiver_time receiver time at measurement
-   * @param user_position_init initial solution of user position in XYZ meters and LLH
-   * @param receiver_error_init initial solution of receiver clock error in meters
-   * @param good_init if true, initial position and clock error are goodly guessed.
-   * @param with_velocity if true, perform velocity estimation.
-   * @return calculation results and matrices used for calculation
-   * @see update_ephemeris(), register_ephemeris
-   */
-  virtual user_pvt_t solve_user_pvt(
-      const prn_obs_t &prn_range,
-      const prn_obs_t &prn_rate,
-      const gps_time_t &receiver_time,
-      const pos_t &user_position_init,
-      const float_t &receiver_error_init,
-      const bool &good_init = true,
-      const bool &with_velocity = true) const {
-    measurement_t measurement;
-    measurement_util_t::merge(measurement, prn_range, measurement_items_t::L1_PSEUDORANGE);
-    measurement_util_t::merge(measurement, prn_rate, measurement_items_t::L1_RANGE_RATE);
-    return solve_user_pvt(
-        measurement, receiver_time,
-        user_position_init, receiver_error_init,
-        good_init, with_velocity);
-  }
-
-  /**
-   * Calculate User position/velocity with hint
-   *
-   * @param prn_range PRN, pseudo-range list
-   * @param prn_rate PRN, pseudo-range rate list
-   * @param receiver_time receiver time at measurement
-   * @param user_position_init_xyz initial solution of user position in meters
-   * @param receiver_error_init initial solution of receiver clock error in meters
-   * @param good_init if true, initial position and clock error are goodly guessed.
-   * @param with_velocity if true, perform velocity estimation.
-   * @return calculation results and matrices used for calculation
-   * @see update_ephemeris(), register_ephemeris
-   */
-  user_pvt_t solve_user_pvt(
-      const prn_obs_t &prn_range,
-      const prn_obs_t &prn_rate,
-      const gps_time_t &receiver_time,
-      const xyz_t &user_position_init_xyz,
-      const float_t &receiver_error_init,
-      const bool &good_init = true,
-      const bool &with_velocity = true) const {
-    pos_t user_position_init = {user_position_init_xyz, user_position_init_xyz.llh()};
-    return solve_user_pvt(
-        prn_range, prn_rate, receiver_time,
-        user_position_init, receiver_error_init,
-        good_init, with_velocity);
-  }
-
-  /**
-   * Calculate User position/velocity without hint
-   *
-   * @param prn_range PRN, pseudo-range list
-   * @param prn_rate PRN, pseudo-range rate list
-   * @param receiver_time receiver time at measurement
-   * @return calculation results and matrices used for calculation
-   */
-  user_pvt_t solve_user_pvt(
-      const prn_obs_t &prn_range,
-      const prn_obs_t &prn_rate,
-      const gps_time_t &receiver_time) const {
-    return solve_user_pvt(prn_range, prn_rate, receiver_time, xyz_t(), 0, false);
-  }
-
-  /**
-   * Calculate User position with hint
-   *
-   * @param prn_range PRN, pseudo-range list
-   * @param receiver_time receiver time at measurement
-   * @param user_position_init initial solution of user position in meters
-   * @param receiver_error_init initial solution of receiver clock error in meters
-   * @param good_init if true, initial position and clock error are goodly guessed.
-   * @return calculation results and matrices used for calculation
-   */
-  user_pvt_t solve_user_position(
-      const prn_obs_t &prn_range,
-      const gps_time_t &receiver_time,
-      const xyz_t &user_position_init,
-      const float_t &receiver_error_init,
-      const bool &good_init = true) const {
-
-    return solve_user_pvt(
-        prn_range, prn_obs_t(), receiver_time,
-        user_position_init, receiver_error_init,
-        good_init, false);
-  }
-
-  /**
-   * Calculate User position without hint
-   *
-   * @param prn_range PRN and pseudo range
-   * @param receiver_time receiver time at measurement
-   * @return calculation results and matrices used for calculation
-   */
-  user_pvt_t solve_user_position(
-          const prn_obs_t &prn_range,
-          const gps_time_t &receiver_time) const {
-    return solve_user_position(prn_range, receiver_time, xyz_t(), 0, false);
-  }
-
 
   /**
    * Calculate satellite position

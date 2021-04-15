@@ -432,16 +432,17 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     /**
      * Calculate User position/velocity with hint
      *
+     * @param res (out) calculation results and matrices used for calculation
      * @param measurement PRN, pseudo-range, pseudo-range rate information
      * @param receiver_time receiver time at measurement
      * @param user_position_init initial solution of user position in XYZ meters and LLH
      * @param receiver_error_init initial solution of receiver clock error in meters
      * @param good_init if true, initial position and clock error are goodly guessed.
      * @param with_velocity if true, perform velocity estimation.
-     * @return calculation results and matrices used for calculation
      * @see update_ephemeris(), register_ephemeris
      */
-    user_pvt_t solve_user_pvt(
+    void user_pvt(
+        user_pvt_t &res,
         const measurement_t &measurement,
         const gps_time_t &receiver_time,
         const pos_t &user_position_init,
@@ -449,12 +450,11 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         const bool &good_init = true,
         const bool &with_velocity = true) const {
 
-      user_pvt_t res;
       res.receiver_time = receiver_time;
 
       if(_options.count_ionospheric_models() == 0){
         res.error_code = user_pvt_t::ERROR_INVALID_IONO_MODEL;
-        return res;
+        return;
       }
 
       typename base_t::measurement2_t measurement2;
@@ -471,7 +471,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
             it->first, &(it->second), this}; // prn, measurement, solver
         measurement2.push_back(v);
       }
-      return base_t::solve_user_pvt(
+      base_t::user_pvt(
+          res,
           measurement2, receiver_time, user_position_init, receiver_error_init,
           good_init, with_velocity);
     }
