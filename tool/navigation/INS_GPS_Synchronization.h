@@ -313,9 +313,9 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
       correct_with_info(info);
     }
 
-    template <class Generator>
+    template <class GPS_Packet, class Generator>
     void correct2_tightly(
-        const GPS_RawData<float_t> &gps,
+        const GPS_Packet &gps,
         const Generator &generator){
       CorrectInfo<float_t> info(generator(snapshots.front().ins_gps, gps));
       if(info.z.rows() < 1){return;}
