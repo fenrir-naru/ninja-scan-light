@@ -338,6 +338,22 @@ struct GPS_Solver_Base {
         return (unsigned int)res;
       }
     }
+    std::vector<int> indices_one() const {
+      std::vector<int> res;
+      int idx(0);
+      static const std::div_t qr(std::div(MAX_SIZE, bits_per_addr));
+      int rem(qr.rem);
+      for(int i(0); i < qr.quot; ++i, idx += bits_per_addr){
+        int idx2(idx);
+        for(ContainerT temp(buf[i]); temp > 0; temp >>= 1, ++idx2){
+          if(temp & 0x1){res.push_back(idx2);}
+        }
+      }
+      for(ContainerT temp(buf[qr.quot + 1]); (temp > 0) && (rem > 0); --rem, ++idx, temp >>= 1){
+        if(temp & 0x1){res.push_back(idx);}
+      }
+      return res;
+    }
   };
 
   struct user_pvt_t {

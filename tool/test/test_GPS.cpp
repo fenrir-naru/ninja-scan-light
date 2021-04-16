@@ -4,6 +4,7 @@
 #include <bitset>
 #include <string>
 #include <algorithm>
+#include <vector>
 
 #include "navigation/GPS.h"
 #include "navigation/GPS_Solver_Base.h"
@@ -269,8 +270,10 @@ void check_bit_array(const bitset<N> &b, const BitArrayT &bit_array){
 BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
   for(int loop(0); loop < 0x1000; loop++){
     bitset<64> b;
+    std::vector<int> ones;
     for(unsigned int i(0); i < b.size(); ++i){
       b.set(i, get_bool());
+      if(b[i]){ones.push_back((int)i);}
     }
     string b_str(b.to_string());
     reverse(b_str.begin(), b_str.end());
@@ -288,6 +291,9 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
         bit_array.set(i, b[i]);
       }
       check_bit_array(b, bit_array);
+
+      std::vector<int> ones2(bit_array.indices_one());
+      BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
     }
 
     {
@@ -298,6 +304,9 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
         bit_array.set(i, b[i]);
       }
       check_bit_array(b, bit_array);
+
+      std::vector<int> ones2(bit_array.indices_one());
+      BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
     }
 
     {
@@ -308,6 +317,9 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
         bit_array.set(i, b[i]);
       }
       check_bit_array(b, bit_array);
+
+      std::vector<int> ones2(bit_array.indices_one());
+      BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
     }
   }
 }
