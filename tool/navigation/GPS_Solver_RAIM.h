@@ -39,9 +39,22 @@
 
 #include <algorithm>
 
+template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
+struct GPS_PVT_RAIM : public PVT_BaseT {
+  bool is_available_RAIM() const {
+    return (PVT_BaseT::used_satellites >= 5);
+  }
+  struct slope_t {
+    FloatT max;
+    typename GPS_Solver_Base<FloatT>::prn_t prn;
+  } slope_HV[2];
+  FloatT wssr;
+};
+
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
 struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   typedef SolverBaseT base_t;
+  typedef GPS_Solver_RAIM_LSR<FloatT, SolverBaseT> self_t;
   virtual ~GPS_Solver_RAIM_LSR() {}
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
@@ -58,25 +71,21 @@ struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   inheritate_type(geometric_matrices_t);
 #undef inheritate_type
 
-  struct user_pvt_t : public base_t::user_pvt_t {
-    struct slope_t {
-      float_t max;
-      typename base_t::prn_t prn;
-    } slope_HV[2];
-  };
+  typedef GPS_PVT_RAIM<float_t, typename base_t::user_pvt_t> user_pvt_t;
 
-  typename base_t::template solver_interface_t<GPS_Solver_RAIM_LSR<FloatT> > solve() const {
-    return typename base_t::template solver_interface_t<GPS_Solver_RAIM_LSR<FloatT> >(*this);
+  typename base_t::template solver_interface_t<self_t> solve() const {
+    return typename base_t::template solver_interface_t<self_t>(*this);
   }
 
 protected:
   virtual bool update_position_solution(
       const geometric_matrices_t &geomat,
-      typename base_t::user_pvt_t &res) const {
+      typename GPS_Solver_Base<FloatT>::user_pvt_t &res) const {
 
     // Least square
     matrix_t S;
-    matrix_t delta_x(geomat.partial(res.used_satellites).least_square(S));
+    typename geometric_matrices_t::partial_t geomat2(geomat.partial(res.used_satellites));
+    matrix_t delta_x(geomat2.least_square(S));
 
     xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
     res.user_position.xyz += delta_user_position;
@@ -87,15 +96,18 @@ protected:
     if(!converged){return false;}
 
     user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
+    if(!pvt.is_available_RAIM()){return true;}
 
-    matrix_t slope_HV(geomat.slope_HV(S, res.user_position.ecef2enu()));
+    pvt.wssr = geomat2.wssr(delta_x);
+    matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
     for(unsigned i(0); i < 2; ++i){ // horizontal, vertical
       typename matrix_t::partial_t::const_iterator it(
           std::max_element(
             slope_HV.partial(slope_HV.rows(), 1, 0, i).cbegin(),
             slope_HV.partial(slope_HV.rows(), 1, 0, i).cend()));
       pvt.slope_HV[i].max = *it;
-      pvt.slope_HV[i].prn = (typename base_t::prn_t)res.used_satellite_mask.indices_one()[it.row()];
+      pvt.slope_HV[i].prn
+          = (typename GPS_Solver_Base<FloatT>::prn_t)res.used_satellite_mask.indices_one()[it.row()];
     }
 
     return true;

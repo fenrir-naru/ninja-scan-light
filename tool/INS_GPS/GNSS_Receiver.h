@@ -433,6 +433,15 @@ data.gps.solver_options. expr
         }
         return out;
       }
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+      template <class PVT_BaseT>
+      static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM<FloatT, PVT_BaseT> *){
+        return print(out, static_cast<const PVT_BaseT *>(0))
+            << ',' << "wssr"
+            << ',' << "slopeH_max" << ',' << "slopeH_max_PRN"
+            << ',' << "slopeV_max" << ',' << "slopeV_max_PRN";
+      }
+#endif
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         return print(out, static_cast<const pvt_t *>(0));
       }
@@ -514,7 +523,20 @@ data.gps.solver_options. expr
       }
       return out;
     }
-
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+    template <class PVT_BaseT>
+    static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM<FloatT, PVT_BaseT> &src){
+      print(out, static_cast<const PVT_BaseT &>(src));
+      if(src.position_solved() && src.is_available_RAIM()){
+        out << ',' << src.wssr
+            << ',' << src.slope_HV[0].max << ',' << src.slope_HV[0].prn
+            << ',' << src.slope_HV[1].max << ',' << src.slope_HV[1].prn;
+      }else{
+        out << ",,,,,";
+      }
+      return out;
+    }
+#endif
     friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &p){
       return print(out, p.pvt);
     }
