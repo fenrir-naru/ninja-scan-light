@@ -47,6 +47,10 @@
 
 #include "analyze_common.h"
 
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+#include "navigation/GPS_Solver_RAIM.h"
+#endif
+
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
 #include "navigation/GPS_Solver_MultiFrequency.h"
 #endif
@@ -55,10 +59,18 @@ template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
 
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+#if defined(BUILD_WITH_GNSS_DEBUG)
+  typedef GPS_Solver_RAIM_LSR<FloatT, GPS_Solver_Base_Debug<FloatT> > solver_base_t;
+#else
+  typedef GPS_Solver_RAIM_LSR<FloatT> solver_base_t;
+#endif
+#else
 #if defined(BUILD_WITH_GNSS_DEBUG)
   typedef GPS_Solver_Base_Debug<FloatT> solver_base_t;
 #else
   typedef GPS_Solver_Base<FloatT> solver_base_t;
+#endif
 #endif
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
