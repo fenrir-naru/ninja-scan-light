@@ -1,0 +1,105 @@
+/**
+ * @file GPS solver with RAIM (Receiver Autonomous Integrity Monitoring)
+ */
+/*
+ * Copyright (c) 2021, M.Naruoka (fenrir)
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * - Redistributions of source code must retain the above copyright notice,
+ *   this list of conditions and the following disclaimer.
+ * - Redistributions in binary form must reproduce the above copyright notice,
+ *   this list of conditions and the following disclaimer in the documentation
+ *   and/or other materials provided with the distribution.
+ * - Neither the name of the naruoka.org nor the names of its contributors
+ *   may be used to endorse or promote products derived from this software
+ *   without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+ * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+ * OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+ * STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+ * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+#ifndef __GPS_SOLVER_RAIM_H__
+#define __GPS_SOLVER_RAIM_H__
+
+#include "GPS_Solver_Base.h"
+
+#include <algorithm>
+
+template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
+struct GPS_Solver_RAIM_LSR : public SolverBaseT {
+  typedef SolverBaseT base_t;
+  virtual ~GPS_Solver_RAIM_LSR() {}
+
+#if defined(__GNUC__) && (__GNUC__ < 5)
+#define inheritate_type(x) typedef typename base_t::x x;
+#else
+#define inheritate_type(x) using typename base_t::x;
+#endif
+
+  inheritate_type(float_t);
+  inheritate_type(matrix_t);
+
+  inheritate_type(xyz_t);
+
+  inheritate_type(geometric_matrices_t);
+#undef inheritate_type
+
+  struct user_pvt_t : public base_t::user_pvt_t {
+    struct slope_t {
+      float_t max;
+      typename base_t::prn_t prn;
+    } slope_HV[2];
+  };
+
+  typename base_t::template solver_interface_t<GPS_Solver_RAIM_LSR<FloatT> > solve() const {
+    return typename base_t::template solver_interface_t<GPS_Solver_RAIM_LSR<FloatT> >(*this);
+  }
+
+protected:
+  virtual bool update_position_solution(
+      const geometric_matrices_t &geomat,
+      typename base_t::user_pvt_t &res) const {
+
+    // Least square
+    matrix_t S;
+    matrix_t delta_x(geomat.partial(res.used_satellites).least_square(S));
+
+    xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
+    res.user_position.xyz += delta_user_position;
+    res.user_position.llh = res.user_position.xyz.llh();
+    res.receiver_error += delta_x(3, 0);
+
+    bool converged(delta_user_position.dist() <= 1E-6);
+    if(!converged){return false;}
+
+    user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
+
+    matrix_t slope_HV(geomat.slope_HV(S, res.user_position.ecef2enu()));
+    for(unsigned i(0); i < 2; ++i){ // horizontal, vertical
+      typename matrix_t::partial_t::const_iterator it(
+          std::max_element(
+            slope_HV.partial(slope_HV.rows(), 1, 0, i).cbegin(),
+            slope_HV.partial(slope_HV.rows(), 1, 0, i).cend()));
+      pvt.slope_HV[i].max = *it;
+      pvt.slope_HV[i].prn = (typename base_t::prn_t)res.used_satellite_mask.indices_one()[it.row()];
+    }
+
+    return true;
+  }
+};
+
+#endif /* __GPS_SOLVER_RAIM_H__ */
