@@ -797,9 +797,9 @@ struct G_Packet
 
 struct G_Packet_Measurement
     : public BasicPacket<G_Packet_Measurement>,
-    public GPS_RawData<float_sylph_t> {
+    public GPS_RawData<float_sylph_t, typename GNSS_Receiver<float_sylph_t>::solver_base_t> {
 
-  typedef GPS_RawData<float_sylph_t> raw_data_t;
+  typedef GPS_RawData<float_sylph_t, typename GNSS_Receiver<float_sylph_t>::solver_base_t> raw_data_t;
   typedef GNSS_Receiver<float_sylph_t>::solver_t solver_t;
 
   struct items_t : public solver_t::measurement_items_t {
