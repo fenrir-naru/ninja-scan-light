@@ -129,13 +129,13 @@ struct GPS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> 
   }
 };
 
-template <class FloatT>
-class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
+template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
+class GPS_SinglePositioning : public SolverBaseT {
   private:
     GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
   public:
     typedef GPS_SinglePositioning<FloatT> self_t;
-    typedef GPS_Solver_Base<FloatT> base_t;
+    typedef SolverBaseT base_t;
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename base_t::x x;
@@ -147,7 +147,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     inheritate_type(matrix_t);
     inheritate_type(prn_t);
 
-    inheritate_type(space_node_t);
+    typedef typename base_t::space_node_t space_node_t;
     inheritate_type(gps_time_t);
     typedef typename space_node_t::Satellite satellite_t;
 
@@ -158,9 +158,9 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     inheritate_type(pos_t);
 
     inheritate_type(prn_obs_t);
-    inheritate_type(measurement_t);
+    typedef typename base_t::measurement_t measurement_t;
     inheritate_type(measurement_items_t);
-    inheritate_type(range_error_t);
+    typedef typename base_t::range_error_t range_error_t;
 
     typedef GPS_SinglePositioning_Options<float_t> options_t;
 

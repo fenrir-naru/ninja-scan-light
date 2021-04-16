@@ -58,9 +58,9 @@ struct GNSS_Receiver {
   typedef GPS_Solver_Base<FloatT> solver_base_t;
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
-  typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> > gps_solver_t;
+  typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT, solver_base_t> > gps_solver_t;
 #else
-  typedef GPS_SinglePositioning<FloatT> gps_solver_t;
+  typedef GPS_SinglePositioning<FloatT, solver_base_t> gps_solver_t;
 #endif
 
   struct system_t;
