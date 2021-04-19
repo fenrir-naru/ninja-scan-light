@@ -51,6 +51,7 @@
 template <class FloatT>
 struct GPS_Solver_GeneralOptions {
   FloatT elevation_mask;
+  FloatT residual_mask;
 
   enum ionospheric_model_t {
     IONOSPHERIC_KLOBUCHAR,
@@ -72,7 +73,9 @@ struct GPS_Solver_GeneralOptions {
   FloatT f_10_7;
 
   GPS_Solver_GeneralOptions()
-      : elevation_mask(0), f_10_7(-1) {
+      : elevation_mask(0), // elevation mask default is 0 [deg]
+      residual_mask(30), // range residual mask is 30 [m]
+      f_10_7(-1) {
     for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
       ionospheric_models[i] = IONOSPHERIC_SKIP;
     }
@@ -308,7 +311,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
           : error.value[range_error_t::TROPOSPHERIC];
 
       // Setup weight
-      if(std::abs(residual.residual) > 30.0){
+      if(std::abs(residual.residual) > _options.residual_mask){
         // If residual is too big, gently exclude it by decreasing its weight.
         residual.weight = 1E-8;
       }else{

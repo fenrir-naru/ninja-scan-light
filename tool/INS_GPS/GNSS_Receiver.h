@@ -282,8 +282,15 @@ data.gps.solver_options. expr
     if(value = runtime_opt_t::get_value(spec, "GNSS_elv_mask_deg", false)){
       if(dry_run){return true;}
       FloatT mask_deg(std::atof(value));
-      std::cerr << "GNSS_elv_mask: " << mask_deg << " [deg]" << std::endl;
+      std::cerr << "GNSS_elv_mask: reject when (elv) < " << mask_deg << " [deg]" << std::endl;
       option_apply(elevation_mask = deg2rad(mask_deg));
+      return true;
+    }
+    if(value = runtime_opt_t::get_value(spec, "GNSS_delta_rho_mask", false)){
+      if(dry_run){return true;}
+      FloatT mask_meter(std::atof(value));
+      std::cerr << "GNSS_delta_rho_mask: reject when (delta_rho) > " << mask_meter << " [m]" << std::endl;
+      option_apply(residual_mask = mask_meter);
       return true;
     }
 
