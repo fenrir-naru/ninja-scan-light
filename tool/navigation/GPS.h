@@ -1692,7 +1692,11 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         bool select(
             const gps_time_t &target_time,
             bool (PropertyT::*is_valid)(const gps_time_t &) const,
-            float_t (PropertyT::*get_delta_t)(const gps_time_t &) const = NULL){
+            float_t (PropertyT::*get_delta_t)(const gps_time_t &) const
+#if !defined(SWIG) // work around for SWIG parser error
+              = NULL
+#endif
+            ){
           typename history_t::iterator it_selected(selected_iterator());
 
           bool changed(false);
