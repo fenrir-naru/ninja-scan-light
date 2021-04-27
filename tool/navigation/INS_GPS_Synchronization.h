@@ -351,15 +351,17 @@ class INS_GPS_RealTime : public INS_GPS, protected INS_GPS_RealTime_Property<typ
       correct_with_info(info);
     }
 
+    template <class SolverT>
     void correct2(
-        const GPS_RawData<float_t> &gps,
+        const GPS_RawData<float_t, SolverT> &gps,
         const vec3_t *lever_arm_b,
         const vec3_t *omega_b2i_4b){
       correct2_tightly(gps,
           typename INS_GPS::CorrectInfoGenerator(lever_arm_b, omega_b2i_4b));
     }
+    template <class PVT_BaseT>
     void correct2(
-        const typename GPS_RawData<float_t>::pvt_t &gps,
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &gps,
         const vec3_t *lever_arm_b,
         const vec3_t *omega_b2i_4b){
       correct2_tightly(gps,

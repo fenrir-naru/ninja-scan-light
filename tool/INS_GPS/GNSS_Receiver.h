@@ -54,10 +54,13 @@
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
+
+  typedef GPS_Solver_Base<FloatT> solver_base_t;
+
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
-  typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> > gps_solver_t;
+  typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT, solver_base_t> > gps_solver_t;
 #else
-  typedef GPS_SinglePositioning<FloatT> gps_solver_t;
+  typedef GPS_SinglePositioning<FloatT, solver_base_t> gps_solver_t;
 #endif
 
   struct system_t;
@@ -76,8 +79,8 @@ struct GNSS_Receiver {
     }
   } data;
 
-  struct solver_t : public GPS_Solver_Base<FloatT> {
-    typedef GPS_Solver_Base<FloatT> base_t;
+  struct solver_t : public solver_base_t {
+    typedef solver_base_t base_t;
     gps_solver_t gps;
     struct measurement_items_t : public gps_solver_t::measurement_items_t {
       // TODO
@@ -108,7 +111,7 @@ struct GNSS_Receiver {
     loader.gps = &const_cast<gps_space_node_t &>(data.gps.space_node);
   }
 
-  const GPS_Solver_Base<FloatT> &solver() const {
+  const solver_base_t &solver() const {
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
     return solver_GNSS;
 #else
@@ -376,11 +379,11 @@ data.gps.solver_options. expr
   }
 
   struct pvt_printer_t {
-    typedef typename GPS_Solver_Base<FloatT>::user_pvt_t pvt_t;
+    typedef typename solver_base_t::user_pvt_t pvt_t;
     const pvt_t &pvt;
     pvt_printer_t(const pvt_t &_pvt) : pvt(_pvt) {}
     static struct label_t {
-      friend std::ostream &operator<<(std::ostream &out, const label_t &label){
+      static std::ostream &print(std::ostream &out, const typename GPS_Solver_Base<FloatT>::user_pvt_t *){
         return out << "week"
             << ',' << "itow_rcv"
             << ',' << "receiver_clock_error_meter"
@@ -398,6 +401,9 @@ data.gps.solver_options. expr
             << ',' << "receiver_clock_error_dot_ms"
             << ',' << "used_satellites"
             << ',' << "PRN";
+      }
+      friend std::ostream &operator<<(std::ostream &out, const label_t &label){
+        return print(out, static_cast<const pvt_t *>(0));
       }
     } label;
 
@@ -427,42 +433,46 @@ data.gps.solver_options. expr
       }
     };
 
-    friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &p){
-      out << p.pvt.receiver_time.week
-          << ',' << p.pvt.receiver_time.seconds;
-      if(p.pvt.position_solved()){
-        out << ',' << p.pvt.receiver_error
-            << ',' << rad2deg(p.pvt.user_position.llh.longitude())
-            << ',' << rad2deg(p.pvt.user_position.llh.latitude())
-            << ',' << p.pvt.user_position.llh.height()
-            << ',' << p.pvt.dop.g
-            << ',' << p.pvt.dop.p
-            << ',' << p.pvt.dop.h
-            << ',' << p.pvt.dop.v
-            << ',' << p.pvt.dop.t;
+    static std::ostream &print(std::ostream &out, const typename GPS_Solver_Base<FloatT>::user_pvt_t &src){
+      out << src.receiver_time.week
+          << ',' << src.receiver_time.seconds;
+      if(src.position_solved()){
+        out << ',' << src.receiver_error
+            << ',' << rad2deg(src.user_position.llh.longitude())
+            << ',' << rad2deg(src.user_position.llh.latitude())
+            << ',' << src.user_position.llh.height()
+            << ',' << src.dop.g
+            << ',' << src.dop.p
+            << ',' << src.dop.h
+            << ',' << src.dop.v
+            << ',' << src.dop.t;
       }else{
         out << ",,,,,,,,,";
       }
-      if(p.pvt.velocity_solved()){
-        out << ',' << p.pvt.user_velocity_enu.north()
-            << ',' << p.pvt.user_velocity_enu.east()
-            << ',' << -p.pvt.user_velocity_enu.up()
-            << ',' << p.pvt.receiver_error_rate;
+      if(src.velocity_solved()){
+        out << ',' << src.user_velocity_enu.north()
+            << ',' << src.user_velocity_enu.east()
+            << ',' << -src.user_velocity_enu.up()
+            << ',' << src.receiver_error_rate;
       }else{
         out << ",,,,";
       }
-      if(p.pvt.position_solved()){
-        out << ',' << p.pvt.used_satellites
-            << ',' << mask_printer_t(p.pvt.used_satellite_mask, 1, 32);
+      if(src.position_solved()){
+        out << ',' << src.used_satellites
+            << ',' << mask_printer_t(src.used_satellite_mask, 1, 32);
       }else{
         out << ",,";
       }
       return out;
     }
+
+    friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &p){
+      return print(out, p.pvt);
+    }
   };
 
   struct raw_data_printer_t {
-    typedef GPS_RawData<FloatT> raw_t;
+    typedef GPS_RawData<FloatT, solver_base_t> raw_t;
     const raw_t &raw;
     typedef typename solver_t::xyz_t xyz_t;
     const xyz_t *xyz_base;

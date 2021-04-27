@@ -302,9 +302,41 @@ class Filtered_INS_ClockErrorEstimated : public BaseFINS {
     void correct();
 };
 
-template <class FloatT>
+template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
+struct GPS_Solution_PVT : public PVT_BaseT {
+  unsigned int clock_index;
+
+  static char (&check_pvt(typename GPS_Solver_Base<FloatT>::user_pvt_t *) )[1];
+  static const int base_pvt_should_be_a_subclass_of_user_pvt_t
+      = sizeof(check_pvt(static_cast<PVT_BaseT *>(0)));
+
+  /**
+   * PVT Converter for loosely integration
+   * @return solution
+   */
+  operator GPS_Solution<FloatT> () const {
+    GPS_Solution<FloatT> res;
+    res.v_n = this->user_velocity_enu.north();
+    res.v_e = this->user_velocity_enu.east();
+    res.v_d = -this->user_velocity_enu.up();
+    res.latitude = this->user_position.llh.latitude();
+    res.longitude = this->user_position.llh.longitude();
+    res.height = this->user_position.llh.height();
+    // Calculation of estimated accuracy
+    /* Position standard deviation is roughly estimated as (DOP * 2 meters)
+     * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
+     */
+    res.sigma_2d = this->dop.h * 2;
+    res.sigma_height = this->dop.v * 2;
+    // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
+    res.sigma_vel = this->dop.p * 0.1;
+    return res;
+  }
+};
+
+template <class FloatT, class SolverT = GPS_Solver_Base<FloatT> >
 struct GPS_RawData {
-  typedef GPS_Solver_Base<FloatT> solver_t;
+  typedef SolverT solver_t;
   const solver_t *solver;
 
   unsigned int clock_index;
@@ -326,31 +358,7 @@ struct GPS_RawData {
       clock_index(_clock_index), measurement(), gpstime() {}
   ~GPS_RawData(){}
 
-  struct pvt_t : public solver_t::user_pvt_t {
-    unsigned int clock_index;
-    /**
-     * PVT Converter for loosely integration
-     * @return solution
-     */
-    operator GPS_Solution<FloatT> () const {
-      GPS_Solution<FloatT> res;
-      res.v_n = this->user_velocity_enu.north();
-      res.v_e = this->user_velocity_enu.east();
-      res.v_d = -this->user_velocity_enu.up();
-      res.latitude = this->user_position.llh.latitude();
-      res.longitude = this->user_position.llh.longitude();
-      res.height = this->user_position.llh.height();
-      // Calculation of estimated accuracy
-      /* Position standard deviation is roughly estimated as (DOP * 2 meters)
-       * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
-       */
-      res.sigma_2d = this->dop.h * 2;
-      res.sigma_height = this->dop.v * 2;
-      // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
-      res.sigma_vel = this->dop.p * 0.1;
-      return res;
-    }
-  };
+  typedef GPS_Solution_PVT<FloatT, typename solver_t::user_pvt_t> pvt_t;
 
   pvt_t pvt(const pvt_t &hint = pvt_t()) const {
     pvt_t res;
@@ -366,7 +374,7 @@ struct GPS_RawData {
           break;
         }else if(delta_t < 300){
           // Use hint, because solution may not be changed extremely in short time
-          (typename solver_t::user_pvt_t &)res = solver->solve_user_pvt(
+          (typename solver_t::user_pvt_t &)res = solver->solve().user_pvt(
               measurement,
               gpstime,
               hint.user_position,
@@ -376,7 +384,7 @@ struct GPS_RawData {
       }else if(!solver){
         break;
       }
-      (typename solver_t::user_pvt_t &)res = solver->solve_user_pvt(
+      (typename solver_t::user_pvt_t &)res = solver->solve().user_pvt(
           measurement,
           gpstime);
     }while(false);
@@ -421,8 +429,7 @@ class INS_GPS2_Tightly : public BaseFINS {
     
     typedef INS_GPS2_Tightly<super_t> self_t;
 
-    typedef GPS_RawData<float_t> raw_data_t;
-    typedef typename raw_data_t::solver_t solver_t;
+    typedef GPS_Solver_Base<float_t> solver_t;
     typedef typename solver_t::space_node_t space_node_t;
 
     using super_t::CLOCKS_SUPPORTED;
@@ -431,14 +438,14 @@ class INS_GPS2_Tightly : public BaseFINS {
 
   protected:
     struct receiver_state_t {
-      typename raw_data_t::gps_time_t t;
+      typename solver_t::gps_time_t t;
       unsigned int clock_index;
       float_t clock_error;
       typename solver_t::pos_t pos;
       typename solver_t::xyz_t vel;
     };
     receiver_state_t receiver_state(
-        const typename raw_data_t::gps_time_t &t,
+        const typename solver_t::gps_time_t &t,
         const unsigned int &clock_index,
         const float_t &clock_error_shift = 0) const {
       float_t clock_error(
@@ -668,8 +675,9 @@ class INS_GPS2_Tightly : public BaseFINS {
      * which will be used when receiver clock error exceeds predefined threshold
      * of allowable delta from true GPS time. Normally it is +/- (1 ms * speed of light).
      */
+    template <class SolverT>
     CorrectInfo<float_t> correct_info(
-        const raw_data_t &gps,
+        const GPS_RawData<float_t, SolverT> &gps,
         const float_t &clock_error_shift = 0) const {
 
       if(gps.clock_index >= CLOCKS_SUPPORTED){return CorrectInfo<float_t>::no_info();}
@@ -704,8 +712,9 @@ class INS_GPS2_Tightly : public BaseFINS {
       return assign_z_H_R(x, props);
     }
 
+    template <class SolverT>
     CorrectInfo<float_t> correct_info(
-        const raw_data_t &gps,
+        const GPS_RawData<float_t, SolverT> &gps,
         const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b,
         const float_t &clock_error_shift = 0) const {
       // TODO
@@ -784,7 +793,8 @@ class INS_GPS2_Tightly : public BaseFINS {
      *
      * @param gps GPS measurement
      */
-    void correct(const raw_data_t &gps){
+    template <class SolverT>
+    void correct(const GPS_RawData<float_t, SolverT> &gps){
       correct_with_clock_jump_check(gps, CorrectInfoGenerator());
     }
 
@@ -795,27 +805,29 @@ class INS_GPS2_Tightly : public BaseFINS {
      * @param lever_arm_b lever arm vector in b-frame
      * @param omega_b2i_4b angular speed vector in b-frame
      */
-    void correct(const raw_data_t &gps,
+    template <class SolverT>
+    void correct(const GPS_RawData<float_t, SolverT> &gps,
         const vec3_t &lever_arm_b,
         const vec3_t &omega_b2i_4b){
       correct_with_clock_jump_check(gps, CorrectInfoGenerator(&lever_arm_b, &omega_b2i_4b));
     }
 
     // { // PVT (loosely) interface
+    template <class PVT_BaseT>
     CorrectInfo<float_t> correct_info_pvt(
-        const typename raw_data_t::pvt_t &,
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &,
         const float_t &,
         void *,
         const vec3_t * = NULL, const vec3_t * = NULL) const {
       return CorrectInfo<float_t>::no_info();
     }
-    template <class BaseFINS2>
+    template <class PVT_BaseT, class BaseFINS2>
     CorrectInfo<float_t> correct_info_pvt(
-        const typename raw_data_t::pvt_t &pvt,
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &pvt,
         const float_t &clock_error_shift,
         const INS_GPS2<BaseFINS2> *,
         const vec3_t *lever_arm_b = NULL, const vec3_t *omega_b2i_4b = NULL) const {
-      if((pvt.error_code != raw_data_t::pvt_t::ERROR_NO)
+      if((pvt.error_code != solver_t::user_pvt_t::ERROR_NO)
           || (pvt.clock_index >= CLOCKS_SUPPORTED)){
         return CorrectInfo<float_t>::no_info();
       }
@@ -847,25 +859,29 @@ class INS_GPS2_Tightly : public BaseFINS {
 
       return CorrectInfo<float_t>(H, z, R);
     }
+    template <class PVT_BaseT>
     CorrectInfo<float_t> correct_info(
-        const typename raw_data_t::pvt_t &pvt,
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &pvt,
         const float_t &clock_error_shift = 0) const {
       return correct_info_pvt(pvt, clock_error_shift, this);
     }
+    template <class PVT_BaseT>
     CorrectInfo<float_t> correct_info(
-        const typename raw_data_t::pvt_t &pvt,
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &pvt,
         const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b,
         const float_t &clock_error_shift = 0) const {
       return correct_info_pvt(pvt, clock_error_shift, this,
           &lever_arm_b, &omega_b2i_4b);
     }
+    template <class PVT_BaseT>
     void correct(
-        const typename raw_data_t::pvt_t &pvt){
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &pvt){
       correct_with_clock_jump_check(
           pvt, CorrectInfoGenerator());
     }
+    template <class PVT_BaseT>
     void correct(
-        const typename raw_data_t::pvt_t &pvt,
+        const GPS_Solution_PVT<float_t, PVT_BaseT> &pvt,
         const vec3_t &lever_arm_b, const vec3_t &omega_b2i_4b){
       correct_with_clock_jump_check(
           pvt, CorrectInfoGenerator(&lever_arm_b, &omega_b2i_4b));

@@ -129,13 +129,13 @@ struct GPS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> 
   }
 };
 
-template <class FloatT>
-class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
+template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
+class GPS_SinglePositioning : public SolverBaseT {
   private:
     GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
   public:
     typedef GPS_SinglePositioning<FloatT> self_t;
-    typedef GPS_Solver_Base<FloatT> base_t;
+    typedef SolverBaseT base_t;
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename base_t::x x;
@@ -147,7 +147,7 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     inheritate_type(matrix_t);
     inheritate_type(prn_t);
 
-    inheritate_type(space_node_t);
+    typedef typename base_t::space_node_t space_node_t;
     inheritate_type(gps_time_t);
     typedef typename space_node_t::Satellite satellite_t;
 
@@ -158,9 +158,9 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     inheritate_type(pos_t);
 
     inheritate_type(prn_obs_t);
-    inheritate_type(measurement_t);
+    typedef typename base_t::measurement_t measurement_t;
     inheritate_type(measurement_items_t);
-    inheritate_type(range_error_t);
+    typedef typename base_t::range_error_t range_error_t;
 
     typedef GPS_SinglePositioning_Options<float_t> options_t;
 
@@ -432,16 +432,17 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
     /**
      * Calculate User position/velocity with hint
      *
+     * @param res (out) calculation results and matrices used for calculation
      * @param measurement PRN, pseudo-range, pseudo-range rate information
      * @param receiver_time receiver time at measurement
      * @param user_position_init initial solution of user position in XYZ meters and LLH
      * @param receiver_error_init initial solution of receiver clock error in meters
      * @param good_init if true, initial position and clock error are goodly guessed.
      * @param with_velocity if true, perform velocity estimation.
-     * @return calculation results and matrices used for calculation
      * @see update_ephemeris(), register_ephemeris
      */
-    user_pvt_t solve_user_pvt(
+    void user_pvt(
+        user_pvt_t &res,
         const measurement_t &measurement,
         const gps_time_t &receiver_time,
         const pos_t &user_position_init,
@@ -449,12 +450,11 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
         const bool &good_init = true,
         const bool &with_velocity = true) const {
 
-      user_pvt_t res;
       res.receiver_time = receiver_time;
 
       if(_options.count_ionospheric_models() == 0){
         res.error_code = user_pvt_t::ERROR_INVALID_IONO_MODEL;
-        return res;
+        return;
       }
 
       typename base_t::measurement2_t measurement2;
@@ -471,7 +471,8 @@ class GPS_SinglePositioning : public GPS_Solver_Base<FloatT> {
             it->first, &(it->second), this}; // prn, measurement, solver
         measurement2.push_back(v);
       }
-      return base_t::solve_user_pvt(
+      base_t::user_pvt(
+          res,
           measurement2, receiver_time, user_position_init, receiver_error_init,
           good_init, with_velocity);
     }
