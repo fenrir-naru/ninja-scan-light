@@ -485,7 +485,7 @@ class INS_GPS2_Tightly : public BaseFINS {
         const receiver_state_t &x) const {
 
       relative_property_t res;
-      res.sigma_range = res.sigma_rate = -1; // initialize invalid value;
+      res.sigma_range = res.sigma_rate = -1; // initialization with invalid value;
 
       const solver_t &solver_selected(solver.select(prn));
       (typename solver_t::relative_property_t &)res = solver_selected.relative_property(
@@ -572,6 +572,8 @@ class INS_GPS2_Tightly : public BaseFINS {
       const float_t &vx(x.vel.x()), &vy(x.vel.y()), &vz(x.vel.z());
 
       // count up valid measurement, and make observation matrices
+      // whose contents are packed by skipping unused (=zero weight) satellite observations.
+      // Thus, there is order inconsistency between input(props) and output(CorrectInfo).
       int i_z(0);
 
       for(typename std::vector<relative_property_t>::const_iterator it(props.begin());
