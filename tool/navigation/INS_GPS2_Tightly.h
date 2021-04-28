@@ -22,6 +22,7 @@
 #include <cmath>
 #include <iostream>
 #include <vector>
+#include <utility>
 
 #include "INS.h"
 #include "Filtered_INS2.h"
@@ -513,6 +514,8 @@ class INS_GPS2_Tightly : public BaseFINS {
       return res;
     }
 
+    typedef std::vector<std::pair<typename solver_t::prn_t, relative_property_t> > relative_property_list_t;
+
     /**
      * Assign items of z, H and R of Kalman filter matrices based on range and rate residuals
      *
@@ -522,7 +525,7 @@ class INS_GPS2_Tightly : public BaseFINS {
      */
     CorrectInfo<float_t> assign_z_H_R(
         const receiver_state_t &x,
-        const std::vector<relative_property_t> &props) const {
+        const relative_property_list_t &props) const {
 
       struct buf_t {
         float_t *z;
@@ -576,46 +579,48 @@ class INS_GPS2_Tightly : public BaseFINS {
       // Thus, there is order inconsistency between input(props) and output(CorrectInfo).
       int i_z(0);
 
-      for(typename std::vector<relative_property_t>::const_iterator it(props.begin());
+      for(typename relative_property_list_t::const_iterator it(props.begin());
           it != props.end(); ++it){
 
+        const relative_property_t &prop(it->second);
+
         { // range
-          if(it->sigma_range <= 0){continue;} // No measurement
+          if(prop.sigma_range <= 0){continue;} // No measurement
           for(int j(0); j < P_SIZE; ++j){buf.H[i_z][j] = 0;} // zero clear
 
           for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
-            for(int i(0); i < sizeof(it->los_neg) / sizeof(it->los_neg[0]); ++i){
-              buf.H[i_z][k] -= it->los_neg[i] * H_uh[i][j]; // polarity checked.
+            for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
+              buf.H[i_z][k] -= prop.los_neg[i] * H_uh[i][j]; // polarity checked.
             }
           }
           buf.H[i_z][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
 
-          buf.z[i_z] = it->range_residual;
-          buf.R_diag[i_z] = std::pow(it->sigma_range, 2);
+          buf.z[i_z] = prop.range_residual;
+          buf.R_diag[i_z] = std::pow(prop.sigma_range, 2);
           ++i_z;
         }
 
         { // rate
-          if(it->sigma_rate <= 0){continue;} // No rate measurement
+          if(prop.sigma_rate <= 0){continue;} // No rate measurement
           for(int j(0); j < P_SIZE; ++j){buf.H[i_z][j] = 0;} // zero clear
 
           { // velocity
             for(unsigned int j(0); j < dcm_q_e2n_star.columns(); ++j){
-              for(int i(0); i < sizeof(it->los_neg) / sizeof(it->los_neg[0]); ++i){
-                buf.H[i_z][j] -= it->los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
+              for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
+                buf.H[i_z][j] -= prop.los_neg[i] * dcm_q_e2n_star(i, j); // polarity checked.
               }
             }
           }
           { // position
-            buf.H[i_z][3] -= (                       it->los_neg[1] * -vz + it->los_neg[2] *  vy) * 2;  // polarity checked.
-            buf.H[i_z][4] -= (it->los_neg[0] *  vz                        + it->los_neg[2] * -vx) * 2;
-            buf.H[i_z][5] -= (it->los_neg[0] * -vy + it->los_neg[1] *  vx                       ) * 2;
+            buf.H[i_z][3] -= (                        prop.los_neg[1] * -vz + prop.los_neg[2] *  vy) * 2;  // polarity checked.
+            buf.H[i_z][4] -= (prop.los_neg[0] *  vz                         + prop.los_neg[2] * -vx) * 2;
+            buf.H[i_z][5] -= (prop.los_neg[0] * -vy + prop.los_neg[1] *  vx                        ) * 2;
           }
           // error rate
           buf.H[i_z][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
 
-          buf.z[i_z] = it->rate_residual;
-          buf.R_diag[i_z] = std::pow(it->sigma_rate, 2);
+          buf.z[i_z] = prop.rate_residual;
+          buf.R_diag[i_z] = std::pow(prop.sigma_rate, 2);
           ++i_z;
         }
       }
@@ -642,19 +647,21 @@ class INS_GPS2_Tightly : public BaseFINS {
      */
     typename solver_t::user_pvt_t::dop_t *get_DOP(
         const receiver_state_t &x,
-        const std::vector<relative_property_t> &props,
+        const relative_property_list_t &props,
         typename solver_t::user_pvt_t::dop_t &res) const {
 
       mat_t G_full(props.size(), 4); // design matrix
 
       // count up valid measurement
       int i_row(0);
-      for(typename std::vector<relative_property_t>::const_iterator it(props.begin());
+      for(typename relative_property_list_t::const_iterator it(props.begin());
           it != props.end(); ++it){
 
-        if(it->sigma_range <= 0){continue;} // No measurement
-        for(int i(0); i < sizeof(it->los_neg) / sizeof(it->los_neg[0]); ++i){
-          G_full(i_row, i) = it->los_neg[i];
+        const relative_property_t &prop(it->second);
+
+        if(prop.sigma_range <= 0){continue;} // No measurement
+        for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
+          G_full(i_row, i) = prop.los_neg[i];
         }
         G_full(i_row, 3) = 1;
         ++i_row;
@@ -664,6 +671,34 @@ class INS_GPS2_Tightly : public BaseFINS {
       typename mat_t::partial_offsetless_t G(G_full.partial(i_row, 4));
       return &(res = solver_t::user_pvt_t::dop_t::get(
           (G.transpose() * G).inverse(), x.pos));
+    }
+
+    /**
+     * Placeholder to filter relative properties to be used for correction
+     *
+     * @param x receiver state
+     * @param measurement measurement used for calculation of relative properties (props)
+     * @param props source relative properties to be filtered
+     * @return filtered relative properties. This function is just a placeholder, and return props itself.
+     */
+    virtual relative_property_list_t &filter_relative_properties(
+        const receiver_state_t &x,
+        const typename solver_t::measurement_t &measurement,
+        relative_property_list_t &props) const {
+
+      /* TODO
+       * Control whether use or not use specific measurement
+       * by regulating props[n].sigma_(range|rate), whose negative or zero value yields
+       * intentional exclusion.
+       */
+      /*{ // check DOP
+        typename solver_t::user_pvt_t::dop_t dop;
+        if(get_DOP(x, props, dop)){
+          // do something
+          std::cerr << dop.t << std::endl;
+        }
+      }*/
+      return props;
     }
 
   public:
@@ -689,29 +724,17 @@ class INS_GPS2_Tightly : public BaseFINS {
 
       receiver_state_t x(receiver_state(gps.gpstime, gps.clock_index, clock_error_shift));
 
-      std::vector<relative_property_t> props;
+      relative_property_list_t props;
       props.reserve(gps.measurement.size());
 
       for(typename solver_t::measurement_t::const_iterator it(gps.measurement.begin());
           it != gps.measurement.end(); ++it){
 
-        props.push_back(relative_property(*gps.solver, it->first, it->second, x));
+        props.push_back(std::make_pair(
+            it->first, relative_property(*gps.solver, it->first, it->second, x)));
       }
 
-      /* TODO
-       * Control whether use or not use specific measurement
-       * by regulating props[n].sigma_(range|rate), whose negative or zero value yields
-       * intentional exclusion.
-       */
-      /*{ // check DOP
-        typename solver_t::user_pvt_t::dop_t dop;
-        if(get_DOP(x, props, dop)){
-          // do something
-          std::cerr << dop.t << std::endl;
-        }
-      }*/
-
-      return assign_z_H_R(x, props);
+      return assign_z_H_R(x, filter_relative_properties(x, gps.measurement, props));
     }
 
     template <class SolverT>
