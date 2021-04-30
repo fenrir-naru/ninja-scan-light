@@ -1304,6 +1304,22 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   template <class T>
   struct Checker {
     template <class Calibration>
+    static NAV *check_tightly(const Calibration &calibration, void *){
+      return INS_GPS_NAV_Factory<T>::generate(calibration);
+    }
+    template <class Calibration, class Base_FINS>
+    static NAV *check_tightly(const Calibration &calibration, INS_GPS2_Tightly<Base_FINS> *){
+      typedef INS_GPS_Debug_Property<float_sylph_t> prop_t;
+      switch(options.debug_property.debug_target){
+        case prop_t::DEBUG_TIGHTLY:
+          return INS_GPS_NAV_Factory<INS_GPS_Debug_Tightly<T> >::generate(calibration);
+        case prop_t::DEBUG_NONE:
+        default:
+          return INS_GPS_NAV_Factory<T>::generate(calibration);
+      }
+    }
+
+    template <class Calibration>
     static NAV *check_covariance(const Calibration &calibration){
       typedef INS_GPS_Debug_Property<float_sylph_t> prop_t;
       switch(options.debug_property.debug_target){
@@ -1312,7 +1328,7 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
           return INS_GPS_NAV_Factory<INS_GPS_Debug_Covariance<T> >::generate(calibration);
         case prop_t::DEBUG_NONE:
         default:
-          return INS_GPS_NAV_Factory<T>::generate(calibration);
+          return check_tightly(calibration, static_cast<T *>(0));
       }
     }
 

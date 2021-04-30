@@ -39,10 +39,15 @@
 
 #include "param/matrix.h"
 #include "Filtered_INS2.h"
+#include "INS_GPS2_Tightly.h"
 
 template <class FloatT>
 struct INS_GPS_Debug_Property {
-  enum debug_target_t {DEBUG_NONE, DEBUG_KF_P, DEBUG_KF_FULL, DEBUG_PURE_INERTIAL} debug_target;
+  enum debug_target_t {
+      DEBUG_NONE,
+      DEBUG_KF_P, DEBUG_KF_FULL,
+      DEBUG_TIGHTLY,
+      DEBUG_PURE_INERTIAL} debug_target;
   INS_GPS_Debug_Property() : debug_target(DEBUG_NONE) {}
 
   bool check_debug_property_spec(const char *spec){
@@ -50,6 +55,8 @@ struct INS_GPS_Debug_Property {
       debug_target = DEBUG_KF_P;
     }else if(std::strcmp(spec, "KF_FULL") == 0){
       debug_target = DEBUG_KF_FULL;
+    }else if(std::strcmp(spec, "tightly") == 0){
+      debug_target = DEBUG_TIGHTLY;
     }else if(std::strcmp(spec, "pure_inertial") == 0){
       debug_target = DEBUG_PURE_INERTIAL;
     }else{
@@ -66,6 +73,7 @@ struct INS_GPS_Debug_Property {
         case DEBUG_NONE: break;
         case DEBUG_KF_P: out << "KF_P"; break;
         case DEBUG_KF_FULL: out << "KF_FULL"; break;
+        case DEBUG_TIGHTLY: out << "tightly"; break;
         case DEBUG_PURE_INERTIAL: out << "pure_inertial"; break;
       }
       return out;
@@ -204,6 +212,34 @@ class INS_GPS_Debug_Covariance : public INS_GPS_Debug<INS_GPS> {
       snapshot.K = K;
       snapshot.v = v;
       super_t::before_correct_INS(H, R, K, v, x_hat);
+    }
+};
+
+template <class INS_GPS>
+class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
+  public:
+    typedef INS_GPS_Debug<INS_GPS> super_t;
+#if defined(__GNUC__) && (__GNUC__ < 5)
+    typedef typename super_t::float_t float_t;
+#else
+    using typename super_t::float_t;
+#endif
+  public:
+    INS_GPS_Debug_Tightly() : super_t() {}
+    INS_GPS_Debug_Tightly(
+        const INS_GPS_Debug_Tightly<INS_GPS> &orig, const bool &deepcopy = false)
+        : super_t(orig, deepcopy) {
+
+    }
+    ~INS_GPS_Debug_Tightly() {}
+
+  protected:
+    virtual typename super_t::relative_property_list_t &filter_relative_properties(
+        const typename super_t::receiver_state_t &x,
+        const typename super_t::solver_t::measurement_t &measurement,
+        typename super_t::relative_property_list_t &props) const {
+      //std::cout << x.t.week << " : " << x.t.seconds << std::endl;
+      return super_t::filter_relative_properties(x, measurement, props);
     }
 };
 
