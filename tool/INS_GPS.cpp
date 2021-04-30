@@ -2788,12 +2788,12 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 class NAV_Generator {
   private:
     template <class T>
-    static NAV *final(){
+    static NAV *anchor(){
       return INS_GPS_NAV_Factory<typename T::product>::get_nav(processors.front().calibration());
     }
     template <class T>
     static NAV *check_bias(){
-      return options.est_bias ? final<typename T::template bias<> >() : final<T>();
+      return options.est_bias ? anchor<typename T::template bias<> >() : anchor<T>();
     }
     template <class T>
     static NAV *check_coupling(){
