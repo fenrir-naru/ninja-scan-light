@@ -34,12 +34,21 @@
 #ifndef __INS_GPS_DEBUG_H__
 #define __INS_GPS_DEBUG_H__
 
+#if defined(_MSC_VER)
+#define _USE_MATH_DEFINES
+#endif
+
 #include <iostream>
 #include <cstring>
+#include <cmath>
 
 #include "param/matrix.h"
 #include "Filtered_INS2.h"
 #include "INS_GPS2_Tightly.h"
+
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+#include "GPS_Solver_MultiFrequency.h"
+#endif
 
 template <class FloatT>
 struct INS_GPS_Debug_Property {
@@ -224,22 +233,95 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
 #else
     using typename super_t::float_t;
 #endif
+    typedef typename super_t::receiver_state_t state_t;
+    typedef typename super_t::solver_t::measurement_t measurement_t;
+    typedef typename super_t::relative_property_list_t prop_list_t;
+  protected:
+    mutable struct snapshot_t {
+      state_t state;
+      measurement_t measurement;
+      prop_list_t props;
+    } snapshot;
+    mutable bool updated;
   public:
-    INS_GPS_Debug_Tightly() : super_t() {}
+    INS_GPS_Debug_Tightly() : super_t(), snapshot(), updated(false) {}
     INS_GPS_Debug_Tightly(
         const INS_GPS_Debug_Tightly<INS_GPS> &orig, const bool &deepcopy = false)
-        : super_t(orig, deepcopy) {
-
-    }
+        : super_t(orig, deepcopy), snapshot(orig.snapshot), updated(orig.updated) {}
     ~INS_GPS_Debug_Tightly() {}
+    void inspect(std::ostream &out) const {
+      if(!updated){return;}
+      updated = false;
+
+      out << snapshot.props.size() << ','; // number of satellites
+
+      do{ // DOP
+        typename super_t::solver_t::user_pvt_t::dop_t dop;
+        if(!super_t::get_DOP(snapshot.state, snapshot.props, dop)){
+          out << ",,,,,";
+          break;
+        }
+        out << dop.g << ','
+            << dop.p << ','
+            << dop.h << ','
+            << dop.v << ','
+            << dop.t << ',';
+      }while(false);
+
+      for(typename prop_list_t::const_iterator it(snapshot.props.begin()), it_end(snapshot.props.end());
+          it != it_end; ++it){
+        out << it->first << ','; // prn
+        if(it->second.sigma_range > 0){ // range (residual)
+          out << it->second.range_residual << ','
+              << it->second.sigma_range << ',';
+        }else{
+          out << ",,";
+        }
+        if(it->second.sigma_rate > 0){ // rate (residual)
+          out << it->second.rate_residual << ','
+              << it->second.sigma_rate << ',';
+        }else{
+          out << ",,";
+        }
+        { // azimuth, elevation
+          typename super_t::solver_t::xyz_t sat_los(
+              -it->second.los_neg[0], -it->second.los_neg[1], -it->second.los_neg[2]);
+          typename super_t::solver_t::enu_t enu_sat(
+              super_t::solver_t::enu_t::relative_rel(sat_los, snapshot.state.pos.llh));
+          out << enu_sat.azimuth() / M_PI * 180 << ','
+              << enu_sat.elevation() / M_PI * 180 << ',';
+        }
+
+        static const typename super_t::solver_t::measurement_item_set_t signals[] = {
+            super_t::solver_t::L1CA,
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+            GPS_Solver_MultiFrequency<typename super_t::solver_t>::L2CM,
+            GPS_Solver_MultiFrequency<typename super_t::solver_t>::L2CL,
+#endif
+        };
+        float_t buf;
+        for(int i(0); i < sizeof(signals) / sizeof(signals[0]); ++i){
+#define print(key) \
+(super_t::solver_t::find_value( \
+    snapshot.measurement[it->first], signals[i].key, buf) ? (out << buf) : out)
+          print(pseudorange.i) << ',';
+          print(signal_strength) << ',';
+#undef print
+        }
+      }
+    }
 
   protected:
-    virtual typename super_t::relative_property_list_t &filter_relative_properties(
-        const typename super_t::receiver_state_t &x,
-        const typename super_t::solver_t::measurement_t &measurement,
-        typename super_t::relative_property_list_t &props) const {
-      //std::cout << x.t.week << " : " << x.t.seconds << std::endl;
-      return super_t::filter_relative_properties(x, measurement, props);
+    virtual prop_list_t &filter_relative_properties(
+        const state_t &x,
+        const measurement_t &measurement,
+        prop_list_t &props) const {
+      snapshot.state = x;
+      snapshot.measurement = measurement;
+      prop_list_t &res(super_t::filter_relative_properties(x, measurement, props));
+      snapshot.props = res;
+      updated = true;
+      return res;
     }
 };
 
