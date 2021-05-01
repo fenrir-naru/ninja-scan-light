@@ -645,17 +645,18 @@ class INS_GPS2_Tightly : public BaseFINS {
      * @param res buffer of calculation result
      * @return (dop_t *) unavailable when null; otherwise, DOP
      */
-    typename solver_t::user_pvt_t::dop_t *get_DOP(
+    static typename solver_t::user_pvt_t::dop_t *get_DOP(
         const receiver_state_t &x,
         const relative_property_list_t &props,
-        typename solver_t::user_pvt_t::dop_t &res) const {
+        typename solver_t::user_pvt_t::dop_t &res) {
 
       mat_t G_full(props.size(), 4); // design matrix
+      mat_t R_full(props.size(), props.size());
 
       // count up valid measurement
       int i_row(0);
-      for(typename relative_property_list_t::const_iterator it(props.begin());
-          it != props.end(); ++it){
+      for(typename relative_property_list_t::const_iterator it(props.begin()), it_end(props.end());
+          it != it_end; ++it){
 
         const relative_property_t &prop(it->second);
 
@@ -664,13 +665,13 @@ class INS_GPS2_Tightly : public BaseFINS {
           G_full(i_row, i) = prop.los_neg[i];
         }
         G_full(i_row, 3) = 1;
+        R_full(i_row, i_row) = std::pow(prop.sigma_range, 2);
         ++i_row;
       }
       if(i_row < 4){return NULL;}
 
       typename mat_t::partial_offsetless_t G(G_full.partial(i_row, 4));
-      return &(res = solver_t::user_pvt_t::dop_t::get(
-          (G.transpose() * G).inverse(), x.pos));
+      return &(res = solver_t::dop((G.transpose() * R_full.partial(i_row, i_row) * G).inverse(), x.pos));
     }
 
     /**

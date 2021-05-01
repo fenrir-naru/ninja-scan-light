@@ -965,8 +965,8 @@ public:
      * @return calculation results and matrices used for calculation
      */
     pvt_t user_position(
-            const prn_obs_t &prn_range,
-            const gps_time_t &receiver_time) const {
+        const prn_obs_t &prn_range,
+        const gps_time_t &receiver_time) const {
       return user_position(prn_range, receiver_time, xyz_t(), 0, false);
     }
   };
@@ -988,6 +988,10 @@ public:
       const gps_time_t &time,
       xyz_t &res) const {
     return NULL;
+  }
+
+  static typename user_pvt_t::dop_t dop(const matrix_t &C, const pos_t &user_position) {
+    return typename user_pvt_t::dop_t(geometric_matrices_t::rotate_C(C, user_position.ecef2enu()));
   }
 };
 
