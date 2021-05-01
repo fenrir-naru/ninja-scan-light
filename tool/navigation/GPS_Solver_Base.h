@@ -99,8 +99,8 @@ struct GPS_Solver_Base {
       L1_DOPPLER_SIGMA,
       L1_CARRIER_PHASE_SIGMA,
       L1_RANGE_RATE_SIGMA,
-      SIGNAL_STRENGTH_dBHz,
-      LOCK_SEC,
+      L1_SIGNAL_STRENGTH_dBHz,
+      L1_LOCK_SEC,
       MEASUREMENT_ITEMS_PREDEFINED,
     };
   };
@@ -110,6 +110,7 @@ struct GPS_Solver_Base {
     struct {
       int i, i_sigma;
     } pseudorange, doppler, carrier_phase, range_rate;
+    int signal_strength, lock_sec;
   };
   static const measurement_item_set_t L1CA;
 
@@ -998,13 +999,18 @@ public:
 template <class FloatT>
 const typename GPS_Solver_Base<FloatT>::measurement_item_set_t
     GPS_Solver_Base<FloatT>::L1CA = {
-#define make_entry(key) { \
-    GPS_Solver_Base<FloatT>::measurement_items_t::L1_ ## key, \
-    GPS_Solver_Base<FloatT>::measurement_items_t::L1_ ## key ## _SIGMA}
-      make_entry(PSEUDORANGE),
-      make_entry(DOPPLER),
-      make_entry(CARRIER_PHASE),
-      make_entry(RANGE_RATE),
+#define make_entry(key) \
+    GPS_Solver_Base<FloatT>::measurement_items_t::L1_ ## key
+#define make_entry2(key) { \
+    make_entry(key), \
+    make_entry(key ## _SIGMA)}
+      make_entry2(PSEUDORANGE),
+      make_entry2(DOPPLER),
+      make_entry2(CARRIER_PHASE),
+      make_entry2(RANGE_RATE),
+      make_entry(SIGNAL_STRENGTH_dBHz),
+      make_entry(LOCK_SEC),
+#undef make_entry2
 #undef make_entry
     };
 

@@ -104,13 +104,17 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
         PREDEFINED_LAST = super_t::measurement_items_t::MEASUREMENT_ITEMS_PREDEFINED - 1,
 #define make_entry(key) \
     L2CM_ ## key, \
-    L2CM_ ## key ## _SIGMA, \
-    L2CL_ ## key, \
-    L2CL_ ## key ## _SIGMA
-        make_entry(PSEUDORANGE),
-        make_entry(CARRIER_PHASE),
-        make_entry(DOPPLER),
-        make_entry(RANGE_RATE),
+    L2CL_ ## key
+#define make_entry2(key) \
+    make_entry(key), \
+    make_entry(key ## _SIGMA)
+        make_entry2(PSEUDORANGE),
+        make_entry2(CARRIER_PHASE),
+        make_entry2(DOPPLER),
+        make_entry2(RANGE_RATE),
+        make_entry(SIGNAL_STRENGTH_dBHz),
+        make_entry(LOCK_SEC),
+#undef make_entry2
 #undef make_entry
         MEASUREMENT_ITEMS_PREDEFINED,
       };
@@ -169,26 +173,36 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
 template <class BaseSolver>
 const typename GPS_Solver_MultiFrequency<BaseSolver>::measurement_item_set_t
     GPS_Solver_MultiFrequency<BaseSolver>::L2CM = {
-#define make_entry(key) { \
-    GPS_Solver_MultiFrequency<BaseSolver>::measurement_items_t::L2CM_ ## key, \
-    GPS_Solver_MultiFrequency<BaseSolver>::measurement_items_t::L2CM_ ## key ## _SIGMA}
-      make_entry(PSEUDORANGE),
-      make_entry(DOPPLER),
-      make_entry(CARRIER_PHASE),
-      make_entry(RANGE_RATE),
+#define make_entry(key) \
+    GPS_Solver_MultiFrequency<BaseSolver>::measurement_items_t::L2CM_ ## key
+#define make_entry2(key) { \
+    make_entry(key), \
+    make_entry(key ## _SIGMA)}
+      make_entry2(PSEUDORANGE),
+      make_entry2(DOPPLER),
+      make_entry2(CARRIER_PHASE),
+      make_entry2(RANGE_RATE),
+      make_entry(SIGNAL_STRENGTH_dBHz),
+      make_entry(LOCK_SEC),
+#undef make_entry2
 #undef make_entry
     };
 
 template <class BaseSolver>
 const typename GPS_Solver_MultiFrequency<BaseSolver>::measurement_item_set_t
     GPS_Solver_MultiFrequency<BaseSolver>::L2CL = {
-#define make_entry(key) { \
-    GPS_Solver_MultiFrequency<BaseSolver>::measurement_items_t::L2CL_ ## key, \
-    GPS_Solver_MultiFrequency<BaseSolver>::measurement_items_t::L2CL_ ## key ## _SIGMA}
-      make_entry(PSEUDORANGE),
-      make_entry(DOPPLER),
-      make_entry(CARRIER_PHASE),
-      make_entry(RANGE_RATE),
+#define make_entry(key) \
+    GPS_Solver_MultiFrequency<BaseSolver>::measurement_items_t::L2CL_ ## key
+#define make_entry2(key) { \
+    make_entry(key), \
+    make_entry(key ## _SIGMA)}
+      make_entry2(PSEUDORANGE),
+      make_entry2(DOPPLER),
+      make_entry2(CARRIER_PHASE),
+      make_entry2(RANGE_RATE),
+      make_entry(SIGNAL_STRENGTH_dBHz),
+      make_entry(LOCK_SEC),
+#undef make_entry2
 #undef make_entry
     };
 
