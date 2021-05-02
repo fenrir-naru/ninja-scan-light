@@ -41,6 +41,9 @@
 #include <iostream>
 #include <cstring>
 #include <cmath>
+#include <vector>
+#include <map>
+#include <string>
 
 #include "param/matrix.h"
 #include "Filtered_INS2.h"
@@ -243,11 +246,13 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
       prop_list_t props;
     } snapshot;
     mutable bool updated;
+    mutable std::map<typename super_t::solver_t::prn_t, int> prn_list;
   public:
-    INS_GPS_Debug_Tightly() : super_t(), snapshot(), updated(false) {}
+    INS_GPS_Debug_Tightly() : super_t(), snapshot(), updated(false), prn_list() {}
     INS_GPS_Debug_Tightly(
         const INS_GPS_Debug_Tightly<INS_GPS> &orig, const bool &deepcopy = false)
-        : super_t(orig, deepcopy), snapshot(orig.snapshot), updated(orig.updated) {}
+        : super_t(orig, deepcopy), snapshot(orig.snapshot), updated(orig.updated),
+        prn_list(orig.prn_list) {}
     ~INS_GPS_Debug_Tightly() {}
     void inspect(std::ostream &out) const {
       if(!updated){return;}
@@ -268,8 +273,34 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
             << dop.t << ',';
       }while(false);
 
-      for(typename prop_list_t::const_iterator it(snapshot.props.begin()), it_end(snapshot.props.end());
+      typedef std::vector<int> order_t;
+      order_t order(prn_list.size() + snapshot.props.size(), -1);
+      for(typename prop_list_t::const_iterator
+          it_begin(snapshot.props.begin()), it(it_begin), it_end(snapshot.props.end());
           it != it_end; ++it){
+        int index((prn_list.find(it->first) == prn_list.end())
+            ? (prn_list[it->first] = prn_list.size())
+            : prn_list[it->first]);
+        order[index] = std::distance(it_begin, it);
+      }
+      order.resize(prn_list.size());
+
+      static const typename super_t::solver_t::measurement_item_set_t signals[] = {
+        super_t::solver_t::L1CA,
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
+        GPS_Solver_MultiFrequency<typename super_t::solver_t>::L2CM,
+        GPS_Solver_MultiFrequency<typename super_t::solver_t>::L2CL,
+#endif
+      };
+
+      for(typename order_t::const_iterator it2(order.begin()), it2_end(order.end());
+          it2 != it2_end; ++it2){
+        if(*it2 < 0){ // skip because of unavailable satellite
+          out << std::string(7 + (sizeof(signals) / sizeof(signals[0]) * 2), ',');
+          continue;
+        }
+
+        typename prop_list_t::const_iterator it(snapshot.props.begin() + (*it2));
         out << it->first << ','; // prn
         if(it->second.sigma_range > 0){ // range (residual)
           out << it->second.range_residual << ','
@@ -292,13 +323,6 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
               << enu_sat.elevation() / M_PI * 180 << ',';
         }
 
-        static const typename super_t::solver_t::measurement_item_set_t signals[] = {
-            super_t::solver_t::L1CA,
-#if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
-            GPS_Solver_MultiFrequency<typename super_t::solver_t>::L2CM,
-            GPS_Solver_MultiFrequency<typename super_t::solver_t>::L2CL,
-#endif
-        };
         float_t buf;
         for(int i(0); i < sizeof(signals) / sizeof(signals[0]); ++i){
 #define print(key) \
