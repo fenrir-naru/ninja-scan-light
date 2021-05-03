@@ -528,6 +528,24 @@ data.gps.solver_options. expr
       print_t res = {raw.measurement, prn, cmd, N};
       return res;
     }
+    struct print_az_el_t {
+      bool valid;
+      typename solver_t::enu_t enu_sat;
+      friend std::ostream &operator<<(std::ostream &out, const print_az_el_t &target){
+        if(!target.valid){return out << ',';}
+        return out << rad2deg(target.enu_sat.azimuth())
+            << ',' << rad2deg(target.enu_sat.elevation());
+      }
+    };
+    print_az_el_t az_el(const int &prn) const {
+      print_az_el_t res = {false};
+      xyz_t xyz_sat;
+      if(xyz_base && raw.solver->select(prn).satellite_position(prn, raw.gpstime, xyz_sat)){
+        res.valid = true;
+        res.enu_sat = solver_t::enu_t::relative(xyz_sat, *xyz_base);
+      }
+      return res;
+    }
     friend std::ostream &operator<<(std::ostream &out, const raw_data_printer_t &p){
       typedef typename solver_t::measurement_items_t items_t;
       static const cmd_t cmd_gps[] = {
@@ -541,16 +559,7 @@ data.gps.solver_options. expr
       };
       out << p.raw.clock_index;
       for(int i(1); i <= 32; ++i){
-        out << ',' << p(i, cmd_gps);
-        xyz_t xyz_sat;
-        if((!p.xyz_base)
-            || (!p.raw.solver->select(i).satellite_position(i, p.raw.gpstime, xyz_sat))){
-          out << ",,";
-          continue;
-        }
-        typename solver_t::enu_t enu_sat(solver_t::enu_t::relative(xyz_sat, *p.xyz_base));
-        out << ',' << rad2deg(enu_sat.azimuth())
-            << ',' << rad2deg(enu_sat.elevation());
+        out << ',' << p(i, cmd_gps) << ',' << p.az_el(i);
       }
       return out;
     }
