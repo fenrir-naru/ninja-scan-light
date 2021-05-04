@@ -1021,4 +1021,48 @@ const typename GPS_Solver_Base<FloatT>::range_error_t
       {0},
     };
 
+template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
+struct GPS_PVT_Debug : public PVT_BaseT {
+  std::vector<FloatT> weight, range_residual;
+};
+
+template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
+struct GPS_Solver_Base_Debug : public SolverBaseT {
+  typedef SolverBaseT base_t;
+  typedef GPS_Solver_Base_Debug<FloatT, SolverBaseT> self_t;
+  virtual ~GPS_Solver_Base_Debug() {}
+
+#if defined(__GNUC__) && (__GNUC__ < 5)
+#define inheritate_type(x) typedef typename base_t::x x;
+#else
+#define inheritate_type(x) using typename base_t::x;
+#endif
+  inheritate_type(float_t);
+  inheritate_type(geometric_matrices_t);
+#undef inheritate_type
+
+  typedef GPS_PVT_Debug<float_t, typename base_t::user_pvt_t> user_pvt_t;
+
+  typename base_t::template solver_interface_t<self_t> solve() const {
+    return typename base_t::template solver_interface_t<self_t>(*this);
+  }
+
+protected:
+  virtual bool update_position_soution(
+      const geometric_matrices_t &geomat,
+      typename GPS_Solver_Base<FloatT>::user_pvt_t &res) const {
+
+    // Least square
+    if(!base_t::update_position_soution(geomat, res)){
+      return false;
+    }
+    for(int i(0); i < res.used_satellites; ++i){
+      static_cast<user_pvt_t &>(res).weight.push_back(geomat.W(i, i));
+      static_cast<user_pvt_t &>(res).range_residual.push_back(geomat.delta_r(i, 0));
+    }
+    return true;
+  }
+};
+
+
 #endif /* __GPS_SOLVER_BASE_H__ */

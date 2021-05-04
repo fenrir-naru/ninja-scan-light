@@ -55,7 +55,11 @@ template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
 
+#if defined(BUILD_WITH_GNSS_DEBUG)
+  typedef GPS_Solver_Base_Debug<FloatT> solver_base_t;
+#else
   typedef GPS_Solver_Base<FloatT> solver_base_t;
+#endif
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
   typedef GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT, solver_base_t> > gps_solver_t;
@@ -402,6 +406,15 @@ data.gps.solver_options. expr
             << ',' << "used_satellites"
             << ',' << "PRN";
       }
+      template <class PVT_BaseT>
+      static std::ostream &print(std::ostream &out, const GPS_PVT_Debug<FloatT, PVT_BaseT> *){
+        print(out, static_cast<const PVT_BaseT *>(0));
+        for(int i(1); i <= 32; ++i){
+          out << ',' << "range_residual(" << i << ')'
+              << ',' << "weight(" << i << ')';
+        }
+        return out;
+      }
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         return print(out, static_cast<const pvt_t *>(0));
       }
@@ -462,6 +475,24 @@ data.gps.solver_options. expr
             << ',' << mask_printer_t(src.used_satellite_mask, 1, 32);
       }else{
         out << ",,";
+      }
+      return out;
+    }
+    template <class PVT_BaseT>
+    static std::ostream &print(std::ostream &out, const GPS_PVT_Debug<FloatT, PVT_BaseT> &src){
+      print(out, static_cast<const PVT_BaseT &>(src));
+      std::vector<int> used_sats(src.used_satellite_mask.indices_one());
+      typename std::vector<int>::const_iterator it(used_sats.begin()), it_end(used_sats.end());
+      if(!src.position_solved()){it = it_end;}
+      for(int i(1), i2(0); i <= 32; ++i){
+        if((it == it_end) || (i != *it)){
+          out << ",,";
+          continue;
+        }
+        out << ',' << src.range_residual[i2]
+            << ',' << src.weight[i2];
+        ++it;
+        ++i2;
       }
       return out;
     }
