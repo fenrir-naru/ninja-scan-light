@@ -82,21 +82,15 @@ protected:
       const geometric_matrices_t &geomat,
       typename GPS_Solver_Base<FloatT>::user_pvt_t &res) const {
 
-    // Least square
-    matrix_t S;
-    typename geometric_matrices_t::partial_t geomat2(geomat.partial(res.used_satellites));
-    matrix_t delta_x(geomat2.least_square(S));
-
-    xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
-    res.user_position.xyz += delta_user_position;
-    res.user_position.llh = res.user_position.xyz.llh();
-    res.receiver_error += delta_x(3, 0);
-
-    bool converged(delta_user_position.dist() <= 1E-6);
-    if(!converged){return false;}
+    if(!base_t::update_position_solution(geomat, res)){return false;}
 
     user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
     if(!pvt.is_available_RAIM()){return true;}
+
+    // Perform least square again for RAIM
+    matrix_t S;
+    typename geometric_matrices_t::partial_t geomat2(geomat.partial(res.used_satellites));
+    matrix_t delta_x(geomat2.least_square(S));
 
     pvt.wssr = geomat2.wssr(delta_x);
     matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
