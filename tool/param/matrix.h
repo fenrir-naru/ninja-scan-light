@@ -298,8 +298,9 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      * @param array another one
      */
     Array2D_Dense(const self_t &array)
-        : super_t(array.m_rows, array.m_columns){
-      if(values = array.values){(*(ref = array.ref))++;}
+        : super_t(array.m_rows, array.m_columns),
+        values(array.values), ref(array.ref){
+      if(ref){++(*ref);}
     }
     /**
      * Constructor based on another type array, which performs deep copy.
@@ -340,12 +341,10 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     self_t &operator=(const self_t &array){
       if(this != &array){
         if(ref && ((--(*ref)) <= 0)){delete ref; delete [] values;}
-        ref = NULL;
-        if(values = array.values){
-          super_t::m_rows = array.m_rows;
-          super_t::m_columns = array.m_columns;
-          (*(ref = array.ref))++;
-        }
+        super_t::m_rows = array.m_rows;
+        super_t::m_columns = array.m_columns;
+        values = array.values;
+        if(ref = array.ref){++(*ref);}
       }
       return *this;
     }
