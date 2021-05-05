@@ -489,8 +489,8 @@ data.gps.solver_options. expr
           out << ",,";
           continue;
         }
-        out << ',' << src.range_residual[i2]
-            << ',' << src.weight[i2];
+        out << ',' << src.delta_r(i2, 0)
+            << ',' << src.W(i2, i2);
         ++it;
         ++i2;
       }

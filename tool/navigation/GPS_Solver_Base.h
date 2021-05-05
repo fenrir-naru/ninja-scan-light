@@ -1023,7 +1023,7 @@ const typename GPS_Solver_Base<FloatT>::range_error_t
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
 struct GPS_PVT_Debug : public PVT_BaseT {
-  std::vector<FloatT> weight, range_residual;
+  typename GPS_Solver_Base<FloatT>::matrix_t G, W, delta_r;
 };
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
@@ -1056,10 +1056,9 @@ protected:
     if(!base_t::update_position_soution(geomat, res)){
       return false;
     }
-    for(int i(0); i < res.used_satellites; ++i){
-      static_cast<user_pvt_t &>(res).weight.push_back(geomat.W(i, i));
-      static_cast<user_pvt_t &>(res).range_residual.push_back(geomat.delta_r(i, 0));
-    }
+    static_cast<user_pvt_t &>(res).G = geomat.G;
+    static_cast<user_pvt_t &>(res).W = geomat.W;
+    static_cast<user_pvt_t &>(res).delta_r = geomat.delta_r;
     return true;
   }
 };
