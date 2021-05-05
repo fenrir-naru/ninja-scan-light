@@ -795,7 +795,7 @@ public:
       if(v.solver == this){continue;} // skip because of not-implemented satellite system
       measurement2.push_back(v);
     }
-    return user_pvt(
+    user_pvt(
         res,
         measurement2, receiver_time, user_position_init, receiver_error_init,
         good_init, with_velocity);
