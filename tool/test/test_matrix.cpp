@@ -76,6 +76,11 @@ BOOST_AUTO_TEST_CASE(init){
   matrix_compare(*A, _A);
 }
 
+BOOST_AUTO_TEST_CASE(null_copy){
+  // check no access violation derived from double delete
+  matrix_t _A, __A(_A);
+}
+
 BOOST_AUTO_TEST_CASE(equal){
   prologue_print();
   matrix_t _A = *A;
