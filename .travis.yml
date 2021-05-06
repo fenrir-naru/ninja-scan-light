@@ -32,22 +32,22 @@ script:
   - (cd ./firmware/ver1 && make clean all)
   - (cd ./firmware/ver2 && make clean all)
   - (cd ./tool/test && make clean all)
-  - (cd ./tool && make clean all 
+  - (cd ./tool && make clean all
     && (cd build_GCC 
-      && touch ${TRAVIS_COMMIT}.commit 
+      && touch ${TRAVIS_COMMIT}.commit
       && tar zvcf ubuntu.$TRAVIS_BRANCH.tar.gz *.out *.commit) )
-  - (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all 
+  - (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all
     && (cd build_GCC_ARM 
       && touch ${TRAVIS_COMMIT}.commit 
       && tar zvcf raspi.$TRAVIS_BRANCH.tar.gz *.out *.commit) )
 
 before_deploy:
-  - sed -e s%@TIMESTAMP@%"`ruby -e 'require "time"; print Time::parse(\`git log --format="%cd" -n 1\`.chomp).strftime("%Y%m%d_%H%M%S")'`"% .travis.bintray.json.in > .travis.bintray.json
-  - cat .travis.bintray.json
+  - (mkdir -p /tmp/artifacts/${TRAVIS_REPO_SLUG#*/}/tool \
+    && cp -t /tmp/artifacts/${TRAVIS_REPO_SLUG#*/}/tool/ $(find ./tool -path "./tool/build_*" -a -name "*.tar.gz") )
 
 deploy:
   - provider: releases
-    token: $GITHUB_TOKEN
+    token: $GITHUB_TOKEN # Oauth token
     file: 
       - ./firmware/ver1/build_by_sdcc/NinjaScanLight.hex
       - ./firmware/ver1/build_by_sdcc/NinjaScanLight.omf
@@ -58,9 +58,7 @@ deploy:
     on:
       tags: true
     overwrite: true
-  - provider: bintray
-    user: fenrir-naru
-    key: $BINTRAY_TOKEN
-    file: .travis.bintray.json
-    on: master
-    edge: true # opt in to dpl v2
+  - provider: script
+    script: bash scripts/deploy-to-archives.sh
+    on:
+      all_branches: true
