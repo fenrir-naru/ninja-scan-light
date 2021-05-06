@@ -18,10 +18,9 @@ It consists of
 
 ## Additional information
 * Firmware binaries are released in [github](https://github.com/fenrir-naru/ninja-scan-light/releases).
-* External links for [related tools](https://dl.bintray.com/fenrir-naru/github/), and [Gerbers](https://drive.google.com/folderview?id=0ByrAl6X3Khv2TkJ5Wkp4RmhMWjg&usp=sharing).
+* External links for [related tools](https://fenrir-naru.github.io/archives/), and [Gerbers](https://drive.google.com/folderview?id=0ByrAl6X3Khv2TkJ5Wkp4RmhMWjg&usp=sharing).
 * The project owner's website is [Fenrir's BLog](http://fenrir.naruoka.org/).
 
 [![Build Status (Firmware + Linux/RasPi tools by Travis-CI)](https://travis-ci.org/fenrir-naru/ninja-scan-light.svg?branch=master)](https://travis-ci.org/fenrir-naru/ninja-scan-light)
 [![CI of firmware and tools](https://github.com/fenrir-naru/ninja-scan-light/workflows/CI%20of%20firmware%20and%20tools/badge.svg?branch=master)](https://github.com/fenrir-naru/ninja-scan-light/actions?query=workflow%3A%22CI+of+firmware+and+tools%22)
 [![Build status (Windows tools)](https://ci.appveyor.com/api/projects/status/6r6koh5rophe6yns?svg=true)](https://ci.appveyor.com/project/fenrir-naru/ninja-scan-light)
-[![Download precompiled tool binaries](https://api.bintray.com/packages/fenrir-naru/github/ninja-scan-light/images/download.svg) ](https://bintray.com/fenrir-naru/github/ninja-scan-light/_latestVersion#files)
