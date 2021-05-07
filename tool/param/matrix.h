@@ -235,8 +235,12 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     using super_t::columns;
 
   protected:
-    T *values; ///< array for values
+    union shared_t { // TODO C2620 of VC2010
+      int ref;
+      T value;
+    };
     int *ref;  ///< reference counter
+    T *values; ///< array for values
 
     template <class T2, bool do_memory_op = std::numeric_limits<T2>::is_specialized>
     struct setup_t {
@@ -262,7 +266,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     };
 
   public:
-    Array2D_Dense() : super_t(0, 0), values(NULL), ref(NULL) {
+    Array2D_Dense() : super_t(0, 0), ref(NULL), values(NULL) {
     }
 
     /**
@@ -275,7 +279,10 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const unsigned int &rows,
         const unsigned int &columns)
         : super_t(rows, columns),
-        values(new T[rows * columns]), ref(new int(1)) {
+        ref(reinterpret_cast<int *>(
+            new shared_t[1 + ((sizeof(T) * rows * columns + sizeof(shared_t) - 1) / sizeof(shared_t))])),
+        values(&(*(reinterpret_cast<shared_t *>(ref))[1].value)) {
+      *ref = 1;
     }
     /**
      * Constructor with initializer
@@ -289,7 +296,10 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const unsigned int &columns,
         const T *serialized)
         : super_t(rows, columns),
-        values(new T[rows * columns]), ref(new int(1)) {
+        ref(reinterpret_cast<int *>(
+            new shared_t[1 + ((sizeof(T) * rows * columns + sizeof(shared_t) - 1) / sizeof(shared_t))])),
+        values(&(*(reinterpret_cast<shared_t *>(ref))[1].value)) {
+      *ref = 1;
       setup_t<T>::copy(*this, serialized);
     }
     /**
@@ -299,7 +309,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     Array2D_Dense(const self_t &array)
         : super_t(array.m_rows, array.m_columns),
-        values(array.values), ref(array.ref){
+          ref(array.ref), values(array.values){
       if(ref){++(*ref);}
     }
     /**
@@ -310,7 +320,10 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     template <class T2>
     Array2D_Dense(const Array2D_Frozen<T2> &array)
         : super_t(array.rows(), array.columns()),
-        values(new T[array.rows() * array.columns()]), ref(new int(1)) {
+        ref(reinterpret_cast<int *>(
+            new shared_t[1 + ((sizeof(T) * array.rows() * array.columns() + sizeof(shared_t) - 1) / sizeof(shared_t))])),
+        values(&(*(reinterpret_cast<shared_t *>(ref))[1].value)) {
+      *ref = 1;
       T *buf(values);
       const unsigned int i_end(array.rows()), j_end(array.columns());
       for(unsigned int i(0); i < i_end; ++i){
@@ -327,8 +340,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     ~Array2D_Dense(){
       if(ref && ((--(*ref)) <= 0)){
-        delete [] values;
-        delete ref;
+        delete [] reinterpret_cast<shared_t *>(ref);
       }
     }
 
@@ -340,11 +352,11 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     self_t &operator=(const self_t &array){
       if(this != &array){
-        if(ref && ((--(*ref)) <= 0)){delete ref; delete [] values;}
+        if(ref && ((--(*ref)) <= 0)){delete [] reinterpret_cast<shared_t *>(ref);}
         super_t::m_rows = array.m_rows;
         super_t::m_columns = array.m_columns;
-        values = array.values;
         if(ref = array.ref){++(*ref);}
+        values = array.values;
       }
       return *this;
     }
