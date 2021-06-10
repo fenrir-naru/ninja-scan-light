@@ -2000,7 +2000,7 @@ class StreamProcessor
               }
               if(trkstat & 0x02){
                 dst.insert(std::make_pair(signal->carrier_phase.i, le_char8_2_num<double>(*(buf + 8))));
-                dst.insert(std::make_pair(signal->carrier_phase.i_sigma, 4E-3 * (1 << (0xF & observer[6 + 44 + (32 * i)]))));
+                dst.insert(std::make_pair(signal->carrier_phase.i_sigma, 4E-3 * (0xF & observer[6 + 44 + (32 * i)])));
               }
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));
               dst.insert(std::make_pair(signal->doppler.i, doppler));
