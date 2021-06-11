@@ -216,13 +216,15 @@ struct GNSS_Receiver {
    */
   static typename solver_t::prn_t satellite_serial(
       const unsigned int &gnss_id,
-      const unsigned int &sv_id){
+      unsigned int sv_id){
     typedef G_Packet_Observer<FloatT> decorder_t;
     typename system_t::type_t type(system_t::Unknown);
     switch(gnss_id){
       case decorder_t::gnss_svid_t::GPS:      type = system_t::GPS;     break;
       case decorder_t::gnss_svid_t::SBAS:     type = system_t::SBAS;    break;
-      case decorder_t::gnss_svid_t::QZSS:     type = system_t::QZSS;    break;
+      case decorder_t::gnss_svid_t::QZSS:     type = system_t::QZSS;
+        sv_id = typename decorder_t::gnss_svid_t(gnss_id, sv_id); // convert to legacy svid (1-5 => 193-197)
+        break;
       case decorder_t::gnss_svid_t::Galileo:  type = system_t::Galileo; break;
       case decorder_t::gnss_svid_t::BeiDou:   type = system_t::Beido;   break;
       case decorder_t::gnss_svid_t::GLONASS:  type = system_t::GLONASS; break;
@@ -334,12 +336,14 @@ data.gps.solver_options. expr
       do{
         char sys_str[8];
         int tmp;
-        if((tmp = std::sscanf(value, "%7[A-Z]:%i", sys_str, &sv_id)) >= 1){
+        if((tmp = std::sscanf(value, "%7[A-Z]:%i", sys_str, &sv_id)) >= 1){ // For QZSS, use QZSS:1-5 (not 193-197)
           // Specific system (with optional satellite) selected
           // system string check
-          select_all = (tmp == 1);
           sys = system_t::str2system(sys_str);
-        }else if((tmp = std::atoi(value)) != 0){
+          if(select_all = (tmp == 1)){break;}
+          sv_id = (sv_id < 0 ? -1 : 1)
+              * satellite_id_t(satellite_serial(sys, std::abs(sv_id))).sv_id;
+        }else if((tmp = std::atoi(value)) != 0){ // For QZSS, use 193-197
           // Specific satellite selected
           satellite_id_t id(std::abs(tmp));
           sys = id.type;
