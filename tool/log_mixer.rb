@@ -31,9 +31,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-UTIL_DIR = File::join(File::dirname(__FILE__), 'misc')
-$: << UTIL_DIR unless $:.include?(UTIL_DIR)
-require 'ubx'
+(require_relative 'misc/ubx') rescue (require File::join(File::dirname(__FILE__), 'misc', 'ubx'))
 
 class G_Packet_Converter
   DATA_PER_PACKET = 31
