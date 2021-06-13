@@ -109,12 +109,20 @@ struct GNSS_Data {
     }
 
     bool load(const GNSS_Data &data){
-      if(data.subframe.gnssID != observer_t::gnss_svid_t::GPS){return false;}
+      bool valid_time_of_reception(data.time_of_reception.week >= 0);
+
+      switch(data.subframe.gnssID){
+        // TODO: other satellite systems
+        case observer_t::gnss_svid_t::GPS:
+          break;
+        default:
+          return false;
+      }
 
       int week_number(data.time_of_reception.week);
       // If invalid week number, estimate it based on current time
       // This is acceptable because it will be used to compensate truncated upper significant bits.
-      if(week_number < 0){week_number = gps_time_t::now().week;}
+      if(!valid_time_of_reception){week_number = gps_time_t::now().week;}
 
       typename observer_t::u32_t *buf((typename observer_t::u32_t *)data.subframe.buffer);
       typedef typename gps_t::template BroadcastedMessage<typename observer_t::u32_t, 30> parser_t;
