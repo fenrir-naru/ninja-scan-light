@@ -1944,7 +1944,7 @@ class StreamProcessor
             unsigned int bytes((G_Observer_t::u8_t)observer[6 + 4] * 4); // numWords (1word = 32bits)
             if(bytes > sizeof(packet.subframe.buffer)){return;}
             observer.inspect(packet.subframe.buffer, bytes, 6 + 8);
-            if((G_Observer_t::u8_t)observer[6 + 2] != 0){return;} // TODO sigID? (0:L1C/A, 4:L2CM?)
+            if((G_Observer_t::u8_t)observer[6 + 2] != 0){return;} // TODO reserved1, sigID? (0:L1C/A, 4:L2CM?)
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 0],
                 (G_Observer_t::u8_t)observer[6 + 1],
@@ -2134,8 +2134,11 @@ class StreamProcessor
           }
           case 0x0F: { // TRK-SFRBX
             G_Packet_Data packet;
-            if(observer.current_packet_size() != 61){return;} // only GPS may be accepted
-            observer.inspect(packet.subframe.buffer, sizeof(packet.subframe.buffer), 6 + 13);
+            int payload_bytes(observer.current_packet_size() - 8 - 13);
+            // size check, maximum payload size is 40 bytes, i.e., total 61 bytes.
+            if((payload_bytes < 0)
+                || (payload_bytes > sizeof(packet.subframe.buffer))){return;}
+            observer.inspect(packet.subframe.buffer, payload_bytes, 6 + 13);
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 1],
                 (G_Observer_t::u8_t)observer[6 + 2],
