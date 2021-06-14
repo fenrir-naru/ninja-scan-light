@@ -1865,23 +1865,23 @@ class StreamProcessor
         Handler::outer.updatable->update(packet);
       }
 
-      void check_subframe(G_Packet_Data &packet){
+      void check_subframe(const unsigned int &svID, G_Packet_Data &packet){
         // Change format in accordance with UBX-RXM-SFRBX
-        if(packet.subframe.sv_number < 1){}
-        else if(packet.subframe.sv_number <= 32){ // GPS(1-32)
+        if(svID < 1){}
+        else if(svID <= 32){ // GPS(1-32)
           /* Move padding bits(=) in accordance with ICD
            * 0x==_0xDD_0xDD_0xDD => 0b==DDDDDD_0xDD_0xDD_0bDD======
            */
           for(int i(0); i < sizeof(packet.subframe.buffer); i += sizeof(G_Observer_t::u32_t)){
             *(G_Observer_t::u32_t *)(&packet.subframe.buffer[i]) <<= 6;
           }
-          check_subframeX(G_Observer_t::gnss_svid_t::GPS, packet.subframe.sv_number, packet);
+          check_subframeX(G_Observer_t::gnss_svid_t::GPS, svID, packet);
         }
-        else if(packet.subframe.sv_number < 120){}
-        else if(packet.subframe.sv_number <= 158){ // SBAS(120-158)
+        else if(svID < 120){}
+        else if(svID <= 158){ // SBAS(120-158)
           // change format to UBX-RXM-SFRB by removing padding on the last word
           *(G_Observer_t::u32_t *)(&packet.subframe.buffer[sizeof(G_Observer_t::u32_t) * 7]) <<= 6;
-          check_subframeX(G_Observer_t::gnss_svid_t::SBAS, packet.subframe.sv_number, packet);
+          check_subframeX(G_Observer_t::gnss_svid_t::SBAS, svID, packet);
         }
       }
 
@@ -1935,15 +1935,16 @@ class StreamProcessor
           }
           case 0x11: { // RXM-SFRB
             G_Packet_Data packet;
-            observer.fetch_subframe(packet.subframe);
-            check_subframe(packet);
+            observer.inspect(packet.subframe.buffer,
+                packet.subframe.bytes = sizeof(packet.subframe.buffer), 6 + 2);
+            check_subframe((G_Observer_t::u8_t)observer[6 + 1], packet);
             return;
           }
           case 0x13: { // RXM-SFRBX
             G_Packet_Data packet;
             unsigned int bytes((G_Observer_t::u8_t)observer[6 + 4] * 4); // numWords (1word = 32bits)
             if(bytes > sizeof(packet.subframe.buffer)){return;}
-            observer.inspect(packet.subframe.buffer, bytes, 6 + 8);
+            observer.inspect(packet.subframe.buffer, (packet.subframe.bytes = bytes), 6 + 8);
             if((G_Observer_t::u8_t)observer[6 + 2] != 0){return;} // TODO reserved1, sigID? (0:L1C/A, 4:L2CM?)
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 0],
@@ -2138,7 +2139,8 @@ class StreamProcessor
             // size check, maximum payload size is 40 bytes, i.e., total 61 bytes.
             if((payload_bytes < 0)
                 || (payload_bytes > sizeof(packet.subframe.buffer))){return;}
-            observer.inspect(packet.subframe.buffer, payload_bytes, 6 + 13);
+            observer.inspect(packet.subframe.buffer,
+                (packet.subframe.bytes = (unsigned int)payload_bytes), 6 + 13);
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 1],
                 (G_Observer_t::u8_t)observer[6 + 2],

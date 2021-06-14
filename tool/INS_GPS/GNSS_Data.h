@@ -46,8 +46,11 @@ struct GNSS_Data {
   mutable Loader *loader;
 
   typedef G_Packet_Observer<FloatT> observer_t;
-  struct subframe_t : public observer_t::subframe_t {
+  struct subframe_t {
     unsigned int gnssID;
+    unsigned int sv_number;
+    unsigned int bytes;
+    typename observer_t::v8_t buffer[40];
   } subframe;
 
   typedef GPS_Time<FloatT> gps_time_t;
