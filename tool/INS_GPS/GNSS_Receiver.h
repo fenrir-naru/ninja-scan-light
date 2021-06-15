@@ -98,6 +98,7 @@ struct GNSS_Receiver {
     const base_t &select(const typename base_t::prn_t &serial) const {
       switch(system_t::serial2system(serial)){
         case system_t::GPS: return gps;
+        case system_t::QZSS: return gps;
       }
       return *this;
     }
@@ -364,6 +365,8 @@ data.gps.solver_options. expr
               ? data.gps.solver_options.exclude_prn.set(without)
               : data.gps.solver_options.exclude_prn.set(sv_id, without);
           break;
+        case system_t::QZSS:
+          // TODO
         default:
           std::cerr << "(error!) Unsupported satellite! [" << value << "]" << std::endl;
           return false;
@@ -410,7 +413,11 @@ data.gps.solver_options. expr
             << ',' << "v_down"
             << ',' << "receiver_clock_error_dot_ms"
             << ',' << "used_satellites"
-            << ',' << "PRN";
+            << ',' << "GPS_PRN(1-32)"
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+            << ',' << "QZSS_PRN(193-202)"
+#endif
+            ;
       }
       template <class PVT_BaseT>
       static std::ostream &print(std::ostream &out, const GPS_PVT_Debug<FloatT, PVT_BaseT> *){
@@ -478,9 +485,17 @@ data.gps.solver_options. expr
       }
       if(src.position_solved()){
         out << ',' << src.used_satellites
-            << ',' << mask_printer_t(src.used_satellite_mask, 1, 32);
+            << ',' << mask_printer_t(src.used_satellite_mask, 1, 32)
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+            << ',' << mask_printer_t(src.used_satellite_mask, 193, 202) // QZSS
+#endif
+            ;
       }else{
-        out << ",,";
+        out << ",,"
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+            << ","
+#endif
+            ;
       }
       return out;
     }
@@ -520,14 +535,22 @@ data.gps.solver_options. expr
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         out << "clock_index";
         for(int i(1); i <= 32; ++i){
-          out << ',' << "L1_range(" << i << ')'
+          out << ',' << "L1_range(GPS:" << i << ')'
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
-              << ',' << "L2_range(" << i << ')'
+              << ',' << "L2_range(GPS:" << i << ')'
 #endif
-              << ',' << "L1_rate(" << i << ')'
-              << ',' << "azimuth(" << i << ')'
-              << ',' << "elevation(" << i << ')';
+              << ',' << "L1_rate(GPS:" << i << ')'
+              << ',' << "azimuth(GPS:" << i << ')'
+              << ',' << "elevation(GPS:" << i << ')';
         }
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+        for(int i(193); i <= 202; ++i){
+          out << ',' << "L1_range(QZSS:" << i << ')'
+              << ',' << "L1_rate(QZSS:" << i << ')'
+              << ',' << "azimuth(QZSS:" << i << ')'
+              << ',' << "elevation(QZSS:" << i << ')';
+        }
+#endif
         return out;
       }
     } label;
@@ -598,6 +621,16 @@ data.gps.solver_options. expr
       for(int i(1); i <= 32; ++i){
         out << ',' << p(i, cmd_gps) << ',' << p.az_el(i);
       }
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+      static const cmd_t cmd_qzss[] = {
+        {items_t::L1_PSEUDORANGE, true,  1}, // range
+        {items_t::L1_RANGE_RATE,  false, 1}, // rate
+        {items_t::L1_DOPPLER,     false, -gps_space_node_t::L1_WaveLength()}, // fallback to using doppler
+      };
+      for(int i(193); i <= 202; ++i){
+        out << ',' << p(i, cmd_qzss) << ',' << p.az_el(i);
+      }
+#endif
       return out;
     }
   };
