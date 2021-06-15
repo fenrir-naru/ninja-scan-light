@@ -38,6 +38,7 @@
 #include "SylphideProcessor.h"
 
 #include "navigation/GPS.h"
+#include "navigation/QZSS.h"
 
 template <class FloatT>
 struct GNSS_Data {
@@ -64,16 +65,26 @@ struct GNSS_Data {
     struct gps_ephemeris_raw_t : public gps_ephemeris_t::raw_t {
       bool set_iodc;
       int iode_subframe2, iode_subframe3;
+      bool is_qzss;
       typedef typename gps_ephemeris_t::raw_t super_t;
       gps_ephemeris_raw_t()
-          : super_t(), set_iodc(false), iode_subframe2(-1), iode_subframe3(-1) {}
-    } gps_ephemeris[32];
+          : super_t(), set_iodc(false), iode_subframe2(-1), iode_subframe3(-1), is_qzss(false) {}
+      operator gps_ephemeris_t() const {
+        return is_qzss
+            ? (gps_ephemeris_t)(reinterpret_cast<const QZSS_LNAV_Ephemeris_Raw<FloatT> &>(*this))
+            : super_t::operator gps_ephemeris_t();
+      }
+    } gps_ephemeris[32], qzss_ephemeris[10];
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
 
     Loader() : gps(NULL) {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
         gps_ephemeris[i].svid = i + 1;
+      }
+      for(unsigned int i(0); i < sizeof(qzss_ephemeris) / sizeof(qzss_ephemeris[0]); ++i){
+        qzss_ephemeris[i].svid = i + 193;
+        qzss_ephemeris[i].is_qzss = true;
       }
     }
 
@@ -123,7 +134,10 @@ struct GNSS_Data {
       int subframe_no(parser_t::subframe_id(buf));
 
       if(subframe_no <= 3){
-        gps_ephemeris_raw_t &eph(gps_ephemeris[data.subframe.sv_number - 1]);
+        gps_ephemeris_raw_t &eph(
+            (data.subframe.gnssID == observer_t::gnss_svid_t::QZSS)
+            ? qzss_ephemeris[data.subframe.sv_number - 1]
+            : gps_ephemeris[data.subframe.sv_number - 1]);
 
         switch(subframe_no){
           case 1: eph.template update_subframe1<2, 0>(buf); eph.set_iodc = true; break;
@@ -159,6 +173,8 @@ struct GNSS_Data {
     bool load(const GNSS_Data &data){
       switch(data.subframe.gnssID){
         // TODO: other satellite systems
+        case observer_t::gnss_svid_t::QZSS:
+          if(data.subframe.bytes != sizeof(data.subframe.buffer)){return false;}
         case observer_t::gnss_svid_t::GPS:
           return load_gps(data);
       }
