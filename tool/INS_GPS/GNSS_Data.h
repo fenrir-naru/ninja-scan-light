@@ -66,7 +66,7 @@ struct GNSS_Data {
       int iode_subframe2, iode_subframe3;
       typedef typename gps_ephemeris_t::raw_t super_t;
       gps_ephemeris_raw_t()
-          : set_iodc(false), iode_subframe2(-1), iode_subframe3(-1) {}
+          : super_t(), set_iodc(false), iode_subframe2(-1), iode_subframe3(-1) {}
     } gps_ephemeris[32];
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
@@ -111,17 +111,8 @@ struct GNSS_Data {
       return true;
     }
 
-    bool load(const GNSS_Data &data){
+    bool load_gps(const GNSS_Data &data){
       bool valid_time_of_reception(data.time_of_reception.week >= 0);
-
-      switch(data.subframe.gnssID){
-        // TODO: other satellite systems
-        case observer_t::gnss_svid_t::GPS:
-          break;
-        default:
-          return false;
-      }
-
       int week_number(data.time_of_reception.week);
       // If invalid week number, estimate it based on current time
       // This is acceptable because it will be used to compensate truncated upper significant bits.
@@ -162,6 +153,15 @@ struct GNSS_Data {
         }
       }
 
+      return false;
+    }
+
+    bool load(const GNSS_Data &data){
+      switch(data.subframe.gnssID){
+        // TODO: other satellite systems
+        case observer_t::gnss_svid_t::GPS:
+          return load_gps(data);
+      }
       return false;
     }
   };
