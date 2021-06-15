@@ -1174,7 +1174,7 @@ static s ## bits ## _t name(const InputT *buf){ \
                 // normal operation
                 return 4 * 60 * 60;
               }else{
-                // short/long-term extended operation
+                // short/long-term extended operation (Table 20-XI, XII)
                 if(_iodc >= 240 && _iodc <= 247){
                   return 8 * 60 * 60;
                 }else if((_iodc >= 248 && _iodc <= 255) || (_iodc == 496)){
