@@ -336,13 +336,15 @@ data.gps.solver_options. expr
       do{
         char sys_str[8];
         int tmp;
-        if((tmp = std::sscanf(value, "%7[A-Z]:%i", sys_str, &sv_id)) >= 1){ // For QZSS, use QZSS:1-5 (not 193-197)
+        if((tmp = std::sscanf(value, "%7[A-Z]:%i", sys_str, &sv_id)) >= 1){
           // Specific system (with optional satellite) selected
           // system string check
           sys = system_t::str2system(sys_str);
           if(select_all = (tmp == 1)){break;}
-          sv_id = (sv_id < 0 ? -1 : 1)
-              * satellite_id_t(satellite_serial(sys, std::abs(sv_id))).sv_id;
+          if((sys == system_t::QZSS) && (std::abs(sv_id) <= 10)){
+            // For QZSS, alternatively QZSS:1-10 available instead of 193-202
+            sv_id = (sv_id < 0 ? -1 : 1) * (std::abs(sv_id) + 192);
+          }
         }else if((tmp = std::atoi(value)) != 0){ // For QZSS, use 193-197
           // Specific satellite selected
           satellite_id_t id(std::abs(tmp));
