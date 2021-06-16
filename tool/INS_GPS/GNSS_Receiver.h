@@ -494,12 +494,17 @@ data.gps.solver_options. expr
 
       switch(sys){
         case system_t::GPS:
-          select_all
-              ? data.gps.solver_options.exclude_prn.set(without)
-              : data.gps.solver_options.exclude_prn.set(sv_id, without);
-          break;
         case system_t::QZSS:
-          // TODO
+          if(select_all){
+            static const int id_table[][2] = {{1, 32}, {193, 202}};
+            int idx(sys == system_t::QZSS ? 1 : 0);
+            for(int i(id_table[idx][0]), i_max(id_table[idx][1]); i <= i_max; ++i){
+              data.gps.solver_options.exclude_prn.set(i, without);
+            }
+          }else{
+            data.gps.solver_options.exclude_prn.set(sv_id, without);
+          }
+          break;
         default:
           std::cerr << "(error!) Unsupported satellite! [" << value << "]" << std::endl;
           return false;
