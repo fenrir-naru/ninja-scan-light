@@ -623,7 +623,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
 #endif
     
     /**
-     * check X page (ADS122)
+     * check X page (ADS122[0] or ELVR[1])
      *
      * @param observer X page observer
      */
@@ -645,7 +645,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         this->inspect(&buf[1], 3, 7 + (3 * index));
         return be_char4_2_num<super_t::u32_t>(buf[0]);
       }
-      void dump_raw(const float_sylph_t &current) const {
+      void dump_ad122_raw(const float_sylph_t &current) const {
         for(int i(-1), k(0); i <= 0; i++){
           options.out() << options.format_time(current) << ", " << i;
           for(int j(0); j < 4; ++j){
@@ -654,7 +654,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           options.out() << endl;
         }
       }
-      void dump_physical(const float_sylph_t &current) const {
+      void dump_ad122_physical(const float_sylph_t &current) const {
         for(int i(-1), k(0); i <= 0; i++){
           options.out() << options.format_time(current) << ", " << i;
           for(int j(0); j < 3; ++j){ // voltage
@@ -667,6 +667,37 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
             options.out() << ", " << (float_sylph_t)(((v & 0x2000) ? -(int)0x4000 : (int)0) + v) / 32;
           }
           options.out() << endl;
+        }
+      }
+      super_t::u16_t get_2bytesBE(const int &index) const {
+        super_t::v8_t buf[sizeof(super_t::u16_t)] = {0};
+        this->inspect(buf, 2, 7 + (2 * index));
+        return be_char2_2_num<super_t::u16_t>(buf[0]);
+      }
+      void dump_as_elvr_raw(const float_sylph_t &current) const {
+        for(int i(-11), j(0); i <= 0; ++i, ++j){
+          options.out()
+              << options.format_time(current) << ", "
+              << i << ", " << get_2bytesBE(j) << endl;
+        }
+      }
+      void dump_as_elvr_physical(const float_sylph_t &current) const {
+        dump_as_elvr_raw(current); // TODO
+      }
+      void dump_raw(const float_sylph_t &current) const {
+        switch((int)((*this)[0])){
+          case 1:
+            return dump_as_elvr_raw(current);
+          default:
+            return dump_ad122_raw(current);
+        }
+      }
+      void dump_physical(const float_sylph_t &current) const {
+        switch((int)((*this)[0])){
+          case 1:
+            return dump_as_elvr_physical(current);
+          default:
+            return dump_ad122_physical(current);
         }
       }
       HandlerX()
