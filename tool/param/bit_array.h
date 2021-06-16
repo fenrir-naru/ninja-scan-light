@@ -30,7 +30,7 @@
  */
 
 /** @file
- * @brief bit array library as an alternative of std::bitset
+ * @brief bit array library as an alternation of std::bitset
  */
 
 
@@ -44,7 +44,7 @@
 #include <vector>
 
 template <int MAX_SIZE, class ContainerT = unsigned char>
-struct BitArray { ///< alternation of std::bitset
+struct BitArray {
   static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
   ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
   void set(const bool &new_bit = false) {
@@ -52,26 +52,43 @@ struct BitArray { ///< alternation of std::bitset
   }
   void reset() {set(false);}
   void clear() {reset();}
+
+  template <int denom, class U = void>
+  struct div_t : public std::div_t {
+    div_t(const int &num) : std::div_t(std::div(num, denom)) {}
+  };
+  template <class U>
+  struct div_t<8, U> {
+    int quot, rem;
+    div_t(const int &num) : quot(num >> 3), rem(num & 0x7) {}
+  };
+  template <class U>
+  struct div_t<16, U> {
+    int quot, rem;
+    div_t(const int &num) : quot(num >> 4), rem(num & 0xF) {}
+  };
+  template <class U>
+  struct div_t<32, U> {
+    int quot, rem;
+    div_t(const int &num) : quot(num >> 5), rem(num & 0x1F) {}
+  };
+  template <class U>
+  struct div_t<64, U> {
+    int quot, rem;
+    div_t(const int &num) : quot(num >> 6), rem(num & 0x3F) {}
+  };
+
   bool operator[](const int &idx) const {
     if((idx < 0) || (idx >= MAX_SIZE)){return false;}
-    if(MAX_SIZE > bits_per_addr){
-      std::div_t qr(std::div(idx, bits_per_addr));
-      ContainerT mask((ContainerT)1 << qr.rem);
-      return buf[qr.quot] & mask;
-    }else{
-      return buf[0] & ((ContainerT)1 << idx);
-    }
+    div_t<bits_per_addr> qr(idx);
+    ContainerT mask((ContainerT)1 << qr.rem);
+    return buf[qr.quot] & mask;
   }
   void set(const int &idx, const bool &bit = true) {
     if((idx < 0) || (idx >= MAX_SIZE)){return;}
-    if(MAX_SIZE > bits_per_addr){
-      std::div_t qr(std::div(idx, bits_per_addr));
-      ContainerT mask((ContainerT)1 << qr.rem);
-      bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
-    }else{
-      ContainerT mask((ContainerT)1 << idx);
-      bit ? (buf[0] |= mask) : (buf[0] &= ~mask);
-    }
+    div_t<bits_per_addr> qr(idx);
+    ContainerT mask((ContainerT)1 << qr.rem);
+    bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
   }
   void reset(const int &idx) {
     set(idx, false);
@@ -89,8 +106,7 @@ struct BitArray { ///< alternation of std::bitset
       idx_msb = idx_lsb + res_bits - 1;
     }
 
-    std::div_t qr_lsb(std::div(idx_lsb, bits_per_addr)),
-        qr_msb(std::div(idx_msb, bits_per_addr));
+    div_t<bits_per_addr> qr_lsb(idx_lsb), qr_msb(idx_msb);
     if(res_bits > bits_per_addr){
       unsigned int res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
           ? ~((ContainerT)0)
@@ -122,7 +138,7 @@ struct BitArray { ///< alternation of std::bitset
   std::vector<int> indices_one() const {
     std::vector<int> res;
     int idx(0);
-    static const std::div_t qr(std::div(MAX_SIZE, bits_per_addr));
+    static const div_t<bits_per_addr> qr(MAX_SIZE);
     int rem(qr.rem);
     for(int i(0); i < qr.quot; ++i, idx += bits_per_addr){
       int idx2(idx);
