@@ -46,6 +46,14 @@ SRCS_C = \
 SRCS_ASM = \
 	$(shell ls $(SRC_DIR)/*.asm || echo '')
 
+ifeq ($(PITOT),ELVR)
+  SRCS_C := $(filter-out %ads122.c, $(SRCS_C))
+  override CPPFLAGS += -DPITOT_AS_ELVR
+  override CFLAGS += -DPITOT_AS_ELVR
+else
+  SRCS_C := $(filter-out %all_sensors_elvr.c, $(SRCS_C))
+endif
+
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.rel, $(SRCS_C)) $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.rel, $(SRCS_ASM))
 
 all : $(BUILD_DIR) depend $(PACKAGE)

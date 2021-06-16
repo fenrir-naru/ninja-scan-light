@@ -54,7 +54,11 @@
 #include "mag3110.h"
 #endif
 #include "ms5611.h"
+#if defined(PITOT_AS_ELVR)
+#include "all_sensors_elvr.h"
+#else
 #include "ads122.h"
+#endif
 
 volatile __xdata u32 global_ms = 0;
 volatile __xdata u32 tickcount = 0;
@@ -295,7 +299,11 @@ void main() {
   mag3110_init();
 #endif
   ms5611_init();
+#if defined(PITOT_AS_ELVR)
+  as_elvr_init();
+#else
   ads122_init();
+#endif
   
   EA = 1; // Global Interrupt enable
   
@@ -323,7 +331,11 @@ void main() {
     mag3110_polling();
 #endif
     ms5611_polling();
+#if defined(PITOT_AS_ELVR)
+    as_elvr_polling();
+#else
     ads122_polling();
+#endif
     data_hub_polling();
     usb_polling();
 
@@ -460,7 +472,11 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   timeout_10ms++;
   switch(u32_lsbyte(tickcount) % 16){ // 6.25Hz
     case 0:
+#if defined(PITOT_AS_ELVR)
+      as_elvr_capture = TRUE;
+#else
       ads122_capture = TRUE;
+#endif
       break;
     case 4:
 #if !(defined(NINJA_VER) && (NINJA_VER >= 200))
