@@ -123,7 +123,7 @@ struct GPS_Solver_GeneralOptions {
 template <class FloatT>
 struct GPS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> {
   typename GPS_Solver_GeneralOptions<FloatT>
-      ::template exclude_prn_t<1, 32> exclude_prn; // PRN ranges from 1 to 32
+      ::template exclude_prn_t<1, 256> exclude_prn; // PRN ranges from 1 to 256 (including GPS compatible systems such as QZSS)
 
   GPS_SinglePositioning_Options() : GPS_Solver_GeneralOptions<FloatT>() {
     exclude_prn.clear();
