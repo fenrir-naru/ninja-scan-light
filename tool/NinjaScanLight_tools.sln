@@ -19,6 +19,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_common", "test\test_co
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_GPS", "test\test_GPS.vcxproj", "{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_bit_array", "test\test_bit_array.vcxproj", "{1DB5DB88-63A8-4A93-8644-A3034F89E810}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		AppVeyor|Win32 = AppVeyor|Win32
@@ -74,6 +76,12 @@ Global
 		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Debug|Win32.Build.0 = Debug|Win32
 		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Release|Win32.ActiveCfg = Release|Win32
 		{124D41EB-E12C-4742-BA04-E34E1DE6BF3E}.Release|Win32.Build.0 = Release|Win32
+		{1DB5DB88-63A8-4A93-8644-A3034F89E810}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{1DB5DB88-63A8-4A93-8644-A3034F89E810}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
+		{1DB5DB88-63A8-4A93-8644-A3034F89E810}.Debug|Win32.ActiveCfg = Debug|Win32
+		{1DB5DB88-63A8-4A93-8644-A3034F89E810}.Debug|Win32.Build.0 = Debug|Win32
+		{1DB5DB88-63A8-4A93-8644-A3034F89E810}.Release|Win32.ActiveCfg = Release|Win32
+		{1DB5DB88-63A8-4A93-8644-A3034F89E810}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

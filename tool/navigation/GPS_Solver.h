@@ -44,6 +44,8 @@
 
 #include <cmath>
 
+#include "param/bit_array.h"
+
 #include "GPS.h"
 #include "GPS_Solver_Base.h"
 #include "NTCM.h"
@@ -104,9 +106,8 @@ struct GPS_Solver_GeneralOptions {
    */
   template <int prn_begin, int prn_end>
   struct exclude_prn_t
-      : public GPS_Solver_Base<FloatT>::template bit_array_t<prn_end - prn_begin + 1, unsigned int> {
-    typedef typename GPS_Solver_Base<FloatT>
-        ::template bit_array_t<prn_end - prn_begin + 1, unsigned int> super_t;
+      : public BitArray<prn_end - prn_begin + 1, unsigned int> {
+    typedef BitArray<prn_end - prn_begin + 1, unsigned int> super_t;
     bool operator[](const int &prn) const {
       return super_t::operator[](prn - prn_begin);
     }

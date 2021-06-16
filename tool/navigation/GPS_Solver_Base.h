@@ -42,9 +42,9 @@
 #include <cmath>
 #include <cstring>
 #include <cstdlib>
-#include <climits>
 
 #include "param/matrix.h"
+#include "param/bit_array.h"
 #include "GPS.h"
 
 template <class FloatT>
@@ -263,100 +263,6 @@ struct GPS_Solver_Base {
     return invalid;
   }
 
-  template <int MAX_SIZE, class ContainerT = unsigned char>
-  struct bit_array_t { ///< alternation of std::bitset
-    static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
-    ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
-    void set(const bool &new_bit = false) {
-      std::memset(buf, (new_bit ? (~0) : 0), sizeof(buf));
-    }
-    void reset() {set(false);}
-    void clear() {reset();}
-    bool operator[](const int &idx) const {
-      if((idx < 0) || (idx >= MAX_SIZE)){return false;}
-      if(MAX_SIZE > bits_per_addr){
-        std::div_t qr(std::div(idx, bits_per_addr));
-        ContainerT mask((ContainerT)1 << qr.rem);
-        return buf[qr.quot] & mask;
-      }else{
-        return buf[0] & ((ContainerT)1 << idx);
-      }
-    }
-    void set(const int &idx, const bool &bit = true) {
-      if((idx < 0) || (idx >= MAX_SIZE)){return;}
-      if(MAX_SIZE > bits_per_addr){
-        std::div_t qr(std::div(idx, bits_per_addr));
-        ContainerT mask((ContainerT)1 << qr.rem);
-        bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
-      }else{
-        ContainerT mask((ContainerT)1 << idx);
-        bit ? (buf[0] |= mask) : (buf[0] &= ~mask);
-      }
-    }
-    void reset(const int &idx) {
-      set(idx, false);
-    }
-    /**
-     * Generate bit pattern with arbitrary start and end indices
-     */
-    unsigned int pattern(const int &idx_lsb, int idx_msb) const {
-      if((idx_msb < idx_lsb) || (idx_lsb < 0) || (idx_msb >= MAX_SIZE)){
-        return 0;
-      }
-      static const int res_bits((int)sizeof(unsigned int) * CHAR_BIT);
-      if((idx_msb - idx_lsb) >= res_bits){
-        // check output boundary; if overrun, msb will be truncated.
-        idx_msb = idx_lsb + res_bits - 1;
-      }
-
-      std::div_t qr_lsb(std::div(idx_lsb, bits_per_addr)),
-          qr_msb(std::div(idx_msb, bits_per_addr));
-      if(res_bits > bits_per_addr){
-        unsigned int res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
-            ? ~((ContainerT)0)
-            : (((ContainerT)1 << (qr_msb.rem + 1)) - 1))); // MSB byte
-        if(qr_msb.quot > qr_lsb.quot){
-          for(int i(qr_msb.quot - 1); i > qr_lsb.quot; --i){ // Fill intermediate
-            res <<= bits_per_addr;
-            res |= buf[i];
-          }
-          res <<= (bits_per_addr - qr_lsb.rem);
-          res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
-        }else{
-          res >>= qr_lsb.rem;
-        }
-        return res;
-      }else{
-        ContainerT res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
-            ? ~((ContainerT)0)
-            : (((ContainerT)1 << (qr_msb.rem + 1)) - 1))); // MSB byte
-        if(qr_msb.quot > qr_lsb.quot){
-          res <<= (bits_per_addr - qr_lsb.rem);
-          res |= (buf[qr_lsb.quot] >> qr_lsb.rem); // Last byte
-        }else{
-          res >>= qr_lsb.rem;
-        }
-        return (unsigned int)res;
-      }
-    }
-    std::vector<int> indices_one() const {
-      std::vector<int> res;
-      int idx(0);
-      static const std::div_t qr(std::div(MAX_SIZE, bits_per_addr));
-      int rem(qr.rem);
-      for(int i(0); i < qr.quot; ++i, idx += bits_per_addr){
-        int idx2(idx);
-        for(ContainerT temp(buf[i]); temp > 0; temp >>= 1, ++idx2){
-          if(temp & 0x1){res.push_back(idx2);}
-        }
-      }
-      for(ContainerT temp(buf[qr.quot + 1]); (temp > 0) && (rem > 0); --rem, ++idx, temp >>= 1){
-        if(temp & 0x1){res.push_back(idx);}
-      }
-      return res;
-    }
-  };
-
   struct user_pvt_t {
     enum {
       ERROR_NO = 0,
@@ -386,7 +292,7 @@ struct GPS_Solver_Base {
           t(std::sqrt(C_enu(3, 3))) {}
     } dop;
     unsigned int used_satellites;
-    typedef bit_array_t<0x400> satellite_mask_t;
+    typedef BitArray<0x400> satellite_mask_t;
     satellite_mask_t used_satellite_mask; ///< bit pattern(use=1, otherwise=0), PRN 1(LSB) to 32 for GPS
 
     user_pvt_t()
