@@ -43,6 +43,20 @@
 
 #include <vector>
 
+template <int denom, int pow2 = 1, int log2 = 0, int rem2 = denom % pow2>
+struct const_div_t : public std::div_t {
+  const_div_t(const int &num) : std::div_t(std::div(num, denom)) {}
+};
+template <int denom, int pow2, int log2>
+struct const_div_t<denom, pow2, log2, 0> : public const_div_t<denom, (pow2 << 1), log2 + 1> {
+  const_div_t(const int &num) : const_div_t<denom, (pow2 << 1), log2 + 1>(num) {}
+};
+template <int denom, int log2>
+struct const_div_t<denom, denom, log2, 0> {
+  int quot, rem;
+  const_div_t(const int &num) : quot(num >> log2), rem(num & (denom - 1)) {}
+};
+
 template <int MAX_SIZE, class ContainerT = unsigned char>
 struct BitArray {
   static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
@@ -53,40 +67,15 @@ struct BitArray {
   void reset() {set(false);}
   void clear() {reset();}
 
-  template <int denom, class U = void>
-  struct div_t : public std::div_t {
-    div_t(const int &num) : std::div_t(std::div(num, denom)) {}
-  };
-  template <class U>
-  struct div_t<8, U> {
-    int quot, rem;
-    div_t(const int &num) : quot(num >> 3), rem(num & 0x7) {}
-  };
-  template <class U>
-  struct div_t<16, U> {
-    int quot, rem;
-    div_t(const int &num) : quot(num >> 4), rem(num & 0xF) {}
-  };
-  template <class U>
-  struct div_t<32, U> {
-    int quot, rem;
-    div_t(const int &num) : quot(num >> 5), rem(num & 0x1F) {}
-  };
-  template <class U>
-  struct div_t<64, U> {
-    int quot, rem;
-    div_t(const int &num) : quot(num >> 6), rem(num & 0x3F) {}
-  };
-
   bool operator[](const int &idx) const {
     if((idx < 0) || (idx >= MAX_SIZE)){return false;}
-    div_t<bits_per_addr> qr(idx);
+    const_div_t<bits_per_addr> qr(idx);
     ContainerT mask((ContainerT)1 << qr.rem);
     return buf[qr.quot] & mask;
   }
   void set(const int &idx, const bool &bit = true) {
     if((idx < 0) || (idx >= MAX_SIZE)){return;}
-    div_t<bits_per_addr> qr(idx);
+    const_div_t<bits_per_addr> qr(idx);
     ContainerT mask((ContainerT)1 << qr.rem);
     bit ? (buf[qr.quot] |= mask) : (buf[qr.quot] &= ~mask);
   }
@@ -106,7 +95,7 @@ struct BitArray {
       idx_msb = idx_lsb + res_bits - 1;
     }
 
-    div_t<bits_per_addr> qr_lsb(idx_lsb), qr_msb(idx_msb);
+    const_div_t<bits_per_addr> qr_lsb(idx_lsb), qr_msb(idx_msb);
     if(res_bits > bits_per_addr){
       unsigned int res(buf[qr_msb.quot] & ((qr_msb.rem == bits_per_addr - 1)
           ? ~((ContainerT)0)
@@ -138,7 +127,7 @@ struct BitArray {
   std::vector<int> indices_one() const {
     std::vector<int> res;
     int idx(0);
-    static const div_t<bits_per_addr> qr(MAX_SIZE);
+    static const const_div_t<bits_per_addr> qr(MAX_SIZE);
     int rem(qr.rem);
     for(int i(0); i < qr.quot; ++i, idx += bits_per_addr){
       int idx2(idx);
