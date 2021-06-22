@@ -38,6 +38,7 @@
 #include "SylphideProcessor.h"
 
 #include "navigation/GPS.h"
+#include "navigation/GLONASS.h"
 
 template <class FloatT>
 struct GNSS_Data {
@@ -70,6 +71,15 @@ struct GNSS_Data {
     } gps_ephemeris[32];
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
+
+    typedef GLONASS_SpaceNode<FloatT> glonass_t;
+    typedef typename glonass_t::Satellite::Ephemeris glonass_ephemeris_t;
+    struct glonass_ephemeris_raw_t : public glonass_ephemeris_t::raw_t, glonass_t::TimeProperties::raw_t {
+      unsigned int super_frame;
+      unsigned int has_string;
+      glonass_ephemeris_raw_t() : has_string(0) {}
+    } glonass_ephemeris[24];
+
 
     Loader() : gps(NULL) {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
@@ -156,9 +166,54 @@ struct GNSS_Data {
       return false;
     }
 
+    bool load_glonass(const GNSS_Data &data){
+      if(data.subframe.bytes != 16){return false;}
+      if((data.subframe.sv_number == 0)
+          || (data.subframe.sv_number > (sizeof(glonass_ephemeris) / sizeof(glonass_ephemeris[0])))){
+        return false; // exclude unknown satellite, whose sv_number may be 255.
+      }
+      typename observer_t::u32_t *buf((typename observer_t::u32_t *)data.subframe.buffer);
+      typedef typename glonass_t::template BroadcastedMessage<typename observer_t::u32_t> parser_t;
+      unsigned int super_frame(buf[3] >> 16), frame(buf[3] & 0xF), string_no(parser_t::m(buf));
+
+      if((string_no >= 1) && (string_no <= 5)){ // immediate info. (ephemeris) with time property (in non-immediate info,)
+        glonass_ephemeris_raw_t &eph(glonass_ephemeris[data.subframe.sv_number - 1]);
+        if((eph.has_string > 0) && (eph.super_frame != super_frame)){
+          eph.has_string = 0; // clean up
+        }
+        eph.super_frame = super_frame;
+        eph.has_string |= (0x1 << (string_no - 1));
+        switch(string_no){ // string num
+          case 1: eph.template update_string1<0, 0>(buf); break;
+          case 2: eph.template update_string2<0, 0>(buf); break;
+          case 3: eph.template update_string3<0, 0>(buf); break;
+          case 4: eph.template update_string4<0, 0>(buf); break;
+          case 5: {
+            eph.template update_string5<0, 0>(buf);
+            if(frame == 4){
+              // TODO: require special care for 50th frame? @see Table 4.9 note (4)
+            }
+            break;
+          }
+        }
+        if(eph.has_string == 0x1F){ // get all ephemeris and time info. in the same super frame
+          glonass_ephemeris_t eph_converted(eph);
+          typename glonass_t::TimeProperties t_prop(eph);
+          // TODO register ephemeris
+          eph.has_string = 0;
+        }
+        return true;
+      }else{ // non-immediate info. except for time info. (alnamac)
+
+      }
+      return false;
+    }
+
     bool load(const GNSS_Data &data){
       switch(data.subframe.gnssID){
         // TODO: other satellite systems
+        case observer_t::gnss_svid_t::GLONASS:
+          return load_glonass(data);
         case observer_t::gnss_svid_t::GPS:
           return load_gps(data);
       }
