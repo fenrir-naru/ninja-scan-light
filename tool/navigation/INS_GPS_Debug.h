@@ -314,13 +314,15 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
         }else{
           out << ",,";
         }
-        { // azimuth, elevation
+        if(it->second.weight > 0){ // azimuth, elevation
           typename super_t::solver_t::xyz_t sat_los(
               -it->second.los_neg[0], -it->second.los_neg[1], -it->second.los_neg[2]);
           typename super_t::solver_t::enu_t enu_sat(
               super_t::solver_t::enu_t::relative_rel(sat_los, snapshot.state.pos.llh));
           out << enu_sat.azimuth() / M_PI * 180 << ','
               << enu_sat.elevation() / M_PI * 180 << ',';
+        }else{
+          out << ",,";
         }
 
         float_t buf;
