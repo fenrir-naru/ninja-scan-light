@@ -264,6 +264,245 @@ static s ## bits ## _t name(const InputT *buf){ \
           bool P4; // flag for ephemeris; 1 - uploaded by the control segment
           bool l_n; // health flag; 0 - healthy, 1 - malfunction
 
+          struct constellation_t { // TODO make it to be a subclass of System_XYZ<float_t, PZ90>
+            float_t position[3];
+            float_t velocity[3];
+            float_t pos_abs2() const {
+              float_t res(0);
+              for(int i(0); i < 3; ++i){
+                res += (position[i] * position[i]);
+              }
+              return res;
+            }
+            constellation_t operator+(const constellation_t &another) const { // for RK4
+              constellation_t res(*this);
+              for(int i(0); i < 3; ++i){
+                res.position[i] += another.position[i];
+                res.velocity[i] += another.velocity[i];
+              }
+              return res;
+            }
+            constellation_t operator*(const float_t &sf) const { // for RK4
+              constellation_t res(*this);
+              for(int i(0); i < 3; ++i){
+                res.position[i] *= sf;
+                res.velocity[i] *= sf;
+              }
+              return res;
+            }
+            static const float_t omega_E;
+            constellation_t abs_corrdinate(const float_t &sidereal_time_in_rad){
+              // @see Appendix.A PZ-90.02 to O-X0Y0Z0
+              float_t crad(std::cos(sidereal_time_in_rad)), srad(std::sin(sidereal_time_in_rad));
+              float_t
+                  x0(position[0] * crad - position[1] * srad),
+                  y0(position[0] * srad + position[1] * crad);
+              constellation_t res = {
+                {x0, y0, position[2]},
+                {
+                  velocity[0] * crad - velocity[1] * srad - omega_E * y0,
+                  velocity[0] * srad + velocity[1] * crad + omega_E * x0,
+                  velocity[2]
+                }
+              };
+              return res;
+            }
+            constellation_t rel_corrdinate(const float_t &sidereal_time_in_rad){
+              // @see Appendix.A O-X0Y0Z0 to PZ-90.02
+              float_t crad(std::cos(sidereal_time_in_rad)), srad(std::sin(sidereal_time_in_rad));
+              float_t
+                  x( position[0] * crad + position[1] * srad),
+                  y(-position[0] * srad + position[1] * crad);
+              constellation_t res = {
+                {x, y, position[2]},
+                {
+                   velocity[0] * crad + velocity[1] * srad + omega_E * y,
+                  -velocity[0] * srad + velocity[1] * crad - omega_E * x,
+                   velocity[2]
+                }
+              };
+              return res;
+            }
+          };
+
+          struct eccentric_anomaly_t {
+            float_t E_k;
+            float_t snu_k, cnu_k;
+            eccentric_anomaly_t(const float_t &g_k, const float_t &e_k){
+              static const float_t delta_limit(1E-12);
+              for(int loop(0); loop < 10; loop++){
+                float_t E_k2(g_k + e_k * std::sin(E_k));
+                if(std::abs(E_k2 - E_k) < delta_limit){break;}
+                E_k = E_k2;
+              }
+              snu_k = std::sqrt(-e_k * e_k + 1) * std::sin(E_k) / (-e_k * std::cos(E_k) + 1);
+              cnu_k = (std::cos(E_k) - e_k) * std::sin(E_k) / (-e_k * std::cos(E_k) + 1);
+            }
+          };
+
+          struct lunar_solar_perturbations_t {
+            struct {
+              float_t xi, eta, zeta, r;
+            } m, s;
+            /**
+             * @param days Sum of days from the epoch at 00 hours Moscow Time (MT) on 1st January 1975
+             * to the epoch at 00 hours MT of current date within which the instant t_e is.
+             * @param t_e reference time of ephemeris parameters (in Julian centuries of 36525 ephemeris days);
+             */
+            lunar_solar_perturbations_t(const float_t &days, const float_t &t_e){
+  #define dms2rad(deg, min, sec) \
+  (M_PI / 180 * ((float_t)sec / 3600 + (float_t)min / 60 + deg))
+              static const float_t
+                  a_m(3.84385243E8), // [m]
+                  a_s(1.49598E11), //[m]
+                  e_m(0.054900489),
+                  e_s(0.016719),
+                  i_m(dms2rad(5, 8, 43.4)),
+                  epsilon(dms2rad(23, 26, 33)),
+                  g_om(dms2rad(-63, 53, 43.41)),
+                  g_1m(dms2rad(477198, 50, 56.79)),
+                  Omega_om(dms2rad(259, 10, 59.79)),
+                  Omega_1m(dms2rad(-1934, 8, 31.23)),
+                  Gamma_o(dms2rad(-334, 19, 46.40)),
+                  Gamma_1(dms2rad(4069, 2, 2.52)),
+                  g_os(dms2rad(358, 28, 33.04)),
+                  g_1s(dms2rad(0, 0, 129596579.10));
+
+              static const float_t
+                  sf_ci_m(-std::cos(i_m) + 1), si_m(std::sin(i_m)),
+                  cepsilon(std::cos(epsilon)), sepsilon(std::sin(epsilon));
+
+              float_t T((27392.375 + days + t_e / 86400) / 36525);
+
+              { // Eq.(3) lunar (m)
+                float_t Omega_m(Omega_om + Omega_1m * T);
+                float_t sOmega_m(std::sin(Omega_m)), cOmega_m(std::sin(Omega_m));
+
+                float_t xi_ast(-cOmega_m * cOmega_m * sf_ci_m + 1);
+                float_t eta_ast(sOmega_m * si_m);
+                float_t zeta_ast(cOmega_m * si_m);
+
+                float_t xi_11(sOmega_m * cOmega_m * sf_ci_m);
+                float_t xi_12(-sOmega_m * sOmega_m * sf_ci_m + 1);
+
+                float_t eta_11(xi_ast * cepsilon - zeta_ast * sepsilon);
+                float_t eta_12(xi_11 * cepsilon + eta_ast * sepsilon);
+
+                float_t zeta_11(xi_ast * sepsilon + zeta_ast * cepsilon);
+                float_t zeta_12(zeta_11 * sepsilon - eta_ast * cepsilon);
+
+                float_t Gamma(Gamma_o + Gamma_1 * T);
+                float_t sGamma(std::sin(Gamma)), cGamma(std::cos(Gamma));
+
+                eccentric_anomaly_t E_m(g_om + g_1m * T, e_m);
+
+                float_t
+                    srad(E_m.snu_k * cGamma + E_m.cnu_k * sGamma),
+                    crad(E_m.cnu_k * cGamma - E_m.snu_k * sGamma);
+                m.xi    = srad * xi_11    + crad * xi_12;
+                m.eta   = srad * eta_11   + crad * eta_12;
+                m.zeta  = srad * zeta_11  + crad * zeta_12;
+                m.r     = a_m * (-e_m * std::cos(E_m.E_k) + 1);
+              }
+
+              { // Eq.(3) solar (s)
+                float_t omega_s(dms2rad(281, 13, 15.00 + (6189.03 * T)));
+                float_t co(std::cos(omega_s)), so(std::sin(omega_s));
+
+                eccentric_anomaly_t E_s(g_os + g_1s * T, e_s);
+
+                float_t
+                    srad(E_s.snu_k * co + E_s.cnu_k * so), // = sin(nu_s + omega_s)
+                    crad(E_s.cnu_k * co - E_s.snu_k * so); // = cos(nu_s + omega_s)
+
+                s.xi    = crad;
+                s.eta   = srad * cepsilon;
+                s.zeta  = srad * sepsilon;
+                s.r     = a_s * (-e_s * std::cos(E_s.E_k) + 1);
+              }
+            }
+          };
+
+          struct differential_t {
+            float_t J_x_a, J_y_a, J_z_a;
+            differential_t(const float_t &J_x, const float_t &J_y, const float_t &J_z)
+                : J_x_a(J_x), J_y_a(J_y), J_z_a(J_z) {}
+            differential_t(const Ephemeris &eph){
+              float_t sidereal_time_in_rad(0); // TODO calculate from t_b
+              float_t crad(std::cos(sidereal_time_in_rad)), srad(std::sin(sidereal_time_in_rad));
+              J_x_a = eph.xn_ddot * crad - eph.yn_ddot * srad;
+              J_y_a = eph.xn_ddot * srad + eph.yn_ddot * crad;
+              J_z_a = eph.zn_ddot;
+            }
+            constellation_t operator()(const float_t &t, const constellation_t &x) const {
+              // @see APPENDIX 3 EXAMPLES OF ALGORITHMS FOR CALCULATION OF COORDINATES AND VELOCITY
+              float_t r2(x.pos_abs2()), r(std::sqrt(r2));
+              static const float_t
+                  a_e(6378.136E3), mu(398600.44E9), C_20(-1082.63E-6); // TODO move to PZ-90
+              float_t mu_bar(mu / r2),
+                  x_a_bar(x.position[0] / r), y_a_bar(x.position[1] / r),
+                  z_a_bar(x.position[2] / r), sf_z_a_bar(z_a_bar * z_a_bar * -5 + 1),
+                  rho2(a_e * a_e / r2);
+              constellation_t res = {
+                x.velocity,
+                { // Eq.(1)
+                  ((C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * x_a_bar + J_x_a,
+                  ((C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * y_a_bar + J_y_a,
+                  ((C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * z_a_bar + J_z_a,
+                }
+              };
+              return res;
+            }
+          };
+
+          struct differential2_t {
+            lunar_solar_perturbations_t J_src;
+            constellation_t operator()(const float_t &t, const constellation_t &x) const {
+              // @see APPENDIX 3 EXAMPLES OF ALGORITHMS FOR CALCULATION OF COORDINATES AND VELOCITY
+
+              float_t J_x_am, J_y_am, J_z_am;
+              { // Eq.(2) lunar (m)
+                float_t
+                    mu_bar(4902.835E9 / std::pow(J_src.m.r, 2)), // mu_m in [m/s]
+                    x_a_bar(x.position[0] / J_src.m.r),
+                    y_a_bar(x.position[1] / J_src.m.r),
+                    z_a_bar(x.position[2] / J_src.m.r),
+                    delta_x(J_src.m.xi - x_a_bar),
+                    delta_y(J_src.m.eta  - y_a_bar),
+                    delta_z(J_src.m.zeta - z_a_bar),
+                    Delta3(std::pow(
+                      std::pow(delta_x, 2) + std::pow(delta_y, 2) + std::pow(delta_z, 2), 1.5));
+                J_x_am = mu_bar * (delta_x / Delta3 - J_src.m.xi);
+                J_y_am = mu_bar * (delta_y / Delta3 - J_src.m.eta);
+                J_z_am = mu_bar * (delta_z / Delta3 - J_src.m.zeta);
+              }
+
+              float_t J_x_as, J_y_as, J_z_as;
+              { // Eq.(2) solar (s)
+                float_t
+                    mu_bar(0.1325263E21 / std::pow(J_src.s.r, 2)), // mu_s in [m/s]
+                    x_a_bar(x.position[0] / J_src.s.r),
+                    y_a_bar(x.position[1] / J_src.s.r),
+                    z_a_bar(x.position[2] / J_src.s.r),
+                    delta_x(J_src.s.xi - x_a_bar),
+                    delta_y(J_src.s.eta  - y_a_bar),
+                    delta_z(J_src.s.zeta - z_a_bar),
+                    Delta3(std::pow(
+                      std::pow(delta_x, 2) + std::pow(delta_y, 2) + std::pow(delta_z, 2), 1.5));
+                J_x_as = mu_bar * (delta_x / Delta3 - J_src.s.xi);
+                J_y_as = mu_bar * (delta_y / Delta3 - J_src.s.eta);
+                J_z_as = mu_bar * (delta_z / Delta3 - J_src.s.zeta);
+              }
+              return differential_t(J_x_am + J_x_as, J_y_am + J_y_as, J_z_am + J_z_as)(t, x);
+            }
+          };
+
+          /*constellation_t constellation(
+              const float_t &t, const float_t &pseudo_range = 0,
+              const bool &with_velocity = true) const {
+
+          }*/
+
           u8_t F_T_index() const;
 
           struct raw_t {
@@ -477,6 +716,10 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
     };
 };
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::constellation_t::omega_E
+    = 0.7292115E-4; // [s^-1]
 
 #define POWER_2(n) \
 (((n) >= 0) \
