@@ -73,8 +73,8 @@ struct GNSS_Data {
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
 
     typedef GLONASS_SpaceNode<FloatT> glonass_t;
-    typedef typename glonass_t::Satellite::Ephemeris glonass_ephemeris_t;
-    struct glonass_ephemeris_raw_t : public glonass_ephemeris_t::raw_t, glonass_t::TimeProperties::raw_t {
+    typedef typename glonass_t::Satellite::Ephemeris_with_GPS_Time glonass_ephemeris_t;
+    struct glonass_ephemeris_raw_t : public glonass_ephemeris_t::raw_t {
       unsigned int super_frame;
       unsigned int has_string;
       glonass_ephemeris_raw_t() : has_string(0) {}
@@ -198,7 +198,6 @@ struct GNSS_Data {
         }
         if(eph.has_string == 0x1F){ // get all ephemeris and time info. in the same super frame
           glonass_ephemeris_t eph_converted(eph);
-          typename glonass_t::TimeProperties t_prop(eph);
           // TODO register ephemeris
           eph.has_string = 0;
         }
