@@ -251,4 +251,17 @@ BOOST_FIXTURE_TEST_CASE(data_parse, Fixture){
   }
 }
 
+BOOST_AUTO_TEST_CASE(gps_time){
+  typedef space_node_t::gps_time_t gpst_t;
+  for(const gpst_t::leap_second_event_t *t(&gpst_t::leap_second_events[0]); t->leap_seconds > 0; ++t){
+    gpst_t t_gps(t->uncorrected.week, t->uncorrected.seconds);
+    std::tm t_tm(t_gps.c_tm()); // tm => gps_time => tm
+    BOOST_REQUIRE_EQUAL(t_tm.tm_year, t->tm_year);
+    BOOST_REQUIRE_EQUAL(t_tm.tm_mon, t->tm_mon);
+    BOOST_REQUIRE_EQUAL(t_tm.tm_mday, t->tm_mday);
+    BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_tm), t->leap_seconds);
+    BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_gps), t->leap_seconds);
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -436,12 +436,76 @@ struct GPS_Time {
     out << t.week << " week " << t.seconds << " sec.";
     return out;
   }
+
+  struct leap_second_event_t {
+    int tm_year; // year - 1900
+    int tm_mon; // [0, 11]
+    int tm_mday; // [1, 31]
+    int leap_seconds;
+    struct {
+      int week;
+      float_t seconds;
+    } uncorrected; // to work around of "incomplete type" error within g++
+    leap_second_event_t(
+        const int &year, const int &month, const int &day,
+        const int &leap)
+        : tm_year(year - 1900), tm_mon(month - 1), tm_mday(day),
+        leap_seconds(leap) {
+      std::tm t = {0};
+      t.tm_year = tm_year;
+      t.tm_mon = tm_mon;
+      t.tm_mday = tm_mday;
+      GPS_Time t_gps(t);
+      uncorrected.week = t_gps.week;
+      uncorrected.seconds = t_gps.seconds;
+    }
+  };
+  static const leap_second_event_t leap_second_events[];
+  static int guess_leap_seconds(const std::tm &t) {
+    for(const leap_second_event_t *i(&leap_second_events[0]); i->leap_seconds > 0; ++i){
+      if(t.tm_year > i->tm_year){return i->leap_seconds;}
+      if(t.tm_year < i->tm_year){continue;}
+      if(t.tm_mon > i->tm_mon){return i->leap_seconds;}
+      if(t.tm_mon < i->tm_mon){continue;}
+      if(t.tm_mday >= i->tm_mday){return i->leap_seconds;}
+    }
+    return 0;
+  }
+  static int guess_leap_seconds(const GPS_Time<float_t> &uncorrected) {
+    for(const leap_second_event_t *i(&leap_second_events[0]); i->leap_seconds > 0; ++i){
+      if(uncorrected >= GPS_Time(i->uncorrected.week, i->uncorrected.seconds)){return i->leap_seconds;}
+    }
+    return 0;
+  }
 };
 
 template <class FloatT>
 const int GPS_Time<FloatT>::days_of_month[] = {
       31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
     };
+
+template <class FloatT>
+const typename GPS_Time<FloatT>::leap_second_event_t GPS_Time<FloatT>::leap_second_events[] = {
+  leap_second_event_t(2017, 1, 1, 18),
+  leap_second_event_t(2015, 7, 1, 17),
+  leap_second_event_t(2012, 7, 1, 16),
+  leap_second_event_t(2009, 1, 1, 15),
+  leap_second_event_t(2006, 1, 1, 14),
+  leap_second_event_t(1999, 1, 1, 13),
+  leap_second_event_t(1997, 7, 1, 12),
+  leap_second_event_t(1996, 1, 1, 11),
+  leap_second_event_t(1994, 7, 1, 10),
+  leap_second_event_t(1993, 7, 1,  9),
+  leap_second_event_t(1992, 7, 1,  8),
+  leap_second_event_t(1991, 1, 1,  7),
+  leap_second_event_t(1990, 1, 1,  6),
+  leap_second_event_t(1988, 1, 1,  5),
+  leap_second_event_t(1985, 7, 1,  4),
+  leap_second_event_t(1983, 7, 1,  3),
+  leap_second_event_t(1982, 7, 1,  2),
+  leap_second_event_t(1981, 7, 1,  1),
+  leap_second_event_t(1980, 1, 6,  0), // anchor
+};
 
 template <class FloatT = double>
 class GPS_SpaceNode {
