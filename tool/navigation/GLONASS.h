@@ -797,7 +797,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           typedef typename Ephemeris::constellation_t constellation_t;
           constellation_t xa_t_b;
           float_t sidereal_t_b_rad;
-          typename Ephemeris::differntial_t eq_of_motion;
+          typename Ephemeris::differential_t eq_of_motion;
 
           struct raw_t : public Ephemeris::raw_t, TimeProperties::raw_t {
             operator Ephemeris_with_Time() const {
@@ -813,7 +813,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                 {res.xn_dot, res.yn_dot, res.zn_dot},
               };
               res.xa_t_b = x_t_b.abs_corrdinate(res.sidereal_t_b_rad);
-              res.eq_of_motion = typename Ephemeris::differntial_t(res, res.sidereal_t_b_rad);
+              res.eq_of_motion = typename Ephemeris::differential_t(res, res.sidereal_t_b_rad);
               return res;
             }
             raw_t &operator=(const Ephemeris_with_Time &eph){
