@@ -30,7 +30,7 @@
  */
 
 /** @file
- * @brief RINEX Loader, support RINEX 2
+ * @brief RINEX Loader, support RINEX 2 and 3
  *
  */
 
@@ -55,18 +55,38 @@ template <class U = void>
 class RINEX_Reader {
   public:
   typedef RINEX_Reader<U> self_t;
-    typedef std::map<std::string, std::string> header_t;
+    typedef std::multimap<std::string, std::string> header_t;
     
   protected:
     header_t _header;
     std::istream &src;
     bool _has_next;
+    int version;
+    enum {
+      RINEX_FILE_UNKNOWN = 0,
+      RINEX_FILE_OBSERVATION,
+      RINEX_FILE_NAVIGATION,
+      RINEX_FILE_METEOROLOGICAL,
+    } file_type;
+    enum {
+      RINEX_SYS_UNKNOWN = 0,
+      RINEX_SYS_GPS,
+      RINEX_SYS_GLONASS,
+      RINEX_SYS_GALILEO,
+      RINEX_SYS_QZSS,
+      RINEX_SYS_BDS,
+      RINEX_SYS_IRNSS,
+      RINEX_SYS_SBAS,
+      RINEX_SYS_TRANSIT,
+      RINEX_SYS_MIXED,
+    } sat_system;
     
   public:
     RINEX_Reader(
         std::istream &in,
         std::string &(*modify_header)(std::string &, std::string &) = NULL)
-        : src(in), _has_next(false){
+        : src(in), _has_next(false),
+        version(0), file_type(RINEX_FILE_UNKNOWN), sat_system(RINEX_SYS_UNKNOWN) {
       if(src.fail()){return;}
       
       char buf[256];
@@ -89,12 +109,35 @@ class RINEX_Reader {
         
         content = content.substr(0, 60);
         if(modify_header){content = modify_header(label, content);}
-        if(_header.find(label) == _header.end()){
-          _header[label] = content;
-        }else{
-          _header[label].append(content); // If already exist, then append.
-        }
+        _header.insert(header_t::value_type(label, content));
       }
+
+      // version and type extraction
+      for(const header_t::const_iterator it(_header.find("RINEX VERSION / TYPE"));
+          it != _header.end(); ){
+        version = std::atoi(it->second.substr(0, 6).c_str()) * 100
+            + std::atoi(it->second.substr(7, 2).c_str());
+        switch(it->second[20]){
+          case 'O': file_type = RINEX_FILE_OBSERVATION;    break;
+          case 'N': file_type = RINEX_FILE_NAVIGATION;     break;
+          case 'M': file_type = RINEX_FILE_METEOROLOGICAL; break;
+        }
+        if((file_type == RINEX_FILE_NAVIGATION) || (file_type == RINEX_FILE_OBSERVATION)){
+          switch(it->second[40]){
+            case 'G': sat_system = RINEX_SYS_GPS;     break;
+            case 'R': sat_system = RINEX_SYS_GLONASS; break;
+            case 'E': sat_system = RINEX_SYS_GALILEO; break;
+            case 'J': sat_system = RINEX_SYS_QZSS;    break;
+            case 'C': sat_system = RINEX_SYS_BDS;     break;
+            case 'I': sat_system = RINEX_SYS_IRNSS;   break;
+            case 'S': sat_system = RINEX_SYS_SBAS;    break;
+            case 'M': sat_system = RINEX_SYS_MIXED;   break;
+            case 'T': sat_system = RINEX_SYS_TRANSIT; break; // ver.2 only
+          }
+        }
+        break;
+      }
+
     }
     virtual ~RINEX_Reader(){_header.clear();}
     header_t &header() {return _header;}
@@ -130,9 +173,21 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static std::string &modify_header(std::string &label, std::string &content){
       if((label.find("ION ALPHA") == 0)
           || (label.find("ION BETA") == 0)
-          || (label.find("DELTA-UTC: A0,A1,T,W") == 0)){
+          || (label.find("DELTA-UTC: A0,A1,T,W") == 0)){ // ver.2 header
         for(int pos(0);
             (pos = content.find("D", pos)) != std::string::npos;
+            ){
+          content.replace(pos, 1, "E");
+        }
+      }else if(label.find("IONOSPHERIC CORR") == 0){ // ver.3 header
+        for(int pos(5);
+            ((pos = content.find("D", pos)) != std::string::npos) && (pos < (5 + 4 * 12));
+            ){
+          content.replace(pos, 1, "E");
+        }
+      }else if(label.find("TIME SYSTEM CORR") == 0){ // ver.3 header
+        for(int pos(5);
+            ((pos = content.find("D", pos)) != std::string::npos) && (pos < (5 + 17 + 16));
             ){
           content.replace(pos, 1, "E");
         }
@@ -142,6 +197,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     
     void seek_next() {
       char buf[256];
+      const int spaces(super_t::version >= 300 ? 4 : 3);
       
       FloatT ura_meter;
       for(int i = 0; (i < 8) && (super_t::src.good()); i++){
@@ -159,33 +215,51 @@ std::stringstream(line_data.size() > offset ? line_data.substr(offset, length) :
         FloatT dummy;
         switch(i){
           case 0: {
-            GET_SS(0, 2) >> info.svid;
-            info.ephemeris.svid = info.svid;
-            struct tm t;
-            GET_SS(3, 2) >> t.tm_year; // year - 1900
-            if(t.tm_year < 80){t.tm_year += 100;} // greater than 1980
-            GET_SS(6, 2) >> t.tm_mon;  // month
-            --(t.tm_mon);
-            GET_SS(9, 2) >> t.tm_mday; // day of month
-            GET_SS(12, 2) >> t.tm_hour; // hour
-            GET_SS(15, 2) >> t.tm_min;  // minute
-            t.tm_sec = 0;
-            GPS_Time<FloatT> gps_time(t);
-            info.ephemeris.WN = gps_time.week;
-            GET_SS(17, 5) >> info.ephemeris.t_oc; // second
-            info.ephemeris.t_oc += gps_time.seconds;
-            GET_SS(22, 19) >> info.ephemeris.a_f0;
-            GET_SS(41, 19) >> info.ephemeris.a_f1;
-            GET_SS(60, 19) >> info.ephemeris.a_f2;
+            if(super_t::version >= 300){
+              // if(line_data[0] != 'G'){} // TODO check GPS before parsing
+              GET_SS(1, 2) >> info.svid;
+              info.ephemeris.svid = info.svid;
+              std::tm t;
+              GET_SS(4, 4) >> t.tm_year; // year
+              t.tm_year -= 1900; // tm_year base is 1900
+              GET_SS(9, 2) >> t.tm_mon;  // month
+              --(t.tm_mon);
+              GET_SS(12, 2) >> t.tm_mday; // day of month
+              GET_SS(15, 2) >> t.tm_hour; // hour
+              GET_SS(18, 2) >> t.tm_min;  // minute
+              GET_SS(21, 2) >> t.tm_sec;  // second
+              GPS_Time<FloatT> gps_time(t);
+              info.ephemeris.WN = gps_time.week;
+              info.ephemeris.t_oc = gps_time.seconds;
+            }else{
+              GET_SS(0, 2) >> info.svid;
+              info.ephemeris.svid = info.svid;
+              struct tm t;
+              GET_SS(3, 2) >> t.tm_year; // year - 1900
+              if(t.tm_year < 80){t.tm_year += 100;} // greater than 1980
+              GET_SS(6, 2) >> t.tm_mon;  // month
+              --(t.tm_mon);
+              GET_SS(9, 2) >> t.tm_mday; // day of month
+              GET_SS(12, 2) >> t.tm_hour; // hour
+              GET_SS(15, 2) >> t.tm_min;  // minute
+              t.tm_sec = 0;
+              GPS_Time<FloatT> gps_time(t);
+              info.ephemeris.WN = gps_time.week;
+              GET_SS(17, 5) >> info.ephemeris.t_oc; // second
+              info.ephemeris.t_oc += gps_time.seconds;
+            }
+            GET_SS(spaces + 19, 19) >> info.ephemeris.a_f0;
+            GET_SS(spaces + 38, 19) >> info.ephemeris.a_f1;
+            GET_SS(spaces + 57, 19) >> info.ephemeris.a_f2;
             break;
           }
 #define READ_AND_STORE(line_num, v0, v1, v2, v3) \
 case line_num: { \
   FloatT v; \
-  try{GET_SS( 3, 19) >> v; v0 = v;}catch(std::exception &e){v0 = 0;} \
-  try{GET_SS(22, 19) >> v; v1 = v;}catch(std::exception &e){v1 = 0;} \
-  try{GET_SS(41, 19) >> v; v2 = v;}catch(std::exception &e){v2 = 0;} \
-  try{GET_SS(60, 19) >> v; v3 = v;}catch(std::exception &e){v3 = 0;} \
+  try{GET_SS(spaces,      19) >> v; v0 = v;}catch(std::exception &e){v0 = 0;} \
+  try{GET_SS(spaces + 19, 19) >> v; v1 = v;}catch(std::exception &e){v1 = 0;} \
+  try{GET_SS(spaces + 38, 19) >> v; v2 = v;}catch(std::exception &e){v2 = 0;} \
+  try{GET_SS(spaces + 57, 19) >> v; v3 = v;}catch(std::exception &e){v3 = 0;} \
   break; \
 }
           READ_AND_STORE(1,
@@ -296,8 +370,58 @@ case line_num: { \
       }
 
       if(leap = ((it = _header.find("LEAP SECONDS")) != _header.end())){
-        std::stringstream sstr(it->second);
+        std::stringstream sstr(it->second.substr(0, 6));
         sstr >> iono_utc.delta_t_LS;
+      }
+
+      space_node.update_iono_utc(iono_utc, alpha && beta, utc && leap);
+      return alpha && beta && utc && leap;
+    }
+
+    bool extract_iono_utc_v3(GPS_SpaceNode<FloatT> &space_node) const {
+      typename space_node_t::Ionospheric_UTC_Parameters iono_utc;
+      bool alpha(false), beta(false), utc(false), leap(false);
+      typedef super_t::header_t::const_iterator it_t;
+
+      {
+        std::pair<it_t, it_t> range(_header.equal_range("IONOSPHERIC CORR"));
+        for(it_t it(range.first); it != range.second; ++it){
+          if(it->second.find("GPSA") != it->second.npos){
+            std::stringstream sstr(it->second.substr(5));
+            for(int i(0); i < sizeof(iono_utc.alpha) / sizeof(iono_utc.alpha[0]); ++i){
+              sstr >> iono_utc.alpha[i];
+            }
+            alpha = true;
+          }else if(it->second.find("GPSB") != it->second.npos){
+            std::stringstream sstr(it->second.substr(5));
+            for(int i(0); i < sizeof(iono_utc.beta) / sizeof(iono_utc.beta[0]); ++i){
+              sstr >> iono_utc.beta[i];
+            }
+            beta = true;
+          }
+        }
+      }
+
+      {
+        std::pair<it_t, it_t> range(_header.equal_range("TIME SYSTEM CORR"));
+        for(it_t it(range.first); it != range.second; ++it){
+          if(it->second.find("GPUT") == it->second.npos){continue;}
+          std::stringstream sstr(it->second.substr(5));
+          sstr >> iono_utc.A0;
+          sstr >> iono_utc.A1;
+          sstr >> iono_utc.t_ot;
+          sstr >> iono_utc.WN_t;
+          utc = true;
+        }
+      }
+
+      {
+        it_t it(_header.find("LEAP SECONDS"));
+        if(it != _header.end()){
+          std::stringstream sstr(it->second.substr(0, 6));
+          sstr >> iono_utc.delta_t_LS;
+          leap = true;
+        }
       }
 
       space_node.update_iono_utc(iono_utc, alpha && beta, utc && leap);
@@ -307,7 +431,14 @@ case line_num: { \
     static int read_all(std::istream &in, space_node_t &space_node){
       int res(-1);
       RINEX_NAV_Reader reader(in);
-      reader.extract_iono_utc(space_node); // read optional parameters
+      switch(reader.version / 100){
+        case 3:
+          reader.extract_iono_utc_v3(space_node);
+          break;
+        case 2:
+        default:
+          reader.extract_iono_utc(space_node); // read optional parameters
+      }
       res++;
       for(; reader.has_next(); ++res){
         SatelliteInfo info(reader.next());
