@@ -48,6 +48,7 @@
 #include <ctime>
 #include <exception>
 #include <algorithm>
+#include <cstddef>
 
 #include "GPS.h"
 
@@ -143,6 +144,84 @@ class RINEX_Reader {
     header_t &header() {return _header;}
     const header_t &header() const {return const_cast<self_t *>(this)->header();}
     bool has_next() const {return _has_next;}
+
+    template <class T>
+    struct conv_t {
+      static void d(
+          std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
+        if(str2val){
+          std::stringstream(buf.substr(offset, length)) >> *(T *)value;
+        }else{
+          std::stringstream ss;
+          ss << std::setfill(' ') << std::right << std::setw(length) << *(T *)value;
+          buf.replace(offset, length, ss.str());
+        }
+      }
+      static void f(
+          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
+        if(str2val){
+          std::stringstream(buf.substr(offset, length)) >> *(T *)value;
+        }else{
+          std::stringstream ss;
+          ss << std::setfill(' ') << std::right << std::setw(length)
+              << std::setprecision(precision) << std::fixed
+              << value;
+          buf.replace(offset, length, ss.str());
+        }
+      }
+      static void fD(
+          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
+        if(str2val){
+          std::string s(buf.substr(offset, length));
+          int pos(s.find("D"));
+          if(pos != string::npos){
+            s.replace(pos, 1, "E");
+          }
+          std::stringstream(s) >> *(T *)value;
+        }else{
+          int w((std::max)(length, precision + 6)); // parentheses of std::max mitigates error C2589 under Windows VC
+
+          std::stringstream ss;
+          ss << std::setprecision(precision - 1) << std::scientific
+              << ((*(T *)value) * 1E1);
+          std::string s(ss.str());
+
+          // -1.2345E+06 => -.12345E+06
+          int index(s[0] == '-' ? 1 : 0);
+          s[index + 1] = s[index + 0];
+          s[index + 0] = '.';
+
+          // -.12345E+06 => -.12345D+06
+          s[index + precision + 1] = 'D';
+          // If exponent portion digits are more than 2, then truncate it.
+          s.erase(index + precision + 3, s.size() - (index + precision + 5));
+
+          ss.str("");
+          ss << std::setfill(' ') << std::right << std::setw(w) << s;
+          buf.replace(offset, length, ss.str());
+        }
+      }
+    };
+
+    struct convert_item_t {
+      void (*func)(
+          std::string &buf, const int &offset, const int &length, void *value,
+          const int &opt, const bool &str2val);
+      int offset;
+      int length;
+      int value_offset;
+      int opt;
+    };
+
+    template <int N>
+    static void convert(const convert_item_t (&items)[N], const std::string &buf, void *values){
+      // str => value
+      for(int i(0); i < N; ++i){
+        (*items[i].func)(
+            const_cast<std::string &>(buf), items[i].offset, items[i].length, (char *)values + items[i].value_offset,
+            items[i].opt, true);
+      }
+    }
 };
 
 template <class FloatT>
@@ -160,40 +239,16 @@ struct RINEX_NAV {
 template <class FloatT = double>
 class RINEX_NAV_Reader : public RINEX_Reader<> {
   protected:
-    typedef RINEX_NAV<FloatT> content_t;
     typedef RINEX_NAV_Reader<FloatT> self_t;
     typedef RINEX_Reader<> super_t;
   public:
+    typedef RINEX_NAV<FloatT> content_t;
     typedef typename content_t::space_node_t space_node_t;
     typedef typename content_t::ephemeris_t ephemeris_t;
     typedef typename content_t::SatelliteInfo SatelliteInfo;
   
   protected:
     SatelliteInfo info;
-    static std::string &modify_header(std::string &label, std::string &content){
-      if((label.find("ION ALPHA") == 0)
-          || (label.find("ION BETA") == 0)
-          || (label.find("DELTA-UTC: A0,A1,T,W") == 0)){ // ver.2 header
-        for(int pos(0);
-            (pos = content.find("D", pos)) != std::string::npos;
-            ){
-          content.replace(pos, 1, "E");
-        }
-      }else if(label.find("IONOSPHERIC CORR") == 0){ // ver.3 header
-        for(int pos(5);
-            ((pos = content.find("D", pos)) != std::string::npos) && (pos < (5 + 4 * 12));
-            ){
-          content.replace(pos, 1, "E");
-        }
-      }else if(label.find("TIME SYSTEM CORR") == 0){ // ver.3 header
-        for(int pos(5);
-            ((pos = content.find("D", pos)) != std::string::npos) && (pos < (5 + 17 + 16));
-            ){
-          content.replace(pos, 1, "E");
-        }
-      }
-      return content;
-    }
     
     void seek_next() {
       char buf[256];
@@ -325,7 +380,7 @@ case line_num: { \
     }
   
   public:
-    RINEX_NAV_Reader(std::istream &in) : super_t(in, self_t::modify_header) {
+    RINEX_NAV_Reader(std::istream &in) : super_t(in) {
       seek_next();
     }
     ~RINEX_NAV_Reader(){}
@@ -337,6 +392,11 @@ case line_num: { \
       return current;
     }
     
+    static const typename super_t::convert_item_t iono_alpha_v2[4];
+    static const typename super_t::convert_item_t iono_beta_v2[4];
+    static const typename super_t::convert_item_t utc_v2[4];
+    static const typename super_t::convert_item_t utc_leap[1];
+
     /**
      * Obtain ionospheric delay coefficient and UTC parameters.
      * 
@@ -346,57 +406,46 @@ case line_num: { \
       typename space_node_t::Ionospheric_UTC_Parameters iono_utc;
       bool alpha, beta, utc, leap;
       super_t::header_t::const_iterator it;
+      typedef super_t::template conv_t<typename space_node_t::float_t> conv_t;
 
       if(alpha = ((it = _header.find("ION ALPHA")) != _header.end())){
-        std::stringstream sstr(it->second);
-        for(int i(0); i < sizeof(iono_utc.alpha) / sizeof(iono_utc.alpha[0]); ++i){
-          sstr >> iono_utc.alpha[i];
-        }
+        super_t::convert(iono_alpha_v2, it->second, &iono_utc);
       }
       
       if(beta = ((it = _header.find("ION BETA")) != _header.end())){
-        std::stringstream sstr(it->second);
-        for(int i(0); i < sizeof(iono_utc.beta) / sizeof(iono_utc.beta[0]); ++i){
-          sstr >> iono_utc.beta[i];
-        }
+        super_t::convert(iono_beta_v2, it->second, &iono_utc);
       }
 
       if(utc = ((it = _header.find("DELTA-UTC: A0,A1,T,W")) != _header.end())){
-        std::stringstream sstr(it->second);
-        sstr >> iono_utc.A0;
-        sstr >> iono_utc.A1;
-        sstr >> iono_utc.t_ot;
-        sstr >> iono_utc.WN_t;
+        super_t::convert(utc_v2, it->second, &iono_utc);
       }
 
       if(leap = ((it = _header.find("LEAP SECONDS")) != _header.end())){
-        std::stringstream sstr(it->second.substr(0, 6));
-        sstr >> iono_utc.delta_t_LS;
+        super_t::convert(utc_leap, it->second, &iono_utc);
       }
 
       space_node.update_iono_utc(iono_utc, alpha && beta, utc && leap);
       return alpha && beta && utc && leap;
     }
 
+    static const typename super_t::convert_item_t iono_alpha_v3[4];
+    static const typename super_t::convert_item_t iono_beta_v3[4];
+    static const typename super_t::convert_item_t utc_v3[4];
+
     bool extract_iono_utc_v3(GPS_SpaceNode<FloatT> &space_node) const {
       typename space_node_t::Ionospheric_UTC_Parameters iono_utc;
       bool alpha(false), beta(false), utc(false), leap(false);
       typedef super_t::header_t::const_iterator it_t;
+      typedef super_t::template conv_t<typename space_node_t::float_t> conv_t;
 
       {
         std::pair<it_t, it_t> range(_header.equal_range("IONOSPHERIC CORR"));
         for(it_t it(range.first); it != range.second; ++it){
           if(it->second.find("GPSA") != it->second.npos){
-            std::stringstream sstr(it->second.substr(5));
-            for(int i(0); i < sizeof(iono_utc.alpha) / sizeof(iono_utc.alpha[0]); ++i){
-              sstr >> iono_utc.alpha[i];
-            }
+            super_t::convert(iono_alpha_v3, it->second, &iono_utc);
             alpha = true;
           }else if(it->second.find("GPSB") != it->second.npos){
-            std::stringstream sstr(it->second.substr(5));
-            for(int i(0); i < sizeof(iono_utc.beta) / sizeof(iono_utc.beta[0]); ++i){
-              sstr >> iono_utc.beta[i];
-            }
+            super_t::convert(iono_beta_v3, it->second, &iono_utc);
             beta = true;
           }
         }
@@ -406,11 +455,7 @@ case line_num: { \
         std::pair<it_t, it_t> range(_header.equal_range("TIME SYSTEM CORR"));
         for(it_t it(range.first); it != range.second; ++it){
           if(it->second.find("GPUT") == it->second.npos){continue;}
-          std::stringstream sstr(it->second.substr(5));
-          sstr >> iono_utc.A0;
-          sstr >> iono_utc.A1;
-          sstr >> iono_utc.t_ot;
-          sstr >> iono_utc.WN_t;
+          super_t::convert(utc_v3, it->second, &iono_utc);
           utc = true;
         }
       }
@@ -418,8 +463,7 @@ case line_num: { \
       {
         it_t it(_header.find("LEAP SECONDS"));
         if(it != _header.end()){
-          std::stringstream sstr(it->second.substr(0, 6));
-          sstr >> iono_utc.delta_t_LS;
+          super_t::convert(utc_leap, it->second, &iono_utc);
           leap = true;
         }
       }
@@ -447,6 +491,70 @@ case line_num: { \
       return res;
     }
 };
+
+#define GEN_ITEM(func, offset, length, container_type, container_member, value_type) \
+    {super_t::template conv_t<value_type>:: ## func, offset, length, \
+      offsetof(container_type, container_member)}
+#define GEN_ITEM_F(offset, length, precision, container_type, container_member) \
+    {super_t::template conv_t<typename space_node_t::float_t>::fD, offset, length, \
+      offsetof(container_type, container_member), precision}
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_alpha_v2[] = {
+  GEN_ITEM_F( 2, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[0]),
+  GEN_ITEM_F(14, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[1]),
+  GEN_ITEM_F(26, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[2]),
+  GEN_ITEM_F(38, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[3]),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_beta_v2[] = {
+  GEN_ITEM_F( 2, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[0]),
+  GEN_ITEM_F(14, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[1]),
+  GEN_ITEM_F(26, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[2]),
+  GEN_ITEM_F(38, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[3]),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_v2[] = {
+  GEN_ITEM_F(  3, 19, 12, space_node_t::Ionospheric_UTC_Parameters, A0),
+  GEN_ITEM_F( 22, 19, 12, space_node_t::Ionospheric_UTC_Parameters, A1),
+  GEN_ITEM(d, 41,  9,     space_node_t::Ionospheric_UTC_Parameters, t_ot, int),
+  GEN_ITEM(d, 50,  9,     space_node_t::Ionospheric_UTC_Parameters, WN_t, int),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_leap[] = {
+  GEN_ITEM(d, 0, 6, space_node_t::Ionospheric_UTC_Parameters, delta_t_LS, int),
+};
+
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_alpha_v3[] = {
+  GEN_ITEM_F( 5, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[0]),
+  GEN_ITEM_F(17, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[1]),
+  GEN_ITEM_F(29, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[2]),
+  GEN_ITEM_F(41, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[3]),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_beta_v3[] = {
+  GEN_ITEM_F( 5, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[0]),
+  GEN_ITEM_F(17, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[1]),
+  GEN_ITEM_F(29, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[2]),
+  GEN_ITEM_F(41, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[3]),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_v3[] = {
+  GEN_ITEM_F(  5, 17, 10, space_node_t::Ionospheric_UTC_Parameters, A0),
+  GEN_ITEM_F( 22, 16,  9, space_node_t::Ionospheric_UTC_Parameters, A1),
+  GEN_ITEM(d, 39,  6,     space_node_t::Ionospheric_UTC_Parameters, t_ot, int),
+  GEN_ITEM(d, 46,  4,     space_node_t::Ionospheric_UTC_Parameters, WN_t, int),
+};
+
+#undef GEN_ITEM_F
+#undef GEN_ITEM
 
 template <class FloatT>
 struct RINEX_OBS {
@@ -701,50 +809,33 @@ class RINEX_Writer {
     template <class FloatT>
     static std::string RINEX_Float(
         const FloatT &value, const int width = 19, const int precision = 12){
-      std::stringstream ss;
-      ss << std::setfill(' ') << std::right << std::setw(width)
-          << std::setprecision(precision) << std::fixed 
-          << value;
-      return ss.str();
+      std::string s;
+      RINEX_Reader<U>::template conv_t<FloatT>::f(s, 0, width, &const_cast<FloatT &>(value), precision, false);
+      return s;
     }
-    
     template <class FloatT>
     static std::string RINEX_FloatD(
         const FloatT &value, const int width = 19, const int precision = 12){
-      int w((std::max)(width, precision + 6)); // parentheses of std::max mitigates error C2589 under Windows VC
-      
-      std::stringstream ss;
-      ss << std::setprecision(precision - 1) << std::scientific
-          << (value * 1E1);
-      std::string s(ss.str());
-      //std::cerr << s << std::endl;
-      
-      // -1.2345E+06 => -.12345E+06
-      int index(s[0] == '-' ? 1 : 0);
-      s[index + 1] = s[index + 0];
-      s[index + 0] = '.';
-      // -.12345E+06 => -.12345D+06
-      s[index + precision + 1] = 'D';
-      // If exponent portion digits are more than 2, then truncate it.
-      s.erase(index + precision + 3, s.size() - (index + precision + 5));
-      
-      ss.str("");
-      ss << std::setfill(' ') << std::right << std::setw(w) << s;
-      
-      return ss.str();
+      std::string s;
+      RINEX_Reader<U>::template conv_t<FloatT>::fD(s, 0, width, &const_cast<FloatT &>(value), precision, false);
+      return s;
     }
     template <class T>
-    static std::string RINEX_Value(
-        const T &value, const int width = 6){
-      std::stringstream ss;
-      ss << std::setfill(' ') << std::right << std::setw(width) << value;
-      return ss.str();
+    static std::string RINEX_Value(const T &value, const int width = 6){
+      std::string s;
+      RINEX_Reader<U>::template conv_t<T>::d(s, 0, width, &const_cast<T &>(value), 0, false);
+      return s;
     }
     
-    void leap_seconds(const int &seconds){
-      std::stringstream ss;
-      ss << RINEX_Value(seconds, 6);
-      _header["LEAP SECONDS"] = ss.str();
+    template <int N>
+    static void convert(
+        const typename RINEX_Reader<U>::convert_item_t (&items)[N], std::string &buf, const void *values){
+      // value => string
+      for(int i(0); i < N; ++i){
+        (*items[i].func)(
+            buf, items[i].offset, items[i].length, (char *)(const_cast<void *>(values)) + items[i].value_offset,
+            items[i].opt, false);
+      }
     }
 };
 
@@ -752,6 +843,7 @@ template <class FloatT>
 class RINEX_NAV_Writer : public RINEX_Writer<> {
   public:
     typedef RINEX_NAV<FloatT> content_t;
+    typedef RINEX_NAV_Reader<FloatT> reader_t;
     typedef RINEX_NAV_Writer self_t;
     typedef RINEX_Writer<> super_t;
   protected:
@@ -766,38 +858,25 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
 
     static const typename super_t::header_item_t default_header[];
     static const int default_header_size;
-    void iono_alpha(
-        const FloatT &a0, const FloatT &a1, 
-        const FloatT &a2, const FloatT &a3){
-      std::stringstream ss;
-      ss << "  " 
-          << RINEX_FloatD(a0, 12, 4)
-          << RINEX_FloatD(a1, 12, 4)
-          << RINEX_FloatD(a2, 12, 4)
-          << RINEX_FloatD(a3, 12, 4);
-      _header["ION ALPHA"] = ss.str();
+    void iono_alpha(const space_node_t &space_node){
+      std::string s(60, ' ');
+      super_t::convert(reader_t::iono_alpha_v2, s, &space_node.iono_utc());
+      _header["ION ALPHA"] = s;
     }
-    void iono_beta(
-        const FloatT &b0, const FloatT &b1, 
-        const FloatT &b2, const FloatT &b3){
-      std::stringstream ss;
-      ss << "  " 
-          << RINEX_FloatD(b0, 12, 4)
-          << RINEX_FloatD(b1, 12, 4)
-          << RINEX_FloatD(b2, 12, 4)
-          << RINEX_FloatD(b3, 12, 4);
-      _header["ION BETA"] = ss.str();
+    void iono_beta(const space_node_t &space_node){
+      std::string s(60, ' ');
+      super_t::convert(reader_t::iono_beta_v2, s, &space_node.iono_utc());
+      _header["ION BETA"] = s;
     }
-    void utc_params(
-        const FloatT &A0, const FloatT &A1,
-        const int &T, const int &W){
-      std::stringstream ss;
-      ss << "   "
-          << RINEX_FloatD(A0, 19, 12)
-          << RINEX_FloatD(A1, 19, 12)
-          << RINEX_Value(T, 9)
-          << RINEX_Value(W, 9);
-      _header["DELTA UTC: A0,A1,T,W"] = ss.str();
+    void utc_params(const space_node_t &space_node){
+      std::string s(60, ' ');
+      super_t::convert(reader_t::utc_v2, s, &space_node.iono_utc());
+      _header["DELTA UTC: A0,A1,T,W"] = s;
+    }
+    void leap_seconds(const space_node_t &space_node){
+      std::string s(60, ' ');
+      super_t::convert(reader_t::utc_leap, s, &space_node.iono_utc());
+      _header["LEAP SECONDS"] = s;
     }
     RINEX_NAV_Writer(std::ostream &out)
         : super_t(out, default_header, default_header_size) {}
@@ -912,11 +991,10 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       RINEX_NAV_Writer writer(out);
       if(!space_node.is_valid_iono_utc()){return res;}
       {
-        const typename content_t::iono_utc_t &iu(space_node.iono_utc());
-        writer.iono_alpha(iu.alpha[0], iu.alpha[1], iu.alpha[2], iu.alpha[3]);
-        writer.iono_beta(iu.beta[0], iu.beta[1], iu.beta[2], iu.beta[3]);
-        writer.utc_params(iu.A0, iu.A1, iu.t_ot, iu.WN_t);
-        writer.leap_seconds(iu.delta_t_LS);
+        writer.iono_alpha(space_node);
+        writer.iono_beta(space_node);
+        writer.utc_params(space_node);
+        writer.leap_seconds(space_node);
       }
       out << writer.header();
       res++;
