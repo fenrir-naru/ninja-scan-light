@@ -853,54 +853,54 @@ class RINEX_Writer {
   public:
     typedef struct {const char *key, *value;} header_item_t;
     
-    class header_t : public std::map<std::string, std::string> {
-      private:
-        template <class T1, class T2>
-        static void write_header_item(
-            std::ostream &out, 
-            const T1 &key, const T2 &value){
-          out << std::setw(60) << value;
-          out << std::setw(20) << key << std::endl;
+    struct header_t : public std::vector<std::pair<std::string, std::string> > {
+      typedef std::vector<std::pair<std::string, std::string> > super_t;
+
+      using super_t::operator[];
+      typename super_t::value_type::second_type operator[]( // mimic of std::map::operator[]
+          const typename super_t::value_type::first_type &key) const {
+        for(typename super_t::const_iterator it(super_t::begin()), it_end(super_t::end());
+            it != it_end; ++it){
+          if(it->first == key){return it->second;}
         }
-      public:
-        const header_item_t *mask;
-        const int mask_size;
-        header_t(
-            const header_item_t *_mask = NULL, 
-            const int _mask_size = 0) 
-            : std::map<std::string, std::string>(), mask(_mask), mask_size(_mask_size) {}
-        ~header_t() {}
-        friend std::ostream &operator<<(std::ostream &out, const header_t &header){
-          
-          std::stringstream ss;
-          ss << std::setfill(' ') << std::left;
-          if(header.mask){
-            // Output as well as sort in accordance with mask
-            for(int i(0); i < header.mask_size; i++){
-              header_t::const_iterator it(header.find(header.mask[i].key));
-              if(it != header.end()){
-                write_header_item(
-                    ss, header.mask[i].key, it->second);
-              }else if(header.mask[i].value){
-                // Default value
-                write_header_item(
-                    ss, header.mask[i].key, header.mask[i].value);
-              }
-            }
-          }else{
-            for(header_t::const_iterator it(header.begin()); 
-                it != header.end(); 
-                ++it){
-              for(unsigned int index(0); index < it->second.length(); index += 60){
-                write_header_item(
-                    ss, it->first.substr(0, 20), it->second.substr(index, 60));
-              }
-            }
-          }
-          write_header_item(ss, "END OF HEADER", "");
-          
-          return out << ss.str();
+        return typename super_t::value_type::second_type();
+      }
+      typename super_t::value_type::second_type &operator[]( // mimic of std::map::operator[]=
+          const typename super_t::value_type::first_type &key){
+        for(typename super_t::iterator it(super_t::begin()), it_end(super_t::end());
+            it != it_end; ++it){
+          if(it->first == key){return it->second;}
         }
+        super_t::push_back(typename super_t::value_type(
+            key, typename super_t::value_type::second_type()));
+        return super_t::back().second;
+      }
+      /**
+       * @param mask Defualt key-value pairs; its order is preserved for ourputs
+       * @param mask_size size of masked items
+       */
+      header_t(
+          const header_item_t *mandatory_items = NULL,
+          const int &mandatory_item_size = 0)
+          : super_t() {
+        for(int i(0); i < mandatory_item_size; i++){
+          super_t::push_back(typename super_t::value_type(
+              mandatory_items[i].key, mandatory_items[i].value ? mandatory_items[i].value : ""));
+        }
+      }
+      ~header_t() {}
+      friend std::ostream &operator<<(std::ostream &out, const header_t &header){
+        std::stringstream ss;
+        ss << std::setfill(' ') << std::left;
+        for(header_t::const_iterator it(header.begin()), it_end(header.end());
+            it != it_end; ++it){
+          ss << std::setw(60) << it->second.substr(0, 60)
+              << std::setw(20) << it->first.substr(0, 20)
+              << std::endl;
+        }
+        ss << std::setw(60) << "" << std::setw(20) << "END OF HEADER" << std::endl;
+        return out << ss.str();
+      }
     };
   protected:
     header_t _header;
