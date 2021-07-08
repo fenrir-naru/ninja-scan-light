@@ -174,7 +174,7 @@ class RINEX_Reader {
         if(str2val){
           std::string s(buf.substr(offset, length));
           int pos(s.find("D"));
-          if(pos != string::npos){
+          if(pos != std::string::npos){
             s.replace(pos, 1, "E");
           }
           std::stringstream(s) >> *(T *)value;
@@ -231,7 +231,8 @@ template <class FloatT>
 struct RINEX_NAV {
   typedef GPS_SpaceNode<FloatT> space_node_t;
   typedef typename space_node_t::Satellite::Ephemeris ephemeris_t;
-  struct message_t : public ephemeris_t {
+  struct message_t {
+    ephemeris_t eph;
     std::tm t_oc_tm;
     int t_oc_year4, t_oc_year2, t_oc_mon12;
     FloatT t_oc_sec;
@@ -242,10 +243,10 @@ struct RINEX_NAV {
     FloatT fit_interval_hr;
     FloatT dummy;
 
-    message_t() : ephemeris_t() {}
-    message_t(const ephemeris_t &eph)
-        : space_node_t::Satellite::Ephemeris(eph),
-        t_oc_tm(space_node_t::gps_time_t(eph.WN, eph.t_oc).c_tm()),
+    message_t() {}
+    message_t(const ephemeris_t &eph_)
+        : eph(eph_),
+        t_oc_tm(typename space_node_t::gps_time_t(eph.WN, eph.t_oc).c_tm()),
         t_oc_year4(t_oc_tm.tm_year + 1900),
         t_oc_year2(t_oc_tm.tm_year % 100),
         t_oc_mon12(t_oc_tm.tm_mon + 1),
@@ -260,10 +261,10 @@ struct RINEX_NAV {
     void update() {
       typename space_node_t::gps_time_t t_oc(t_oc_tm);
       t_oc += (t_oc_sec - t_oc_tm.tm_sec);
-      ephemeris_t::WN = t_oc.week;
-      ephemeris_t::t_oc = t_oc.seconds;
+      eph.WN = t_oc.week;
+      eph.t_oc = t_oc.seconds;
 
-      ephemeris_t::URA = ephemeris_t::URA_index(ura_meter); // meter to index
+      eph.URA = ephemeris_t::URA_index(ura_meter); // meter to index
 
       /* @see ftp://igs.org/pub/data/format/rinex210.txt
        * 6.7 Satellite Health
@@ -271,15 +272,15 @@ struct RINEX_NAV {
        * RINEX Value:   1    Health not OK (bits 18-22 not stored)
        * RINEX Value: >32    Health not OK (bits 18-22 stored)
        */
-      ephemeris_t::SV_health = (unsigned int)SV_health_f;
-      if(ephemeris_t::SV_health > 32){
-        ephemeris_t::SV_health &= 0x3F; // 0b111111
-      }else if(ephemeris_t::SV_health > 0){
-        ephemeris_t::SV_health = 0x20; // 0b100000
+      eph.SV_health = (unsigned int)SV_health_f;
+      if(eph.SV_health > 32){
+        eph.SV_health &= 0x3F; // 0b111111
+      }else if(eph.SV_health > 0){
+        eph.SV_health = 0x20; // 0b100000
       }
 
       // At least 4 hour validity, then, hours => seconds;
-      ephemeris_t::fit_interval = ((fit_interval_hr < 4) ? 4 : fit_interval_hr) * 60 * 60;
+      eph.fit_interval = ((fit_interval_hr < 4) ? 4 : fit_interval_hr) * 60 * 60;
     }
   };
 };
@@ -292,6 +293,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
   public:
     typedef typename RINEX_NAV<FloatT>::space_node_t space_node_t;
     typedef typename RINEX_NAV<FloatT>::message_t message_t;
+    typedef typename space_node_t::Ionospheric_UTC_Parameters iono_utc_t;
 
     static const typename super_t::convert_item_t eph0_v2[10], eph0_v3[10];
     static const typename super_t::convert_item_t eph1_v2[4], eph1_v3[4];
@@ -373,7 +375,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     ~RINEX_NAV_Reader(){}
     
     typename space_node_t::Satellite::Ephemeris next() {
-      typename space_node_t::Satellite::Ephemeris current(msg);
+      typename space_node_t::Satellite::Ephemeris current(msg.eph);
       super_t::_has_next = false;
       seek_next();
       return current;
@@ -390,7 +392,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
      * @return true when successfully obtained, otherwise false
      */
     bool extract_iono_utc(GPS_SpaceNode<FloatT> &space_node) const {
-      typename space_node_t::Ionospheric_UTC_Parameters iono_utc;
+      iono_utc_t iono_utc;
       bool alpha, beta, utc, leap;
       super_t::header_t::const_iterator it;
 
@@ -419,10 +421,9 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static const typename super_t::convert_item_t utc_v3[4];
 
     bool extract_iono_utc_v3(GPS_SpaceNode<FloatT> &space_node) const {
-      typename space_node_t::Ionospheric_UTC_Parameters iono_utc;
+      iono_utc_t iono_utc;
       bool alpha(false), beta(false), utc(false), leap(false);
       typedef super_t::header_t::const_iterator it_t;
-      typedef super_t::template conv_t<typename space_node_t::float_t> conv_t;
 
       {
         std::pair<it_t, it_t> range(_header.equal_range("IONOSPHERIC CORR"));
@@ -485,101 +486,101 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph0_v2[] = {
-  GEN_D( 0,  2,     message_t, svid, int),
+  GEN_D( 0,  2,     message_t, eph.svid, int),
   GEN_D( 3,  2,     message_t, t_oc_year2,      int),
   GEN_D( 6,  2,     message_t, t_oc_mon12,      int),
   GEN_D( 9,  2,     message_t, t_oc_tm.tm_mday, int),
   GEN_D(12,  2,     message_t, t_oc_tm.tm_hour, int),
   GEN_D(15,  2,     message_t, t_oc_tm.tm_min,  int),
   GEN_F(17,  5,  1, message_t, t_oc_sec),
-  GEN_E(22, 19, 12, message_t, a_f0),
-  GEN_E(41, 19, 12, message_t, a_f1),
-  GEN_E(60, 19, 12, message_t, a_f2),
+  GEN_E(22, 19, 12, message_t, eph.a_f0),
+  GEN_E(41, 19, 12, message_t, eph.a_f1),
+  GEN_E(60, 19, 12, message_t, eph.a_f2),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph0_v3[] = {
-  GEN_D( 1,  2,     message_t, svid, int),
+  GEN_D( 1,  2,     message_t, eph.svid, int),
   GEN_D( 4,  4,     message_t, t_oc_year4,      int),
   GEN_D( 9,  2,     message_t, t_oc_mon12,      int),
   GEN_D(12,  2,     message_t, t_oc_tm.tm_mday, int),
   GEN_D(15,  2,     message_t, t_oc_tm.tm_hour, int),
   GEN_D(18,  2,     message_t, t_oc_tm.tm_min,  int),
   GEN_D(21,  2,     message_t, t_oc_tm.tm_sec,  int),
-  GEN_E(23, 19, 12, message_t, a_f0),
-  GEN_E(42, 19, 12, message_t, a_f1),
-  GEN_E(61, 19, 12, message_t, a_f2),
+  GEN_E(23, 19, 12, message_t, eph.a_f0),
+  GEN_E(42, 19, 12, message_t, eph.a_f1),
+  GEN_E(61, 19, 12, message_t, eph.a_f2),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_v2[] = {
-  GEN_E( 3, 19, 12, message_t, iode),
-  GEN_E(22, 19, 12, message_t, c_rs),
-  GEN_E(41, 19, 12, message_t, delta_n),
-  GEN_E(60, 19, 12, message_t, M0),
+  GEN_E( 3, 19, 12, message_t, eph.iode),
+  GEN_E(22, 19, 12, message_t, eph.c_rs),
+  GEN_E(41, 19, 12, message_t, eph.delta_n),
+  GEN_E(60, 19, 12, message_t, eph.M0),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_v3[] = {
-  GEN_E( 4, 19, 12, message_t, iode),
-  GEN_E(23, 19, 12, message_t, c_rs),
-  GEN_E(42, 19, 12, message_t, delta_n),
-  GEN_E(61, 19, 12, message_t, M0),
+  GEN_E( 4, 19, 12, message_t, eph.iode),
+  GEN_E(23, 19, 12, message_t, eph.c_rs),
+  GEN_E(42, 19, 12, message_t, eph.delta_n),
+  GEN_E(61, 19, 12, message_t, eph.M0),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph2_v2[] = {
-  GEN_E( 3, 19, 12, message_t, c_uc),
-  GEN_E(22, 19, 12, message_t, e),
-  GEN_E(41, 19, 12, message_t, c_us),
-  GEN_E(60, 19, 12, message_t, sqrt_A),
+  GEN_E( 3, 19, 12, message_t, eph.c_uc),
+  GEN_E(22, 19, 12, message_t, eph.e),
+  GEN_E(41, 19, 12, message_t, eph.c_us),
+  GEN_E(60, 19, 12, message_t, eph.sqrt_A),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph2_v3[] = {
-  GEN_E( 4, 19, 12, message_t, c_uc),
-  GEN_E(23, 19, 12, message_t, e),
-  GEN_E(42, 19, 12, message_t, c_us),
-  GEN_E(61, 19, 12, message_t, sqrt_A),
+  GEN_E( 4, 19, 12, message_t, eph.c_uc),
+  GEN_E(23, 19, 12, message_t, eph.e),
+  GEN_E(42, 19, 12, message_t, eph.c_us),
+  GEN_E(61, 19, 12, message_t, eph.sqrt_A),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph3_v2[] = {
-  GEN_E( 3, 19, 12, message_t, t_oe),
-  GEN_E(22, 19, 12, message_t, c_ic),
-  GEN_E(41, 19, 12, message_t, Omega0),
-  GEN_E(60, 19, 12, message_t, c_is),
+  GEN_E( 3, 19, 12, message_t, eph.t_oe),
+  GEN_E(22, 19, 12, message_t, eph.c_ic),
+  GEN_E(41, 19, 12, message_t, eph.Omega0),
+  GEN_E(60, 19, 12, message_t, eph.c_is),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph3_v3[] = {
-  GEN_E( 4, 19, 12, message_t, t_oe),
-  GEN_E(23, 19, 12, message_t, c_ic),
-  GEN_E(42, 19, 12, message_t, Omega0),
-  GEN_E(61, 19, 12, message_t, c_is),
+  GEN_E( 4, 19, 12, message_t, eph.t_oe),
+  GEN_E(23, 19, 12, message_t, eph.c_ic),
+  GEN_E(42, 19, 12, message_t, eph.Omega0),
+  GEN_E(61, 19, 12, message_t, eph.c_is),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph4_v2[] = {
-  GEN_E( 3, 19, 12, message_t, i0),
-  GEN_E(22, 19, 12, message_t, c_rc),
-  GEN_E(41, 19, 12, message_t, omega),
-  GEN_E(60, 19, 12, message_t, dot_Omega0),
+  GEN_E( 3, 19, 12, message_t, eph.i0),
+  GEN_E(22, 19, 12, message_t, eph.c_rc),
+  GEN_E(41, 19, 12, message_t, eph.omega),
+  GEN_E(60, 19, 12, message_t, eph.dot_Omega0),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph4_v3[] = {
-  GEN_E( 4, 19, 12, message_t, i0),
-  GEN_E(23, 19, 12, message_t, c_rc),
-  GEN_E(42, 19, 12, message_t, omega),
-  GEN_E(61, 19, 12, message_t, dot_Omega0),
+  GEN_E( 4, 19, 12, message_t, eph.i0),
+  GEN_E(23, 19, 12, message_t, eph.c_rc),
+  GEN_E(42, 19, 12, message_t, eph.omega),
+  GEN_E(61, 19, 12, message_t, eph.dot_Omega0),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph5_v2[] = {
-  GEN_E( 3, 19, 12, message_t, dot_i0),
+  GEN_E( 3, 19, 12, message_t, eph.dot_i0),
   GEN_E(22, 19, 12, message_t, dummy), // Codes on L2 channel
   GEN_E(41, 19, 12, message_t, t_oe_WN),
   GEN_E(60, 19, 12, message_t, dummy), // L2 P data flag
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph5_v3[] = {
-  GEN_E( 4, 19, 12, message_t, dot_i0),
+  GEN_E( 4, 19, 12, message_t, eph.dot_i0),
   GEN_E(23, 19, 12, message_t, dummy), // Codes on L2 channel
   GEN_E(42, 19, 12, message_t, t_oe_WN),
   GEN_E(61, 19, 12, message_t, dummy), // L2 P data flag
@@ -589,15 +590,15 @@ template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v2[] = {
   GEN_E( 3, 19, 12, message_t, ura_meter),
   GEN_E(22, 19, 12, message_t, SV_health_f),
-  GEN_E(41, 19, 12, message_t, t_GD),
-  GEN_E(60, 19, 12, message_t, iodc),
+  GEN_E(41, 19, 12, message_t, eph.t_GD),
+  GEN_E(60, 19, 12, message_t, eph.iodc),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v3[] = {
   GEN_E( 4, 19, 12, message_t, ura_meter),
   GEN_E(23, 19, 12, message_t, SV_health_f),
-  GEN_E(42, 19, 12, message_t, t_GD),
-  GEN_E(61, 19, 12, message_t, iodc),
+  GEN_E(42, 19, 12, message_t, eph.t_GD),
+  GEN_E(61, 19, 12, message_t, eph.iodc),
 };
 
 template <class FloatT>
@@ -613,56 +614,56 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_alpha_v2[] = {
-  GEN_E( 2, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[0]),
-  GEN_E(14, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[1]),
-  GEN_E(26, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[2]),
-  GEN_E(38, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[3]),
+  GEN_E( 2, 12, 4, iono_utc_t, alpha[0]),
+  GEN_E(14, 12, 4, iono_utc_t, alpha[1]),
+  GEN_E(26, 12, 4, iono_utc_t, alpha[2]),
+  GEN_E(38, 12, 4, iono_utc_t, alpha[3]),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_beta_v2[] = {
-  GEN_E( 2, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[0]),
-  GEN_E(14, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[1]),
-  GEN_E(26, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[2]),
-  GEN_E(38, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[3]),
+  GEN_E( 2, 12, 4, iono_utc_t, beta[0]),
+  GEN_E(14, 12, 4, iono_utc_t, beta[1]),
+  GEN_E(26, 12, 4, iono_utc_t, beta[2]),
+  GEN_E(38, 12, 4, iono_utc_t, beta[3]),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_v2[] = {
-  GEN_E(  3, 19, 12, space_node_t::Ionospheric_UTC_Parameters, A0),
-  GEN_E( 22, 19, 12, space_node_t::Ionospheric_UTC_Parameters, A1),
-  GEN_D( 41,  9,     space_node_t::Ionospheric_UTC_Parameters, t_ot, int),
-  GEN_D( 50,  9,     space_node_t::Ionospheric_UTC_Parameters, WN_t, int),
+  GEN_E(  3, 19, 12, iono_utc_t, A0),
+  GEN_E( 22, 19, 12, iono_utc_t, A1),
+  GEN_D( 41,  9,     iono_utc_t, t_ot, int),
+  GEN_D( 50,  9,     iono_utc_t, WN_t, int),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_leap[] = {
-  GEN_D(0, 6, space_node_t::Ionospheric_UTC_Parameters, delta_t_LS, int),
+  GEN_D(0, 6, iono_utc_t, delta_t_LS, int),
 };
 
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_alpha_v3[] = {
-  GEN_E( 5, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[0]),
-  GEN_E(17, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[1]),
-  GEN_E(29, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[2]),
-  GEN_E(41, 12, 4, space_node_t::Ionospheric_UTC_Parameters, alpha[3]),
+  GEN_E( 5, 12, 4, iono_utc_t, alpha[0]),
+  GEN_E(17, 12, 4, iono_utc_t, alpha[1]),
+  GEN_E(29, 12, 4, iono_utc_t, alpha[2]),
+  GEN_E(41, 12, 4, iono_utc_t, alpha[3]),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_beta_v3[] = {
-  GEN_E( 5, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[0]),
-  GEN_E(17, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[1]),
-  GEN_E(29, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[2]),
-  GEN_E(41, 12, 4, space_node_t::Ionospheric_UTC_Parameters, beta[3]),
+  GEN_E( 5, 12, 4, iono_utc_t, beta[0]),
+  GEN_E(17, 12, 4, iono_utc_t, beta[1]),
+  GEN_E(29, 12, 4, iono_utc_t, beta[2]),
+  GEN_E(41, 12, 4, iono_utc_t, beta[3]),
 };
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_v3[] = {
-  GEN_F(  5, 17, 10, space_node_t::Ionospheric_UTC_Parameters, A0),
-  GEN_F( 22, 16,  9, space_node_t::Ionospheric_UTC_Parameters, A1),
-  GEN_D( 39,  6,     space_node_t::Ionospheric_UTC_Parameters, t_ot, int),
-  GEN_D( 46,  4,     space_node_t::Ionospheric_UTC_Parameters, WN_t, int),
+  GEN_F(  5, 17, 10, iono_utc_t, A0),
+  GEN_F( 22, 16,  9, iono_utc_t, A1),
+  GEN_D( 39,  6,     iono_utc_t, t_ot, int),
+  GEN_D( 46,  4,     iono_utc_t, WN_t, int),
 };
 
 #undef GEN_D
