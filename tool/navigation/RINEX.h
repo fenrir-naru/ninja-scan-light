@@ -857,23 +857,59 @@ class RINEX_Writer {
       typedef std::vector<std::pair<std::string, std::string> > super_t;
 
       using super_t::operator[];
-      typename super_t::value_type::second_type operator[]( // mimic of std::map::operator[]
-          const typename super_t::value_type::first_type &key) const {
-        for(typename super_t::const_iterator it(super_t::begin()), it_end(super_t::end());
-            it != it_end; ++it){
-          if(it->first == key){return it->second;}
+      struct bracket_accessor_t {
+        header_t &header;
+        typename super_t::value_type::first_type key;
+        typename super_t::iterator it_head, it_tail;
+        bracket_accessor_t(header_t &_header, const typename super_t::value_type::first_type &_key)
+            : header(_header), key(_key), it_head(header.end()), it_tail(header.end()) {
+          for(typename super_t::iterator it(header.begin()), it_end(header.end());
+              it != it_end; ++it){
+            if(it->first != key){continue;}
+            it_head = it;
+            break;
+          }
+          for(typename super_t::reverse_iterator it(header.rbegin()), it_end(header.rend());
+              it != it_end; ++it){
+            if(it->first != key){continue;}
+            it_tail = it.base() - 1;
+            break;
+          }
         }
-        return typename super_t::value_type::second_type();
-      }
-      typename super_t::value_type::second_type &operator[]( // mimic of std::map::operator[]=
+        /**
+         * replace value corresponding to key with erase of other entries having the same key
+         */
+        bracket_accessor_t &operator=(
+            const typename super_t::value_type::second_type &value){
+          if(it_head == header.end()){
+            header.push_back(typename super_t::value_type(key, value));
+            it_head = it_tail = header.rbegin().base();
+            return *this;
+          }
+          it_head->second = value;
+          for(; it_tail != it_head; --it_tail){
+            if(it_tail->first == key){continue;}
+            header.erase(it_tail);
+          }
+          return *this;
+        }
+        /**
+         * add value corresponding to key after the last entry having the same key
+         */
+        bracket_accessor_t &operator<<(
+            const typename super_t::value_type::second_type &value){
+          if(it_tail == header.end()){
+            header.push_back(typename super_t::value_type(key, value));
+            it_head = it_tail = header.rbegin().base();
+            return *this;
+          }
+          header.insert(++it_tail, typename super_t::value_type(key, value));
+          return *this;
+        }
+      };
+      bracket_accessor_t operator[]( // mimic of std::map::operator[]=
           const typename super_t::value_type::first_type &key){
-        for(typename super_t::iterator it(super_t::begin()), it_end(super_t::end());
-            it != it_end; ++it){
-          if(it->first == key){return it->second;}
-        }
-        super_t::push_back(typename super_t::value_type(
-            key, typename super_t::value_type::second_type()));
-        return super_t::back().second;
+        return bracket_accessor_t(*this, key);
       }
       /**
        * @param mask Defualt key-value pairs; its order is preserved for ourputs
