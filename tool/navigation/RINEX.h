@@ -49,6 +49,7 @@
 #include <exception>
 #include <algorithm>
 #include <cstddef>
+#include <cstring>
 
 #include "GPS.h"
 
@@ -62,32 +63,43 @@ class RINEX_Reader {
     header_t _header;
     std::istream &src;
     bool _has_next;
-    int version;
-    enum {
-      RINEX_FILE_UNKNOWN = 0,
-      RINEX_FILE_OBSERVATION,
-      RINEX_FILE_NAVIGATION,
-      RINEX_FILE_METEOROLOGICAL,
-    } file_type;
-    enum {
-      RINEX_SYS_UNKNOWN = 0,
-      RINEX_SYS_GPS,
-      RINEX_SYS_GLONASS,
-      RINEX_SYS_GALILEO,
-      RINEX_SYS_QZSS,
-      RINEX_SYS_BDS,
-      RINEX_SYS_IRNSS,
-      RINEX_SYS_SBAS,
-      RINEX_SYS_TRANSIT,
-      RINEX_SYS_MIXED,
-    } sat_system;
     
+  public:
+    struct version_type_t {
+      int version;
+      enum file_type_t {
+        FTYPE_UNKNOWN = 0,
+        FTYPE_OBSERVATION,
+        FTYPE_NAVIGATION,
+        FTYPE_METEOROLOGICAL,
+      } file_type;
+      enum sat_system_t {
+        SYS_UNKNOWN = 0,
+        SYS_GPS,
+        SYS_GLONASS,
+        SYS_GALILEO,
+        SYS_QZSS,
+        SYS_BDS,
+        SYS_IRNSS,
+        SYS_SBAS,
+        SYS_TRANSIT,
+        SYS_MIXED,
+      } sat_system;
+      version_type_t(
+          const int &ver = 0, const file_type_t &ftype = FTYPE_UNKNOWN, const sat_system_t &sys = SYS_UNKNOWN)
+          : version(ver), file_type(ftype), sat_system(sys) {}
+      void parse(const std::string &buf);
+      void dump(std::string &buf) const;
+    };
+  protected:
+    version_type_t version_type;
+
   public:
     RINEX_Reader(
         std::istream &in,
         std::string &(*modify_header)(std::string &, std::string &) = NULL)
         : src(in), _has_next(false),
-        version(0), file_type(RINEX_FILE_UNKNOWN), sat_system(RINEX_SYS_UNKNOWN) {
+        version_type() {
       if(src.fail()){return;}
       
       char buf[256];
@@ -116,26 +128,7 @@ class RINEX_Reader {
       // version and type extraction
       for(const header_t::const_iterator it(_header.find("RINEX VERSION / TYPE"));
           it != _header.end(); ){
-        version = std::atoi(it->second.substr(0, 6).c_str()) * 100
-            + std::atoi(it->second.substr(7, 2).c_str());
-        switch(it->second[20]){
-          case 'O': file_type = RINEX_FILE_OBSERVATION;    break;
-          case 'N': file_type = RINEX_FILE_NAVIGATION;     break;
-          case 'M': file_type = RINEX_FILE_METEOROLOGICAL; break;
-        }
-        if((file_type == RINEX_FILE_NAVIGATION) || (file_type == RINEX_FILE_OBSERVATION)){
-          switch(it->second[40]){
-            case 'G': sat_system = RINEX_SYS_GPS;     break;
-            case 'R': sat_system = RINEX_SYS_GLONASS; break;
-            case 'E': sat_system = RINEX_SYS_GALILEO; break;
-            case 'J': sat_system = RINEX_SYS_QZSS;    break;
-            case 'C': sat_system = RINEX_SYS_BDS;     break;
-            case 'I': sat_system = RINEX_SYS_IRNSS;   break;
-            case 'S': sat_system = RINEX_SYS_SBAS;    break;
-            case 'M': sat_system = RINEX_SYS_MIXED;   break;
-            case 'T': sat_system = RINEX_SYS_TRANSIT; break; // ver.2 only
-          }
-        }
+        version_type.parse(it->second);
         break;
       }
 
@@ -153,7 +146,7 @@ class RINEX_Reader {
           std::stringstream(buf.substr(offset, length)) >> *(T *)value;
         }else{
           std::stringstream ss;
-          ss << std::setfill(' ') << std::right << std::setw(length) << *(T *)value;
+          ss << std::setfill(opt == 1 ? '0' : ' ') << std::right << std::setw(length) << *(T *)value;
           buf.replace(offset, length, ss.str());
         }
       }
@@ -226,6 +219,121 @@ class RINEX_Reader {
       convert(items, N, buf, values);
     }
 };
+
+template <class U>
+void RINEX_Reader<U>::version_type_t::parse(const std::string &buf){
+  int temp;
+  conv_t<int>::d(const_cast<std::string &>(buf), 0, 6, &temp);
+  version = temp * 100;
+  conv_t<int>::d(const_cast<std::string &>(buf), 7, 2, &temp);
+  version += temp;
+  switch(version / 100){
+    case 2:
+      switch(buf[20]){
+        case 'O':
+          file_type = FTYPE_OBSERVATION;
+          switch(buf[40]){
+            case ' ':
+            case 'G': sat_system = SYS_GPS;     break;
+            case 'R': sat_system = SYS_GLONASS; break;
+            case 'S': sat_system = SYS_SBAS;    break;
+            case 'M': sat_system = SYS_MIXED;   break;
+            case 'T': sat_system = SYS_TRANSIT; break;
+          }
+          break;
+        case 'M': file_type = FTYPE_METEOROLOGICAL; break;
+        case 'N': file_type = FTYPE_NAVIGATION; sat_system = SYS_GPS;     break;
+        case 'G': file_type = FTYPE_NAVIGATION; sat_system = SYS_GLONASS; break;
+        case 'H': file_type = FTYPE_NAVIGATION;
+          sat_system = SYS_SBAS; // TODO: Is geostational as SBAS?
+          break;
+      }
+      break;
+    case 3:
+      switch(buf[20]){
+        case 'O': file_type = FTYPE_OBSERVATION;    break;
+        case 'N': file_type = FTYPE_NAVIGATION;     break;
+        case 'M': file_type = FTYPE_METEOROLOGICAL; break;
+      }
+      if((file_type == FTYPE_OBSERVATION) || (file_type == FTYPE_NAVIGATION)){
+        switch(buf[40]){
+          case 'G': sat_system = SYS_GPS;     break;
+          case 'R': sat_system = SYS_GLONASS; break;
+          case 'E': sat_system = SYS_GALILEO; break;
+          case 'J': sat_system = SYS_QZSS;    break;
+          case 'C': sat_system = SYS_BDS;     break;
+          case 'I': sat_system = SYS_IRNSS;   break;
+          case 'S': sat_system = SYS_SBAS;    break;
+          case 'M': sat_system = SYS_MIXED;   break;
+        }
+      }
+      break;
+  }
+}
+template <class U>
+void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
+  int temp;
+  conv_t<int>::d(buf, 0, 6, &(temp = version / 100), 0, false);
+  if(version % 100 != 0){
+    buf[6] = '.';
+    conv_t<int>::d(buf, 7, 2, &(temp = version % 100), 1, false);
+  }
+  const char *type_str(NULL), *sys_str(NULL);
+  switch(version / 100){
+    case 2: {
+      switch(file_type){
+        case FTYPE_OBSERVATION: {
+          type_str = "OBSERVATION DATA";
+          switch(sat_system){
+            case SYS_GPS:     sys_str = "G: GPS";     break;
+            case SYS_GLONASS: sys_str = "R: GLONASS"; break;
+            case SYS_SBAS:    sys_str = "S: Geostat"; break;
+            case SYS_MIXED:   sys_str = "M: MIXED";   break;
+            case SYS_TRANSIT: sys_str = "T: TRANSIT"; break;
+          }
+          break;
+        }
+        case FTYPE_NAVIGATION:
+          switch(sat_system){
+            case SYS_GPS:     type_str = "N: GPS NAV DATA";     break;
+            case SYS_GLONASS: type_str = "G: GLONASS NAV DATA"; break;
+            case SYS_SBAS:    type_str = "H: GEO NAV MSG DATA"; break;
+          }
+          break;
+        case FTYPE_METEOROLOGICAL: type_str = "METEOROLOGICAL DATA"; break;
+      }
+      break;
+    }
+    case 3: {
+      switch(file_type){
+        case FTYPE_OBSERVATION:    type_str = "OBSERVATION DATA";    break;
+        case FTYPE_NAVIGATION:     type_str = "N: GNSS NAV DATA";    break;
+        case FTYPE_METEOROLOGICAL: type_str = "METEOROLOGICAL DATA"; break;
+      }
+      if((file_type != FTYPE_OBSERVATION) && (file_type != FTYPE_NAVIGATION)){break;}
+      switch(sat_system){
+        case SYS_GPS:     sys_str = "G: GPS";     break;
+        case SYS_GLONASS: sys_str = "R: GLONASS"; break;
+        case SYS_GALILEO: sys_str = "G: GALILEO"; break;
+        case SYS_QZSS:    sys_str = "Q: QZSS";    break;
+        case SYS_BDS:     sys_str = "B: BDS";     break;
+        case SYS_IRNSS:   sys_str = "I: IRNSS";   break;
+        case SYS_SBAS:    sys_str = "S: SBAS";    break;
+        case SYS_MIXED:   sys_str = "M: MIXED";   break;
+      }
+      break;
+    }
+  }
+  if(type_str){
+    int n(std::strlen(type_str));
+    buf.replace(20, n, type_str, n);
+  }
+  if(sys_str){
+    int n(std::strlen(sys_str));
+    buf.replace(40, n, sys_str, n);
+  }
+}
+
 
 template <class FloatT>
 struct RINEX_NAV {
@@ -365,7 +473,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     }
 
     void seek_next() {
-      super_t::version >= 300 ? seek_next_v3() : seek_next_v2();
+      super_t::version_type.version >= 300 ? seek_next_v3() : seek_next_v2();
     }
 
   public:
@@ -462,7 +570,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static int read_all(std::istream &in, space_node_t &space_node){
       int res(-1);
       RINEX_NAV_Reader reader(in);
-      (reader.version >= 300)
+      (reader.version_type.version >= 300)
           ? reader.extract_iono_utc_v3(space_node)
           : reader.extract_iono_utc(space_node);
       res++;
@@ -477,6 +585,9 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
 #define GEN_D(offset, length, container_type, container_member, value_type) \
     {super_t::template conv_t<value_type>::d, offset, length, \
       offsetof(container_type, container_member)}
+#define GEN_I(offset, length, container_type, container_member, value_type) \
+    {super_t::template conv_t<value_type>::d, offset, length, \
+      offsetof(container_type, container_member), 1}
 #define GEN_F(offset, length, precision, container_type, container_member) \
     {super_t::template conv_t<typename space_node_t::float_t>::f, offset, length, \
       offsetof(container_type, container_member), precision}
@@ -499,13 +610,13 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph0_v3[] = {
-  GEN_D( 1,  2,     message_t, eph.svid, int),
-  GEN_D( 4,  4,     message_t, t_oc_year4,      int),
-  GEN_D( 9,  2,     message_t, t_oc_mon12,      int),
-  GEN_D(12,  2,     message_t, t_oc_tm.tm_mday, int),
-  GEN_D(15,  2,     message_t, t_oc_tm.tm_hour, int),
-  GEN_D(18,  2,     message_t, t_oc_tm.tm_min,  int),
-  GEN_D(21,  2,     message_t, t_oc_tm.tm_sec,  int),
+  GEN_I( 1,  2,     message_t, eph.svid, int),
+  GEN_I( 4,  4,     message_t, t_oc_year4,      int),
+  GEN_I( 9,  2,     message_t, t_oc_mon12,      int),
+  GEN_I(12,  2,     message_t, t_oc_tm.tm_mday, int),
+  GEN_I(15,  2,     message_t, t_oc_tm.tm_hour, int),
+  GEN_I(18,  2,     message_t, t_oc_tm.tm_min,  int),
+  GEN_I(21,  2,     message_t, t_oc_tm.tm_sec,  int),
   GEN_E(23, 19, 12, message_t, eph.a_f0),
   GEN_E(42, 19, 12, message_t, eph.a_f1),
   GEN_E(61, 19, 12, message_t, eph.a_f2),
@@ -667,6 +778,7 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 };
 
 #undef GEN_D
+#undef GEN_I
 #undef GEN_F
 #undef GEN_E
 
@@ -851,6 +963,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
 template <class U = void>
 class RINEX_Writer {
   public:
+    typedef typename RINEX_Reader<U>::version_type_t version_type_t;
     typedef struct {const char *key, *value;} header_item_t;
     
     struct header_t : public std::vector<std::pair<std::string, std::string> > {
@@ -939,17 +1052,24 @@ class RINEX_Writer {
       }
     };
   protected:
+    version_type_t _version_type;
     header_t _header;
     std::ostream &dist;
     
+    void set_version_type(const version_type_t &version_type){
+      _version_type = version_type;
+      std::string buf(60, ' ');
+      _version_type.dump(buf);
+      _header["RINEX VERSION / TYPE"] = buf;
+    }
+
   public:
     typedef RINEX_Writer<U> self_t;
     RINEX_Writer(
         std::ostream &out,
         const header_item_t *header_mask = NULL, 
         const int header_mask_size = 0) 
-        : _header(header_mask, header_mask_size), dist(out) {
-      
+        : _version_type(), _header(header_mask, header_mask_size), dist(out) {
     }
     virtual ~RINEX_Writer() {_header.clear();}
 
@@ -1011,18 +1131,42 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     static const int default_header_size;
     void iono_alpha(const space_node_t &space_node){
       std::string s(60, ' ');
-      super_t::convert(reader_t::iono_alpha_v2, s, &space_node.iono_utc());
-      _header["ION ALPHA"] = s;
+      switch(super_t::_version_type.version / 100){
+        case 2:
+          super_t::convert(reader_t::iono_alpha_v2, s, &space_node.iono_utc());
+          _header["ION ALPHA"] = s;
+          break;
+        case 3:
+          super_t::convert(reader_t::iono_alpha_v3, s, &space_node.iono_utc());
+          _header["IONOSPHERIC CORR"] << s.replace(0, 4, "GPSA", 4);
+          break;
+      }
     }
     void iono_beta(const space_node_t &space_node){
       std::string s(60, ' ');
-      super_t::convert(reader_t::iono_beta_v2, s, &space_node.iono_utc());
-      _header["ION BETA"] = s;
+      switch(super_t::_version_type.version / 100){
+        case 2:
+          super_t::convert(reader_t::iono_beta_v2, s, &space_node.iono_utc());
+          _header["ION BETA"] = s;
+          break;
+        case 3:
+          super_t::convert(reader_t::iono_beta_v3, s, &space_node.iono_utc());
+          _header["IONOSPHERIC CORR"] << s.replace(0, 4, "GPSB", 4);
+          break;
+      }
     }
     void utc_params(const space_node_t &space_node){
       std::string s(60, ' ');
-      super_t::convert(reader_t::utc_v2, s, &space_node.iono_utc());
-      _header["DELTA UTC: A0,A1,T,W"] = s;
+      switch(super_t::_version_type.version / 100){
+        case 2:
+          super_t::convert(reader_t::utc_v2, s, &space_node.iono_utc());
+          _header["DELTA UTC: A0,A1,T,W"] = s;
+          break;
+        case 3:
+          super_t::convert(reader_t::utc_v3, s, &space_node.iono_utc());
+          _header["TIME SYSTEM CORR"] << s.replace(0, 4, "GPUT", 4);
+          break;
+      }
     }
     void leap_seconds(const space_node_t &space_node){
       std::string s(60, ' ');
@@ -1032,21 +1176,42 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     RINEX_NAV_Writer(std::ostream &out)
         : super_t(out, default_header, default_header_size) {}
     ~RINEX_NAV_Writer(){}
+
     self_t &operator<<(const message_t &msg){
       std::stringstream buf;
-      for(int i(0); i < 8; ++i){
-        std::string s(80, ' ');
-        switch(i){
-          case 0: super_t::convert(reader_t::eph0_v2, s, &msg); break;
-          case 1: super_t::convert(reader_t::eph1_v2, s, &msg); break;
-          case 2: super_t::convert(reader_t::eph2_v2, s, &msg); break;
-          case 3: super_t::convert(reader_t::eph3_v2, s, &msg); break;
-          case 4: super_t::convert(reader_t::eph4_v2, s, &msg); break;
-          case 5: super_t::convert(reader_t::eph5_v2, s, &msg); break;
-          case 6: super_t::convert(reader_t::eph6_v2, s, &msg); break;
-          case 7: super_t::convert(reader_t::eph7_v2, s, &msg); break;
-        }
-        buf << s << std::endl;
+      switch(super_t::_version_type.version / 100){
+        case 2:
+          for(int i(0); i < 8; ++i){
+            std::string s(80, ' ');
+            switch(i){
+              case 0: super_t::convert(reader_t::eph0_v2, s, &msg); break;
+              case 1: super_t::convert(reader_t::eph1_v2, s, &msg); break;
+              case 2: super_t::convert(reader_t::eph2_v2, s, &msg); break;
+              case 3: super_t::convert(reader_t::eph3_v2, s, &msg); break;
+              case 4: super_t::convert(reader_t::eph4_v2, s, &msg); break;
+              case 5: super_t::convert(reader_t::eph5_v2, s, &msg); break;
+              case 6: super_t::convert(reader_t::eph6_v2, s, &msg); break;
+              case 7: super_t::convert(reader_t::eph7_v2, s, &msg); break;
+            }
+            buf << s << std::endl;
+          }
+          break;
+        case 3:
+          for(int i(0); i < 8; ++i){
+            std::string s(80, ' ');
+            switch(i){
+              case 0: super_t::convert(reader_t::eph0_v3, s, &msg); s[0] = 'G'; break;
+              case 1: super_t::convert(reader_t::eph1_v3, s, &msg); break;
+              case 2: super_t::convert(reader_t::eph2_v3, s, &msg); break;
+              case 3: super_t::convert(reader_t::eph3_v3, s, &msg); break;
+              case 4: super_t::convert(reader_t::eph4_v3, s, &msg); break;
+              case 5: super_t::convert(reader_t::eph5_v3, s, &msg); break;
+              case 6: super_t::convert(reader_t::eph6_v3, s, &msg); break;
+              case 7: super_t::convert(reader_t::eph7_v3, s, &msg); break;
+            }
+            buf << s << std::endl;
+          }
+          break;
       }
       dist << buf.str();
       return *this;
@@ -1063,11 +1228,12 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     };
 
   public:
-    static int write_all(std::ostream &out, const space_node_t &space_node){
+    static int write_all(std::ostream &out, const space_node_t &space_node, const int &version = 304){
       int res(-1);
       RINEX_NAV_Writer writer(out);
-      if(!space_node.is_valid_iono_utc()){return res;}
-      {
+      writer.set_version_type(typename super_t::version_type_t(
+          version, super_t::version_type_t::FTYPE_NAVIGATION, super_t::version_type_t::SYS_GPS));
+      if(space_node.is_valid_iono_utc()){
         writer.iono_alpha(space_node);
         writer.iono_beta(space_node);
         writer.utc_params(space_node);
@@ -1091,11 +1257,7 @@ template <class FloatT>
 const typename RINEX_Writer<>::header_item_t RINEX_NAV_Writer<FloatT>::default_header[] = {
     {"RINEX VERSION / TYPE",
         "     2              NAVIGATION DATA"},
-    {"COMMENT", NULL},
-    {"ION ALPHA", NULL},
-    {"ION BETA", NULL},
-    {"DELTA UTC: A0,A1,T,W", NULL},
-    {"LEAP SECONDS", NULL}};
+    {"PGM / RUN BY / DATE", NULL}};
 template <class FloatT>
 const int RINEX_NAV_Writer<FloatT>::default_header_size
     = sizeof(RINEX_NAV_Writer<FloatT>::default_header) / sizeof(RINEX_NAV_Writer<FloatT>::default_header[0]);
