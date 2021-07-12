@@ -1171,7 +1171,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       switch(super_t::_version_type.version / 100){
         case 2:
           super_t::convert(reader_t::utc_v2, s, &space_node.iono_utc());
-          _header["DELTA UTC: A0,A1,T,W"] = s;
+          _header["DELTA-UTC: A0,A1,T,W"] = s;
           break;
         case 3:
           super_t::convert(reader_t::utc_v3, s, &space_node.iono_utc());
