@@ -1136,6 +1136,21 @@ class RINEX_Writer {
         const typename RINEX_Reader<U>::convert_item_t (&items)[N], std::string &buf, const void *values){
       convert(items, N, buf, values);
     }
+
+    void pgm_runby_date(
+        const std::string &pgm, const std::string &runby,
+        const std::tm &t, const char *tz = "UTC"){
+      // ex) "XXRINEXO V9.9       AIUB                19900912 124300 UTC"
+      char buf[21] = {0};
+      std::strftime(buf, sizeof(buf) - 1, "%Y%m%d %H%M%S", &t);
+      std::sprintf(&buf[15], " %-4s", tz);
+      std::stringstream ss;
+      ss << std::setfill(' ') << std::left
+          << std::setw(20) << pgm.substr(0, 20)
+          << std::setw(20) << runby.substr(0, 20)
+          << buf;
+      _header["PGM / RUN BY / DATE"] = ss.str();
+    }
 };
 
 template <class FloatT>
@@ -1309,19 +1324,6 @@ class RINEX_OBS_Writer : public RINEX_Writer<> {
   public:
     static const header_item_t default_header[];
     static const int default_header_size;
-    void pgm_runby_date(
-        const std::string &pgm, const std::string &runby,
-        const struct tm &t){
-      // ex) "XXRINEXO V9.9       AIUB                12-SEP-90 12:43"
-      char buf[20] = {0};
-      std::strftime(buf, sizeof(buf) - 1, "%d-%b-%y %H:%M", &t);
-      std::stringstream ss;
-      ss << std::setfill(' ') << std::left 
-          << std::setw(20) << pgm.substr(0, 20)
-          << std::setw(20) << runby.substr(0, 20)
-          << buf;
-      _header["PGM / RUN BY / DATE"] = ss.str();
-    }
     void maker_name(
         const std::string &name){
       _header["MARKER NAME"] = name.substr(0, 60);

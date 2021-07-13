@@ -112,7 +112,9 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
   {
     std::stringstream ss;
     writer_t writer(ss);
-    writer.header()["PGM / RUN BY / DATE"] = "NetR9 5.45          Receiver Operator   20210526 000001 UTC";
+    //writer.header()["PGM / RUN BY / DATE"] = "NetR9 5.45          Receiver Operator   20210526 000001 UTC";
+    std::tm t_header = {1, 0, 0, 26, 5 - 1, 2021 - 1900};
+    writer.pgm_runby_date("NetR9 5.45", "Receiver Operator", t_header, "UTC");
     writer.write_all(space_node, 302);
     dist = ss.str();
     dist.replace(13 * 81 +  5, 18, " .200000000000D+01"); // overwrite SV accuracy
