@@ -492,14 +492,14 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static const typename super_t::convert_item_t iono_alpha_v2[4];
     static const typename super_t::convert_item_t iono_beta_v2[4];
     static const typename super_t::convert_item_t utc_v2[4];
-    static const typename super_t::convert_item_t utc_leap[1];
+    static const typename super_t::convert_item_t utc_leap_v2[1];
 
     /**
      * Obtain ionospheric delay coefficient and UTC parameters.
      * 
      * @return true when successfully obtained, otherwise false
      */
-    bool extract_iono_utc(GPS_SpaceNode<FloatT> &space_node) const {
+    bool extract_iono_utc_v2(GPS_SpaceNode<FloatT> &space_node) const {
       iono_utc_t iono_utc;
       bool alpha, beta, utc, leap;
       super_t::header_t::const_iterator it;
@@ -517,7 +517,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       }
 
       if(leap = ((it = _header.find("LEAP SECONDS")) != _header.end())){
-        super_t::convert(utc_leap, it->second, &iono_utc);
+        super_t::convert(utc_leap_v2, it->second, &iono_utc);
       }
 
       space_node.update_iono_utc(iono_utc, alpha && beta, utc && leap);
@@ -527,6 +527,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static const typename super_t::convert_item_t iono_alpha_v3[4];
     static const typename super_t::convert_item_t iono_beta_v3[4];
     static const typename super_t::convert_item_t utc_v3[4];
+    static const typename super_t::convert_item_t utc_leap_v301[4];
 
     bool extract_iono_utc_v3(GPS_SpaceNode<FloatT> &space_node) const {
       iono_utc_t iono_utc;
@@ -558,7 +559,11 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       {
         it_t it(_header.find("LEAP SECONDS"));
         if(it != _header.end()){
-          super_t::convert(utc_leap, it->second, &iono_utc);
+          if(version_type.version >= 301){
+            super_t::convert(utc_leap_v301, it->second, &iono_utc);
+          }else{
+            super_t::convert(utc_leap_v2, it->second, &iono_utc);
+          }
           leap = true;
         }
       }
@@ -572,7 +577,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       RINEX_NAV_Reader reader(in);
       (reader.version_type.version >= 300)
           ? reader.extract_iono_utc_v3(space_node)
-          : reader.extract_iono_utc(space_node);
+          : reader.extract_iono_utc_v2(space_node);
       res++;
       for(; reader.has_next(); ++res){
         typename space_node_t::Satellite::Ephemeris eph(reader.next());
@@ -918,7 +923,7 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 };
 
 template <class FloatT>
-const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_leap[] = {
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_leap_v2[] = {
   GEN_D(0, 6, iono_utc_t, delta_t_LS, int),
 };
 
@@ -941,10 +946,18 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_v3[] = {
-  GEN_F(  5, 17, 10, iono_utc_t, A0),
-  GEN_F( 22, 16,  9, iono_utc_t, A1),
-  GEN_D( 39,  6,     iono_utc_t, t_ot, int),
-  GEN_D( 46,  4,     iono_utc_t, WN_t, int),
+  GEN_E( 5, 17, 10, iono_utc_t, A0),
+  GEN_E(22, 16,  9, iono_utc_t, A1),
+  GEN_D(39,  6,     iono_utc_t, t_ot, int),
+  GEN_D(46,  4,     iono_utc_t, WN_t, int),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::utc_leap_v301[] = {
+  GEN_D( 0, 6, iono_utc_t, delta_t_LS,  int),
+  GEN_D( 6, 6, iono_utc_t, delta_t_LSF, int),
+  GEN_D(12, 6, iono_utc_t, WN_LSF,      int),
+  GEN_D(18, 6, iono_utc_t, DN,          int),
 };
 
 template <class FloatT>
@@ -1181,7 +1194,11 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     }
     void leap_seconds(const space_node_t &space_node){
       std::string s(60, ' ');
-      super_t::convert(reader_t::utc_leap, s, &space_node.iono_utc());
+      if(super_t::_version_type.version >= 301){
+        super_t::convert(reader_t::utc_leap_v301, s, &space_node.iono_utc());
+      }else{
+        super_t::convert(reader_t::utc_leap_v2, s, &space_node.iono_utc());
+      }
       _header["LEAP SECONDS"] = s;
     }
     RINEX_NAV_Writer(std::ostream &out)
