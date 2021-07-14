@@ -344,6 +344,7 @@ struct RINEX_NAV {
     std::tm t_oc_tm;
     int t_oc_year4, t_oc_year2, t_oc_mon12;
     FloatT t_oc_sec;
+    FloatT iodc_f, iode_f; // originally int type
     FloatT t_oe_WN;
     FloatT ura_meter;
     FloatT SV_health_f;
@@ -359,6 +360,7 @@ struct RINEX_NAV {
         t_oc_year2(t_oc_tm.tm_year % 100),
         t_oc_mon12(t_oc_tm.tm_mon + 1),
         t_oc_sec(std::fmod(eph.t_oc, 60)),
+        iodc_f(eph.iodc), iode_f(eph.iode),
         t_oe_WN(eph.WN),
         ura_meter(ephemeris_t::URA_meter(eph.URA)),
         SV_health_f(((eph.SV_health & 0x20) && (eph.SV_health & 0x1F == 0)) ? 1 : eph.SV_health),
@@ -371,6 +373,9 @@ struct RINEX_NAV {
       t_oc += (t_oc_sec - t_oc_tm.tm_sec);
       eph.WN = t_oc.week;
       eph.t_oc = t_oc.seconds;
+
+      eph.iodc = iodc_f;
+      eph.iode = iode_f;
 
       eph.URA = ephemeris_t::URA_index(ura_meter); // meter to index
 
@@ -799,14 +804,14 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_v2[] = {
-  GEN_E( 3, 19, 12, message_t, eph.iode),
+  GEN_E( 3, 19, 12, message_t, iode_f),
   GEN_E(22, 19, 12, message_t, eph.c_rs),
   GEN_E(41, 19, 12, message_t, eph.delta_n),
   GEN_E(60, 19, 12, message_t, eph.M0),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_v3[] = {
-  GEN_E( 4, 19, 12, message_t, eph.iode),
+  GEN_E( 4, 19, 12, message_t, iode_f),
   GEN_E(23, 19, 12, message_t, eph.c_rs),
   GEN_E(42, 19, 12, message_t, eph.delta_n),
   GEN_E(61, 19, 12, message_t, eph.M0),
@@ -877,14 +882,14 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
   GEN_E( 3, 19, 12, message_t, ura_meter),
   GEN_E(22, 19, 12, message_t, SV_health_f),
   GEN_E(41, 19, 12, message_t, eph.t_GD),
-  GEN_E(60, 19, 12, message_t, eph.iodc),
+  GEN_E(60, 19, 12, message_t, iodc_f),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v3[] = {
   GEN_E( 4, 19, 12, message_t, ura_meter),
   GEN_E(23, 19, 12, message_t, SV_health_f),
   GEN_E(42, 19, 12, message_t, eph.t_GD),
-  GEN_E(61, 19, 12, message_t, eph.iodc),
+  GEN_E(61, 19, 12, message_t, iodc_f),
 };
 
 template <class FloatT>

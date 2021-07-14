@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "navigation/RINEX.h"
+#include "navigation/GPS.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -15,6 +16,9 @@
 
 using namespace std;
 using boost::format;
+
+typedef double float_t;
+typedef GPS_SpaceNode<float_t> gps_t;
 
 BOOST_AUTO_TEST_SUITE(RINEX)
 
@@ -53,14 +57,72 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v2){
       "     .406800000000D+06  .000000000000D+00                                       \n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
-  typedef RINEX_NAV_Reader<double> reader_t;
-  typedef RINEX_NAV_Writer<double> writer_t;
+  typedef RINEX_NAV_Reader<float_t> reader_t;
+  typedef RINEX_NAV_Writer<float_t> writer_t;
 
-  reader_t::space_node_t space_node;
+  gps_t gps;
   {
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
-    reader_t::read_all(in, space_node);
+    reader_t::read_all(in, gps);
+  }
+
+  {
+    BOOST_REQUIRE(gps.is_valid_iono_utc());
+    /*typename*/ gps_t::Ionospheric_UTC_Parameters iono_utc(gps.iono_utc());
+    static const float_t
+        alpha[4] = {.1676E-07, .2235E-07, -.1192E-06, -.1192E-06},
+        beta[4] = {.1208E+06, .1310E+06, -.1310E+06, -.1966E+06},
+        A0(.133179128170E-06), A1(.107469588780E-12);
+    static const int t_ot(552960), WN_t(1025);
+    for(int i(0); i < 4; ++i){
+      BOOST_CHECK_SMALL(std::abs(iono_utc.alpha[i] - alpha[i]), 1E-8);
+      BOOST_CHECK_SMALL(std::abs(iono_utc.beta[i] - beta[i]), 1E-7);
+    }
+    BOOST_CHECK_SMALL(std::abs(iono_utc.A0 - A0), 1E-7);
+    BOOST_CHECK_SMALL(std::abs(iono_utc.A1 - A1), 1E-7);
+    BOOST_CHECK_EQUAL(iono_utc.t_ot, t_ot);
+    BOOST_CHECK_EQUAL(iono_utc.WN_t, WN_t);
+  }
+
+  {
+    std::tm t_oc_tm = {44, 51, 17, 2, 9 - 1, 1999 - 1900};
+    /*typename*/ gps_t::gps_time_t t_oc(t_oc_tm);
+    gps.satellite(6).select_ephemeris(t_oc);
+    const /*typename*/ gps_t::Satellite::Ephemeris &eph(gps.satellite(6).ephemeris());
+
+    BOOST_CHECK_SMALL(std::abs(-.839701388031E-03 - eph.a_f0), 1E-15);
+    BOOST_CHECK_SMALL(std::abs(-.165982783074E-10 - eph.a_f1), 1E-22);
+    BOOST_CHECK_SMALL(std::abs( .000000000000E+00 - eph.a_f2), 1E-12);
+
+    BOOST_CHECK_SMALL(std::abs( .910000000000E+02 - eph.iode),    1E-10);
+    BOOST_CHECK_SMALL(std::abs( .934062500000E+02 - eph.c_rs),    1E-10);
+    BOOST_CHECK_SMALL(std::abs( .116040547840E-08 - eph.delta_n), 1E-20);
+    BOOST_CHECK_SMALL(std::abs( .162092304801E+00 - eph.M0),      1E-12);
+
+    BOOST_CHECK_SMALL(std::abs( .484101474285E-05 - eph.c_uc),    1E-17);
+    BOOST_CHECK_SMALL(std::abs( .626740418375E-02 - eph.e),       1E-14);
+    BOOST_CHECK_SMALL(std::abs( .652112066746E-05 - eph.c_us),    1E-17);
+    BOOST_CHECK_SMALL(std::abs( .515365489006E+04 - eph.sqrt_A),  1E-8);
+
+    BOOST_CHECK_SMALL(std::abs( .409904000000E+06 - eph.t_oe),    1E-6);
+    BOOST_CHECK_SMALL(std::abs(-.242143869400E-07 - eph.c_ic),    1E-19);
+    BOOST_CHECK_SMALL(std::abs( .329237003460E+00 - eph.Omega0),  1E-12);
+    BOOST_CHECK_SMALL(std::abs(-.596046447754E-07 - eph.c_is),    1E-19);
+
+    BOOST_CHECK_SMALL(std::abs( .111541663136E+01 - eph.i0),          1E-11);
+    BOOST_CHECK_SMALL(std::abs( .326593750000E+03 - eph.c_rc),        1E-9);
+    BOOST_CHECK_SMALL(std::abs( .206958726335E+01 - eph.omega),       1E-11);
+    BOOST_CHECK_SMALL(std::abs(-.638312302555E-08 - eph.dot_Omega0),  1E-20);
+
+    BOOST_CHECK_SMALL(std::abs( .307155651409E-09 - eph.dot_i0), 1E-21);
+
+    BOOST_CHECK_EQUAL(0, eph.URA);
+    BOOST_CHECK_EQUAL(0, eph.SV_health);
+    BOOST_CHECK_SMALL(std::abs( .000000000000E+00 - eph.t_GD), 1E-12);
+    BOOST_CHECK_SMALL(std::abs( .910000000000E+02 - eph.iodc), 1E-10);
+
+    BOOST_CHECK_SMALL(std::abs(60 * 60 * 4 - eph.fit_interval), 1E-12);
   }
 
   std::string dist;
@@ -69,7 +131,7 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v2){
     writer_t writer(ss);
     writer.header()["PGM / RUN BY / DATE"] = "XXRINEXN V2.10      AIUB                 3-SEP-99 15:22";
     writer.header()["COMMENT"] = "EXAMPLE OF VERSION 2.10 FORMAT";
-    writer.write_all(space_node, 210);
+    writer.write_all(gps, 210);
     dist = ss.str();
     dist.replace(14 * 81 +  4, 18, " .000000000000D+00"); // overwrite SV accuracy
     dist.replace(15 * 81 +  4, 18, " .406800000000D+06"); // overwrite Transmission time
@@ -98,14 +160,54 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
       "      .252018000000D+06  .400000000000D+01                                      \n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
-  typedef RINEX_NAV_Reader<double> reader_t;
-  typedef RINEX_NAV_Writer<double> writer_t;
+  typedef RINEX_NAV_Reader<float_t> reader_t;
+  typedef RINEX_NAV_Writer<float_t> writer_t;
 
-  reader_t::space_node_t space_node;
+  gps_t gps;
   {
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
-    reader_t::read_all(in, space_node);
+    reader_t::read_all(in, gps);
+  }
+
+  {
+    std::tm t_oc_tm = {0, 0, 0, 26, 5 - 1, 2021 - 1900};
+    /*typename*/ gps_t::gps_time_t t_oc(t_oc_tm);
+    gps.satellite(18).select_ephemeris(t_oc);
+    const /*typename*/ gps_t::Satellite::Ephemeris &eph(gps.satellite(18).ephemeris());
+
+    BOOST_CHECK_SMALL(std::abs( .349333044142E-03 - eph.a_f0), 1E-15);
+    BOOST_CHECK_SMALL(std::abs(-.125055521494E-11 - eph.a_f1), 1E-23);
+    BOOST_CHECK_SMALL(std::abs( .000000000000E+00 - eph.a_f2), 1E-12);
+
+    BOOST_CHECK_SMALL(std::abs( .153000000000E+03 - eph.iode),    1E-9);
+    BOOST_CHECK_SMALL(std::abs(-.127968750000E+03 - eph.c_rs),    1E-9);
+    BOOST_CHECK_SMALL(std::abs( .412802909184E-08 - eph.delta_n), 1E-20);
+    BOOST_CHECK_SMALL(std::abs(-.186204225475E+01 - eph.M0),      1E-11);
+
+    BOOST_CHECK_SMALL(std::abs(-.674836337566E-05 - eph.c_uc),    1E-17);
+    BOOST_CHECK_SMALL(std::abs( .142880436033E-02 - eph.e),       1E-14);
+    BOOST_CHECK_SMALL(std::abs( .113956630230E-04 - eph.c_us),    1E-16);
+    BOOST_CHECK_SMALL(std::abs( .515366753769E+04 - eph.sqrt_A),  1E-8);
+
+    BOOST_CHECK_SMALL(std::abs( .259200000000E+06 - eph.t_oe),    1E-6);
+    BOOST_CHECK_SMALL(std::abs(-.372529029846E-08 - eph.c_ic),    1E-20);
+    BOOST_CHECK_SMALL(std::abs( .285810954536E+01 - eph.Omega0),  1E-11);
+    BOOST_CHECK_SMALL(std::abs(-.353902578354E-07 - eph.c_is),    1E-19);
+
+    BOOST_CHECK_SMALL(std::abs( .968418001400E+00 - eph.i0),          1E-12);
+    BOOST_CHECK_SMALL(std::abs( .168687500000E+03 - eph.c_rc),        1E-9);
+    BOOST_CHECK_SMALL(std::abs( .290532037240E+01 - eph.omega),       1E-11);
+    BOOST_CHECK_SMALL(std::abs(-.775818030221E-08 - eph.dot_Omega0),  1E-20);
+
+    BOOST_CHECK_SMALL(std::abs( .832177520677E-10 - eph.dot_i0), 1E-22);
+
+    BOOST_CHECK_EQUAL(0, eph.URA); // .200000000000E+01
+    BOOST_CHECK_EQUAL(0, eph.SV_health);
+    BOOST_CHECK_SMALL(std::abs(-.838190317154E-08 - eph.t_GD), 1E-20);
+    BOOST_CHECK_SMALL(std::abs( .921000000000E+03 - eph.iodc), 1E-9);
+
+    BOOST_CHECK_SMALL(std::abs(60 * 60 * 4 - eph.fit_interval), 1E-12);
   }
 
   std::string dist;
@@ -115,7 +217,7 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
     //writer.header()["PGM / RUN BY / DATE"] = "NetR9 5.45          Receiver Operator   20210526 000001 UTC";
     std::tm t_header = {1, 0, 0, 26, 5 - 1, 2021 - 1900};
     writer.pgm_runby_date("NetR9 5.45", "Receiver Operator", t_header, "UTC");
-    writer.write_all(space_node, 302);
+    writer.write_all(gps, 302);
     dist = ss.str();
     dist.replace(13 * 81 +  5, 18, " .200000000000D+01"); // overwrite SV accuracy
     dist.replace(14 * 81 +  5, 18, " .252018000000D+06"); // overwrite Transmission time
