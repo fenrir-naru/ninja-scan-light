@@ -303,6 +303,7 @@ void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
             case SYS_SBAS:    sys_str = "S: Geostat"; break;
             case SYS_MIXED:   sys_str = "M: MIXED";   break;
             case SYS_TRANSIT: sys_str = "T: TRANSIT"; break;
+            default: break;
           }
           break;
         }
@@ -311,9 +312,11 @@ void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
             case SYS_GPS:     type_str = "N: GPS NAV DATA";     break;
             case SYS_GLONASS: type_str = "G: GLONASS NAV DATA"; break;
             case SYS_SBAS:    type_str = "H: GEO NAV MSG DATA"; break;
+            default: break;
           }
           break;
         case FTYPE_METEOROLOGICAL: type_str = "METEOROLOGICAL DATA"; break;
+        default: break;
       }
       break;
     }
@@ -322,6 +325,7 @@ void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
         case FTYPE_OBSERVATION:    type_str = "OBSERVATION DATA";    break;
         case FTYPE_NAVIGATION:     type_str = "N: GNSS NAV DATA";    break;
         case FTYPE_METEOROLOGICAL: type_str = "METEOROLOGICAL DATA"; break;
+        default: break;
       }
       if((file_type != FTYPE_OBSERVATION) && (file_type != FTYPE_NAVIGATION)){break;}
       switch(sat_system){
@@ -333,6 +337,7 @@ void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
         case SYS_IRNSS:   sys_str = "I: IRNSS";   break;
         case SYS_SBAS:    sys_str = "S: SBAS";    break;
         case SYS_MIXED:   sys_str = "M: MIXED";   break;
+        default: break;
       }
       break;
     }
@@ -746,11 +751,11 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
         }
 
         // Observation data per satellite
-        int obs_types(obs_types[' '].size());
+        int types(obs_types[' '].size());
         for(typename sat_list_t::const_iterator it(sat_list.begin()), it_end(sat_list.end());
             it != it_end; ++it){
           std::string obs_str;
-          for(int i(0), offset(80); i < obs_types; i++, offset += 16){
+          for(int i(0), offset(80); i < types; i++, offset += 16){
             if(offset >= 80){
               if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
               obs_str = std::string(buf);
@@ -804,10 +809,10 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
         for(int i(0); i < epoch_flag.items_followed; ++i){
           if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
           std::string obs_str(buf);
-          int obs_types(obs_types[obs_str[0]].size()), serial;
+          int types(obs_types[obs_str[0]].size()), serial;
           super_t::template conv_t<int>::d(obs_str, 1, 3, &serial);
           serial += sys2serial(obs_str[0]);
-          for(int j(0), offset(3); j < obs_types; j++, offset += 16){
+          for(int j(0), offset(3); j < types; j++, offset += 16){
             typename observation_t::record_t record = {false, 0};
             std::string record_str(obs_str.substr(offset, 16));
             if(record_str[10] == '.'){
@@ -864,7 +869,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
               std::string param_name(it2->substr(4 * i + 7, 3));
               if(param_name == "   "){continue;}
               obs_types[sys].push_back(param_name);
-              if(obs_types[sys].size() >= types){
+              if((int)(obs_types[sys].size()) >= types){
                 types = 0;
                 break;
               }
@@ -893,7 +898,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
       if(it == obs_types.end()){return -1;}
       int res(distance(it->second.begin(),
           find(it->second.begin(), it->second.end(), label)));
-      return (res >= it->second.size() ? -1 : res);
+      return (res >= (int)(it->second.size()) ? -1 : res);
     }
 };
 

@@ -17,8 +17,8 @@
 using namespace std;
 using boost::format;
 
-typedef double float_t;
-typedef GPS_SpaceNode<float_t> gps_t;
+typedef double fnum_t;
+typedef GPS_SpaceNode<fnum_t> gps_t;
 
 BOOST_AUTO_TEST_SUITE(RINEX)
 
@@ -57,8 +57,8 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v2){
       "     .406800000000D+06  .000000000000D+00                                       \n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
-  typedef RINEX_NAV_Reader<float_t> reader_t;
-  typedef RINEX_NAV_Writer<float_t> writer_t;
+  typedef RINEX_NAV_Reader<fnum_t> reader_t;
+  typedef RINEX_NAV_Writer<fnum_t> writer_t;
 
   gps_t gps;
   {
@@ -70,7 +70,7 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v2){
   {
     BOOST_REQUIRE(gps.is_valid_iono_utc());
     /*typename*/ gps_t::Ionospheric_UTC_Parameters iono_utc(gps.iono_utc());
-    static const float_t
+    static const fnum_t
         alpha[4] = {.1676E-07, .2235E-07, -.1192E-06, -.1192E-06},
         beta[4] = {.1208E+06, .1310E+06, -.1310E+06, -.1966E+06},
         A0(.133179128170E-06), A1(.107469588780E-12);
@@ -160,8 +160,8 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
       "      .252018000000D+06  .400000000000D+01                                      \n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
-  typedef RINEX_NAV_Reader<float_t> reader_t;
-  typedef RINEX_NAV_Writer<float_t> writer_t;
+  typedef RINEX_NAV_Reader<fnum_t> reader_t;
+  typedef RINEX_NAV_Writer<fnum_t> writer_t;
 
   gps_t gps;
   {
@@ -265,8 +265,8 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v2){
       "                     65432.123 5                                     48861.586 7\n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
-  typedef RINEX_OBS_Reader<float_t> reader_t;
-  typedef RINEX_OBS_Writer<float_t> writer_t;
+  typedef RINEX_OBS_Reader<fnum_t> reader_t;
+  typedef RINEX_OBS_Writer<fnum_t> writer_t;
 
   {
     std::stringbuf sbuf(src);
@@ -275,7 +275,7 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v2){
 
     {
       static const char *types[] = {"P1", "L1", "L2", "P2", "L5"};
-      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+      for(unsigned i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
         BOOST_CHECK_EQUAL(reader.observed_index(types[i]), i);
       }
     }
@@ -399,8 +399,8 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3){
       "      TWO COMMENT LINES FOLLOW DIRECTLY THE EVENT RECORD    COMMENT             \n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
-  typedef RINEX_OBS_Reader<float_t> reader_t;
-  typedef RINEX_OBS_Writer<float_t> writer_t;
+  typedef RINEX_OBS_Reader<fnum_t> reader_t;
+  typedef RINEX_OBS_Writer<fnum_t> writer_t;
 
   {
     std::stringbuf sbuf(src);
@@ -409,25 +409,25 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3){
 
     {
       static const char *types[] = {"C1C", "L1W", "L2W", "C1W", "S2W"};
-      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+      for(unsigned i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
         BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'G'), i);
       }
     }
     {
       static const char *types[] = {"C1C", "L1C"};
-      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+      for(unsigned i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
         BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'R'), i);
       }
     }
     {
       static const char *types[] = {"L1B", "L5I"};
-      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+      for(unsigned i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
         BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'E'), i);
       }
     }
     {
       static const char *types[] = {"C1C", "L1C"};
-      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+      for(unsigned i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
         BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'S'), i);
       }
     }
