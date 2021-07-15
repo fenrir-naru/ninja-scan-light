@@ -368,7 +368,7 @@ struct GPS_Time {
       leap_year ? 366 : 365,
       365, 365, 365
     };
-    for(int i(0); i < sizeof(doy) / sizeof(doy[0]); ++i){
+    for(unsigned i(0); i < sizeof(doy) / sizeof(doy[0]); ++i){
       if(t.tm_mday <= doy[i]){break;}
       t.tm_mday -= doy[i];
       y++;
