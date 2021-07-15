@@ -266,7 +266,7 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v2){
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
   typedef RINEX_OBS_Reader<float_t> reader_t;
-  //typedef RINEX_OBS_Writer<float_t> writer_t;
+  typedef RINEX_OBS_Writer<float_t> writer_t;
 
   {
     std::stringbuf sbuf(src);
@@ -284,7 +284,7 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v2){
     {
       reader_t::observation_t obs(reader.next());
 
-      std::tm t(obs.t_epoc.c_tm());
+      std::tm t(obs.t_epoch.c_tm());
       BOOST_CHECK_EQUAL(t.tm_year, 2005 - 1900);
       BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
       BOOST_CHECK_EQUAL(t.tm_mday, 24);
@@ -307,12 +307,24 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v2){
       BOOST_CHECK(obs.per_satellite[12][2].valid);
       BOOST_CHECK(obs.per_satellite[12][3].valid);
       BOOST_CHECK(!obs.per_satellite[12][4].valid);
+
+      std::stringstream ss;
+      writer_t writer(ss);
+      writer.set_version(210);
+      writer << obs;
+      compare_lines(
+          " 05  3 24 13 10 36.0000000  0  4G06G09G12E11                         -.123456789\n"
+          "  20607600.189           -.430 9          .394    20607605.848                  \n"
+          "  20891534.648           -.120 9         -.358    20891541.292                  \n"
+          "  23629347.915            .300 8         -.353    23629364.158                  \n"
+          "                          .324 8                                          .178 7\n",
+          ss.str());
     }
     BOOST_CHECK(reader.has_next());
     {
       reader_t::observation_t obs(reader.next());
 
-      std::tm t(obs.t_epoc.c_tm());
+      std::tm t(obs.t_epoch.c_tm());
       BOOST_CHECK_EQUAL(t.tm_year, 2005 - 1900);
       BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
       BOOST_CHECK_EQUAL(t.tm_mday, 24);
@@ -388,7 +400,7 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3){
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
   typedef RINEX_OBS_Reader<float_t> reader_t;
-  //typedef RINEX_OBS_Writer<float_t> writer_t;
+  typedef RINEX_OBS_Writer<float_t> writer_t;
 
   {
     std::stringbuf sbuf(src);
@@ -424,7 +436,7 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3){
     {
       reader_t::observation_t obs(reader.next());
 
-      std::tm t(obs.t_epoc.c_tm());
+      std::tm t(obs.t_epoch.c_tm());
       BOOST_CHECK_EQUAL(t.tm_year, 2006 - 1900);
       BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
       BOOST_CHECK_EQUAL(t.tm_mday, 24);
@@ -449,12 +461,25 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3){
       BOOST_CHECK(obs.per_satellite[6][3].valid);
       BOOST_CHECK(obs.per_satellite[6][4].valid);
       BOOST_CHECK_SMALL(std::abs(24.158 - obs.per_satellite[6][4].value), 1E-4);
+
+      std::stringstream ss;
+      writer_t writer(ss);
+      writer.set_version(304);
+      writer << obs;
+      compare_lines(
+          "> 2006 03 24 13 10 36.0000000  0  5       -.123456789012                        \n"
+          "G06  23629347.915            .300 8         -.353 4  23629347.158          24.158  \n"
+          "G09  20891534.648           -.120 9         -.358 6  20891545.292          38.123  \n"
+          "G12  20607600.189           -.430 9          .394 5  20607600.848          35.234  \n"
+          "S20  38137559.506      335849.135 9\n"
+          "E11          .324 8          .178 7\n",
+          ss.str());
     }
     BOOST_CHECK(reader.has_next());
     {
       reader_t::observation_t obs(reader.next());
 
-      std::tm t(obs.t_epoc.c_tm());
+      std::tm t(obs.t_epoch.c_tm());
       BOOST_CHECK_EQUAL(t.tm_year, 2006 - 1900);
       BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
       BOOST_CHECK_EQUAL(t.tm_mday, 24);

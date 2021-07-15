@@ -159,7 +159,20 @@ class RINEX_Reader {
           ss << std::setfill(' ') << std::right << std::setw(length)
               << std::setprecision(precision) << std::fixed
               << *(T *)value;
-          buf.replace(offset, length, ss.str());
+          std::string s(ss.str());
+          if((*(T *)value) >= 0){
+            if((*(T *)value) < 1){
+              int i(length - precision - 2);
+              if(i >= 0){s[i] = ' ';}
+            }
+          }else{
+            if((*(T *)value) > -1){
+              int i(length - precision - 2);
+              if(i >= 0){s[i] = '-';}
+              if(--i >= 0){s[i] = ' ';}
+            }
+          }
+          buf.replace(offset, length, s);
         }
       }
       static void e(
@@ -598,6 +611,7 @@ struct RINEX_OBS {
     FloatT epoch_sec;
     int flag;
     int items_followed;
+    FloatT receiver_clock_error;
 
     epoch_flag_t &operator=(const GPS_Time<FloatT> &t){
       epoch = t.c_tm();
@@ -613,7 +627,7 @@ struct RINEX_OBS {
   };
 
   struct observation_t {
-    GPS_Time<FloatT> t_epoc;
+    GPS_Time<FloatT> t_epoch;
     FloatT receiver_clock_error;
     struct record_t {
       bool valid;
@@ -622,6 +636,18 @@ struct RINEX_OBS {
     };
     typedef std::map<int, std::vector<record_t> > per_satellite_t;
     per_satellite_t per_satellite;
+
+    observation_t &operator=(const epoch_flag_t &epoch_flag){
+      t_epoch = (GPS_Time<FloatT>)epoch_flag;
+      receiver_clock_error = epoch_flag.receiver_clock_error;
+      return *this;
+    }
+    operator epoch_flag_t() const {
+      epoch_flag_t res = {0};
+      res = t_epoch;
+      res.receiver_clock_error = receiver_clock_error;
+      return res;
+    }
   };
 };
 
@@ -634,7 +660,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
     typedef typename RINEX_OBS<FloatT>::epoch_flag_t epoch_flag_t;
     typedef typename RINEX_OBS<FloatT>::observation_t::record_t record_t;
 
-    static const typename super_t::convert_item_t epoch_flag_v2[8], epoch_flag_v3[8];
+    static const typename super_t::convert_item_t epoch_flag_v2[9], epoch_flag_v3[9];
     static const typename super_t::convert_item_t record_v2v3[3];
 
     typedef typename RINEX_OBS<FloatT>::observation_t observation_t;
@@ -653,7 +679,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
       }
     }
     static char serial2sys(const int &serial, int &offset){
-      if(serial & 0xF00){
+      switch(serial & 0xF00){
         case 0:
           if(serial < 100){
             offset = serial; return 'G'; // NAVSTAR
@@ -667,8 +693,8 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
         case 0x200: offset = serial - 0x200; return 'E'; // Galileo, since ver 2.11
         case 0x300: offset = serial - 0x300; return 'C'; // BDS, since ver 3.02
         case 0x400: offset = serial - 0x400; return 'I'; // IRNSS, since ver 3.03
-        case 0x800: offset = serial - 0x800; return ' '; // unknown
       }
+      offset = serial - 0x800; return ' '; // unknown
     }
 
 
@@ -698,7 +724,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
           epoch_flag.epoch.tm_year = epoch_flag.epoch_year2 + (epoch_flag.epoch_year2 < 80 ? 100 : 0); // greater than 1980
           epoch_flag.epoch.tm_mon = epoch_flag.epoch_mon12 - 1; // month [0, 11]
           epoch_flag.epoch.tm_sec = (int)epoch_flag.epoch_sec;
-          obs.t_epoc = epoch_flag;
+          obs = epoch_flag;
 
           if(epoch_flag.flag >= 2){
             for(int i(0); i < epoch_flag.items_followed; ++i){
@@ -706,9 +732,6 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
             }
             continue;
           }
-
-          // Receiver clock error
-          super_t::template conv_t<FloatT>::f(epoch_str, 68, 12, &obs.receiver_clock_error, 9);
 
           int prn;
           for(int items(0), i(0); items < epoch_flag.items_followed; items++, i++){
@@ -767,7 +790,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
           epoch_flag.epoch.tm_year = epoch_flag.epoch_year4 - 1900; // greater than 1980
           epoch_flag.epoch.tm_mon = epoch_flag.epoch_mon12 - 1; // month [0, 11]
           epoch_flag.epoch.tm_sec = (int)epoch_flag.epoch_sec;
-          obs.t_epoc = epoch_flag;
+          obs = epoch_flag;
 
           if(epoch_flag.flag >= 2){
             for(int i(0); i < epoch_flag.items_followed; ++i){
@@ -775,9 +798,6 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
             }
             continue;
           }
-
-          // Receiver clock error
-          super_t::template conv_t<FloatT>::f(epoch_str, 41, 15, &obs.receiver_clock_error, 12);
         }
 
         // Observation data per satellite
@@ -1090,6 +1110,7 @@ const typename RINEX_OBS_Reader<FloatT>::convert_item_t RINEX_OBS_Reader<FloatT>
   GEN_F(15, 11,  7, epoch_flag_t, epoch_sec),
   GEN_D(28,  1,     epoch_flag_t, flag,           int),
   GEN_D(29,  3,     epoch_flag_t, items_followed, int), // Satellite(flag = 0/1) or Line number(except for  0/1)
+  GEN_F(68, 12,  9, epoch_flag_t, receiver_clock_error),
 };
 
 template <class FloatT>
@@ -1102,6 +1123,7 @@ const typename RINEX_OBS_Reader<FloatT>::convert_item_t RINEX_OBS_Reader<FloatT>
   GEN_F(18, 11,  7, epoch_flag_t, epoch_sec),
   GEN_D(31,  1,     epoch_flag_t, flag,           int),
   GEN_D(32,  3,     epoch_flag_t, items_followed, int), // Satellite(flag = 0/1) or Line number(except for  0/1)
+  GEN_F(41, 15, 12, epoch_flag_t, receiver_clock_error),
 };
 
 template <class FloatT>
@@ -1403,10 +1425,16 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     };
 
   public:
+    void set_version(
+        const int &version,
+        const super_t::version_type_t::sat_system_t &sys = super_t::version_type_t::SYS_GPS){
+      super_t::set_version_type(typename super_t::version_type_t(
+          version, super_t::version_type_t::FTYPE_NAVIGATION, sys));
+    }
+
     int write_all(const space_node_t &space_node, const int &version = 304){
       int res(-1);
-      set_version_type(typename super_t::version_type_t(
-          version, super_t::version_type_t::FTYPE_NAVIGATION, super_t::version_type_t::SYS_GPS));
+      set_version(version);
       if(space_node.is_valid_iono_utc()){
         iono_alpha(space_node);
         iono_beta(space_node);
@@ -1454,6 +1482,13 @@ class RINEX_OBS_Writer : public RINEX_Writer<> {
     using super_t::_header;
     using super_t::dist;
   public:
+    void set_version(
+        const int &version,
+        const super_t::version_type_t::sat_system_t &sys = super_t::version_type_t::SYS_GPS){
+      super_t::set_version_type(typename super_t::version_type_t(
+          version, super_t::version_type_t::FTYPE_OBSERVATION, sys));
+    }
+
     static const header_item_t default_header[];
     static const int default_header_size;
     void maker_name(
@@ -1587,54 +1622,63 @@ class RINEX_OBS_Writer : public RINEX_Writer<> {
       std::stringstream top, rest;
       
       std::string buf(80, ' ');
+      int ver_major(super_t::_version_type.version / 100);
       { // epoch
-        typename RINEX_OBS<FloatT>::epoch_flag_t epoch_flag = {0};
-        epoch_flag = obs.t_epoch;
+        typename RINEX_OBS<FloatT>::epoch_flag_t epoch_flag(obs);
         epoch_flag.items_followed = obs.per_satellite.size(); // Num. of satellites
-        super_t::convert(reader_t::epoch_flag, buf, epoch_flag);
-        reader_t::template conv_t<FloatT>::f(
-            buf, 68, 12, &(const_cast<observation_t &>(obs).receiver_clock_error), 9, false);
+        switch(ver_major){
+          case 2: super_t::convert(reader_t::epoch_flag_v2, buf, &epoch_flag); break;
+          case 3: super_t::convert(reader_t::epoch_flag_v3, buf, &epoch_flag); buf[0] = '>'; break;
+          default: return *this;
+        }
       }
       
       int i(0);
       for(typename per_satellite_t::const_iterator
             it(obs.per_satellite.begin()), it_end(obs.per_satellite.end());
-          it != it_end(); ++it, ++i){ // Enumerate satellites
+          it != it_end; ++it, ++i){ // Enumerate satellites
         
         // If satellites are more than 12, then use the next line
-        if(i == 12){
+        if((i == 12) && (ver_major == 2)){
           i = 0;
           top << buf << std::endl;
           buf = std::string(80, ' ');
         }
         
         // Write PRN number to list
-        int prn(it->first);
-        if(prn < 100){
-          buf[32 + i * 3] = 'G';
-        }else if(prn < 200){
-          buf[32 + i * 3] = 'S';
-          prn -= 100;
-        }else if(prn & 0x100){
-          buf[32 + i * 3] = 'R';
-          prn &= 0xFF;
-        }else{continue;}
-        reader_t::template conv_t<int>::d(buf, 33 + i * 3, 2, &prn, 0, false);
+        {
+          int serial(it->first), prn;
+          char sys(reader_t::serial2sys(serial, prn));
+          std::string sat_str(3, ' ');
+          sat_str[0] = sys;
+          reader_t::template conv_t<int>::d(sat_str, 1, 2, &prn, 1, false);
+          switch(ver_major){
+            case 2: buf.replace(32 + i * 3, 3, sat_str); break;
+            case 3: rest << sat_str; break;
+          }
+        }
 
         // Observation data
         int i2(5);
         for(typename per_satellite_t::mapped_type::const_iterator it2(it->second.begin()),
               it2_end(it->second.end());
             it2 != it2_end; ++it2){
-          if(--i2 == 0){
-            i2 = 5;
+          if((ver_major == 2) && (i2-- == 0)){
+            i2 = 4;
             rest << std::endl;
           }
           std::string buf2(16, ' ');
-          super_t::convert(reader_t::record_v2, buf2, &(*it2));
+          if(it2->valid){
+            super_t::convert(reader_t::record_v2v3, buf2, &(*it2));
+            if(it2->lli == 0){buf2[14] = ' ';}
+            if(it2->ss == 0){buf2[15] = ' ';}
+          }
           rest << buf2;
         }
-        rest << std::string(16 * i2, ' ') << std::endl;
+        if(ver_major == 2){
+          rest << std::string(16 * i2, ' ');
+        }
+        rest << std::endl;
       }
       top << buf << std::endl;
       
