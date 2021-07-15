@@ -226,4 +226,253 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
   compare_lines(src, dist);
 }
 
+BOOST_AUTO_TEST_CASE(obs_GPS_v2){
+  const char *src = \
+      "     2.11           OBSERVATION DATA    M (MIXED)           RINEX VERSION / TYPE\n"
+      "BLANK OR G = GPS,  R = GLONASS,  E = GALILEO,  M = MIXED    COMMENT             \n"
+      "XXRINEXO V9.9       AIUB                24-MAR-01 14:43     PGM / RUN BY / DATE \n"
+      "EXAMPLE OF A MIXED RINEX FILE (NO FEATURES OF V 2.11)       COMMENT             \n"
+      "A 9080                                                      MARKER NAME         \n"
+      "9080.1.34                                                   MARKER NUMBER       \n"
+      "BILL SMITH          ABC INSTITUTE                           OBSERVER / AGENCY   \n"
+      "X1234A123           XX                  ZZZ                 REC # / TYPE / VERS \n"
+      "234                 YY                                      ANT # / TYPE        \n"
+      "  4375274.       587466.      4589095.                      APPROX POSITION XYZ \n"
+      "         .9030         .0000         .0000                  ANTENNA: DELTA H/E/N\n"
+      "     1     1                                                WAVELENGTH FACT L1/2\n"
+      "     1     2     6   G14   G15   G16   G17   G18   G19      WAVELENGTH FACT L1/2\n"
+      "     0                                                      RCV CLOCK OFFS APPL \n"
+      "     5    P1    L1    L2    P2    L5                        # / TYPES OF OBSERV \n"
+      "    18.000                                                  INTERVAL            \n"
+      "  2005     3    24    13    10   36.0000000                 TIME OF FIRST OBS   \n"
+      "                                                            END OF HEADER       \n"
+      " 05  3 24 13 10 36.0000000  0  4G12G09G06E11                         -.123456789\n"
+      "  23629347.915            .300 8         -.353    23629364.158                  \n"
+      "  20891534.648           -.120 9         -.358    20891541.292                  \n"
+      "  20607600.189           -.430 9          .394    20607605.848                  \n"
+      "                          .324 8                                          .178 7\n"
+      " 05  3 24 13 10 50.0000000  4  4                                                \n"
+      "     1     2     2   G 9   G12                              WAVELENGTH FACT L1/2\n"
+      "  *** WAVELENGTH FACTOR CHANGED FOR 2 SATELLITES ***        COMMENT             \n"
+      "      NOW 8 SATELLITES HAVE WL FACT 1 AND 2!                COMMENT             \n"
+      "                                                            COMMENT             \n"
+      " 05  3 24 13 10 54.0000000  0  6G12G09G06R21R22E11                   -.123456789\n"
+      "  23619095.450      -53875.632 8    -41981.375    23619112.008                  \n"
+      "  20886075.667      -28688.027 9    -22354.535    20886082.101                  \n"
+      "  20611072.689       18247.789 9     14219.770    20611078.410                  \n"
+      "  21345678.576       12345.567 5                                                \n"
+      "  22123456.789       23456.789 5                                                \n"
+      "                     65432.123 5                                     48861.586 7\n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_OBS_Reader<float_t> reader_t;
+  //typedef RINEX_OBS_Writer<float_t> writer_t;
+
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    reader_t reader(in);
+
+    {
+      static const char *types[] = {"P1", "L1", "L2", "P2", "L5"};
+      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+        BOOST_CHECK_EQUAL(reader.observed_index(types[i]), i);
+      }
+    }
+
+    BOOST_CHECK(reader.has_next());
+    {
+      reader_t::observation_t obs(reader.next());
+
+      std::tm t(obs.t_epoc.c_tm());
+      BOOST_CHECK_EQUAL(t.tm_year, 2005 - 1900);
+      BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
+      BOOST_CHECK_EQUAL(t.tm_mday, 24);
+      BOOST_CHECK_EQUAL(t.tm_hour, 13);
+      BOOST_CHECK_EQUAL(t.tm_min, 10);
+      BOOST_CHECK_EQUAL(t.tm_sec, 36);
+
+      BOOST_CHECK_SMALL(std::abs(-.123456789 - obs.receiver_clock_error), 1E-10);
+      BOOST_CHECK_EQUAL(obs.per_satellite.size(), 4);
+      BOOST_CHECK_EQUAL(obs.per_satellite[12].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 9].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 6].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[11 + 0x200].size(), 5);
+
+      BOOST_CHECK(obs.per_satellite[12][0].valid);
+      BOOST_CHECK(obs.per_satellite[12][1].valid);
+      BOOST_CHECK_SMALL(std::abs(.300 - obs.per_satellite[12][1].value), 1E-4);
+      BOOST_CHECK_EQUAL(obs.per_satellite[12][1].lli, 0);
+      BOOST_CHECK_EQUAL(obs.per_satellite[12][1].ss, 8);
+      BOOST_CHECK(obs.per_satellite[12][2].valid);
+      BOOST_CHECK(obs.per_satellite[12][3].valid);
+      BOOST_CHECK(!obs.per_satellite[12][4].valid);
+    }
+    BOOST_CHECK(reader.has_next());
+    {
+      reader_t::observation_t obs(reader.next());
+
+      std::tm t(obs.t_epoc.c_tm());
+      BOOST_CHECK_EQUAL(t.tm_year, 2005 - 1900);
+      BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
+      BOOST_CHECK_EQUAL(t.tm_mday, 24);
+      BOOST_CHECK_EQUAL(t.tm_hour, 13);
+      BOOST_CHECK_EQUAL(t.tm_min, 10);
+      BOOST_CHECK_EQUAL(t.tm_sec, 54);
+
+      BOOST_CHECK_EQUAL(obs.per_satellite.size(), 6);
+      BOOST_CHECK_EQUAL(obs.per_satellite[12].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 9].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 6].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[21 + 0x100].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[22 + 0x100].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[11 + 0x200].size(), 5);
+    }
+    BOOST_CHECK(!reader.has_next());
+  }
+}
+
+BOOST_AUTO_TEST_CASE(obs_GPS_v3){
+  const char *src = \
+      "     3.04           OBSERVATION DATA    M                   RINEX VERSION / TYPE\n"
+      "G = GPS  R = GLONASS  E = GALILEO  S = GEO  M = MIXED       COMMENT             \n"
+      "XXRINEXO V9.9       AIUB                20060324 144333 UTC PGM / RUN BY / DATE \n"
+      "EXAMPLE OF A MIXED RINEX FILE VERSION 3.04                  COMMENT             \n"
+      "The file contains L1 pseudorange and phase data of the      COMMENT             \n"
+      "geostationary AOR-E satellite (PRN 120 = S20)               COMMENT             \n"
+      "A 9080                                                      MARKER NAME         \n"
+      "9080.1.34                                                   MARKER NUMBER       \n"
+      "BILL SMITH          ABC INSTITUTE                           OBSERVER / AGENCY   \n"
+      "X1234A123           GEODETIC            1.3.1               REC # / TYPE / VERS \n"
+      "G1234               ROVER                                   ANT # / TYPE        \n"
+      "  4375274.       587466.      4589095.                      APPROX POSITION XYZ \n"
+      "         .9030         .0000         .0000                  ANTENNA: DELTA H/E/N\n"
+      "     0                                                      RCV CLOCK OFFS APPL \n"
+      "G    5 C1C L1W L2W C1W S2W                                  SYS / # / OBS TYPES \n"
+      "R    2 C1C L1C                                              SYS / # / OBS TYPES \n"
+      "E    2 L1B L5I                                              SYS / # / OBS TYPES \n"
+      "S    2 C1C L1C                                              SYS / # / OBS TYPES \n"
+      "    18.000                                                  INTERVAL            \n"
+      "G APPL_DCB          xyz.uvw.abc//pub/dcb_gps.dat            SYS / DCBS APPLIED  \n"
+      "DBHZ                                                        SIGNAL STRENGTH UNIT\n"
+      "  2006    03    24    13    10   36.0000000     GPS         TIME OF FIRST OBS   \n"
+      " 18 R01  1 R02  2 R03  3 R04  4 R05  5 R06 -6 R07 -5 R08 -4 GLONASS SLOT / FRQ #\n"
+      "    R09 -3 R10 -2 R11 -1 R12  0 R13  1 R14  2 R15  3 R16  4 GLONASS SLOT / FRQ #\n"
+      "    R17  5 R18 -5                                           GLONASS SLOT / FRQ #\n"
+      "G L1C                                                       SYS / PHASE SHIFT   \n"
+      "G L1W  0.00000                                              SYS / PHASE SHIFT   \n"
+      "G L2W                                                       SYS / PHASE SHIFT   \n"
+      "R L1C                                                       SYS / PHASE SHIFT   \n"
+      "E L1B                                                       SYS / PHASE SHIFT   \n"
+      "E L5I                                                       SYS / PHASE SHIFT   \n"
+      "S L1C                                                       SYS / PHASE SHIFT   \n"
+      " C1C  -10.000 C1P  -10.123 C2C  -10.432 C2P  -10.634        GLONASS COD/PHS/BIS \n"
+      "                                                            END OF HEADER       \n"
+      "> 2006 03 24 13 10 36.0000000  0  5      -0.123456789012                        \n"
+      "G06  23629347.915            .300 8         -.353 4  23629347.158          24.158  \n"
+      "G09  20891534.648           -.120 9         -.358 6  20891545.292          38.123  \n"
+      "G12  20607600.189           -.430 9          .394 5  20607600.848          35.234  \n"
+      "E11          .324 8          .178 7\n"
+      "S20  38137559.506      335849.135 9\n"
+      "> 2006 03 24 13 10 54.0000000  0  7      -0.123456789210                        \n"
+      "G06  23619095.450      -53875.632 8    -41981.375 4  23619095.008          25.234  \n"
+      "G09  20886075.667      -28688.027 9    -22354.535 7  20886076.101          42.231  \n"
+      "G12  20611072.689       18247.789 9     14219.770 6  20611072.410          36.765  \n"
+      "R21  21345678.576       12345.567 5\n"
+      "R22  22123456.789       23456.789 5\n"
+      "E11     65432.123 5     48861.586 7\n"
+      "S20  38137559.506      335849.135 9\n"
+      "> 2006 03 24 13 11 12.0000000  2  2                                             \n"
+      "      *** FROM NOW ON KINEMATIC DATA! ***                   COMMENT             \n"
+      "      TWO COMMENT LINES FOLLOW DIRECTLY THE EVENT RECORD    COMMENT             \n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_OBS_Reader<float_t> reader_t;
+  //typedef RINEX_OBS_Writer<float_t> writer_t;
+
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    reader_t reader(in);
+
+    {
+      static const char *types[] = {"C1C", "L1W", "L2W", "C1W", "S2W"};
+      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+        BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'G'), i);
+      }
+    }
+    {
+      static const char *types[] = {"C1C", "L1C"};
+      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+        BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'R'), i);
+      }
+    }
+    {
+      static const char *types[] = {"L1B", "L5I"};
+      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+        BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'E'), i);
+      }
+    }
+    {
+      static const char *types[] = {"C1C", "L1C"};
+      for(int i(0); i < sizeof(types)/ sizeof(types[0]); ++i){
+        BOOST_CHECK_EQUAL(reader.observed_index(types[i], 'S'), i);
+      }
+    }
+
+    BOOST_CHECK(reader.has_next());
+    {
+      reader_t::observation_t obs(reader.next());
+
+      std::tm t(obs.t_epoc.c_tm());
+      BOOST_CHECK_EQUAL(t.tm_year, 2006 - 1900);
+      BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
+      BOOST_CHECK_EQUAL(t.tm_mday, 24);
+      BOOST_CHECK_EQUAL(t.tm_hour, 13);
+      BOOST_CHECK_EQUAL(t.tm_min, 10);
+      BOOST_CHECK_EQUAL(t.tm_sec, 36);
+
+      BOOST_CHECK_SMALL(std::abs(-0.123456789012 - obs.receiver_clock_error), 1E-14);
+      BOOST_CHECK_EQUAL(obs.per_satellite.size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 6].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 9].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[12].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[11 + 0x200].size(), 2);
+      BOOST_CHECK_EQUAL(obs.per_satellite[120].size(), 2);
+
+      BOOST_CHECK(obs.per_satellite[6][0].valid);
+      BOOST_CHECK(obs.per_satellite[6][1].valid);
+      BOOST_CHECK_SMALL(std::abs(.300 - obs.per_satellite[6][1].value), 1E-4);
+      BOOST_CHECK_EQUAL(obs.per_satellite[6][1].lli, 0);
+      BOOST_CHECK_EQUAL(obs.per_satellite[6][1].ss, 8);
+      BOOST_CHECK(obs.per_satellite[6][2].valid);
+      BOOST_CHECK(obs.per_satellite[6][3].valid);
+      BOOST_CHECK(obs.per_satellite[6][4].valid);
+      BOOST_CHECK_SMALL(std::abs(24.158 - obs.per_satellite[6][4].value), 1E-4);
+    }
+    BOOST_CHECK(reader.has_next());
+    {
+      reader_t::observation_t obs(reader.next());
+
+      std::tm t(obs.t_epoc.c_tm());
+      BOOST_CHECK_EQUAL(t.tm_year, 2006 - 1900);
+      BOOST_CHECK_EQUAL(t.tm_mon,  3 - 1);
+      BOOST_CHECK_EQUAL(t.tm_mday, 24);
+      BOOST_CHECK_EQUAL(t.tm_hour, 13);
+      BOOST_CHECK_EQUAL(t.tm_min, 10);
+      BOOST_CHECK_EQUAL(t.tm_sec, 54);
+
+      BOOST_CHECK_EQUAL(obs.per_satellite.size(), 7);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 6].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[ 9].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[12].size(), 5);
+      BOOST_CHECK_EQUAL(obs.per_satellite[21 + 0x100].size(), 2);
+      BOOST_CHECK_EQUAL(obs.per_satellite[22 + 0x100].size(), 2);
+      BOOST_CHECK_EQUAL(obs.per_satellite[11 + 0x200].size(), 2);
+      BOOST_CHECK_EQUAL(obs.per_satellite[120].size(), 2);
+    }
+    BOOST_CHECK(!reader.has_next());
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
