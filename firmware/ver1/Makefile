@@ -42,16 +42,18 @@ INCLUDES = -I$(SRC_DIR)
 LIBS = #-L
 
 SRCS_C = \
-	$(filter-out %mpu9250.c, $(shell ls $(SRC_DIR)/*.c || echo ''))
+	$(filter-out %mpu9250.c %ads122.c %all_sensors_elvr.c, $(shell ls $(SRC_DIR)/*.c || echo ''))
 SRCS_ASM = \
 	$(shell ls $(SRC_DIR)/*.asm || echo '')
 
-ifeq ($(PITOT),ELVR)
-  SRCS_C := $(filter-out %ads122.c, $(SRCS_C))
-  override CPPFLAGS += -DPITOT_AS_ELVR
-  override CFLAGS += -DPITOT_AS_ELVR
-else
-  SRCS_C := $(filter-out %all_sensors_elvr.c, $(SRCS_C))
+ifeq ($(PITOT),ADS122)
+  SRCS_C := $(SRCS_C) $(shell ls $(SRC_DIR)/ads122.c || echo '')
+  override CPPFLAGS += -DI2C1_ADS122
+  override CFLAGS += -DI2C1_ADS122
+else ifeq ($(PITOT),ELVR)
+  SRCS_C := $(SRCS_C) $(shell ls $(SRC_DIR)/all_sensors_elvr.c || echo '')
+  override CPPFLAGS += -DI2C1_ELVR
+  override CFLAGS += -DI2C1_ELVR
 endif
 
 OBJS = $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.rel, $(SRCS_C)) $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.rel, $(SRCS_ASM))

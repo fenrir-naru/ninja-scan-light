@@ -54,10 +54,10 @@
 #include "mag3110.h"
 #endif
 #include "ms5611.h"
-#if defined(PITOT_AS_ELVR)
-#include "all_sensors_elvr.h"
-#else
+#if defined(I2C1_ADS122)
 #include "ads122.h"
+#elif defined(I2C1_ELVR)
+#include "all_sensors_elvr.h"
 #endif
 
 volatile __xdata u32 global_ms = 0;
@@ -299,10 +299,10 @@ void main() {
   mag3110_init();
 #endif
   ms5611_init();
-#if defined(PITOT_AS_ELVR)
-  as_elvr_init();
-#else
+#if defined(I2C1_ADS122)
   ads122_init();
+#elif defined(I2C1_ELVR)
+  as_elvr_init();
 #endif
   
   EA = 1; // Global Interrupt enable
@@ -331,10 +331,10 @@ void main() {
     mag3110_polling();
 #endif
     ms5611_polling();
-#if defined(PITOT_AS_ELVR)
-    as_elvr_polling();
-#else
+#if defined(I2C1_ADS122)
     ads122_polling();
+#elif defined(I2C1_ELVR)
+    as_elvr_polling();
 #endif
     data_hub_polling();
     usb_polling();
@@ -393,6 +393,7 @@ static void port_init() {
     while(!(P1 & 0x02));
   }
   
+#if defined(I2C1_ADS122) || defined(I2C1_ELVR)
   // check scl1(P2.7) and sda1(P2.6), if not Hi, perform clock out to reset I2C01
   while((P2 & 0xC0) != 0xC0){
     scl1_low();
@@ -400,7 +401,8 @@ static void port_init() {
     scl1_hiz();
     while(!(P2 & 0x80));
   }
-
+#endif
+  
   // P0
   // 0 => SPI_SCK, 1 => SPI_MISO, 2 => SPI_MOSI, 3 => SPI_-CS,
   // 4 => UART0_TX, 5 => UART0_RX, 6 => -INT0, 7 => VREF(analog)
@@ -472,10 +474,10 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   timeout_10ms++;
   switch(u32_lsbyte(tickcount) % 16){ // 6.25Hz
     case 0:
-#if defined(PITOT_AS_ELVR)
-      as_elvr_capture = TRUE;
-#else
+#if defined(I2C1_ADS122)
       ads122_capture = TRUE;
+#elif defined(I2C1_ELVR)
+      as_elvr_capture = TRUE;
 #endif
       break;
     case 4:
