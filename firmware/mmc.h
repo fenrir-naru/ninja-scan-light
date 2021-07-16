@@ -40,7 +40,7 @@ typedef enum {
 #define MMC_PHYSICAL_BLOCK_SIZE 512
 
 extern __bit mmc_initialized;
-extern __xdata unsigned int mmc_block_length;
+extern __xdata unsigned short mmc_block_length;
 extern __xdata unsigned long mmc_physical_sectors;
 
 void mmc_init();
