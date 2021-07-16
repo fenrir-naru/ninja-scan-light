@@ -213,16 +213,26 @@ void interrupt_uart0 () __interrupt (INTERRUPT_UART0) {
 /**
  * putchar - blocking
  */
+#if defined(SDCC) && (SDCC >= 370)
+int putchar (int c_){
+  char c = (char)c_;
+#else
 void putchar (char c){
+#endif
   while(uart0_write(&c, 1) == 0);
 }
 
 /**
  * getchar - blocking
  */
+#if defined(SDCC) && (SDCC >= 370)
+int getchar (void){
+#else
 char getchar (void){
+#endif
   char c;
   while(uart0_read(&c, sizeof(c)) == 0);
   return c;
 }
+
 
