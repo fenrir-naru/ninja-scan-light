@@ -12,7 +12,7 @@ if [ ! -d sdcc-${SDCC} ]; then
   if [ ! -f sdcc-src-${SDCC}.tar.bz2 ]; then
     wget "https://downloads.sourceforge.net/project/sdcc/sdcc/${SDCC}/sdcc-src-${SDCC}.tar.bz2" -O sdcc-src-${SDCC}.tar.bz2
   fi
-  tar jvxf sdcc-src-${SDCC}.tar.bz2
+  mkdir sdcc-${SDCC} && tar jvxf sdcc-src-${SDCC}.tar.bz2 -C sdcc-${SDCC} --strip-components 1
 fi
 
 cd sdcc-${SDCC}
@@ -126,9 +126,11 @@ DISABLE_DEVICES="z80 z180 r2k r3ka gbz80 ds390 ds400 pic14 pic16 hc08 s08"
 CONFIGURE_OPT="--prefix=${SDCC_DIR} --disable-ucsim --disable-sdcdb --disable-non-free" 
 case "${SDCC}" in
 3.[45678].*)
-DISABLE_DEVICES+=" tlcs90 stm8 stm8";;
-3.[9].*)
-DISABLE_DEVICES+=" tlcs90 stm8 stm8 ez80_z80 pdk13 pdk14 pdk15";;
+DISABLE_DEVICES+=" tlcs90 stm8";;
+3.[9].* | 4.0.*)
+DISABLE_DEVICES+=" tlcs90 stm8 ez80_z80 pdk13 pdk14 pdk15";;
+4.1.*)
+DISABLE_DEVICES+=" tlcs90 stm8 ez80_z80 pdk13 pdk14 pdk15 r2ka z80n";;
 esac
 for dev in ${DISABLE_DEVICES}; do
   CONFIGURE_OPT+=" --disable-${dev}-port";
