@@ -54,6 +54,11 @@
 #include "mag3110.h"
 #endif
 #include "ms5611.h"
+#if defined(I2C1_ADS122)
+#include "ads122.h"
+#elif defined(I2C1_ELVR)
+#include "all_sensors_elvr.h"
+#endif
 
 volatile __xdata u32 global_ms = 0;
 volatile __xdata u32 tickcount = 0;
@@ -78,6 +83,8 @@ static __idata __at (0x100 - sizeof(software_reset_survive_t))
 #define p21_low()   {__asm anl _P2,SHARP ~0x02 __endasm; }
 #define scl0_hiz()  {__asm orl _P1,SHARP  0x02 __endasm; }
 #define scl0_low()  {__asm anl _P1,SHARP ~0x02 __endasm; }
+#define scl1_hiz()  {__asm orl _P2,SHARP  0x80 __endasm; }
+#define scl1_low()  {__asm anl _P2,SHARP ~0x80 __endasm; }
 #define led3_on()   {__asm orl _P2,SHARP  0x08 __endasm; }
 #define led4_on()   {__asm orl _P2,SHARP  0x04 __endasm; }
 #define led34_on()  {__asm orl _P2,SHARP  (0x04 | 0x08) __endasm; }
@@ -87,6 +94,8 @@ static __idata __at (0x100 - sizeof(software_reset_survive_t))
 #define p21_low()   (P2 &= ~0x02)
 #define scl0_hiz()  (P1 |=  0x02)
 #define scl0_low()  (P1 &= ~0x02)
+#define scl1_hiz()  (P1 |=  0x80)
+#define scl1_low()  (P1 &= ~0x80)
 #define led3_on()   (P2 |=  0x08)
 #define led4_on()   (P2 |=  0x04)
 #define led34_on()  (P2 |=  (0x04 | 0x08))
@@ -290,6 +299,11 @@ void main() {
   mag3110_init();
 #endif
   ms5611_init();
+#if defined(I2C1_ADS122)
+  ads122_init();
+#elif defined(I2C1_ELVR)
+  as_elvr_init();
+#endif
   
   EA = 1; // Global Interrupt enable
   
@@ -317,6 +331,11 @@ void main() {
     mag3110_polling();
 #endif
     ms5611_polling();
+#if defined(I2C1_ADS122)
+    ads122_polling();
+#elif defined(I2C1_ELVR)
+    as_elvr_polling();
+#endif
     data_hub_polling();
     usb_polling();
 
@@ -373,6 +392,16 @@ static void port_init() {
     scl0_hiz();
     while(!(P1 & 0x02));
   }
+  
+#if defined(I2C1_ADS122) || defined(I2C1_ELVR)
+  // check scl1(P2.7) and sda1(P2.6), if not Hi, perform clock out to reset I2C01
+  while((P2 & 0xC0) != 0xC0){
+    scl1_low();
+    while(P2 & 0x80);
+    scl1_hiz();
+    while(!(P2 & 0x80));
+  }
+#endif
   
   // P0
   // 0 => SPI_SCK, 1 => SPI_MISO, 2 => SPI_MOSI, 3 => SPI_-CS,
@@ -445,6 +474,11 @@ void interrupt_timer3() __interrupt (INTERRUPT_TIMER3) {
   timeout_10ms++;
   switch(u32_lsbyte(tickcount) % 16){ // 6.25Hz
     case 0:
+#if defined(I2C1_ADS122)
+      ads122_capture = TRUE;
+#elif defined(I2C1_ELVR)
+      as_elvr_capture = TRUE;
+#endif
       break;
     case 4:
 #if !(defined(NINJA_VER) && (NINJA_VER >= 200))
