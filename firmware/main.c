@@ -168,9 +168,9 @@ static void power_on_delay(){
 }
 
 #if defined(POSITION_MONITOR)
-static __xdata u8 position_polarity = 0;
 typedef struct {
   gps_pos_t upper, lower;
+  u8 polarity;
 } position_range_t;
 static volatile __code __at(CONFIG_ADDRESS + sizeof(config_t))
     position_range_t position_range = {
@@ -180,6 +180,7 @@ static volatile __code __at(CONFIG_ADDRESS + sizeof(config_t))
   {{ // position lower
     -1800000000, -900000000, -100000000, // W180, S90, -100km
   }},
+  0x7, // all positive; required condition is lower < target < upper, neither target < lower nor upper < target
 };
 static void position_monitor(__xdata gps_pos_t *pos){
   typedef enum {
@@ -203,7 +204,7 @@ static void position_monitor(__xdata gps_pos_t *pos){
           u8
               a = (position_range.upper.v[i] < pos->v[i]),
               b = (position_range.lower.v[i] > pos->v[i]);
-          if((position_polarity & j) ? (a || b) : (a && b)){
+          if((position_range.polarity & j) ? (a || b) : (a && b)){
             current = GPS_OUT_OF_RANGE;
             break;
           }
@@ -244,23 +245,19 @@ static void position_check(FIL *f){
     DWORD f_pos = f_tell(f);
     __xdata config_t *buf = config_clone();
     __xdata position_range_t *buf_range = (__xdata position_range_t *)((u8 *)buf + sizeof(config_t));
-    u8 i;
-    for(i = 0; i < 3; ++i){
+    u8 i, j;
+    buf_range->polarity = 0;
+    for(i = 0, j = 0x1; i < 3; ++i, j <<= 1){
       buf_range->upper.v[i] = data_hub_read_long(f);
       buf_range->lower.v[i] = data_hub_read_long(f);
       if(f_tell(f) == f_pos){break;}
       f_pos = f_tell(f);
+      if(buf_range->upper.v[i] >= buf_range->lower.v[i]){
+        buf_range->polarity |= j;
+      }
     }
     if((i == 3) && (memcmp(&position_range, buf_range, sizeof(position_range_t)) != 0)){
       config_renew(buf);
-    }
-  }
-  {
-    u8 i, j;
-    for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
-      if(position_range.upper.v[i] >= position_range.lower.v[i]){
-        position_polarity |= j;
-      }
     }
   }
   gps_position_monitor = position_monitor;
