@@ -55,7 +55,12 @@ void interrupt_uart0() __interrupt (INTERRUPT_UART0);
 #define uart0_tx_active() (TB80 == 1)
 
 // For stdio.h
+#if defined(SDCC) && (SDCC >= 370)
+int getchar();
+int putchar(int c);
+#else
 char getchar();
 void putchar(char c);
+#endif
 
 #endif
