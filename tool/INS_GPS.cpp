@@ -2729,9 +2729,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
       }
     }
 
-    template <typename BaseFINS>
+    template <typename BaseINS, unsigned int Clocks>
     void measurement_update(const G_Packet &g_packet,
-        INS_GPS2_Tightly<BaseFINS> *){
+        INS_ClockErrorEstimated<BaseINS, Clocks> *){
       return;
     }
 
@@ -2744,9 +2744,9 @@ class INS_GPS_NAV<INS_GPS>::Helper {
      *
      * @param g_packet observation data of GPS receiver
      */
-    template <typename BaseFINS>
+    template <typename BaseINS, unsigned int Clocks>
     void measurement_update(const G_Packet_Measurement &g_packet,
-        INS_GPS2_Tightly<BaseFINS> *ins_gps){
+        INS_ClockErrorEstimated<BaseINS, Clocks> *ins_gps){
 
       for(receivers_t::iterator it(receivers.begin()); it != receivers.end(); ++it){
         it->adjust(g_packet.gpstime);
