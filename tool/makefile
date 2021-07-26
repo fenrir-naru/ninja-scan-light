@@ -66,8 +66,13 @@ $(BUILD_DIR)/depend.inc: $(SRCS) makefile
 
 -include $(BUILD_DIR)/depend.inc
 
+$(BUILD_DIR)/%.h.gch : %.h
+	mkdir -p $(@D)
+	$(CXX) $(CFLAGS) $(INCLUDES) -o $@ $<
+
 $(BUILD_DIR)/%.o :
-	$(CXX) -c $(CFLAGS) $(INCLUDES) -o $@ $<
+	$(MAKE) $(addsuffix .gch,$(addprefix $(BUILD_DIR)/,$(filter %.h, $^)))
+	$(CXX) -c $(CFLAGS) -I$(BUILD_DIR) $(INCLUDES) -o $@ $<
 
 $(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(OBJS_COMMON)
 	$(CXX) $(LFLAGS) $(INCLUDES) -o $@ $^ $(LIBS)
