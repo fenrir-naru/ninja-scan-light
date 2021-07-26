@@ -23,6 +23,8 @@
 #include "param/matrix.h"
 #include "param/vector3.h"
 
+#include "navigation/Filtered_INS2.h"
+
 #include <list>
 
 template <class FloatT>
