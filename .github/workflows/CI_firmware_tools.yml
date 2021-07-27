@@ -16,6 +16,7 @@ jobs:
       run: |
         echo "SDCC_DIR=${SDCC_DIR}" >> $GITHUB_ENV
         echo "${SDCC_DIR}/bin" >> $GITHUB_PATH
+        echo "DEPLOY_MESSAGE=\"build by Github actions, `ruby -e 'require "time"; print Time::parse(\`git log --format="%cd" -n 1\`.chomp).strftime("%Y%m%d_%H%M%S")'`\"" >> $GITHUB_ENV
         sudo apt-get update && sudo apt-get install -yq gcc-5 g++-5 libboost-all-dev g++-arm-linux-gnueabihf
     - name: cache
       uses: actions/cache@v2.1.3
@@ -33,3 +34,8 @@ jobs:
         (cd ./tool/test && make clean all)
         (cd ./tool && make clean all && (cd build_GCC && touch ${GITHUB_SHA}.commit && tar zvcf ubuntu.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
         (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all && (cd build_GCC_ARM && touch ${GITHUB_SHA}.commit && tar zvcf raspi.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
+    - name: deploy_to_archives
+      run: |
+        (mkdir -p /tmp/artifacts/${GITHUB_REPOSITORY##*/}/tool && cp -t /tmp/artifacts/${GITHUB_REPOSITORY##*/}/tool/ $(find ./tool -path "./tool/build_*" -a -name "*.tar.gz") )
+        (curl -fL -o /tmp/ghcp.zip https://github.com/int128/ghcp/releases/download/v1.8.0/ghcp_linux_amd64.zip && unzip -d /tmp /tmp/ghcp.zip)
+        (cd /tmp/artifacts && /tmp/ghcp commit -u fenrir-naru -r archives -m ${{env.DEPLOY_MESSAGE}} --token=${{secrets.DEPLOY_TO_ARCHIVES_TOKEN}} $(find . -type f | sed -n 's|^\./||p') )
