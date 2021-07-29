@@ -47,7 +47,7 @@ before_deploy:
 
 deploy:
   - provider: releases
-    token: $GITHUB_TOKEN # Oauth token
+    token: $GITHUB_PERSONAL_TOKEN # Oauth token
     file: 
       - ./firmware/ver1/build_by_sdcc/NinjaScanLight.hex
       - ./firmware/ver1/build_by_sdcc/NinjaScanLight.omf
