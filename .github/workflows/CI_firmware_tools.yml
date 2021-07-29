@@ -35,6 +35,11 @@ jobs:
         (cd ./tool/test && make clean all)
         (cd ./tool && make clean all && (cd build_GCC && touch ${GITHUB_SHA}.commit && tar zvcf ubuntu.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
         (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all && (cd build_GCC_ARM && touch ${GITHUB_SHA}.commit && tar zvcf raspi.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
+    - name: upload_artifact
+      uses: actions/upload-artifact@v2.2.4
+      with:
+        path: |
+          tool/build_*/*.tar.gz
     - name: deploy_to_archives
       run: |
         (mkdir -p /tmp/artifacts/${GITHUB_REPOSITORY##*/}/tool && cp -t /tmp/artifacts/${GITHUB_REPOSITORY##*/}/tool/ $(find ./tool -path "./tool/build_*" -a -name "*.tar.gz") )
