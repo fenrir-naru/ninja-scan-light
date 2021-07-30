@@ -464,6 +464,8 @@ protected:
      * @param S coefficient matrix of solution
      * @param rotation_matrix 3 by 3 matrix, which makes S aligned to ENU or NED coordinates
      * @return slopes matrix (1st and 2nd columns correspond to horizontal and vertical components, respectively)
+     * @see Eq.(5.26), (5.27) in @article{Mink, title={Performance of Receiver Autonomous Integrity Monitoring (RAIM) for Maritime Operations}, author={Mink, Michael}, pages={220} }
+     * Note: returned values are not performed to be multiplied by sqrt(N-4)
      */
     matrix_t slope_HV(const matrix_t &S, const matrix_t &rotation_matrix = matrix_t::getI(3)) const {
       matrix_t S_ENU_or_NED(rotate_S(S, rotation_matrix));
