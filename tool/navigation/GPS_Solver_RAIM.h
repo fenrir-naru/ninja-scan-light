@@ -95,10 +95,9 @@ protected:
     pvt.wssr = geomat2.wssr(delta_x);
     matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
     for(unsigned i(0); i < 2; ++i){ // horizontal, vertical
+      typename matrix_t::partial_t slope_HV_i(slope_HV.partial(slope_HV.rows(), 1, 0, i));
       typename matrix_t::partial_t::const_iterator it(
-          std::max_element(
-            slope_HV.partial(slope_HV.rows(), 1, 0, i).cbegin(),
-            slope_HV.partial(slope_HV.rows(), 1, 0, i).cend()));
+          std::max_element(slope_HV_i.cbegin(), slope_HV_i.cend()));
       pvt.slope_HV[i].max = *it;
       pvt.slope_HV[i].prn
           = (typename GPS_Solver_Base<FloatT>::prn_t)res.used_satellite_mask.indices_one()[it.row()];
