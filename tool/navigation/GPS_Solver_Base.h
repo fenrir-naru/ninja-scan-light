@@ -499,7 +499,7 @@ protected:
    * @param res (in,out) current solution to be updated
    * @return (bool) If solution will be treated as the final solution, true is returned; otherwise false.
    */
-  virtual bool update_position_soution(
+  virtual bool update_position_solution(
       const geometric_matrices_t &geomat,
       user_pvt_t &res) const {
 
@@ -600,7 +600,7 @@ protected:
       }
 
       try{
-        converged = update_position_soution(geomat, res);
+        converged = update_position_solution(geomat, res);
         if((!coarse_estimation) && converged){break;}
       }catch(std::exception &e){
         res.error_code = user_pvt_t::ERROR_POSITION_LS;
@@ -954,12 +954,12 @@ struct GPS_Solver_Base_Debug : public SolverBaseT {
   }
 
 protected:
-  virtual bool update_position_soution(
+  virtual bool update_position_solution(
       const geometric_matrices_t &geomat,
       typename GPS_Solver_Base<FloatT>::user_pvt_t &res) const {
 
     // Least square
-    if(!base_t::update_position_soution(geomat, res)){
+    if(!base_t::update_position_solution(geomat, res)){
       return false;
     }
     static_cast<user_pvt_t &>(res).G = geomat.G;
