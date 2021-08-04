@@ -418,7 +418,7 @@ static void port_init() {
   P1SKIP = 0xFC;
   
   // P2
-  // 0-1 => N.C., 2 => LED0, 3 => LED1
+  // 0-1 => N.C., 2 => LED4, 3 => LED3
   // 4 => UART1_TX, 5 => UART1_RX, 6 => I2C1_SDA, 7 => I2C1_SCL
   P2MDIN = 0xFF; 
   P2MDOUT = 0x1C; // 0, 1, 5, 6, 7 => open-drain
