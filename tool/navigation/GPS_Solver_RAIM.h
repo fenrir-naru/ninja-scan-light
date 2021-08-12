@@ -41,7 +41,7 @@
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
 struct GPS_PVT_RAIM : public PVT_BaseT {
-  bool is_available_RAIM() const {
+  bool is_available_RAIM_FD() const {
     return (PVT_BaseT::used_satellites >= 5);
   }
   struct slope_t {
@@ -85,7 +85,7 @@ protected:
     if(!base_t::update_position_solution(geomat, res)){return false;}
 
     user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
-    if(!pvt.is_available_RAIM()){return true;}
+    if(!pvt.is_available_RAIM_FD()){return true;}
 
     // Perform least square again for RAIM
     matrix_t S;
