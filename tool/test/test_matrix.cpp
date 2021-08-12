@@ -6,6 +6,7 @@
 #include <set>
 #include <deque>
 #include <algorithm>
+#include <numeric>
 
 #include <boost/type_traits/is_same.hpp>
 
@@ -151,6 +152,20 @@ BOOST_AUTO_TEST_CASE(check_symmetric){
   prologue_print();
   BOOST_TEST_MESSAGE("sym?:" << A->isSymmetric());
   BOOST_REQUIRE_EQUAL(true, A->isSymmetric());
+}
+
+BOOST_AUTO_TEST_CASE(sum){
+  prologue_print();
+  BOOST_TEST_MESSAGE("sum:" << A->sum());
+  BOOST_REQUIRE_EQUAL(std::accumulate(A->begin(), A->end(), content_t(0)), A->sum());
+}
+BOOST_AUTO_TEST_CASE(trace){
+  for(matrix_t::iterator it(A->begin()), it_end(A->end()); it != it_end; ++it){
+    if(it.row() != it.column()){*it = 0;} // Remove nondiagonal elements
+  }
+  prologue_print();
+  BOOST_TEST_MESSAGE("trace:" << A->trace());
+  BOOST_REQUIRE_EQUAL(A->sum(), A->trace());
 }
 
 BOOST_AUTO_TEST_CASE(scalar_mul){

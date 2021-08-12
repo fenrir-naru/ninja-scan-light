@@ -1535,6 +1535,21 @@ class Matrix_Frozen {
     }
 
     /**
+     * Return sum of matrix elements
+     *
+     * @return Summentaion
+     */
+    T sum() const noexcept {
+      T sum(0);
+      for(unsigned int i(0), i_end(rows()); i < i_end; i++){
+        for(unsigned int j(0), j_end(columns()); j < j_end; j++){
+          sum += (*this)(i, j);
+        }
+      }
+      return sum;
+    }
+
+    /**
      * Test whether matrix is LU decomposed.
      * The assumption of elements is
      * (0, 0)-(n-1, n-1):  L matrix
