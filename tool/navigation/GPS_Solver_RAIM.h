@@ -49,6 +49,8 @@ struct GPS_PVT_RAIM : public PVT_BaseT {
     typename GPS_Solver_Base<FloatT>::prn_t prn;
   } slope_HV[2];
   FloatT wssr;
+  FloatT wssr_sf; ///< sum(eigen.values(W (I - P)))
+  FloatT weight_max;
 };
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
@@ -88,19 +90,21 @@ protected:
     if(!pvt.is_available_RAIM_FD()){return true;}
 
     // Perform least square again for RAIM
-    matrix_t S;
+    matrix_t S, sf;
     typename geometric_matrices_t::partial_t geomat2(geomat.partial(res.used_satellites));
-    matrix_t delta_x(geomat2.least_square(S));
-
-    pvt.wssr = geomat2.wssr(delta_x);
+    geomat2.least_square(S);
+    pvt.wssr = geomat2.wssr_S(S, &sf);
+    pvt.wssr_sf = sf.eigen().partial(res.used_satellites, 1, 0, res.used_satellites).sum().real();
+    pvt.weight_max = *std::max_element(geomat2.W.cbegin(), geomat2.W.cend());
     matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
     for(unsigned i(0); i < 2; ++i){ // horizontal, vertical
       typename matrix_t::partial_t slope_HV_i(slope_HV.partial(slope_HV.rows(), 1, 0, i));
       typename matrix_t::partial_t::const_iterator it(
           std::max_element(slope_HV_i.cbegin(), slope_HV_i.cend()));
+      unsigned int row(it.row());
       pvt.slope_HV[i].max = *it;
       pvt.slope_HV[i].prn
-          = (typename GPS_Solver_Base<FloatT>::prn_t)res.used_satellite_mask.indices_one()[it.row()];
+          = (typename GPS_Solver_Base<FloatT>::prn_t)res.used_satellite_mask.indices_one()[row];
     }
 
     return true;

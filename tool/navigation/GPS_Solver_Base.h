@@ -485,7 +485,7 @@ protected:
     }
     /**
      * Calculate weighted square sum of residual (WSSR) based on least square solution.
-     * v^t W v (= (y - G x)^t W (y - G x) )
+     * v^t W v (= (y - G x)^t W (y - G x) = y^t W (I-P) y)
      *
      * @param x solution
      * @return WSSR scalar
@@ -493,6 +493,20 @@ protected:
     float_t wssr(const matrix_t &x = least_square()) const {
       matrix_t v(delta_r - G * x);
       return (v.transpose() * W * v)(0, 0);
+    }
+    /**
+     * Calculate weighted square sum of residual (WSSR) based on least square solution
+     * with solution coefficient matrix (S).
+     * v^t W v (= (y - G x)^t W (y - G x) = y^t W (I-G*S) y)
+     *
+     * @param S coefficient matrix of solution
+     * @param sf (output) pointer to store scale factor matrix of y^t y, i.e., *sf = W (I-G*S)
+     * @return WSSR scalar
+     */
+    float_t wssr_S(const matrix_t &S, matrix_t *sf = NULL) const {
+      matrix_t sf_(W * (matrix_t::getI(W.rows()) - (G * S)));
+      if(sf){*sf = sf_;}
+      return (delta_r.transpose() * sf_ * delta_r)(0, 0);
     }
     typedef linear_solver_t<typename MatrixT::partial_offsetless_t> partial_t;
     partial_t partial(unsigned int size) const {
