@@ -437,7 +437,7 @@ data.gps.solver_options. expr
       template <class PVT_BaseT>
       static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM<FloatT, PVT_BaseT> *){
         return print(out, static_cast<const PVT_BaseT *>(0))
-            << ',' << "wssr"
+            << ',' << "wssr" << ',' << "wssr_sf" << ',' << "weight_max"
             << ',' << "slopeH_max" << ',' << "slopeH_max_PRN"
             << ',' << "slopeV_max" << ',' << "slopeV_max_PRN";
       }
@@ -528,7 +528,7 @@ data.gps.solver_options. expr
     static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM<FloatT, PVT_BaseT> &src){
       print(out, static_cast<const PVT_BaseT &>(src));
       if(src.position_solved() && src.is_available_RAIM_FD()){
-        out << ',' << src.wssr
+        out << ',' << src.wssr << ',' << src.wssr_sf << ',' << src.weight_max
             << ',' << src.slope_HV[0].max << ',' << src.slope_HV[0].prn
             << ',' << src.slope_HV[1].max << ',' << src.slope_HV[1].prn;
       }else{

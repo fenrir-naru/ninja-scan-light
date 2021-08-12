@@ -90,11 +90,11 @@ protected:
     if(!pvt.is_available_RAIM_FD()){return true;}
 
     // Perform least square again for RAIM
-    matrix_t S, sf;
+    matrix_t S, W_dash;
     typename geometric_matrices_t::partial_t geomat2(geomat.partial(res.used_satellites));
     geomat2.least_square(S);
-    pvt.wssr = geomat2.wssr_S(S, &sf);
-    pvt.wssr_sf = sf.eigen().partial(res.used_satellites, 1, 0, res.used_satellites).sum().real();
+    pvt.wssr = geomat2.wssr_S(S, &W_dash);
+    pvt.wssr_sf = W_dash.trace();
     pvt.weight_max = *std::max_element(geomat2.W.cbegin(), geomat2.W.cend());
     matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
     for(unsigned i(0); i < 2; ++i){ // horizontal, vertical

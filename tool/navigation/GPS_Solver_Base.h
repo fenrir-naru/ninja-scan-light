@@ -500,13 +500,19 @@ protected:
      * v^t W v (= (y - G x)^t W (y - G x) = y^t W (I-G*S) y)
      *
      * @param S coefficient matrix of solution
-     * @param sf (output) pointer to store scale factor matrix of y^t y, i.e., *sf = W (I-G*S)
+     * @param W_dash (output) pointer to store scale factor matrix of y^t y,
+     * i.e., *W_dash = norm(t(I-G*S)) * W * norm(I-G*S)
      * @return WSSR scalar
      */
-    float_t wssr_S(const matrix_t &S, matrix_t *sf = NULL) const {
-      matrix_t sf_(W * (matrix_t::getI(W.rows()) - (G * S)));
-      if(sf){*sf = sf_;}
-      return (delta_r.transpose() * sf_ * delta_r)(0, 0);
+    float_t wssr_S(const matrix_t &S, matrix_t *W_dash = NULL) const {
+      matrix_t rhs(matrix_t::getI(W.rows()) - (G * S));
+      if(W_dash){
+        *W_dash = W.copy();
+        for(unsigned int i(0), i_end(rhs.rows()); i < i_end; ++i){
+          (*W_dash)(i, i) *= (rhs.rowVector(i) * rhs.rowVector(i).transpose())(0, 0);
+        }
+      }
+      return (delta_r.transpose() * W * rhs * delta_r)(0, 0);
     }
     typedef linear_solver_t<typename MatrixT::partial_offsetless_t> partial_t;
     partial_t partial(unsigned int size) const {
