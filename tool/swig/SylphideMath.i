@@ -212,6 +212,7 @@ class Matrix_Frozen {
     bool isSymmetric() const noexcept;
     
     T trace(const bool &do_check = true) const;
+    T sum() const noexcept;
     
     // bool isLU() const noexcept
     
