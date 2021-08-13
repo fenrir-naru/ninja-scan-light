@@ -435,7 +435,7 @@ data.gps.solver_options. expr
       }
 #if !defined(BUILD_WITHOUT_GNSS_RAIM)
       template <class PVT_BaseT>
-      static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM<FloatT, PVT_BaseT> *){
+      static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM_LSR<FloatT, PVT_BaseT> *){
         return print(out, static_cast<const PVT_BaseT *>(0))
             << ',' << "wssr" << ',' << "wssr_sf" << ',' << "weight_max"
             << ',' << "slopeH_max" << ',' << "slopeH_max_PRN"
@@ -525,14 +525,14 @@ data.gps.solver_options. expr
     }
 #if !defined(BUILD_WITHOUT_GNSS_RAIM)
     template <class PVT_BaseT>
-    static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM<FloatT, PVT_BaseT> &src){
+    static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM_LSR<FloatT, PVT_BaseT> &src){
       print(out, static_cast<const PVT_BaseT &>(src));
-      if(src.position_solved() && src.is_available_RAIM_FD()){
-        out << ',' << src.wssr << ',' << src.wssr_sf << ',' << src.weight_max
-            << ',' << src.slope_HV[0].max << ',' << src.slope_HV[0].prn
-            << ',' << src.slope_HV[1].max << ',' << src.slope_HV[1].prn;
+      if(src.position_solved() && src.FD.valid){
+        out << ',' << src.FD.wssr << ',' << src.FD.wssr_sf << ',' << src.FD.weight_max
+            << ',' << src.FD.slope_HV[0].max << ',' << src.FD.slope_HV[0].prn
+            << ',' << src.FD.slope_HV[1].max << ',' << src.FD.slope_HV[1].prn;
       }else{
-        out << ",,,,,";
+        out << ",,,,,,,";
       }
       return out;
     }

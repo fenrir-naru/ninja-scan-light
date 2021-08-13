@@ -40,17 +40,18 @@
 #include <algorithm>
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
-struct GPS_PVT_RAIM : public PVT_BaseT {
-  bool is_available_RAIM_FD() const {
-    return (PVT_BaseT::used_satellites >= 5);
-  }
-  struct slope_t {
-    FloatT max;
-    typename GPS_Solver_Base<FloatT>::prn_t prn;
-  } slope_HV[2];
-  FloatT wssr;
-  FloatT wssr_sf; ///< sum(eigen.values(W (I - P)))
-  FloatT weight_max;
+struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
+  struct info_t {
+    bool valid;
+    struct slope_t {
+      FloatT max;
+      typename GPS_Solver_Base<FloatT>::prn_t prn;
+    } slope_HV[2];
+    FloatT wssr;
+    FloatT wssr_sf; ///< for nominal bias consideration, sum(eigen.values(W (I - P)))
+    FloatT weight_max;
+  };
+  info_t FD; ///< Fault detection
 };
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
@@ -73,7 +74,7 @@ struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   inheritate_type(geometric_matrices_t);
 #undef inheritate_type
 
-  typedef GPS_PVT_RAIM<float_t, typename base_t::user_pvt_t> user_pvt_t;
+  typedef GPS_PVT_RAIM_LSR<float_t, typename base_t::user_pvt_t> user_pvt_t;
 
   typename base_t::template solver_interface_t<self_t> solve() const {
     return typename base_t::template solver_interface_t<self_t>(*this);
@@ -87,23 +88,23 @@ protected:
     if(!base_t::update_position_solution(geomat, res)){return false;}
 
     user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
-    if(!pvt.is_available_RAIM_FD()){return true;}
+    if(!(pvt.FD.valid = (pvt.used_satellites >= 5))){return true;}
 
-    // Perform least square again for RAIM
+    // Perform least square again for Fault Detection
     matrix_t S, W_dash;
     typename geometric_matrices_t::partial_t geomat2(geomat.partial(res.used_satellites));
     geomat2.least_square(S);
-    pvt.wssr = geomat2.wssr_S(S, &W_dash);
-    pvt.wssr_sf = W_dash.trace();
-    pvt.weight_max = *std::max_element(geomat2.W.cbegin(), geomat2.W.cend());
+    pvt.FD.wssr = geomat2.wssr_S(S, &W_dash);
+    pvt.FD.wssr_sf = W_dash.trace();
+    pvt.FD.weight_max = *std::max_element(geomat2.W.cbegin(), geomat2.W.cend());
     matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
     for(unsigned i(0); i < 2; ++i){ // horizontal, vertical
       typename matrix_t::partial_t slope_HV_i(slope_HV.partial(slope_HV.rows(), 1, 0, i));
       typename matrix_t::partial_t::const_iterator it(
           std::max_element(slope_HV_i.cbegin(), slope_HV_i.cend()));
       unsigned int row(it.row());
-      pvt.slope_HV[i].max = *it;
-      pvt.slope_HV[i].prn
+      pvt.FD.slope_HV[i].max = *it;
+      pvt.FD.slope_HV[i].prn
           = (typename GPS_Solver_Base<FloatT>::prn_t)res.used_satellite_mask.indices_one()[row];
     }
 
