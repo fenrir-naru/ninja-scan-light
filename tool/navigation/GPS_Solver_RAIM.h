@@ -98,14 +98,14 @@ protected:
     pvt.FD.wssr_sf = W_dash.trace();
     pvt.FD.weight_max = *std::max_element(geomat2.W.cbegin(), geomat2.W.cend());
     matrix_t slope_HV(geomat2.slope_HV(S, res.user_position.ecef2enu()));
+    std::vector<int> prn_list(res.used_satellite_mask.indices_one());
     for(unsigned i(0); i < 2; ++i){ // horizontal, vertical
       typename matrix_t::partial_t slope_HV_i(slope_HV.partial(slope_HV.rows(), 1, 0, i));
       typename matrix_t::partial_t::const_iterator it(
           std::max_element(slope_HV_i.cbegin(), slope_HV_i.cend()));
       unsigned int row(it.row());
       pvt.FD.slope_HV[i].max = *it;
-      pvt.FD.slope_HV[i].prn
-          = (typename GPS_Solver_Base<FloatT>::prn_t)res.used_satellite_mask.indices_one()[row];
+      pvt.FD.slope_HV[i].prn = (typename GPS_Solver_Base<FloatT>::prn_t)prn_list[row];
     }
 
     return true;
