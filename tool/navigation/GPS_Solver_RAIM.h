@@ -38,6 +38,7 @@
 #include "GPS_Solver_Base.h"
 
 #include <algorithm>
+#include <deque>
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
 struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
@@ -52,6 +53,7 @@ struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
     FloatT weight_max;
   };
   info_t FD; ///< Fault detection
+  info_t FDE_min, FDE_2nd; ///< Fault exclusion
 };
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
@@ -69,9 +71,11 @@ struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   inheritate_type(float_t);
   inheritate_type(matrix_t);
 
-  inheritate_type(xyz_t);
+  inheritate_type(gps_time_t);
+  inheritate_type(pos_t);
 
   inheritate_type(geometric_matrices_t);
+  inheritate_type(measurement2_t);
 #undef inheritate_type
 
   typedef GPS_PVT_RAIM_LSR<float_t, typename base_t::user_pvt_t> user_pvt_t;
@@ -109,6 +113,60 @@ protected:
     }
 
     return true;
+  }
+
+public:
+  using base_t::user_pvt;
+protected:
+  void user_pvt(
+      typename GPS_Solver_Base<FloatT>::user_pvt_t &res,
+      const measurement2_t &measurement,
+      const gps_time_t &receiver_time,
+      const pos_t &user_position_init,
+      const float_t &receiver_error_init,
+      const bool &good_init = true,
+      const bool &with_velocity = true) const {
+
+    user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
+    pvt.FD.valid = pvt.FDE_min.valid = pvt.FDE_2nd.valid = false;
+
+    // Solution with full satellites
+    base_t::user_pvt(res,
+        measurement, receiver_time,
+        user_position_init, receiver_error_init,
+        good_init, with_velocity);
+
+    if((pvt.error_code != user_pvt_t::ERROR_NO)
+        || (!pvt.FD.valid)
+        || (pvt.used_satellites < 6)){return;}
+
+    // Generate full set
+    std::deque<typename measurement2_t::value_type> fullset;
+    for(typename measurement2_t::const_iterator it(measurement.begin()), it_end(measurement.end());
+        it != it_end; ++it){
+      if(!pvt.used_satellite_mask[it->prn]){continue;}
+      fullset.push_back(*it);
+    }
+
+    // Subset calculation for Fault Exclusion
+    pvt.FDE_min.wssr = pvt.FDE_2nd.wssr = pvt.FD.wssr;
+    user_pvt_t pvt_FDE(pvt);
+    for(unsigned int i(0); i < pvt.used_satellites - 1;
+        ++i, fullset.push_back(fullset.front()), fullset.pop_front()){
+      pvt_FDE.FD.valid = false;
+      measurement2_t subset(fullset.begin(), fullset.end() - 1);
+      base_t::user_pvt(pvt_FDE,
+          subset, receiver_time,
+          pvt.user_position, pvt.receiver_error,
+          true, false);
+      if(!pvt_FDE.FD.valid){continue;}
+      if(pvt_FDE.FD.wssr < pvt.FDE_min.wssr){
+        pvt.FDE_2nd = pvt.FDE_min;
+        pvt.FDE_min = pvt_FDE.FD;
+      }else if(pvt_FDE.FD.wssr < pvt.FDE_2nd.wssr){
+        pvt.FDE_2nd = pvt_FDE.FD;
+      }
+    }
   }
 };
 
