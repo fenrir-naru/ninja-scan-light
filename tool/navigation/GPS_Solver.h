@@ -432,6 +432,7 @@ class GPS_SinglePositioning : public SolverBaseT {
 
     /**
      * Calculate User position/velocity with hint
+     * This is optimized version for GPS-only constellation
      *
      * @param res (out) calculation results and matrices used for calculation
      * @param measurement PRN, pseudo-range, pseudo-range rate information

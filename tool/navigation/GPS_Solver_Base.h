@@ -494,6 +494,9 @@ protected:
 
   /**
    * Update position solution
+   * This function will be called multiple times in a solution calculation iteration.
+   * It may be overridden in a subclass for extraction of calculation source
+   * such as design matrix.
    *
    * @param geomat residual, desgin and weight matrices
    * @param res (in,out) current solution to be updated
@@ -517,7 +520,8 @@ protected:
   }
 
   /**
-   * Calculate User position/velocity with hint
+   * Calculate User position/velocity by using associated solvers.
+   * This function can be overridden in a subclass.
    *
    * @param res (out) calculation results and matrices used for calculation
    * @param measurement PRN, pseudo-range, and pseudo-range rate information
@@ -529,7 +533,7 @@ protected:
    * @param with_velocity if true, perform velocity estimation.
    * @see update_ephemeris(), register_ephemeris
    */
-  void user_pvt(
+  virtual void user_pvt(
       user_pvt_t &res,
       const measurement2_t &measurement,
       const gps_time_t &receiver_time,
@@ -538,7 +542,6 @@ protected:
       const bool &good_init = true,
       const bool &with_velocity = true) const {
 
-    // Reference implementation (to be hidden by optimized one in sub class)
     res.receiver_time = receiver_time;
 
     // 1. Position calculation
@@ -673,6 +676,8 @@ protected:
 public:
   /**
    * Calculate User position/velocity with hint
+   * This is multi-constellation version,
+   * and reference implementation to be hidden by optimized one in sub class.
    *
    * @param res (out) calculation results and matrices used for calculation
    * @param measurement PRN, pseudo-range, and pseudo-range rate information
