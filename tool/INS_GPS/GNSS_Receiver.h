@@ -440,7 +440,8 @@ data.gps.solver_options. expr
             << ',' << "wssr" << ',' << "wssr_sf" << ',' << "weight_max"
             << ',' << "slopeH_max" << ',' << "slopeH_max_PRN"
             << ',' << "slopeV_max" << ',' << "slopeV_max_PRN"
-            << ',' << "wssr_FDE_min" << ',' << "wssr_FDE_2nd";
+            << ',' << "wssr_FDE_min" << ',' << "wssr_FDE_min_PRN"
+            << ',' << "wssr_FDE_2nd" << ',' << "wssr_FDE_2nd_PRN";
       }
 #endif
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
@@ -532,12 +533,18 @@ data.gps.solver_options. expr
         out << ',' << src.FD.wssr << ',' << src.FD.wssr_sf << ',' << src.FD.weight_max
             << ',' << src.FD.slope_HV[0].max << ',' << src.FD.slope_HV[0].prn
             << ',' << src.FD.slope_HV[1].max << ',' << src.FD.slope_HV[1].prn;
-        out << ',';
-        if(src.FDE_min.valid){out << src.FDE_min.wssr;}
-        out << ',';
-        if(src.FDE_2nd.valid){out << src.FDE_2nd.wssr;}
+        if(src.FDE_min.valid){
+          out << ',' << src.FDE_min.wssr << ',' << src.FDE_min.excluded;
+          if(src.FDE_2nd.valid){
+            out << ',' << src.FDE_2nd.wssr << ',' << src.FDE_2nd.excluded;
+          }else{
+            out << ",,";
+          }
+        }else{
+          out << ",,,,";
+        }
       }else{
-        out << ",,,,,,,,,";
+        out << ",,,,,,,,,,,";
       }
       return out;
     }

@@ -42,7 +42,7 @@
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
 struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
-  struct info_t {
+  struct detection_t {
     bool valid;
     struct slope_t {
       FloatT max;
@@ -51,9 +51,13 @@ struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
     FloatT wssr;
     FloatT wssr_sf; ///< for nominal bias consideration, sum(eigen.values(W (I - P)))
     FloatT weight_max;
-  };
-  info_t FD; ///< Fault detection
-  info_t FDE_min, FDE_2nd; ///< Fault exclusion
+  } FD; ///< Fault detection
+  struct exclusion_t : public detection_t {
+    typename GPS_Solver_Base<FloatT>::prn_t excluded;
+    typename GPS_Solver_Base<FloatT>::pos_t user_position;
+    typename GPS_Solver_Base<FloatT>::float_t receiver_error;
+    typename GPS_Solver_Base<FloatT>::user_pvt_t::dop_t dop;
+  } FDE_min, FDE_2nd; ///< Fault exclusion
 };
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
@@ -159,13 +163,30 @@ protected:
           subset, receiver_time,
           pvt.user_position, pvt.receiver_error,
           true, false);
+
       if(!pvt_FDE.FD.valid){continue;}
+      switch(pvt_FDE.error_code){
+        case user_pvt_t::ERROR_NO:
+        case user_pvt_t::ERROR_VELOCITY_SKIPPED:
+          break;
+        default:
+          continue;
+      }
+
+      typename user_pvt_t::exclusion_t *target(NULL);
       if(pvt_FDE.FD.wssr < pvt.FDE_min.wssr){
         pvt.FDE_2nd = pvt.FDE_min;
-        pvt.FDE_min = pvt_FDE.FD;
+        target = &pvt.FDE_min;
       }else if(pvt_FDE.FD.wssr < pvt.FDE_2nd.wssr){
-        pvt.FDE_2nd = pvt_FDE.FD;
+        target = &pvt.FDE_2nd;
+      }else{
+        continue;
       }
+      (typename user_pvt_t::detection_t &)(*target) = pvt_FDE.FD;
+      target->excluded = fullset.back().prn;
+      target->user_position = pvt_FDE.user_position;
+      target->receiver_error = pvt_FDE.receiver_error;
+      target->dop = pvt_FDE.dop;
     }
   }
 };
