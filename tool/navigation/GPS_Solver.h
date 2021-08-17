@@ -163,16 +163,17 @@ class GPS_SinglePositioning : public SolverBaseT {
     inheritate_type(measurement_items_t);
     typedef typename base_t::range_error_t range_error_t;
 
-    typedef GPS_SinglePositioning_Options<float_t> options_t;
-
     inheritate_type(relative_property_t);
     inheritate_type(geometric_matrices_t);
     inheritate_type(user_pvt_t);
 #undef inheritate_type
 
+    typedef typename GPS_Solver_Base<float_t>::options_t::template merge_t<
+        GPS_SinglePositioning_Options<float_t>, base_t> options_t;
+
   protected:
     const space_node_t &_space_node;
-    options_t _options;
+    GPS_SinglePositioning_Options<float_t> _options;
 
   public:
     const space_node_t &space_node() const {return _space_node;}
@@ -184,7 +185,7 @@ class GPS_SinglePositioning : public SolverBaseT {
      *
      * @return (int) number of (possibly) available models
      */
-    int filter_ionospheric_models(options_t &opt) const {
+    int filter_ionospheric_models(GPS_SinglePositioning_Options<float_t> &opt) const {
 
       int available_models(0);
 
@@ -209,22 +210,25 @@ class GPS_SinglePositioning : public SolverBaseT {
       return available_models;
     }
 
-    const options_t &available_options() const {
-      return _options;
+    options_t available_options() const {
+      return options_t(base_t::available_options(), _options);
     }
 
     options_t available_options(const options_t &opt_wish) const {
-      options_t res(opt_wish);
-      filter_ionospheric_models(res);
-      return res;
+      GPS_SinglePositioning_Options<float_t> opt(opt_wish);
+      filter_ionospheric_models(opt);
+      return options_t(base_t::available_options(opt_wish), opt);
     }
 
-    const options_t &update_options(const options_t &opt_wish){
-      return _options = available_options(opt_wish);
+    options_t update_options(const options_t &opt_wish){
+      filter_ionospheric_models(_options = opt_wish);
+      return options_t(base_t::update_options(opt_wish), _options);
     }
 
-    GPS_SinglePositioning(const space_node_t &sn, const options_t &opt_wish = options_t())
-        : base_t(), _space_node(sn), _options(available_options(opt_wish)) {}
+    GPS_SinglePositioning(const space_node_t &sn)
+        : base_t(), _space_node(sn), _options() {
+      filter_ionospheric_models(_options);
+    }
 
     ~GPS_SinglePositioning(){}
 

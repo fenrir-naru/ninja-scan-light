@@ -64,38 +64,28 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
     inheritate_type(measurement_item_set_t);
 #undef inheritate_type
 
-    struct options_t
-        : public super_t::options_t,
-        public GPS_Solver_MultiFrequency_Options<float_t> {
-      static options_t generate(
-          const typename super_t::options_t &opt_super,
-          const GPS_Solver_MultiFrequency_Options<float_t> &opt_freq){
-        options_t res;
-        ((typename super_t::options_t &)res) = opt_super;
-        ((GPS_Solver_MultiFrequency_Options<float_t> &)res) = opt_freq;
-        return res;
-      }
-    };
+    typedef typename GPS_Solver_Base<float_t>::options_t::template merge_t<
+        GPS_Solver_MultiFrequency_Options<float_t>, super_t> options_t;
+
     GPS_Solver_MultiFrequency_Options<float_t> options_frequency;
 
   public:
     options_t available_options() const {
-      return options_t::generate(super_t::available_options(), options_frequency);
+      return options_t(super_t::available_options());
     }
 
     options_t available_options(const options_t &opt_wish) const {
-      return options_t::generate(super_t::available_options(opt_wish), options_frequency);
+      return options_t(super_t::available_options(opt_wish), opt_wish);
     }
 
     options_t update_options(const options_t &opt_wish){
-      return options_t::generate(
+      return options_t(
           super_t::update_options(opt_wish),
           options_frequency = opt_wish);
     }
 
-    GPS_Solver_MultiFrequency(
-        const space_node_t &sn, const options_t &opt_wish = options_t())
-        : super_t(sn, opt_wish), options_frequency(opt_wish) {}
+    GPS_Solver_MultiFrequency(const space_node_t &sn)
+        : super_t(sn), options_frequency() {}
 
     ~GPS_Solver_MultiFrequency(){}
 

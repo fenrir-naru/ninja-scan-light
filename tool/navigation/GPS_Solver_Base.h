@@ -316,6 +316,29 @@ struct GPS_Solver_Base {
     }
   };
 
+  struct options_t {
+    template <class OptionsT, class BaseSolverT = GPS_Solver_Base<float_t> >
+    struct merge_t : public BaseSolverT::options_t, OptionsT {
+      merge_t() : BaseSolverT::options_t(), OptionsT() {}
+      merge_t(
+          const typename BaseSolverT::options_t &opt_super,
+          const OptionsT &opt = OptionsT())
+          : BaseSolverT::options_t(opt_super), OptionsT(opt) {}
+    };
+  };
+
+  options_t available_options() const {
+    return options_t();
+  }
+
+  options_t available_options(const options_t &opt_wish) const {
+    return opt_wish;
+  }
+
+  options_t update_options(const options_t &opt_wish){
+    return opt_wish;
+  }
+
 protected:
   template <class MatrixT>
   struct linear_solver_t {
