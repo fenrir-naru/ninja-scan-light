@@ -325,6 +325,28 @@ struct GPS_Solver_Base {
           const OptionsT &opt = OptionsT())
           : BaseSolverT::options_t(opt_super), OptionsT(opt) {}
     };
+
+    /**
+     * Flags to invalidate specific satellite
+     * Its index will be adjusted for PRN.
+     */
+    template <int prn_begin, int prn_end>
+    struct exclude_prn_t
+        : public BitArray<prn_end - prn_begin + 1, unsigned int> {
+      typedef BitArray<prn_end - prn_begin + 1, unsigned int> super_t;
+      exclude_prn_t() : super_t() {
+        super_t::clear();
+      }
+      bool operator[](const int &prn) const {
+        return super_t::operator[](prn - prn_begin);
+      }
+      using super_t::set;
+      void set(const int &prn, const bool &bit = true) {
+        super_t::set(prn - prn_begin, bit);
+      }
+      using super_t::reset;
+      void reset(const int &prn) {set(prn, false);}
+    };
   };
 
   options_t available_options() const {

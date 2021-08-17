@@ -99,34 +99,17 @@ struct GPS_Solver_GeneralOptions {
 
     return true;
   }
-
-  /**
-   * Flags to invalidate specific satellite
-   * Its index will be adjusted for PRN.
-   */
-  template <int prn_begin, int prn_end>
-  struct exclude_prn_t
-      : public BitArray<prn_end - prn_begin + 1, unsigned int> {
-    typedef BitArray<prn_end - prn_begin + 1, unsigned int> super_t;
-    bool operator[](const int &prn) const {
-      return super_t::operator[](prn - prn_begin);
-    }
-    using super_t::set;
-    void set(const int &prn, const bool &bit = true) {
-      super_t::set(prn - prn_begin, bit);
-    }
-    using super_t::reset;
-    void reset(const int &prn) {set(prn, false);}
-  };
 };
 
 template <class FloatT>
 struct GPS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> {
-  typename GPS_Solver_GeneralOptions<FloatT>
-      ::template exclude_prn_t<1, 256> exclude_prn; // PRN ranges from 1 to 256 (including GPS compatible systems such as QZSS)
+  
+  // PRN ranges from 1 to 256 (including GPS compatible systems such as QZSS)
+  typename GPS_Solver_Base<FloatT>::options_t::template exclude_prn_t<1, 256> exclude_prn;
+  
+  GPS_SinglePositioning_Options() 
+      : GPS_Solver_GeneralOptions<FloatT>(), exclude_prn() {
 
-  GPS_SinglePositioning_Options() : GPS_Solver_GeneralOptions<FloatT>() {
-    exclude_prn.clear();
   }
 };
 
