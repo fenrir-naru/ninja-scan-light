@@ -60,6 +60,20 @@ struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
   } FDE_min, FDE_2nd; ///< Fault exclusion
 };
 
+/*
+ * Comment on implementation of protection level (PL) calculation
+ *
+ * To calculate PL, WSSR threshold is firstly required.
+ * WSSR threshold is a function of P_fa (false alarm), DoF (degree of freedom)
+ * corresponding to number of usable satellites minus 4, and nominal biases.
+ * If nominal biases are configured as zeros, the threshold can be implemented
+ * as a map whose key is DoF, without online calculation of CFD of chi-squred distribution.
+ * However, in order to consider nominal biases, online calculation is required,
+ * and chi-squred distribution also must be implemented.
+ * Therefore, currently, PL is assumed to be calculated outside this program,
+ * which can be performed with wssr, wssr_sf, slope_HV.
+ */
+
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
 struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   typedef SolverBaseT base_t;
