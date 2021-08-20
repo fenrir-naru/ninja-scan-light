@@ -47,6 +47,10 @@
 
 #include "analyze_common.h"
 
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+#include "navigation/GPS_Solver_RAIM.h"
+#endif
+
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
 #include "navigation/GPS_Solver_MultiFrequency.h"
 #endif
@@ -55,10 +59,18 @@ template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
 
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+#if defined(BUILD_WITH_GNSS_DEBUG)
+  typedef GPS_Solver_RAIM_LSR<FloatT, GPS_Solver_Base_Debug<FloatT> > solver_base_t;
+#else
+  typedef GPS_Solver_RAIM_LSR<FloatT> solver_base_t;
+#endif
+#else
 #if defined(BUILD_WITH_GNSS_DEBUG)
   typedef GPS_Solver_Base_Debug<FloatT> solver_base_t;
 #else
   typedef GPS_Solver_Base<FloatT> solver_base_t;
+#endif
 #endif
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
@@ -421,6 +433,17 @@ data.gps.solver_options. expr
         }
         return out;
       }
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+      template <class PVT_BaseT>
+      static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM_LSR<FloatT, PVT_BaseT> *){
+        return print(out, static_cast<const PVT_BaseT *>(0))
+            << ',' << "wssr" << ',' << "wssr_sf" << ',' << "weight_max"
+            << ',' << "slopeH_max" << ',' << "slopeH_max_PRN"
+            << ',' << "slopeV_max" << ',' << "slopeV_max_PRN"
+            << ',' << "wssr_FDE_min" << ',' << "wssr_FDE_min_PRN"
+            << ',' << "wssr_FDE_2nd" << ',' << "wssr_FDE_2nd_PRN";
+      }
+#endif
       friend std::ostream &operator<<(std::ostream &out, const label_t &label){
         return print(out, static_cast<const pvt_t *>(0));
       }
@@ -502,7 +525,30 @@ data.gps.solver_options. expr
       }
       return out;
     }
-
+#if !defined(BUILD_WITHOUT_GNSS_RAIM)
+    template <class PVT_BaseT>
+    static std::ostream &print(std::ostream &out, const GPS_PVT_RAIM_LSR<FloatT, PVT_BaseT> &src){
+      print(out, static_cast<const PVT_BaseT &>(src));
+      if(src.position_solved() && src.FD.valid){
+        out << ',' << src.FD.wssr << ',' << src.FD.wssr_sf << ',' << src.FD.weight_max
+            << ',' << src.FD.slope_HV[0].max << ',' << src.FD.slope_HV[0].prn
+            << ',' << src.FD.slope_HV[1].max << ',' << src.FD.slope_HV[1].prn;
+        if(src.FDE_min.valid){
+          out << ',' << src.FDE_min.wssr << ',' << src.FDE_min.excluded;
+          if(src.FDE_2nd.valid){
+            out << ',' << src.FDE_2nd.wssr << ',' << src.FDE_2nd.excluded;
+          }else{
+            out << ",,";
+          }
+        }else{
+          out << ",,,,";
+        }
+      }else{
+        out << ",,,,,,,,,,,";
+      }
+      return out;
+    }
+#endif
     friend std::ostream &operator<<(std::ostream &out, const pvt_printer_t &p){
       return print(out, p.pvt);
     }

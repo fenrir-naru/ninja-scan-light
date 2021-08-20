@@ -464,6 +464,8 @@ protected:
      * @param S coefficient matrix of solution
      * @param rotation_matrix 3 by 3 matrix, which makes S aligned to ENU or NED coordinates
      * @return slopes matrix (1st and 2nd columns correspond to horizontal and vertical components, respectively)
+     * @see Eq.(5.26), (5.27) in @article{Mink, title={Performance of Receiver Autonomous Integrity Monitoring (RAIM) for Maritime Operations}, author={Mink, Michael}, pages={220} }
+     * Note: returned values are not performed to be multiplied by sqrt(N-4)
      */
     matrix_t slope_HV(const matrix_t &S, const matrix_t &rotation_matrix = matrix_t::getI(3)) const {
       matrix_t S_ENU_or_NED(rotate_S(S, rotation_matrix));
@@ -483,7 +485,7 @@ protected:
     }
     /**
      * Calculate weighted square sum of residual (WSSR) based on least square solution.
-     * v^t W v (= (y - G x)^t W (y - G x) )
+     * v^t W v (= (y - G x)^t W (y - G x) = y^t W (I-P) y)
      *
      * @param x solution
      * @return WSSR scalar
@@ -491,6 +493,26 @@ protected:
     float_t wssr(const matrix_t &x = least_square()) const {
       matrix_t v(delta_r - G * x);
       return (v.transpose() * W * v)(0, 0);
+    }
+    /**
+     * Calculate weighted square sum of residual (WSSR) based on least square solution
+     * with solution coefficient matrix (S).
+     * v^t W v (= (y - G x)^t W (y - G x) = y^t W (I-G*S) y)
+     *
+     * @param S coefficient matrix of solution
+     * @param W_dash (output) pointer to store scale factor matrix of y^t y,
+     * i.e., *W_dash = norm(t(I-G*S)) * W * norm(I-G*S)
+     * @return WSSR scalar
+     */
+    float_t wssr_S(const matrix_t &S, matrix_t *W_dash = NULL) const {
+      matrix_t rhs(matrix_t::getI(W.rows()) - (G * S));
+      if(W_dash){
+        *W_dash = W.copy();
+        for(unsigned int i(0), i_end(rhs.rows()); i < i_end; ++i){
+          (*W_dash)(i, i) *= (rhs.rowVector(i) * rhs.rowVector(i).transpose())(0, 0);
+        }
+      }
+      return (delta_r.transpose() * W * rhs * delta_r)(0, 0);
     }
     typedef linear_solver_t<typename MatrixT::partial_offsetless_t> partial_t;
     partial_t partial(unsigned int size) const {
