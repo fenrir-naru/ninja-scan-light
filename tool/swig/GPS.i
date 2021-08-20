@@ -37,45 +37,50 @@
 
 %extend GPS_Time {
 #if defined(SWIGRUBY)
-  %typemap(out) struct tm {
+  %typemap(out) std::tm {
     $result = rb_ary_new3(
         6,
-        INT2NUM((double)($1.tm_year + 1900)),
-        INT2NUM((double)($1.tm_mon + 1)),
-        INT2NUM((double)($1.tm_mday)),
-        INT2NUM((double)($1.tm_hour)),
-        INT2NUM((double)($1.tm_min)),
-        INT2NUM((double)($1.tm_sec)));
+        INT2NUM($1.tm_year + 1900),
+        INT2NUM($1.tm_mon + 1),
+        INT2NUM($1.tm_mday),
+        INT2NUM($1.tm_hour),
+        INT2NUM($1.tm_min),
+        INT2NUM($1.tm_sec));
   }
-  %typemap(in) const struct tm & {
-    $1 = new struct tm;
+  %typemap(in) const std::tm & (std::tm temp = {0}) {
+    $1 = &temp;
     int *dst[] = {
-      &($1->tm_year),
-      &($1->tm_mon),
-      &($1->tm_mday),
-      &($1->tm_hour),
-      &($1->tm_min),
-      &($1->tm_sec),
+      &(temp.tm_year),
+      &(temp.tm_mon),
+      &(temp.tm_mday),
+      &(temp.tm_hour),
+      &(temp.tm_min),
+      &(temp.tm_sec),
     };
-    for(unsigned i(0); i < sizeof(dst) / sizeof(dst[0]); ++i){
+    int i_max(sizeof(dst) / sizeof(dst[0]));
+    if(i_max > RARRAY_LEN($input)){i_max = RARRAY_LEN($input);}
+    for(int i(0); i < i_max; ++i){
       VALUE v = rb_ary_entry($input, i);
       if(v == Qnil){break;}
-      if(dst[i] == &($1->tm_year)){
+      if(dst[i] == &(temp.tm_year)){
         *dst[i] = NUM2INT(v) - 1900;
-      }else if(dst[i] == &($1->tm_mon)){
+      }else if(dst[i] == &(temp.tm_mon)){
         *dst[i] = NUM2INT(v) - 1;
       }else{
         *dst[i] = NUM2INT(v);
       }
     }
   }
-  %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const struct tm & {
+  %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const std::tm & {
     $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
   }
-  %typemap(freearg) const struct tm & {
-    delete $1;
-  }
 #endif
+  %apply int *OUTPUT { int *week };
+  %apply FloatT *OUTPUT { FloatT *seconds };
+  void to_a(int *week, FloatT *seconds) const {
+    *week = self->week;
+    *seconds = self->seconds;
+  }
 }
 
 %include navigation/GPS.h
