@@ -119,8 +119,8 @@ class System_3D {
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
-      out << self[0] << " "
-          << self[1] << " "
+      out << self[0] << ","
+          << self[1] << ","
           << self[2];
       return out;
     }
@@ -303,8 +303,8 @@ class System_LLH : public System_3D<FloatT> {
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
-      out << (self.latitude() / M_PI * 180) << " "
-          << (self.longitude() / M_PI * 180) << " "
+      out << (self.latitude() / M_PI * 180) << ","
+          << (self.longitude() / M_PI * 180) << ","
           << self.height();
       return out;
     }
