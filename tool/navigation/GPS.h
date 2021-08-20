@@ -1891,7 +1891,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         }
 
         void merge(const Satellite &another, const bool &keep_original = true){
-          eph_history.merge(another, keep_original);
+          eph_history.merge(another.eph_history, keep_original);
         }
 
         const eph_t &ephemeris() const {
