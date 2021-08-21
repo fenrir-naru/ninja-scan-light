@@ -38,17 +38,12 @@
   }
 }
 
-%define STR(x)
-#x
-%enddef
-%define MAKE_SETTER(name, type)
-%rename(STR(name ## =)) set_ ## name;
+%define MAKE_ACCESSOR(name, type)
+%rename(%str(name ## =)) set_ ## name;
 type set_ ## name (const type &v) {
   return (self->name() = v);
 }
-%enddef
-%define MAKE_GETTER(name, type)
-%rename(STR(name)) get_ ## name;
+%rename(%str(name)) get_ ## name;
 type get_ ## name () {
   return self->name();
 }
@@ -159,10 +154,8 @@ class Complex;
     return Complex<FloatT>(r, i);
   }
 
-  MAKE_SETTER(real, FloatT);
-  MAKE_GETTER(real, FloatT);
-  MAKE_SETTER(imaginary, FloatT);
-  MAKE_GETTER(imaginary, FloatT);
+  MAKE_ACCESSOR(real, FloatT);
+  MAKE_ACCESSOR(imaginary, FloatT);
 
 #ifdef SWIGRUBY
   %alias power "**";
@@ -194,6 +187,8 @@ MAKE_TO_S(Complex);
 %enddef
 
 INSTANTIATE_COMPLEX(double, D);
+
+#undef INSTANTIATE_COMPLEX
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix_Frozen {
@@ -324,13 +319,9 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
       Matrix<T, Array2D_Dense<T> > &output_L,
       Matrix<T, Array2D_Dense<T> > &output_U,
       Matrix<T, Array2D_Dense<T> > &output_P,
-      Matrix<T, Array2D_Dense<T> > &output_D %{ {
-    Matrix<T, Array2D_Dense<T> > *mat(new Matrix<T, Array2D_Dense<T> >(*$1));
-#ifdef SWIGRUBY
-    $result = SWIG_Ruby_AppendOutput($result,
-        SWIG_NewPointerObj(mat, $1_descriptor, SWIG_POINTER_OWN));
-#endif
-  } %}
+      Matrix<T, Array2D_Dense<T> > &output_D {
+    %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
+  }
   void lup(
       Matrix<T, Array2D_Dense<T> > &output_L, 
       Matrix<T, Array2D_Dense<T> > &output_U, 
@@ -557,14 +548,9 @@ bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type
   %}
   %typemap(argout)
       Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D,
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V %{ {
-    Matrix<Complex<type>, Array2D_Dense<Complex<type> > > *mat(
-        new Matrix<Complex<type>, Array2D_Dense<Complex<type> > >(*$1));
-#if SWIGRUBY
-    $result = SWIG_Ruby_AppendOutput($result,
-        SWIG_NewPointerObj(mat, $1_descriptor, SWIG_POINTER_OWN));
-#endif
-  } %}
+      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V {
+    %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
+  }
   void eigen(
       Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V, 
       Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D) const {
@@ -638,3 +624,12 @@ INSTANTIATE_MATRIX(double, D);
 INSTANTIATE_MATRIX_EIGEN(double);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);
 
+#undef INSTANTIATE_MATRIX_FUNC
+#undef INSTANTIATE_MATRIX_TRANSPOSE
+#undef INSTANTIATE_MATRIX_PARTIAL
+#undef INSTANTIATE_MATRIX_EIGEN2
+#undef INSTANTIATE_MATRIX_EIGEN
+#undef INSTANTIATE_MATRIX
+
+#undef MAKE_ACCESSOR
+#undef MAKE_TO_S
