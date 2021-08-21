@@ -145,8 +145,7 @@ class System_XYZ : public System_3D<FloatT> {
     using super_t::non_const_ref;
   public:
     System_XYZ() : super_t() {}
-    template <class T>
-    System_XYZ(const T &x, const T &y, const T &z)
+    System_XYZ(const FloatT &x, const FloatT &y, const FloatT &z)
         : super_t(x, y, z) {}
     System_XYZ(const self_t &xyz)
         : super_t(xyz) {}
