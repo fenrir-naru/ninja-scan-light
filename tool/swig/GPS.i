@@ -17,6 +17,9 @@
 
 #include "navigation/GPS.h"
 #include "navigation/RINEX.h"
+
+#include "navigation/GPS_Solver_Base.h"
+#include "navigation/GPS_Solver.h"
 %}
 
 %include typemaps.i
@@ -94,6 +97,18 @@ type set_ ## name (const type &v) {
 %rename(%str(name)) get_ ## name;
 const type &get_ ## name () const {
   return self->name;
+}
+%enddef
+
+%define MAKE_VECTOR2ARRAY(type)
+%typemap(out) std::vector<type> {
+#if defined(SWIGRUBY)
+  $result = rb_ary_new();
+#endif
+  for($1_type::const_iterator it($1.begin()), it_end($1.end());
+      it != it_end; ++it){
+    %append_output(SWIG_From(type)(*it));
+  }
 }
 %enddef
 
@@ -317,8 +332,6 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   }
 }
 
-#undef MAKE_ACCESSOR
-
 %extend GPS_SpaceNode {
   %typemap(out) const Ionospheric_UTC_Parameters & {
     %set_output(SWIG_NewPointerObj(
@@ -351,11 +364,234 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
 
 %include navigation/GPS.h
 
+%extend GPS_User_PVT {
+  %ignore base_t;
+  %ignore GPS_User_PVT(const base_t &);
+  MAKE_VECTOR2ARRAY(int);
+#ifdef SWIGRUBY
+  %rename("position_solved?") position_solved;
+  %rename("velocity_solved?") velocity_solved;
+#endif
+}
+%inline %{
+template <class FloatT>
+struct GPS_User_PVT : protected GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> >::user_pvt_t {
+  typedef typename GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> >::user_pvt_t base_t;
+  GPS_User_PVT() : base_t() {}
+  GPS_User_PVT(const base_t &base) : base_t(base) {}
+  enum {
+    ERROR_NO = 0,
+    ERROR_UNSOLVED,
+    ERROR_INVALID_IONO_MODEL,
+    ERROR_INSUFFICIENT_SATELLITES,
+    ERROR_POSITION_LS,
+    ERROR_POSITION_NOT_CONVERGED,
+    ERROR_DOP,
+    ERROR_VELOCITY_SKIPPED,
+    ERROR_VELOCITY_INSUFFICIENT_SATELLITES,
+    ERROR_VELOCITY_LS,
+  };
+  int error_code() const {return (int)(base_t::error_code);}
+  const GPS_Time<FloatT> &receiver_time() const {return base_t::receiver_time;}
+  const System_XYZ<FloatT, WGS84> &xyz() const {return base_t::user_position.xyz;}
+  const System_LLH<FloatT, WGS84> &llh() const {return base_t::user_position.llh;}
+  const FloatT &receiver_error() const {return base_t::receiver_error;}
+  const System_ENU<FloatT, WGS84> &velocity() const {return base_t::user_velocity_enu;}
+  const FloatT &receiver_error_rate() const {return base_t::receiver_error_rate;}
+  const FloatT &gdop() const {return base_t::dop.g;}
+  const FloatT &pdop() const {return base_t::dop.p;}
+  const FloatT &hdop() const {return base_t::dop.h;}
+  const FloatT &vdop() const {return base_t::dop.v;}
+  const FloatT &tdop() const {return base_t::dop.t;}
+  std::vector<int> used_satellites() const {return base_t::used_satellite_mask.indices_one();}
+  bool position_solved() const {return base_t::position_solved();}
+  bool velocity_solved() const {return base_t::velocity_solved();}
+  
+  const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &G() const {return base_t::G;}
+  const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &W() const {return base_t::W;}
+  const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &delta_r() const {return base_t::delta_r;}
+};
+%}
+
+%extend GPS_Measurement {
+  %ignore items_t;
+  %ignore items;
+  %exception each {
+#ifdef SWIGRUBY
+    if(!rb_block_given_p()){
+      return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
+    }
+#endif
+    $action
+  }
+  void each() const {
+    for(typename GPS_Measurement<FloatT>::items_t::const_iterator
+          it(self->items.begin()), it_end(self->items.end());
+        it != it_end; ++it){
+      for(typename GPS_Measurement<FloatT>::items_t::mapped_type::const_iterator 
+            it2(it->second.begin()), it2_end(it->second.end());
+          it2 != it2_end; ++it2){
+#ifdef SWIGRUBY
+        rb_yield_values(3,
+            SWIG_From(int)(it->first), 
+            SWIG_From(int)(it2->first), SWIG_From(double)((double)it2->second));
+#endif
+      }
+    }
+  }
+}
+#ifdef SWIGRUBY
+%mixin GPS_Measurement "Enumerable";
+#endif
+%inline {
+template <class FloatT>
+struct GPS_Measurement {
+  typedef std::map<int, std::map<int, FloatT> > items_t;
+  items_t items;
+  enum {
+    L1_PSEUDORANGE,
+    L1_DOPPLER,
+    L1_CARRIER_PHASE,
+    L1_RANGE_RATE,
+    L1_PSEUDORANGE_SIGMA,
+    L1_DOPPLER_SIGMA,
+    L1_CARRIER_PHASE_SIGMA,
+    L1_RANGE_RATE_SIGMA,
+    L1_SIGNAL_STRENGTH_dBHz,
+    L1_LOCK_SEC,
+    ITEMS_PREDEFINED,
+  };
+  void add(const int &prn, const int &key, const FloatT &value){
+    items[prn][key] = value;
+  }
+};
+}
+
+%extend GPS_SolverOptions {
+  %ignore base_t;
+  MAKE_ACCESSOR(elevation_mask, FloatT);
+  MAKE_ACCESSOR(residual_mask, FloatT);
+  MAKE_ACCESSOR(f_10_7, FloatT);
+  MAKE_VECTOR2ARRAY(int);
+#ifdef SWIGRUBY
+  %rename("ionospheric_models=") set_ionospheric_models;
+  %rename("ionospheric_models") get_ionospheric_models;
+#endif
+  %typemap(in) const std::vector<int> &models (std::vector<int> temp) {
+    $1 = &temp;
+#ifdef SWIGRUBY
+    if(RB_TYPE_P($input, T_ARRAY)){
+      for(int i(0), i_max(RARRAY_LEN($input)); i < i_max; ++i){
+        SWIG_Object obj(RARRAY_AREF($input, i));
+        int v;
+        if(SWIG_IsOK(SWIG_AsVal(int)(obj, &v))){
+          temp.push_back(v);
+        }else{
+          SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
+        }
+      }
+    }
+#endif
+  }
+}
+%inline %{
+template <class FloatT>
+struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
+  typedef typename GPS_SinglePositioning<FloatT>::options_t base_t;
+  void exclude(const int &prn){base_t::exclude_prn.set(prn);}
+  void include(const int &prn){base_t::exclude_prn.reset(prn);}
+  std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+  enum {
+    IONOSPHERIC_KLOBUCHAR,
+    IONOSPHERIC_NTCM_GL,
+    IONOSPHERIC_NONE, // which allows no correction
+    IONOSPHERIC_MODELS,
+    IONOSPHERIC_SKIP = IONOSPHERIC_MODELS, // which means delegating the next slot
+  };
+  std::vector<int> get_ionospheric_models() const {
+    std::vector<int> res;
+    for(int i(0); i < base_t::IONOSPHERIC_MODELS; ++i){
+      int v((int)(base_t::ionospheric_models[i]));
+      if(v == base_t::IONOSPHERIC_SKIP){break;}
+      res.push_back(v);
+    }
+    return res;
+  }
+  std::vector<int> set_ionospheric_models(const std::vector<int> &models){
+    typedef typename base_t::ionospheric_model_t model_t;
+    for(int i(0), j(0), j_max(models.size()); i < model_t::IONOSPHERIC_MODELS; ++i){
+      model_t v(model_t::IONOSPHERIC_SKIP);
+      if(j < j_max){
+        if((models[j] >= 0) && (models[j] < model_t::IONOSPHERIC_SKIP)){
+          v = (model_t)models[j];
+        }
+        ++j;
+      }
+      base_t::ionospheric_models[i] = v;
+    }
+    return get_ionospheric_models();
+  }
+};
+%}
+
+%extend GPS_Solver {
+  %ignore base_t;
+  %ignore gps_t;
+  %ignore gps;
+  %ignore select;
+  %typemap(in) const std::map<int, std::map<int, FloatT> > &measurement (
+      std::map<int, std::map<int, FloatT> > temp) {
+    $1 = &temp;
+#ifdef SWIGRUBY
+    // TODO
+#endif
+  }
+}
+%inline %{
+template <class FloatT>
+struct GPS_Solver : public GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > {
+  typedef GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > base_t;
+  struct gps_t {
+    GPS_SpaceNode<FloatT> space_node;
+    GPS_SolverOptions<FloatT> options;
+    GPS_SinglePositioning<FloatT> solver;
+    gps_t() : space_node(), options(), solver(space_node) {}
+  } gps;
+  GPS_Solver() : base_t(), gps() {}
+  GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
+  GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
+  const GPS_Solver_Base<FloatT> &select(
+      const typename GPS_Solver_Base<FloatT>::prn_t &prn) const {
+    if(prn > 0 && prn <= 32){return gps.solver;}
+    return *this;
+  }
+  GPS_User_PVT<FloatT> solve(
+      const std::map<int, std::map<int, FloatT> > &measurement,
+      const GPS_Time<FloatT> &receiver_time) const {
+    const_cast<gps_t &>(gps).space_node.update_all_ephemeris(receiver_time);
+    const_cast<gps_t &>(gps).solver.update_options(gps.options);
+    return base_t::solve().user_pvt(measurement, receiver_time);
+  }
+  GPS_User_PVT<FloatT> solve(
+      const GPS_Measurement<FloatT> &measurement,
+      const GPS_Time<FloatT> &receiver_time) const {
+    return solve(measurement.items, receiver_time);
+  }
+};
+%}
+
+#undef MAKE_ACCESSOR
+#undef MAKE_VECTOR2ARRAY
+
 %define CONCRETIZE(type)
 %template(Time) GPS_Time<type>;
 %template(SpaceNode) GPS_SpaceNode<type>;
 %template(Ionospheric_UTC_Parameters) GPS_Ionospheric_UTC_Parameters<type>;
 %template(Ephemeris) GPS_Ephemeris<type>;
+%template(PVT) GPS_User_PVT<type>;
+%template(Measurement) GPS_Measurement<type>;
+%template(SolverOptions) GPS_SolverOptions<type>;
+%template(Solver) GPS_Solver<type>;
 %enddef
 
 CONCRETIZE(double);
