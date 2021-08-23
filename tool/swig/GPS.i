@@ -37,17 +37,15 @@
 %import "Coordinate.i"
 
 %extend GPS_Time {
-#if defined(SWIGRUBY)
   %typemap(out) std::tm {
-    $result = rb_ary_new3(
-        6,
-        INT2NUM($1.tm_year + 1900),
-        INT2NUM($1.tm_mon + 1),
-        INT2NUM($1.tm_mday),
-        INT2NUM($1.tm_hour),
-        INT2NUM($1.tm_min),
-        INT2NUM($1.tm_sec));
+    %append_output(SWIG_From(int)($1.tm_year + 1900));
+    %append_output(SWIG_From(int)($1.tm_mon + 1));
+    %append_output(SWIG_From(int)($1.tm_mday));
+    %append_output(SWIG_From(int)($1.tm_hour));
+    %append_output(SWIG_From(int)($1.tm_min));
+    %append_output(SWIG_From(int)($1.tm_sec));
   }
+#if defined(SWIGRUBY)
   %typemap(in) const std::tm & (std::tm temp = {0}) {
     $1 = &temp;
     int *dst[] = {
@@ -61,14 +59,18 @@
     int i_max(sizeof(dst) / sizeof(dst[0]));
     if(i_max > RARRAY_LEN($input)){i_max = RARRAY_LEN($input);}
     for(int i(0); i < i_max; ++i){
-      VALUE v = rb_ary_entry($input, i);
-      if(v == Qnil){break;}
-      if(dst[i] == &(temp.tm_year)){
-        *dst[i] = NUM2INT(v) - 1900;
-      }else if(dst[i] == &(temp.tm_mon)){
-        *dst[i] = NUM2INT(v) - 1;
+      SWIG_Object obj = rb_ary_entry($input, i);
+      int v;
+      if(SWIG_IsOK(SWIG_AsVal(int)(obj, &v))){
+        if(dst[i] == &(temp.tm_year)){
+          *dst[i] = v - 1900;
+        }else if(dst[i] == &(temp.tm_mon)){
+          *dst[i] = v - 1;
+        }else{
+          *dst[i] = v;
+        }
       }else{
-        *dst[i] = NUM2INT(v);
+        SWIG_exception(SWIG_TypeError, "int is expected");
       }
     }
   }
@@ -103,53 +105,45 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
   %typemap(in,numinputs=0) FloatT values[4] (FloatT temp[4]) %{
     $1 = temp;
   %}
-  %typemap(argout, fragment="output_helper") FloatT values[4] {
+  %typemap(argout) FloatT values[4] {
     for(int i(0); i < 4; ++i){
-      %append_output(DBL2NUM($1[i]));
+      %append_output(SWIG_From(double)((double)($1[i])));
     }
   }
-  %typemap(in) const FloatT values[4] (FloatT temp[4]) %{
+  %typemap(in) const FloatT values[4] (FloatT temp[4]) {
 #ifdef SWIGRUBY
     if(!(RB_TYPE_P($input, T_ARRAY) && (RARRAY_LEN($input) == 4))){
       SWIG_exception(SWIG_TypeError, "array[4] is expected");
     }
     for(int i(0); i < 4; ++i){
-      VALUE rb_obj(RARRAY_AREF($input, i));
-      switch(TYPE(rb_obj)){
-        case T_FIXNUM:
-          temp[i] = (FloatT)NUM2INT(rb_obj);
-          break;
-        case T_BIGNUM:
-        case T_FLOAT:
-        case T_RATIONAL:
-          temp[i] = (FloatT)NUM2DBL(rb_obj);
-          break;
-        default:
-          SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
+      SWIG_Object obj(RARRAY_AREF($input, i));
+      double v;
+      if(SWIG_IsOK(SWIG_AsVal(double)(obj, &v))){
+        temp[i] = (FloatT)v;
+      }else{
+        SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
       }
     }
 #endif
     $1 = temp;
-  %}
+  }
   %typemap(default) (const unsigned int *buf) {
     $1 = NULL;
   }
-  %typemap(in) const unsigned int *buf %{
+  %typemap(in) const unsigned int *buf {
 #ifdef SWIGRUBY
     if(!RB_TYPE_P($input, T_ARRAY)){
       SWIG_exception(SWIG_TypeError, "array is expected");
     }
     $1 = new unsigned int [RARRAY_LEN($input)];
     for(int i(0); i < RARRAY_LEN($input); ++i){
-      VALUE rb_obj(RARRAY_AREF($input, i));
-      if(TYPE(rb_obj) == T_FIXNUM){
-        $1[i] = (unsigned int)NUM2INT(rb_obj);
-      }else{
+      SWIG_Object obj(RARRAY_AREF($input, i));
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(obj, &($1[i])))){
         SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
       }
     }
 #endif
-  %}
+  }
   %typemap(freearg) const unsigned int *buf {
     delete [] $1;
   }
@@ -237,22 +231,20 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   %typemap(default) (const unsigned int *buf) {
     $1 = NULL;
   }
-  %typemap(in) const unsigned int *buf %{
+  %typemap(in) const unsigned int *buf {
 #ifdef SWIGRUBY
     if(!RB_TYPE_P($input, T_ARRAY)){
       SWIG_exception(SWIG_TypeError, "array is expected");
     }
     $1 = new unsigned int [RARRAY_LEN($input)];
     for(int i(0); i < RARRAY_LEN($input); ++i){
-      VALUE rb_obj(RARRAY_AREF($input, i));
-      if(TYPE(rb_obj) == T_FIXNUM){
-        $1[i] = (unsigned int)NUM2INT(rb_obj);
-      }else{
+      SWIG_Object obj(RARRAY_AREF($input, i));
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(obj, &($1[i])))){
         SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
       }
     }
 #endif
-  %}
+  }
   %typemap(freearg) const unsigned int *buf {
     delete [] $1;
   }
@@ -345,12 +337,10 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         %const_cast(self, GPS_SpaceNode<FloatT> *)->satellite(prn).ephemeris(), 
         const GPS_Ephemeris<FloatT> &);
   }
-#ifdef SWIGRUBY
   %typemap(out) pierce_point_res_t {
-    %append_output(DBL2NUM((double)($1.latitude)));
-    %append_output(DBL2NUM((double)($1.longitude)));
+    %append_output(SWIG_From(double)((double)($1.latitude)));
+    %append_output(SWIG_From(double)((double)($1.longitude)));
   }
-#endif
   %ignore iono_correction() const;
   %ignore tropo_correction() const;
   int read(const char *fname) {
