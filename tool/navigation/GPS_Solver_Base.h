@@ -346,6 +346,14 @@ struct GPS_Solver_Base {
       }
       using super_t::reset;
       void reset(const int &prn) {set(prn, false);}
+      std::vector<int> excluded() const {
+        std::vector<int> res(super_t::indices_one());
+        for(std::vector<int>::iterator it(res.begin()), it_end(res.end());
+            it != it_end; ++it){
+          *it += prn_begin;
+        }
+        return res;
+      }
     };
   };
 
