@@ -57,8 +57,9 @@
 
 template <class FloatT = double>
 class System_3D {
-  protected:
+  public:
     typedef System_3D self_t;
+  protected:
     FloatT v[3];
     template <class T>
     static const T &const_ref(T *ptr){return static_cast<const T &>(*ptr);}
@@ -118,9 +119,9 @@ class System_3D {
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
-      out << operator[](0) << " "
-          << operator[](1) << " "
-          << operator[](2);
+      out << self[0] << ","
+          << self[1] << ","
+          << self[2];
       return out;
     }
     friend std::istream &operator>>(std::istream &in, self_t &self){
@@ -136,15 +137,15 @@ template <class FloatT, class Earth> class System_LLH;
 
 template <class FloatT = double, class Earth = WGS84>
 class System_XYZ : public System_3D<FloatT> {
-  protected:
+  public:
     typedef System_XYZ<FloatT, Earth> self_t;
+  protected:
     typedef System_3D<FloatT> super_t;
     using super_t::const_ref;
     using super_t::non_const_ref;
   public:
     System_XYZ() : super_t() {}
-    template <class T>
-    System_XYZ(const T &x, const T &y, const T &z)
+    System_XYZ(const FloatT &x, const FloatT &y, const FloatT &z)
         : super_t(x, y, z) {}
     System_XYZ(const self_t &xyz)
         : super_t(xyz) {}
@@ -222,19 +223,20 @@ class System_XYZ : public System_3D<FloatT> {
 };
 
 template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::f0(Earth::F_e);
+const FloatT System_XYZ<FloatT, Earth>::f0 = Earth::F_e;
 template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::a0(Earth::R_e);
+const FloatT System_XYZ<FloatT, Earth>::a0 = Earth::R_e;
 template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::b0(Earth::R_e * (1.0 - Earth::F_e));
+const FloatT System_XYZ<FloatT, Earth>::b0 = Earth::R_e * (1.0 - Earth::F_e);
 template <class FloatT, class Earth>
-const FloatT System_XYZ<FloatT, Earth>::e0(std::sqrt(Earth::F_e * (2.0 - Earth::F_e)));
+const FloatT System_XYZ<FloatT, Earth>::e0 = std::sqrt(Earth::F_e * (2.0 - Earth::F_e));
 
 template <class FloatT = double, class Earth = WGS84>
 class System_LLH : public System_3D<FloatT> {
-  protected:
+  public:
     typedef System_LLH<FloatT, Earth> self_t;
     typedef System_XYZ<FloatT, Earth> xyz_t;
+  protected:
     typedef System_3D<FloatT> super_t;
     using super_t::const_ref;
     using super_t::non_const_ref;
@@ -300,9 +302,9 @@ class System_LLH : public System_3D<FloatT> {
     }
 
     friend std::ostream &operator<<(std::ostream &out, const self_t &self){
-      out << (latitude() / M_PI * 180) << " "
-          << (longitude() / M_PI * 180) << " "
-          << height();
+      out << (self.latitude() / M_PI * 180) << ","
+          << (self.longitude() / M_PI * 180) << ","
+          << self.height();
       return out;
     }
     friend std::istream &operator>>(std::istream &in, self_t &self){
@@ -318,11 +320,12 @@ class System_LLH : public System_3D<FloatT> {
 
 template <class FloatT = double, class Earth = WGS84>
 class System_ENU : public System_3D<FloatT> {
-  protected:
+  public:
     typedef System_ENU<FloatT, Earth> self_t;
-    typedef System_3D<FloatT> super_t;
     typedef System_XYZ<FloatT, Earth> xyz_t;
     typedef System_LLH<FloatT, Earth> llh_t;
+  protected:
+    typedef System_3D<FloatT> super_t;
     using super_t::const_ref;
     using super_t::non_const_ref;
   public:

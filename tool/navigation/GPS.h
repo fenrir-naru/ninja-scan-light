@@ -246,7 +246,7 @@ struct GPS_Time {
     seconds -= (seconds_week * quot);
     return *this;
   }
-  GPS_Time(const struct tm &t, const float_t &leap_seconds = 0) {
+  GPS_Time(const std::tm &t, const float_t &leap_seconds = 0) {
     int days(-6);
     int y(t.tm_year + 1900); // tm_year is year minus 1900
     bool leap_year;
@@ -274,7 +274,7 @@ struct GPS_Time {
   }
   static GPS_Time now(const float_t &leap_seconds = 0) {
     time_t timer;
-    struct tm t;
+    std::tm t;
     
     time(&timer); // Current serial time, then convert the time to struct
 #if defined(_MSC_VER)
@@ -339,8 +339,8 @@ struct GPS_Time {
     return t.operator<=(*this);
   }
   
-  struct tm c_tm(const float_t &leap_seconds = 0) const {
-    struct tm t;
+  std::tm c_tm(const float_t &leap_seconds = 0) const {
+    std::tm t;
     
     GPS_Time mod_t((*this) + leap_seconds);
     
@@ -1891,7 +1891,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         }
 
         void merge(const Satellite &another, const bool &keep_original = true){
-          eph_history.merge(another, keep_original);
+          eph_history.merge(another.eph_history, keep_original);
         }
 
         const eph_t &ephemeris() const {
