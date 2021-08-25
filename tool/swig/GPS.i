@@ -20,6 +20,7 @@
 
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
+#include "navigation/GPS_Solver_RAIM.h"
 %}
 
 %include typemaps.i
@@ -372,11 +373,42 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   %rename("position_solved?") position_solved;
   %rename("velocity_solved?") velocity_solved;
 #endif
+  %typemap(in, numinputs=0) const typename base_t::detection_t ** (typename base_t::detection_t *temp) {
+    $1 = &temp;
+  }
+  %typemap(argout) const typename base_t::detection_t ** {
+    if((*$1)->valid){
+      %append_output(SWIG_From(double)((double)((*$1)->wssr)));
+      %append_output(SWIG_From(double)((double)((*$1)->wssr_sf)));
+      %append_output(SWIG_From(double)((double)((*$1)->weight_max)));
+      %append_output(SWIG_From(double)((double)((*$1)->slope_HV[0].max)));
+      %append_output(SWIG_From(int)(((*$1)->slope_HV[0].prn)));
+      %append_output(SWIG_From(double)((double)((*$1)->slope_HV[1].max)));
+      %append_output(SWIG_From(int)(((*$1)->slope_HV[1].prn)));
+    }
+  }
+  %typemap(in, numinputs=0) const typename base_t::exclusion_t ** (typename base_t::exclusion_t *temp) {
+    $1 = &temp;
+  }
+  %typemap(argout) const typename base_t::exclusion_t ** {
+    if((*$1)->valid){
+      %append_output(SWIG_From(int)(((*$1)->excluded)));
+      %append_output(SWIG_NewPointerObj(
+          (new System_XYZ<FloatT, WGS84>((*$1)->user_position.xyz)),
+          $descriptor(System_XYZ<FloatT, WGS84>), SWIG_POINTER_OWN));
+      %append_output(SWIG_NewPointerObj(
+          (new System_LLH<FloatT, WGS84>((*$1)->user_position.llh)),
+          $descriptor(System_LLH<FloatT, WGS84>), SWIG_POINTER_OWN));
+    }
+  }
 }
 %inline %{
 template <class FloatT>
-struct GPS_User_PVT : protected GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> >::user_pvt_t {
-  typedef typename GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> >::user_pvt_t base_t;
+struct GPS_User_PVT 
+    : protected GPS_Solver_RAIM_LSR<FloatT,
+      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > >::user_pvt_t {
+  typedef typename GPS_Solver_RAIM_LSR<FloatT, 
+      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > >::user_pvt_t base_t;
   GPS_User_PVT() : base_t() {}
   GPS_User_PVT(const base_t &base) : base_t(base) {}
   enum {
@@ -410,6 +442,18 @@ struct GPS_User_PVT : protected GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<Fl
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &G() const {return base_t::G;}
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &W() const {return base_t::W;}
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &delta_r() const {return base_t::delta_r;}
+  
+  void fd(const typename base_t::detection_t **out) const {*out = &(base_t::FD);}
+  void fde_min(
+      const typename base_t::detection_t **out0, 
+      const typename base_t::exclusion_t **out1) const {
+    *out0 = *out1 = &(base_t::FDE_min);
+  }
+  void fde_2nd(
+      const typename base_t::detection_t **out0, 
+      const typename base_t::exclusion_t **out1) const {
+    *out0 = *out1 = &(base_t::FDE_2nd);
+  }
 };
 %}
 
@@ -549,8 +593,11 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
 }
 %inline %{
 template <class FloatT>
-struct GPS_Solver : public GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > {
-  typedef GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > base_t;
+struct GPS_Solver 
+    : public GPS_Solver_RAIM_LSR<FloatT, 
+        GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > > {
+  typedef GPS_Solver_RAIM_LSR<FloatT, 
+      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > > base_t;
   struct gps_t {
     GPS_SpaceNode<FloatT> space_node;
     GPS_SolverOptions<FloatT> options;
