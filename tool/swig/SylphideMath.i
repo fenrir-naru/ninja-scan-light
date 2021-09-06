@@ -134,20 +134,26 @@ bool from_value(const VALUE &obj, swig_type_info *info, Complex<T> &v){
 template <class FloatT>
 class Complex;
 
+%copyctor Complex;
+
 %extend Complex {
-#ifdef SWIGRUBY
   %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const Complex<FloatT> & {
     void *vptr = 0;
-    $1 = RB_TYPE_P($input, T_COMPLEX)
-        || SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
-  }
-  %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
-    from_value($input, $1_descriptor, temp);
-    $1 = &temp;
-  }
+#ifdef SWIGRUBY
+    if(($1 = RB_TYPE_P($input, T_COMPLEX))){} else
 #endif
-  Complex(const Complex<FloatT> &complex) noexcept {
-    return new Complex<FloatT>(complex);
+    $1 = SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
+  }
+  %typemap(in) const Complex<FloatT> & {
+#ifdef SWIGRUBY
+    if(RB_TYPE_P($input, T_COMPLEX)){
+      $input = rb_funcall(((swig_class *)($1_descriptor->clientdata))->klass,
+          rb_intern("new"), 2, rb_complex_real($input), rb_complex_imag($input));
+    }
+#endif    
+    if(!SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){
+      SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
+    }
   }
 
   static Complex<FloatT> rectangular(const FloatT &r, const FloatT &i = FloatT(0)) noexcept {
