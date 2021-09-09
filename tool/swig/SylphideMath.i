@@ -58,25 +58,13 @@ type get_ ## name () {
 };
 %enddef
 
-
-#ifdef SWIGRUBY
-%{
+%header {
 template <class T>
-VALUE to_value(swig_type_info *info, const T &v){
+SWIG_Object to_value(swig_type_info *info, const T &v){
   return SWIG_NewPointerObj((void *)&v, info, 0);
 }
-template <>
-VALUE to_value(swig_type_info *info, const double &v){
-  return DBL2NUM(v);
-}
 template <class T>
-VALUE to_value(swig_type_info *info, const Complex<T> &v){
-  return rb_complex_new(
-      to_value(info, v.real()), 
-      to_value(info, v.imaginary()));
-}
-template <class T>
-bool from_value_object(const VALUE &obj, swig_type_info *info, T &v){
+bool from_value(const SWIG_Object &obj, swig_type_info *info, T &v){
   T *ptr;
   int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 1) : SWIG_ERROR);
   if(SWIG_IsOK(res)){
@@ -86,42 +74,42 @@ bool from_value_object(const VALUE &obj, swig_type_info *info, T &v){
   }
   return false;
 }
-template <class T>
-bool from_value_primitive(const VALUE &obj, swig_type_info *info, T &v){
-  switch(TYPE(obj)){
-    case T_NIL: // if nil, then keep current v
-      return true;
-    case T_FIXNUM:
-      v = NUM2INT(obj);
-      return true;
-    case T_BIGNUM:
-    case T_FLOAT:
-    case T_RATIONAL:
-      v = NUM2DBL(obj);
-      return true;
-  }
-  return false;
+template <>
+SWIG_Object to_value(swig_type_info *info, const double &v);
+template <>
+bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v);
 }
-template <class T>
-bool from_value(const VALUE &obj, swig_type_info *info, T &v){
-  return from_value_object(obj, info, v);
+
+%wrapper {
+template <>
+SWIG_Object to_value(swig_type_info *info, const double &v){
+  return SWIG_From(double)(v);
 }
 template <>
-bool from_value(const VALUE &obj, swig_type_info *info, double &v){
-  return from_value_primitive(obj, info, v);
+bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v){
+  return SWIG_IsOK(SWIG_AsVal(double)(obj, &v)) ? true : false;
+}
+}
+
+#ifdef SWIGRUBY
+%header {
+template <class T>
+SWIG_Object to_value(swig_type_info *info, const Complex<T> &v){
+  return rb_complex_new(
+      to_value(info, v.real()), 
+      to_value(info, v.imaginary()));
 }
 template <class T>
-bool from_value(const VALUE &obj, swig_type_info *info, Complex<T> &v){
+bool from_value(const SWIG_Object &obj, swig_type_info *info, Complex<T> &v){
   if(RB_TYPE_P(obj, T_COMPLEX)){
     return from_value(rb_complex_real(obj), NULL, v.real())
         && from_value(rb_complex_imag(obj), NULL, v.imaginary());
-  }else if(from_value(obj, NULL, v.real())){
+  }else{
     v.imaginary() = T(0);
-    return true;
+    return from_value(obj, NULL, v.real());
   }
-  return from_value_object(obj, info, v);
 }
-%}
+}
 #endif
 
 %feature("autodoc", "1");
@@ -144,12 +132,15 @@ class Complex;
 #endif
     $1 = SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
   }
-  %typemap(in) const Complex<FloatT> & {
+  %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
 #ifdef SWIGRUBY
     if(RB_TYPE_P($input, T_COMPLEX)){
-      $input = rb_funcall(((swig_class *)($1_descriptor->clientdata))->klass,
-          rb_intern("new"), 2, rb_complex_real($input), rb_complex_imag($input));
-    }
+      if((!from_value(rb_complex_real($input), $descriptor(T), temp.real()))
+          || (!from_value(rb_complex_imag($input), $descriptor(T), temp.imaginary()))){
+        SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
+      }
+      $1 = &temp;
+    } else
 #endif    
     if(!SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){
       SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
@@ -389,20 +380,19 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
   
-  %typemap(in,numinputs=0) (swig_type_info *info_for_each, T) {
+  %typemap(in,numinputs=0) (void *dummy_for_each) {
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
     }
-    $1 = $2_descriptor;
   }
-  %typemap(argout) (swig_type_info *info_for_each, T) {
+  %typemap(argout) (void *dummy_for_each) {
     $result = self;
   }
-  void each(swig_type_info *info_for_each, T) const {
+  void each(void *dummy_for_each) const {
     for(unsigned int i(0); i < $self->rows(); ++i){
       for(unsigned int j(0); j < $self->columns(); ++j){
         rb_yield_values(3,
-            to_value(info_for_each, (*($self))(i, j)),
+            to_value($descriptor(const T &), (*($self))(i, j)),
             UINT2NUM(i), UINT2NUM(j));
       }
     }
@@ -416,70 +406,36 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 
 MAKE_TO_S(Matrix_Frozen)
 
-#ifdef SWIGRUBY
-%{
-template <class T, class Array2D_Type, class ViewType>
-bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type_info *info){
-  if(!rb_block_given_p()){return false;}
-  for(unsigned int i(0); i < mat.rows(); ++i){
-    for(unsigned int j(0); j < mat.columns(); ++j){
-      VALUE v(rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)));
-      if(!from_value(v, info, mat(i, j))){
-        VALUE v_inspect(rb_inspect(v));
-        std::stringstream s;
-        s << "Unknown input [" << i << "," << j << "]: ";
-        throw std::runtime_error(
-            s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
-      }
-    }
-  }
-  return true;
-}
-%}
-#endif
-
 %extend Matrix {
-  %typemap(default) (const T *serialized, int length, swig_type_info *info) {
-    $1 = NULL;
-    $2 = 0;
-    $3 = $1_descriptor;
-  }
-#ifdef SWIGRUBY
-  %typemap(typecheck) (const T *serialized, int length, swig_type_info *info) {
+  %typemap(typecheck,precedence=SWIG_TYPECHECK_VOIDPTR) const void *replacer {
+#if defined(SWIGRUBY)
     $1 = RB_TYPE_P($input, T_ARRAY);
+#else
+    $1 = 0;
+#endif
   }
-  %typemap(in) (const T *serialized, int length, swig_type_info *info) {
-    if(RB_TYPE_P($input, T_ARRAY)){
-      $2 = RARRAY_LEN($input);
-      $1 = new T [$2];
-      for(int i(0); i < $2; ++i){
-        VALUE rb_obj(RARRAY_AREF($input, i));
-        if(!from_value(rb_obj, $3, $1[i])){
-          SWIG_exception(SWIG_TypeError, "$*1_ltype expected");
-        }
-      }
+  %typemap(in) const void *replacer {
+    $1 = &$input;
+  }
+
+  Matrix(const unsigned int &rows, const unsigned int &columns, 
+      const void *replacer = NULL){
+    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+  }
+  Matrix(const unsigned int &rows, const unsigned int &columns,
+      const T *serialized){
+    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+  }
+#if defined(SWIGRUBY)
+  %exception Matrix {
+    $action
+    if(argc > 2){
+      rb_funcall2(self, rb_intern("replace!"), argc - 2, &argv[2]);
+    }else if(rb_block_given_p()){
+      rb_funcall_passing_block(self, rb_intern("replace!"), argc - 2, &argv[2]);
     }
   }
 #endif
-  %typemap(freearg) (const T *serialized, int length, swig_type_info *info) {
-    delete [] $1;
-  }
-
-  Matrix(
-      const unsigned int &rows, const unsigned int &columns, 
-      const T *serialized, int length, swig_type_info *info){
-    if(serialized){
-      if((unsigned int)length < (rows * columns)){
-        throw std::runtime_error("Length is too short");
-      }
-      return new Matrix<T, Array2D_Type, ViewType>(rows, columns, serialized);
-    }else{
-      Matrix<T, Array2D_Type, ViewType> *res(
-         new Matrix<T, Array2D_Type, ViewType>(rows, columns));
-      Matrix_replace_with_block(*res, info);
-      return res;
-    }
-  }
 
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
@@ -488,30 +444,66 @@ bool Matrix_replace_with_block(Matrix<T, Array2D_Type, ViewType> &mat, swig_type
   %rename("I") getI;
   %rename("swap_rows") swapRows;
   %rename("swap_columns") swapColumns;
-  
+
   template <class T2, class Array2D_Type2, class ViewType2>
   self_t &replace(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
     return $self->replace(matrix);
   }
-  self_t &replace(const T *serialized, int length, swig_type_info *info){
+  INSTANTIATE_MATRIX_FUNC(replace, replace);
+
+  self_t &replace(const void *replacer = NULL){
     unsigned int r($self->rows()), c($self->columns());
-    if(serialized){
-      if((unsigned int)length < (r * c)){
+#if defined(SWIGRUBY)
+    if(replacer){
+      const SWIG_Object &value(*static_cast<const SWIG_Object *>(replacer));
+      if(!RB_TYPE_P(value, T_ARRAY)){
+        throw std::runtime_error("Array is required");
+      }
+      if((unsigned int)RARRAY_LEN(value) < (r * c)){
         throw std::runtime_error("Length is too short");
       }
+      unsigned int i_array(0);
       for(unsigned int i(0); i < r; ++i){
         for(unsigned int j(0); j < c; ++j){
-          (*($self))(i, j) = *(serialized++);
+          VALUE rb_obj(RARRAY_AREF(value, i_array++));
+          if(!from_value(rb_obj, $descriptor(T &), (*$self)(i, j))){
+            SWIG_exception(SWIG_TypeError, "T expected");
+          }
         }
       }
-    }else if(Matrix_replace_with_block(*($self), info)){
-      
-    }else{
+    } else if(rb_block_given_p()){
+      for(unsigned int i(0); i < r; ++i){
+        for(unsigned int j(0); j < c; ++j){
+          VALUE v(rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)));
+          if(!from_value(v, $descriptor(T &), (*$self)(i, j))){
+            VALUE v_inspect(rb_inspect(v));
+            std::stringstream s;
+            s << "Unknown input [" << i << "," << j << "]: ";
+            throw std::runtime_error(
+                s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+          }
+        }
+      }
+    } else
+#endif
+    {
       throw std::runtime_error("Unsupported replacement");
     }
-    return *($self);
+    return *$self;
   }
-  INSTANTIATE_MATRIX_FUNC(replace, replace);
+
+  self_t &replace(const T *serialized){
+    if(serialized){
+      unsigned int r($self->rows()), c($self->columns());
+      for(unsigned int i(0); i < r; ++i){
+        for(unsigned int j(0); j < c; ++j){
+          (*$self)(i, j) = *(serialized++);
+        }
+      }
+    }
+    return *$self;
+  }
+  
 #ifdef SWIGRUBY
   %bang swapRows(const unsigned int &, const unsigned int &);
   %bang swapColumns(const unsigned int &, const unsigned int &);
