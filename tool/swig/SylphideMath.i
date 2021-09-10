@@ -66,7 +66,7 @@ SWIG_Object to_value(swig_type_info *info, const T &v){
 template <class T>
 bool from_value(const SWIG_Object &obj, swig_type_info *info, T &v){
   T *ptr;
-  int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 1) : SWIG_ERROR);
+  int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 0) : SWIG_ERROR);
   if(SWIG_IsOK(res)){
     if(ptr){v = *ptr;} // if nil, then keep current v
     if(SWIG_IsNewObj(res)){delete ptr;}
@@ -127,24 +127,22 @@ class Complex;
 %extend Complex {
   %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const Complex<FloatT> & {
     void *vptr = 0;
-#ifdef SWIGRUBY
-    if(($1 = RB_TYPE_P($input, T_COMPLEX))){} else
-#endif
+    Complex<FloatT> temp;
     $1 = SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
+    $1 = $1 || from_value($input, $1_descriptor, temp);
   }
   %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
-#ifdef SWIGRUBY
-    if(RB_TYPE_P($input, T_COMPLEX)){
-      if((!from_value(rb_complex_real($input), $descriptor(T), temp.real()))
-          || (!from_value(rb_complex_imag($input), $descriptor(T), temp.imaginary()))){
-        SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
+    do{
+      if(SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){break;}
+      if(from_value($input, $1_descriptor, temp)){
+        $1 = &temp;
+        break;
       }
-      $1 = &temp;
-    } else
-#endif    
-    if(!SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){
       SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
-    }
+    }while(false);
+  }
+  %typemap(out) Complex<FloatT> {
+    $result = to_value($&1_descriptor, $1);
   }
 
   static Complex<FloatT> rectangular(const FloatT &r, const FloatT &i = FloatT(0)) noexcept {
@@ -432,7 +430,7 @@ MAKE_TO_S(Matrix_Frozen)
     if(argc > 2){
       rb_funcall2(self, rb_intern("replace!"), argc - 2, &argv[2]);
     }else if(rb_block_given_p()){
-      rb_funcall_passing_block(self, rb_intern("replace!"), argc - 2, &argv[2]);
+      rb_funcall_passing_block(self, rb_intern("replace!"), 0, NULL);
     }
   }
 #endif
