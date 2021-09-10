@@ -450,41 +450,59 @@ MAKE_TO_S(Matrix_Frozen)
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
   self_t &replace(const void *replacer = NULL){
-    unsigned int r($self->rows()), c($self->columns());
+    unsigned int r($self->rows()), c($self->columns()), len(r * c);
+    bool replaced(true);
 #if defined(SWIGRUBY)
-    if(replacer){
-      const SWIG_Object &value(*static_cast<const SWIG_Object *>(replacer));
-      if(!RB_TYPE_P(value, T_ARRAY)){
-        throw std::runtime_error("Array is required");
-      }
-      if((unsigned int)RARRAY_LEN(value) < (r * c)){
-        throw std::runtime_error("Length is too short");
-      }
-      unsigned int i_array(0);
-      for(unsigned int i(0); i < r; ++i){
-        for(unsigned int j(0); j < c; ++j){
-          VALUE rb_obj(RARRAY_AREF(value, i_array++));
-          if(!from_value(rb_obj, $descriptor(T &), (*$self)(i, j))){
-            SWIG_exception(SWIG_TypeError, "T expected");
+    const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
+    unsigned int i(0), j(0), i_elm(0);
+    VALUE v_elm;
+    if(value && RB_TYPE_P(*value, T_ARRAY)){
+      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
+        if((unsigned int)RARRAY_LEN(*value) < r){
+          throw std::runtime_error("Length is too short");
+        }
+        VALUE value_r;
+        for(; i_elm < len; i_elm++){
+          if(j == 0){
+            value_r = RARRAY_AREF(*value, i);
+            if(!RB_TYPE_P(value_r, T_ARRAY)){
+              throw std::runtime_error("double array [[...], ...] is required");
+            }else if((unsigned int)RARRAY_LEN(value_r) < c){
+              throw std::runtime_error("Length is too short");
+            }
           }
+          v_elm = RARRAY_AREF(value_r, j);
+          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }else{  // [r0c0, r0c1, ...]
+        if((unsigned int)RARRAY_LEN(*value) < len){
+          throw std::runtime_error("Length is too short");
+        }
+        for(; i_elm < len; i_elm++){
+          v_elm = RARRAY_AREF(*value, i_elm);
+          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
+          if(++j >= c){j = 0; ++i;}
         }
       }
-    } else if(rb_block_given_p()){
-      for(unsigned int i(0); i < r; ++i){
-        for(unsigned int j(0); j < c; ++j){
-          VALUE v(rb_yield_values(2, UINT2NUM(i), UINT2NUM(j)));
-          if(!from_value(v, $descriptor(T &), (*$self)(i, j))){
-            VALUE v_inspect(rb_inspect(v));
-            std::stringstream s;
-            s << "Unknown input [" << i << "," << j << "]: ";
-            throw std::runtime_error(
-                s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
-          }
-        }
+    }else if(rb_block_given_p()){
+      for(; i_elm < len; i_elm++){
+        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
+        if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
+        if(++j >= c){j = 0; ++i;}
       }
-    } else
+    }else{
+      replaced = false;
+    }
+    if(replaced && (i_elm < len)){
+      VALUE v_inspect(rb_inspect(v_elm));
+      std::stringstream s;
+      s << "Unknown input (T expected) [" << i << "," << j << "]: ";
+      throw std::runtime_error(
+          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+    }
 #endif
-    {
+    if(!replaced){
       throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
