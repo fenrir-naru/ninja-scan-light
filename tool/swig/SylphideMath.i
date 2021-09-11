@@ -407,7 +407,7 @@ MAKE_TO_S(Matrix_Frozen)
 %extend Matrix {
   %typemap(typecheck,precedence=SWIG_TYPECHECK_VOIDPTR) const void *replacer {
 #if defined(SWIGRUBY)
-    $1 = RB_TYPE_P($input, T_ARRAY);
+    $1 = rb_block_given_p() ? 0 : 1;
 #else
     $1 = 0;
 #endif
@@ -431,6 +431,24 @@ MAKE_TO_S(Matrix_Frozen)
       rb_funcall2(self, rb_intern("replace!"), argc - 2, &argv[2]);
     }else if(rb_block_given_p()){
       rb_funcall_passing_block(self, rb_intern("replace!"), 0, NULL);
+    }
+  }
+  Matrix(const void *replacer){
+    const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
+    if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
+      return new Matrix<T, Array2D_Type, ViewType>(
+          (unsigned int)RARRAY_LEN(*value),
+          (unsigned int)RARRAY_LEN(RARRAY_AREF(*value, 0)));
+    }else{
+      throw std::runtime_error("double array [[...], ...] is required");
+    }
+  }
+  %exception Matrix(const void *replacer) {
+    try {
+      $action
+      rb_funcall2(self, rb_intern("replace!"), argc, argv);
+    } catch (const std::exception& e) {
+      SWIG_exception(SWIG_RuntimeError, e.what());
     }
   }
 #endif
@@ -624,7 +642,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
 %init %{
-#if SWIGRUBY
+#if defined(SWIGRUBY)
   { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
     VALUE singleton = rb_singleton_class(SwigClassMatrix ## suffix ## .klass);
     rb_define_alias(singleton, "identity", "I");
