@@ -185,6 +185,8 @@ INSTANTIATE_COMPLEX(double, D);
 
 #undef INSTANTIATE_COMPLEX
 
+#define DO_NOT_INSTANTIATE_SCALAR_MATRIX
+
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix_Frozen {
   protected:
@@ -212,10 +214,12 @@ class Matrix_Frozen {
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   public:
+#if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
     typedef Matrix_Frozen<T, Array2D_ScaledUnit<T> > scalar_matrix_t;
     static scalar_matrix_t getScalar(const unsigned int &size, const T &scalar);
     static scalar_matrix_t getI(const unsigned int &size);
-    
+#endif
+
     typedef Matrix<T, Array2D_Type, ViewType> self_t;
     self_t &swapRows(const unsigned int &row1, const unsigned int &row2);
     self_t &swapColumns(const unsigned int &column1, const unsigned int &column2);
@@ -229,9 +233,11 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 %}
 
 %define INSTANTIATE_MATRIX_FUNC(func_orig, func_new)
+#if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatViewBase>;
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_p>;
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_pt>;
+#endif
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatViewBase>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_t>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_p>;
@@ -456,6 +462,16 @@ MAKE_TO_S(Matrix_Frozen)
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
   }
+#if defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
+  static Matrix<T, Array2D_Dense<T> > getScalar(const unsigned int &size, const T &scalar) {
+    return Matrix<T, Array2D_Dense<T> >(
+        Matrix_Frozen<T, Array2D_Type, ViewType>::getScalar(size, scalar));
+  }
+  static Matrix<T, Array2D_Dense<T> > getI(const unsigned int &size) {
+    return Matrix<T, Array2D_Dense<T> >(
+        Matrix_Frozen<T, Array2D_Type, ViewType>::getI(size));
+  }
+#endif
   %rename("scalar") getScalar;
   %rename("I") getI;
   %rename("swap_rows") swapRows;
@@ -598,9 +614,11 @@ MAKE_TO_S(Matrix_Frozen)
 };
 %enddef
 %define INSTANTIATE_MATRIX_EIGEN(type)
+#if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatViewBase);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_p);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_pt);
+#endif
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatViewBase);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_p);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_t);
@@ -608,6 +626,7 @@ INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
 %enddef
 
 %define INSTANTIATE_MATRIX(type, suffix)
+#if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
     return *($self);
@@ -625,6 +644,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_
 %template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase>;
 %template(Matrix_Scalar ## suffix ## _p) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_p>;
 %template(Matrix_Scalar ## suffix ## _pt) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_pt>;
+#endif
 
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_t);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_t, MatViewBase);
@@ -662,6 +682,10 @@ INSTANTIATE_MATRIX(Complex<double>, ComplexD);
 #undef INSTANTIATE_MATRIX_EIGEN2
 #undef INSTANTIATE_MATRIX_EIGEN
 #undef INSTANTIATE_MATRIX
+
+#if defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
+#undef DO_NOT_INSTANTIATE_SCALAR_MATRIX
+#endif
 
 #undef MAKE_ACCESSOR
 #undef MAKE_TO_S
