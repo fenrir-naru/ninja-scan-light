@@ -384,22 +384,121 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
   
-  %typemap(in,numinputs=0) (void *dummy_for_each) {
+  %typemap(in,numinputs=0) 
+      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
     if(!rb_block_given_p()){
-      return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
+      return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
+    }
+    struct proc_t {
+      static void yield(const T &v, const unsigned int &i, const unsigned int &j){
+        rb_yield_values(1, to_value($descriptor(const T &), v));
+      }
+      static void yield_with_index(const T &v, const unsigned int &i, const unsigned int &j){
+        rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
+      }
+    };
+    $1 = proc_t::yield;
+    if(rb_frame_callee() == rb_intern("each_with_index")){
+      $1 = proc_t::yield_with_index;
     }
   }
-  %typemap(argout) (void *dummy_for_each) {
+  %typemap(argout)
+      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
     $result = self;
   }
-  void each(void *dummy_for_each) const {
-    for(unsigned int i(0); i < $self->rows(); ++i){
-      for(unsigned int j(0); j < $self->columns(); ++j){
-        rb_yield_values(3,
-            to_value($descriptor(const T &), (*($self))(i, j)),
-            UINT2NUM(i), UINT2NUM(j));
-      }
+  %typemap(typecheck) const unsigned int &each_which {
+    $1 = RB_TYPE_P($input, T_SYMBOL);
+  }
+  %typemap(in) const unsigned int &each_which (unsigned int temp = 0) {
+    $1 = &temp;
+    if(!RB_TYPE_P($input, T_SYMBOL)){
+      SWIG_exception(SWIG_TypeError, "Symbol is required");
     }
+    static const SWIG_Object cmp[] = {
+      ID2SYM(rb_intern("all")),
+      ID2SYM(rb_intern("diagonal")),
+      ID2SYM(rb_intern("off_diagonal")),
+      ID2SYM(rb_intern("lower")),
+      ID2SYM(rb_intern("upper")),
+      ID2SYM(rb_intern("strict_lower")),
+      ID2SYM(rb_intern("strict_upper")),
+    };
+    while($input != cmp[temp]){
+      if(++temp >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
+    }
+    if(temp >= (sizeof(cmp) / sizeof(cmp[0]))){
+      SWIG_exception(SWIG_RuntimeError, "Unknown enumerate direction");
+    }
+  }
+  void each(
+      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j), 
+      const unsigned int &each_which = 0) const {
+    unsigned int i_max($self->rows()), j_max($self->columns());
+    switch(each_which){
+      case 1: // diagonal
+        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
+          (*each_func)((*($self))(k, k), k, k);
+        }
+        break;
+      case 2: // off_diagonal
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            if(i != j){(*each_func)((*($self))(i, j), i, j);}
+          }
+        }
+        break;
+      case 3: // lower
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            if(j >= i){break;}
+            (*each_func)((*($self))(i, j), i, j);
+          }
+        }
+        break;
+      case 4: // upper
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i); j < j_max; ++j){
+            (*each_func)((*($self))(i, j), i, j);
+          }
+        }
+        break;
+      case 5: // strict_lower
+        for(unsigned int i(1); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            if(j >= i){break;}
+            (*each_func)((*($self))(i, j), i, j);
+          }
+        }
+        break;
+      case 6: // strict_upper
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i + 1); j < j_max; ++j){
+            (*each_func)((*($self))(i, j), i, j);
+          }
+        }
+        break;
+      case 0: default: // all
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            (*each_func)((*($self))(i, j), i, j);
+          }
+        }
+        break;
+    }
+  }
+  %alias each "each_with_index";
+  
+  SWIG_Object to_a() const {
+    unsigned int i_max($self->rows()), j_max($self->columns());
+    SWIG_Object res = rb_ary_new2(i_max);
+    for(unsigned int i(0); i < i_max; ++i){
+      SWIG_Object row = rb_ary_new2(j_max);
+      for(unsigned int j(0); j < j_max; ++j){
+        rb_ary_store(row, j, to_value($descriptor(const T &), (*($self))(i, j)));
+      }
+      rb_ary_store(res, i, row);
+    }
+    return res;
   }
 #endif
 };
