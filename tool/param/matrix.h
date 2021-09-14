@@ -349,7 +349,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         if(ref && ((--(*ref)) <= 0)){delete [] reinterpret_cast<T *>(ref);}
         super_t::m_rows = array.m_rows;
         super_t::m_columns = array.m_columns;
-        if(ref = array.ref){++(*ref);}
+        if((ref = array.ref)){++(*ref);}
         values = array.values;
       }
       return *this;
