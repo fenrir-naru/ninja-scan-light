@@ -244,6 +244,84 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_pt>;
 %enddef
 
+%{
+struct MatrixUtil {
+  enum each_which_t {
+    EACH_ALL,
+    EACH_DIAGONAL,
+    EACH_OFF_DIAGONAL,
+    EACH_LOWER,
+    EACH_UPPER,
+    EACH_STRICT_LOWER,
+    EACH_STRICT_UPPER,
+  };
+  template <class T, 
+      class Array2D_Type, class ViewType,
+      class Array2D_Type2, class ViewType2>
+  static void each(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &src,
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j),
+      const each_which_t &each_which = EACH_ALL,
+      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL){
+    unsigned int i_max(src.rows()), j_max(src.columns());
+    switch(each_which){
+      case EACH_DIAGONAL:
+        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
+          (*each_func)(src(k, k), (dst ? &((*dst)(k, k)) : NULL), k, k);
+        }
+        break;
+      case EACH_OFF_DIAGONAL:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            if(i != j){
+              (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+            }
+          }
+        }
+        break;
+      case EACH_LOWER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j <= i; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_UPPER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_STRICT_LOWER:
+        for(unsigned int i(1); i < i_max; ++i){
+          for(unsigned int j(0); j < i; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_STRICT_UPPER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i + 1); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_ALL:
+      default:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+    }
+  }
+};
+%}
+
 %extend Matrix_Frozen {
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
     return ($self)->operator()(row, column);
@@ -385,108 +463,85 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias ud "ud_decomposition";
   
   %typemap(in,numinputs=0) 
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
+      void (*each_func)(const T &src, T *dst, const unsigned int &i, const unsigned int &j) {
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
     }
     struct proc_t {
-      static void yield(const T &v, const unsigned int &i, const unsigned int &j){
+      static void yield(const T &v, T *, const unsigned int &i, const unsigned int &j){
         rb_yield_values(1, to_value($descriptor(const T &), v));
       }
-      static void yield_with_index(const T &v, const unsigned int &i, const unsigned int &j){
+      static void yield_with_index(const T &v, T *, const unsigned int &i, const unsigned int &j){
         rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
+      }
+      static void yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+        SWIG_Object v(rb_yield_values(1, to_value($descriptor(const T &), src)));
+        if(!from_value(v, $descriptor(T &), *dst)){
+          VALUE v_inspect(rb_inspect(v));
+          std::stringstream s;
+          s << "Unknown input (T expected) [" << i << "," << j << "]: ";
+          throw std::runtime_error(
+              s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+        }
       }
     };
     $1 = proc_t::yield;
     if(rb_frame_callee() == rb_intern("each_with_index")){
       $1 = proc_t::yield_with_index;
+    }else if(rb_frame_this_func() == rb_intern("map")){
+      $1 = proc_t::yield_get;
     }
   }
-  %typemap(argout)
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
-    $result = self;
-  }
-  %typemap(typecheck) const unsigned int &each_which {
+  %typemap(typecheck) const typename MatrixUtil::each_which_t &each_which {
     $1 = RB_TYPE_P($input, T_SYMBOL);
   }
-  %typemap(in) const unsigned int &each_which (unsigned int temp = 0) {
-    $1 = &temp;
+  %typemap(in) const typename MatrixUtil::each_which_t &each_which {
     if(!RB_TYPE_P($input, T_SYMBOL)){
       SWIG_exception(SWIG_TypeError, "Symbol is required");
     }
-    static const SWIG_Object cmp[] = {
-      ID2SYM(rb_intern("all")),
-      ID2SYM(rb_intern("diagonal")),
-      ID2SYM(rb_intern("off_diagonal")),
-      ID2SYM(rb_intern("lower")),
-      ID2SYM(rb_intern("upper")),
-      ID2SYM(rb_intern("strict_lower")),
-      ID2SYM(rb_intern("strict_upper")),
+    static struct {
+      SWIG_Object sym;
+      typename MatrixUtil::each_which_t which;
+    } cmp[] = {
+      {ID2SYM(rb_intern("all")),          MatrixUtil::EACH_ALL},
+      {ID2SYM(rb_intern("diagonal")),     MatrixUtil::EACH_DIAGONAL},
+      {ID2SYM(rb_intern("off_diagonal")), MatrixUtil::EACH_OFF_DIAGONAL},
+      {ID2SYM(rb_intern("lower")),        MatrixUtil::EACH_LOWER},
+      {ID2SYM(rb_intern("upper")),        MatrixUtil::EACH_UPPER},
+      {ID2SYM(rb_intern("strict_lower")), MatrixUtil::EACH_STRICT_LOWER},
+      {ID2SYM(rb_intern("strict_upper")), MatrixUtil::EACH_STRICT_UPPER},
     };
-    while($input != cmp[temp]){
-      if(++temp >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
+    unsigned int i(0);
+    while($input != cmp[i].sym){
+      if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
     }
-    if(temp >= (sizeof(cmp) / sizeof(cmp[0]))){
+    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
       SWIG_exception(SWIG_RuntimeError, "Unknown enumerate direction");
+    }else{
+      $1 = &(cmp[i].which);
     }
   }
-  void each(
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j), 
-      const unsigned int &each_which = 0) const {
-    unsigned int i_max($self->rows()), j_max($self->columns());
-    switch(each_which){
-      case 1: // diagonal
-        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
-          (*each_func)((*($self))(k, k), k, k);
-        }
-        break;
-      case 2: // off_diagonal
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(i != j){(*each_func)((*($self))(i, j), i, j);}
-          }
-        }
-        break;
-      case 3: // lower
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(j >= i){break;}
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 4: // upper
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(i); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 5: // strict_lower
-        for(unsigned int i(1); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(j >= i){break;}
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 6: // strict_upper
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(i + 1); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 0: default: // all
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-    }
+  const Matrix_Frozen<T, Array2D_Type, ViewType> &each(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+    MatrixUtil::template each<T, Array2D_Type, ViewType, Array2D_Type, ViewType>(
+        *$self, each_func, each_which);
+    return *$self;
   }
   %alias each "each_with_index";
+  
+  Matrix<T, Array2D_Dense<T> > map(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+    Matrix<T, Array2D_Dense<T> > res($self->operator Matrix<T, Array2D_Dense<T> >());
+    MatrixUtil::each(*$self, each_func, each_which, &res);
+    return res;
+  }
+  %alias map "collect";
   
   SWIG_Object to_a() const {
     unsigned int i_max($self->rows()), j_max($self->columns());
