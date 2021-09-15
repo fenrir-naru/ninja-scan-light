@@ -488,7 +488,8 @@ struct MatrixUtil {
     $1 = proc_t::yield;
     if(rb_frame_callee() == rb_intern("each_with_index")){
       $1 = proc_t::yield_with_index;
-    }else if(rb_frame_this_func() == rb_intern("map")){
+    }else if((rb_frame_this_func() == rb_intern("map"))
+        || (rb_frame_this_func() == rb_intern("map!"))){
       $1 = proc_t::yield_get;
     }
   }
@@ -712,6 +713,17 @@ MAKE_TO_S(Matrix_Frozen)
   %bang swapRows(const unsigned int &, const unsigned int &);
   %bang swapColumns(const unsigned int &, const unsigned int &);
   %rename("replace!") replace;
+  
+  self_t &map_bang(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL){
+    MatrixUtil::each(*$self, each_func, each_which, $self);
+    return *$self;
+  }
+  %rename("map!") map_bang;
+  %alias map_bang "collect!";
 #endif
 };
 
