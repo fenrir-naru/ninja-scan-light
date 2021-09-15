@@ -614,6 +614,8 @@ MAKE_TO_S(Matrix_Frozen)
   }
 #endif
 
+  %typemap(out) self_t & "$result = self;"
+
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
   }
