@@ -319,6 +319,105 @@ struct MatrixUtil {
         break;
     }
   }
+#if defined(SWIGRUBY)
+  static const each_which_t &sym2each_which(const VALUE &value){
+    if(!RB_TYPE_P(value, T_SYMBOL)){
+      std::runtime_error("Symbol is required");
+    }
+    static const struct {
+      VALUE sym;
+      each_which_t which;
+    } cmp[] = {
+      {ID2SYM(rb_intern("all")),          EACH_ALL},
+      {ID2SYM(rb_intern("diagonal")),     EACH_DIAGONAL},
+      {ID2SYM(rb_intern("off_diagonal")), EACH_OFF_DIAGONAL},
+      {ID2SYM(rb_intern("lower")),        EACH_LOWER},
+      {ID2SYM(rb_intern("upper")),        EACH_UPPER},
+      {ID2SYM(rb_intern("strict_lower")), EACH_STRICT_LOWER},
+      {ID2SYM(rb_intern("strict_upper")), EACH_STRICT_UPPER},
+    };
+    unsigned int i(0);
+    while(value != cmp[i].sym){
+      if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
+    }
+    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
+      std::runtime_error("Unknown enumerate direction");
+    }
+    return cmp[i].which;
+  }
+#endif
+
+  template <class T, class Array2D_Type, class ViewType>
+  static bool replace(
+      Matrix<T, Array2D_Type, ViewType> &dst,
+      bool (*conv)(const void *src, T &dst),
+      const void *src = NULL){
+    unsigned int r(dst.rows()), c(dst.columns()), len(r * c);
+    bool replaced(true);
+#if defined(SWIGRUBY)
+    const VALUE *value(static_cast<const VALUE *>(src));
+    unsigned int i(0), j(0), i_elm(0);
+    VALUE v_elm;
+    if(value && RB_TYPE_P(*value, T_ARRAY)){
+      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
+        if((unsigned int)RARRAY_LEN(*value) < r){
+          throw std::runtime_error("Length is too short");
+        }
+        VALUE value_r;
+        for(; i_elm < len; i_elm++){
+          if(j == 0){
+            value_r = RARRAY_AREF(*value, i);
+            if(!RB_TYPE_P(value_r, T_ARRAY)){
+              throw std::runtime_error("double array [[...], ...] is required");
+            }else if((unsigned int)RARRAY_LEN(value_r) < c){
+              throw std::runtime_error("Length is too short");
+            }
+          }
+          v_elm = RARRAY_AREF(value_r, j);
+          if(!conv(&v_elm, dst(i, j))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }else{ // [r0c0, r0c1, ...]
+        if((unsigned int)RARRAY_LEN(*value) < len){
+          throw std::runtime_error("Length is too short");
+        }
+        for(; i_elm < len; i_elm++){
+          v_elm = RARRAY_AREF(*value, i_elm);
+          if(!conv(&v_elm, dst(i, j))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }
+    }else if(rb_block_given_p()){
+      for(; i_elm < len; i_elm++){
+        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
+        if(!conv(&v_elm, dst(i, j))){break;}
+        if(++j >= c){j = 0; ++i;}
+      }
+    }else{
+      replaced = false;
+    }
+    if(replaced && (i_elm < len)){
+      VALUE v_inspect(rb_inspect(v_elm));
+      std::stringstream s;
+      s << "Unexpected input [" << i << "," << j << "]: ";
+      throw std::runtime_error(
+          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+    }
+#endif
+    return replaced;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static bool replace(
+      Matrix<T, Array2D_Type, ViewType> &dst,
+      const T *src){
+    if(!src){return false;}
+    for(unsigned int i(0), r(dst.rows()); i < r; ++i){
+      for(unsigned int j(0), c(dst.columns()); j < c; ++j){
+        dst(i, j) = *(src++);
+      }
+    }
+    return true;
+  }
 };
 %}
 
@@ -497,29 +596,10 @@ struct MatrixUtil {
     $1 = RB_TYPE_P($input, T_SYMBOL);
   }
   %typemap(in) const typename MatrixUtil::each_which_t &each_which {
-    if(!RB_TYPE_P($input, T_SYMBOL)){
-      SWIG_exception(SWIG_TypeError, "Symbol is required");
-    }
-    static struct {
-      SWIG_Object sym;
-      typename MatrixUtil::each_which_t which;
-    } cmp[] = {
-      {ID2SYM(rb_intern("all")),          MatrixUtil::EACH_ALL},
-      {ID2SYM(rb_intern("diagonal")),     MatrixUtil::EACH_DIAGONAL},
-      {ID2SYM(rb_intern("off_diagonal")), MatrixUtil::EACH_OFF_DIAGONAL},
-      {ID2SYM(rb_intern("lower")),        MatrixUtil::EACH_LOWER},
-      {ID2SYM(rb_intern("upper")),        MatrixUtil::EACH_UPPER},
-      {ID2SYM(rb_intern("strict_lower")), MatrixUtil::EACH_STRICT_LOWER},
-      {ID2SYM(rb_intern("strict_upper")), MatrixUtil::EACH_STRICT_UPPER},
-    };
-    unsigned int i(0);
-    while($input != cmp[i].sym){
-      if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
-    }
-    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
-      SWIG_exception(SWIG_RuntimeError, "Unknown enumerate direction");
-    }else{
-      $1 = &(cmp[i].which);
+    try{
+      $1 = &const_cast<typename MatrixUtil::each_which_t &>(MatrixUtil::sym2each_which($input));
+    }catch(std::runtime_error &e){
+      SWIG_exception(SWIG_TypeError, e.what());
     }
   }
   const Matrix_Frozen<T, Array2D_Type, ViewType> &each(
@@ -576,40 +656,38 @@ MAKE_TO_S(Matrix_Frozen)
   %typemap(in) const void *replacer {
     $1 = &$input;
   }
+  %typemap(in, numinputs=0) bool (*conv)(const void *src, T &dst) {
+    struct proc_t {
+      static bool conv(const void *src, T &dst){
+        return from_value(*static_cast<const SWIG_Object *>(src), $descriptor(T &), dst);
+      }
+    };
+    $1 = proc_t::conv;
+  }
 
   Matrix(const unsigned int &rows, const unsigned int &columns, 
-      const void *replacer = NULL){
-    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+      bool (*conv)(const void *src, T &dst), const void *replacer = NULL){
+    Matrix<T, Array2D_Type, ViewType> res(rows, columns);
+    MatrixUtil::replace(res, conv, replacer);
+    return new Matrix<T, Array2D_Type, ViewType>(res);
   }
   Matrix(const unsigned int &rows, const unsigned int &columns,
       const T *serialized){
-    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+    Matrix<T, Array2D_Type, ViewType> res(rows, columns);
+    MatrixUtil::replace(res, serialized);
+    return new Matrix<T, Array2D_Type, ViewType>(res);
   }
 #if defined(SWIGRUBY)
-  %exception Matrix {
-    $action
-    if(argc > 2){
-      rb_funcall2(self, rb_intern("replace!"), argc - 2, &argv[2]);
-    }else if(rb_block_given_p()){
-      rb_funcall_passing_block(self, rb_intern("replace!"), 0, NULL);
-    }
-  }
-  Matrix(const void *replacer){
+  Matrix(bool (*conv)(const void *src, T &dst), const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
-      return new Matrix<T, Array2D_Type, ViewType>(
+      Matrix<T, Array2D_Type, ViewType> res(
           (unsigned int)RARRAY_LEN(*value),
           (unsigned int)RARRAY_LEN(RARRAY_AREF(*value, 0)));
+      MatrixUtil::replace(res, conv, replacer);
+      return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{
       throw std::runtime_error("double array [[...], ...] is required");
-    }
-  }
-  %exception Matrix(const void *replacer) {
-    try {
-      $action
-      rb_funcall2(self, rb_intern("replace!"), argc, argv);
-    } catch (const std::exception& e) {
-      SWIG_exception(SWIG_RuntimeError, e.what());
     }
   }
 #endif
@@ -640,73 +718,16 @@ MAKE_TO_S(Matrix_Frozen)
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
-  self_t &replace(const void *replacer = NULL){
-    unsigned int r($self->rows()), c($self->columns()), len(r * c);
-    bool replaced(true);
-#if defined(SWIGRUBY)
-    const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
-    unsigned int i(0), j(0), i_elm(0);
-    VALUE v_elm;
-    if(value && RB_TYPE_P(*value, T_ARRAY)){
-      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
-        if((unsigned int)RARRAY_LEN(*value) < r){
-          throw std::runtime_error("Length is too short");
-        }
-        VALUE value_r;
-        for(; i_elm < len; i_elm++){
-          if(j == 0){
-            value_r = RARRAY_AREF(*value, i);
-            if(!RB_TYPE_P(value_r, T_ARRAY)){
-              throw std::runtime_error("double array [[...], ...] is required");
-            }else if((unsigned int)RARRAY_LEN(value_r) < c){
-              throw std::runtime_error("Length is too short");
-            }
-          }
-          v_elm = RARRAY_AREF(value_r, j);
-          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-          if(++j >= c){j = 0; ++i;}
-        }
-      }else{  // [r0c0, r0c1, ...]
-        if((unsigned int)RARRAY_LEN(*value) < len){
-          throw std::runtime_error("Length is too short");
-        }
-        for(; i_elm < len; i_elm++){
-          v_elm = RARRAY_AREF(*value, i_elm);
-          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-          if(++j >= c){j = 0; ++i;}
-        }
-      }
-    }else if(rb_block_given_p()){
-      for(; i_elm < len; i_elm++){
-        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
-        if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-        if(++j >= c){j = 0; ++i;}
-      }
-    }else{
-      replaced = false;
-    }
-    if(replaced && (i_elm < len)){
-      VALUE v_inspect(rb_inspect(v_elm));
-      std::stringstream s;
-      s << "Unknown input (T expected) [" << i << "," << j << "]: ";
-      throw std::runtime_error(
-          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
-    }
-#endif
-    if(!replaced){
+  self_t &replace(bool (*conv)(const void *src, T &dst), const void *replacer = NULL){
+    if(!MatrixUtil::replace(*$self, conv, replacer)){
       throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
   }
 
   self_t &replace(const T *serialized){
-    if(serialized){
-      unsigned int r($self->rows()), c($self->columns());
-      for(unsigned int i(0); i < r; ++i){
-        for(unsigned int j(0); j < c; ++j){
-          (*$self)(i, j) = *(serialized++);
-        }
-      }
+    if(!MatrixUtil::replace(*$self, serialized)){
+      throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
   }
