@@ -152,7 +152,7 @@ class Complex;
   MAKE_ACCESSOR(real, FloatT);
   MAKE_ACCESSOR(imaginary, FloatT);
 
-#ifdef SWIGRUBY
+#if defined(SWIGRUBY)
   %alias power "**";
   %alias arg "angle,phase";
   %alias conjugate "conj";
@@ -171,14 +171,16 @@ MAKE_TO_S(Complex);
 
 %define INSTANTIATE_COMPLEX(type, suffix)
 %template(Complex ## suffix) Complex<type>;
-%init %{
-#if SWIGRUBY
-  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
-    VALUE singleton = rb_singleton_class(SwigClassComplex ## suffix ## .klass);
+#if defined(SWIGRUBY)
+%fragment("init"{ComplexInit<type>}, "init") {
+  { /* work around of %alias rectangular "rect"; %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(
+        ((swig_class *)$descriptor(Complex<type> *)->clientdata)->klass);
     rb_define_alias(singleton, "rect", "rectangular");
   }
+}
+%fragment("init"{ComplexInit<type>});
 #endif
-%}
 %enddef
 
 INSTANTIATE_COMPLEX(double, D);
@@ -561,36 +563,40 @@ struct MatrixUtil {
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
   
-  %typemap(in,numinputs=0) 
+  %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header"){
+    static void matrix_yield(const T &v, T *, const unsigned int &i, const unsigned int &j){
+      rb_yield_values(1, to_value($descriptor(const T &), v));
+    }
+    static void matrix_yield_with_index(const T &v, T *, const unsigned int &i, const unsigned int &j){
+      rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
+    }
+    static void matrix_yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      SWIG_Object v(rb_yield_values(1, to_value($descriptor(const T &), src)));
+      if(!from_value(v, $descriptor(T &), *dst)){
+        VALUE v_inspect(rb_inspect(v));
+        std::stringstream s;
+        s << "Unknown input (T expected) [" << i << "," << j << "]: ";
+        throw std::runtime_error(
+            s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+      }
+    }
+    static void (*matrix_each(const T *))
+        (const T &, T *, const unsigned int &, const unsigned int &) {
+      if(rb_frame_callee() == rb_intern("each_with_index")){
+        return matrix_yield_with_index;
+      }else if((rb_frame_this_func() == rb_intern("map"))
+          || (rb_frame_this_func() == rb_intern("map!"))){
+        return matrix_yield_get;
+      }
+      return matrix_yield;
+    }
+  }
+  %typemap(in,numinputs=0, fragment=SWIG_From_frag(Matrix_Frozen_Helper<T>)) 
       void (*each_func)(const T &src, T *dst, const unsigned int &i, const unsigned int &j) {
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
     }
-    struct proc_t {
-      static void yield(const T &v, T *, const unsigned int &i, const unsigned int &j){
-        rb_yield_values(1, to_value($descriptor(const T &), v));
-      }
-      static void yield_with_index(const T &v, T *, const unsigned int &i, const unsigned int &j){
-        rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
-      }
-      static void yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-        SWIG_Object v(rb_yield_values(1, to_value($descriptor(const T &), src)));
-        if(!from_value(v, $descriptor(T &), *dst)){
-          VALUE v_inspect(rb_inspect(v));
-          std::stringstream s;
-          s << "Unknown input (T expected) [" << i << "," << j << "]: ";
-          throw std::runtime_error(
-              s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
-        }
-      }
-    };
-    $1 = proc_t::yield;
-    if(rb_frame_callee() == rb_intern("each_with_index")){
-      $1 = proc_t::yield_with_index;
-    }else if((rb_frame_this_func() == rb_intern("map"))
-        || (rb_frame_this_func() == rb_intern("map!"))){
-      $1 = proc_t::yield_get;
-    }
+    $1 = matrix_each((const T *)0);
   }
   %typemap(typecheck) const typename MatrixUtil::each_which_t &each_which {
     $1 = RB_TYPE_P($input, T_SYMBOL);
@@ -656,13 +662,13 @@ MAKE_TO_S(Matrix_Frozen)
   %typemap(in) const void *replacer {
     $1 = &$input;
   }
-  %typemap(in, numinputs=0) bool (*conv)(const void *src, T &dst) {
-    struct proc_t {
-      static bool conv(const void *src, T &dst){
-        return from_value(*static_cast<const SWIG_Object *>(src), $descriptor(T &), dst);
-      }
-    };
-    $1 = proc_t::conv;
+  %fragment(SWIG_From_frag(MatrixHelper<T>), "header"){
+    static bool from_value(const void *src, T &dst){
+      return from_value(*static_cast<const SWIG_Object *>(src), $descriptor(T &), dst);
+    }
+  }
+  %typemap(in, numinputs=0, fragment=SWIG_From_frag(MatrixHelper<T>)) bool (*conv)(const void *src, T &dst) {
+    $1 = from_value;
   }
 
   Matrix(const unsigned int &rows, const unsigned int &columns, 
@@ -850,15 +856,17 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
-%init %{
 #if defined(SWIGRUBY)
-  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
-    VALUE singleton = rb_singleton_class(SwigClassMatrix ## suffix ## .klass);
+%fragment("init"{Matrix<type, Array2D_Dense<type > >}, "init") {
+  { /* work around of %alias I "unit,identity"; %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(
+        ((swig_class *)$descriptor(Matrix<type, Array2D_Dense<type > > *)->clientdata)->klass);
     rb_define_alias(singleton, "identity", "I");
     rb_define_alias(singleton, "unit", "I");
   }
+}
+%fragment("init"{Matrix<type, Array2D_Dense<type > >});
 #endif
-%}
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
