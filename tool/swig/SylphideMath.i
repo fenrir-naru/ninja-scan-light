@@ -152,7 +152,7 @@ class Complex;
   MAKE_ACCESSOR(real, FloatT);
   MAKE_ACCESSOR(imaginary, FloatT);
 
-#ifdef SWIGRUBY
+#if defined(SWIGRUBY)
   %alias power "**";
   %alias arg "angle,phase";
   %alias conjugate "conj";
@@ -171,14 +171,16 @@ MAKE_TO_S(Complex);
 
 %define INSTANTIATE_COMPLEX(type, suffix)
 %template(Complex ## suffix) Complex<type>;
-%init %{
-#if SWIGRUBY
-  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
-    VALUE singleton = rb_singleton_class(SwigClassComplex ## suffix ## .klass);
+#if defined(SWIGRUBY)
+%fragment("init"{ComplexInit<type>}, "init") {
+  { /* work around of %alias rectangular "rect"; %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(
+        ((swig_class *)$descriptor(Complex<type> *)->clientdata)->klass);
     rb_define_alias(singleton, "rect", "rectangular");
   }
+}
+%fragment("init"{ComplexInit<type>});
 #endif
-%}
 %enddef
 
 INSTANTIATE_COMPLEX(double, D);
@@ -243,6 +245,183 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_p>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_pt>;
 %enddef
+
+%{
+struct MatrixUtil {
+  enum each_which_t {
+    EACH_ALL,
+    EACH_DIAGONAL,
+    EACH_OFF_DIAGONAL,
+    EACH_LOWER,
+    EACH_UPPER,
+    EACH_STRICT_LOWER,
+    EACH_STRICT_UPPER,
+  };
+  template <class T, 
+      class Array2D_Type, class ViewType,
+      class Array2D_Type2, class ViewType2>
+  static void each(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &src,
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j),
+      const each_which_t &each_which = EACH_ALL,
+      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL){
+    unsigned int i_max(src.rows()), j_max(src.columns());
+    switch(each_which){
+      case EACH_DIAGONAL:
+        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
+          (*each_func)(src(k, k), (dst ? &((*dst)(k, k)) : NULL), k, k);
+        }
+        break;
+      case EACH_OFF_DIAGONAL:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            if(i != j){
+              (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+            }
+          }
+        }
+        break;
+      case EACH_LOWER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j <= i; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_UPPER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_STRICT_LOWER:
+        for(unsigned int i(1); i < i_max; ++i){
+          for(unsigned int j(0); j < i; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_STRICT_UPPER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i + 1); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_ALL:
+      default:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+    }
+  }
+#if defined(SWIGRUBY)
+  static const each_which_t &sym2each_which(const VALUE &value){
+    if(!RB_TYPE_P(value, T_SYMBOL)){
+      std::runtime_error("Symbol is required");
+    }
+    static const struct {
+      VALUE sym;
+      each_which_t which;
+    } cmp[] = {
+      {ID2SYM(rb_intern("all")),          EACH_ALL},
+      {ID2SYM(rb_intern("diagonal")),     EACH_DIAGONAL},
+      {ID2SYM(rb_intern("off_diagonal")), EACH_OFF_DIAGONAL},
+      {ID2SYM(rb_intern("lower")),        EACH_LOWER},
+      {ID2SYM(rb_intern("upper")),        EACH_UPPER},
+      {ID2SYM(rb_intern("strict_lower")), EACH_STRICT_LOWER},
+      {ID2SYM(rb_intern("strict_upper")), EACH_STRICT_UPPER},
+    };
+    unsigned int i(0);
+    while(value != cmp[i].sym){
+      if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
+    }
+    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
+      std::runtime_error("Unknown enumerate direction");
+    }
+    return cmp[i].which;
+  }
+#endif
+
+  template <class T, class Array2D_Type, class ViewType>
+  static bool replace(
+      Matrix<T, Array2D_Type, ViewType> &dst,
+      bool (*conv)(const void *src, T &dst),
+      const void *src = NULL){
+    unsigned int r(dst.rows()), c(dst.columns()), len(r * c);
+    bool replaced(true);
+#if defined(SWIGRUBY)
+    const VALUE *value(static_cast<const VALUE *>(src));
+    unsigned int i(0), j(0), i_elm(0);
+    VALUE v_elm;
+    if(value && RB_TYPE_P(*value, T_ARRAY)){
+      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
+        if((unsigned int)RARRAY_LEN(*value) < r){
+          throw std::runtime_error("Length is too short");
+        }
+        VALUE value_r;
+        for(; i_elm < len; i_elm++){
+          if(j == 0){
+            value_r = RARRAY_AREF(*value, i);
+            if(!RB_TYPE_P(value_r, T_ARRAY)){
+              throw std::runtime_error("double array [[...], ...] is required");
+            }else if((unsigned int)RARRAY_LEN(value_r) < c){
+              throw std::runtime_error("Length is too short");
+            }
+          }
+          v_elm = RARRAY_AREF(value_r, j);
+          if(!conv(&v_elm, dst(i, j))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }else{ // [r0c0, r0c1, ...]
+        if((unsigned int)RARRAY_LEN(*value) < len){
+          throw std::runtime_error("Length is too short");
+        }
+        for(; i_elm < len; i_elm++){
+          v_elm = RARRAY_AREF(*value, i_elm);
+          if(!conv(&v_elm, dst(i, j))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }
+    }else if(rb_block_given_p()){
+      for(; i_elm < len; i_elm++){
+        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
+        if(!conv(&v_elm, dst(i, j))){break;}
+        if(++j >= c){j = 0; ++i;}
+      }
+    }else{
+      replaced = false;
+    }
+    if(replaced && (i_elm < len)){
+      VALUE v_inspect(rb_inspect(v_elm));
+      std::stringstream s;
+      s << "Unexpected input [" << i << "," << j << "]: ";
+      throw std::runtime_error(
+          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+    }
+#endif
+    return replaced;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static bool replace(
+      Matrix<T, Array2D_Type, ViewType> &dst,
+      const T *src){
+    if(!src){return false;}
+    for(unsigned int i(0), r(dst.rows()); i < r; ++i){
+      for(unsigned int j(0), c(dst.columns()); j < c; ++j){
+        dst(i, j) = *(src++);
+      }
+    }
+    return true;
+  }
+};
+%}
 
 %extend Matrix_Frozen {
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
@@ -384,109 +563,72 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
   
-  %typemap(in,numinputs=0) 
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
+  %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header"){
+    static void matrix_yield(const T &v, T *, const unsigned int &i, const unsigned int &j){
+      rb_yield_values(1, to_value($descriptor(const T &), v));
+    }
+    static void matrix_yield_with_index(const T &v, T *, const unsigned int &i, const unsigned int &j){
+      rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
+    }
+    static void matrix_yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      SWIG_Object v(rb_yield_values(1, to_value($descriptor(const T &), src)));
+      if(!from_value(v, $descriptor(T &), *dst)){
+        VALUE v_inspect(rb_inspect(v));
+        std::stringstream s;
+        s << "Unknown input (T expected) [" << i << "," << j << "]: ";
+        throw std::runtime_error(
+            s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+      }
+    }
+    static void (*matrix_each(const T *))
+        (const T &, T *, const unsigned int &, const unsigned int &) {
+      if(rb_frame_callee() == rb_intern("each_with_index")){
+        return matrix_yield_with_index;
+      }else if((rb_frame_this_func() == rb_intern("map"))
+          || (rb_frame_this_func() == rb_intern("map!"))){
+        return matrix_yield_get;
+      }
+      return matrix_yield;
+    }
+  }
+  %typemap(in,numinputs=0, fragment=SWIG_From_frag(Matrix_Frozen_Helper<T>)) 
+      void (*each_func)(const T &src, T *dst, const unsigned int &i, const unsigned int &j) {
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
     }
-    struct proc_t {
-      static void yield(const T &v, const unsigned int &i, const unsigned int &j){
-        rb_yield_values(1, to_value($descriptor(const T &), v));
-      }
-      static void yield_with_index(const T &v, const unsigned int &i, const unsigned int &j){
-        rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
-      }
-    };
-    $1 = proc_t::yield;
-    if(rb_frame_callee() == rb_intern("each_with_index")){
-      $1 = proc_t::yield_with_index;
-    }
+    $1 = matrix_each((const T *)0);
   }
-  %typemap(argout)
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
-    $result = self;
-  }
-  %typemap(typecheck) const unsigned int &each_which {
+  %typemap(typecheck) const typename MatrixUtil::each_which_t &each_which {
     $1 = RB_TYPE_P($input, T_SYMBOL);
   }
-  %typemap(in) const unsigned int &each_which (unsigned int temp = 0) {
-    $1 = &temp;
-    if(!RB_TYPE_P($input, T_SYMBOL)){
-      SWIG_exception(SWIG_TypeError, "Symbol is required");
-    }
-    static const SWIG_Object cmp[] = {
-      ID2SYM(rb_intern("all")),
-      ID2SYM(rb_intern("diagonal")),
-      ID2SYM(rb_intern("off_diagonal")),
-      ID2SYM(rb_intern("lower")),
-      ID2SYM(rb_intern("upper")),
-      ID2SYM(rb_intern("strict_lower")),
-      ID2SYM(rb_intern("strict_upper")),
-    };
-    while($input != cmp[temp]){
-      if(++temp >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
-    }
-    if(temp >= (sizeof(cmp) / sizeof(cmp[0]))){
-      SWIG_exception(SWIG_RuntimeError, "Unknown enumerate direction");
+  %typemap(in) const typename MatrixUtil::each_which_t &each_which {
+    try{
+      $1 = &const_cast<typename MatrixUtil::each_which_t &>(MatrixUtil::sym2each_which($input));
+    }catch(std::runtime_error &e){
+      SWIG_exception(SWIG_TypeError, e.what());
     }
   }
-  void each(
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j), 
-      const unsigned int &each_which = 0) const {
-    unsigned int i_max($self->rows()), j_max($self->columns());
-    switch(each_which){
-      case 1: // diagonal
-        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
-          (*each_func)((*($self))(k, k), k, k);
-        }
-        break;
-      case 2: // off_diagonal
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(i != j){(*each_func)((*($self))(i, j), i, j);}
-          }
-        }
-        break;
-      case 3: // lower
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(j >= i){break;}
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 4: // upper
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(i); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 5: // strict_lower
-        for(unsigned int i(1); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(j >= i){break;}
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 6: // strict_upper
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(i + 1); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 0: default: // all
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-    }
+  const Matrix_Frozen<T, Array2D_Type, ViewType> &each(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+    MatrixUtil::template each<T, Array2D_Type, ViewType, Array2D_Type, ViewType>(
+        *$self, each_func, each_which);
+    return *$self;
   }
   %alias each "each_with_index";
+  
+  Matrix<T, Array2D_Dense<T> > map(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+    Matrix<T, Array2D_Dense<T> > res($self->operator Matrix<T, Array2D_Dense<T> >());
+    MatrixUtil::each(*$self, each_func, each_which, &res);
+    return res;
+  }
+  %alias map "collect";
   
   SWIG_Object to_a() const {
     unsigned int i_max($self->rows()), j_max($self->columns());
@@ -520,43 +662,43 @@ MAKE_TO_S(Matrix_Frozen)
   %typemap(in) const void *replacer {
     $1 = &$input;
   }
+  %fragment(SWIG_From_frag(MatrixHelper<T>), "header"){
+    static bool from_value(const void *src, T &dst){
+      return from_value(*static_cast<const SWIG_Object *>(src), $descriptor(T &), dst);
+    }
+  }
+  %typemap(in, numinputs=0, fragment=SWIG_From_frag(MatrixHelper<T>)) bool (*conv)(const void *src, T &dst) {
+    $1 = from_value;
+  }
 
   Matrix(const unsigned int &rows, const unsigned int &columns, 
-      const void *replacer = NULL){
-    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+      bool (*conv)(const void *src, T &dst), const void *replacer = NULL){
+    Matrix<T, Array2D_Type, ViewType> res(rows, columns);
+    MatrixUtil::replace(res, conv, replacer);
+    return new Matrix<T, Array2D_Type, ViewType>(res);
   }
   Matrix(const unsigned int &rows, const unsigned int &columns,
       const T *serialized){
-    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+    Matrix<T, Array2D_Type, ViewType> res(rows, columns);
+    MatrixUtil::replace(res, serialized);
+    return new Matrix<T, Array2D_Type, ViewType>(res);
   }
 #if defined(SWIGRUBY)
-  %exception Matrix {
-    $action
-    if(argc > 2){
-      rb_funcall2(self, rb_intern("replace!"), argc - 2, &argv[2]);
-    }else if(rb_block_given_p()){
-      rb_funcall_passing_block(self, rb_intern("replace!"), 0, NULL);
-    }
-  }
-  Matrix(const void *replacer){
+  Matrix(bool (*conv)(const void *src, T &dst), const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
-      return new Matrix<T, Array2D_Type, ViewType>(
+      Matrix<T, Array2D_Type, ViewType> res(
           (unsigned int)RARRAY_LEN(*value),
           (unsigned int)RARRAY_LEN(RARRAY_AREF(*value, 0)));
+      MatrixUtil::replace(res, conv, replacer);
+      return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{
       throw std::runtime_error("double array [[...], ...] is required");
     }
   }
-  %exception Matrix(const void *replacer) {
-    try {
-      $action
-      rb_funcall2(self, rb_intern("replace!"), argc, argv);
-    } catch (const std::exception& e) {
-      SWIG_exception(SWIG_RuntimeError, e.what());
-    }
-  }
 #endif
+
+  %typemap(out) self_t & "$result = self;"
 
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
@@ -582,73 +724,16 @@ MAKE_TO_S(Matrix_Frozen)
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
-  self_t &replace(const void *replacer = NULL){
-    unsigned int r($self->rows()), c($self->columns()), len(r * c);
-    bool replaced(true);
-#if defined(SWIGRUBY)
-    const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
-    unsigned int i(0), j(0), i_elm(0);
-    VALUE v_elm;
-    if(value && RB_TYPE_P(*value, T_ARRAY)){
-      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
-        if((unsigned int)RARRAY_LEN(*value) < r){
-          throw std::runtime_error("Length is too short");
-        }
-        VALUE value_r;
-        for(; i_elm < len; i_elm++){
-          if(j == 0){
-            value_r = RARRAY_AREF(*value, i);
-            if(!RB_TYPE_P(value_r, T_ARRAY)){
-              throw std::runtime_error("double array [[...], ...] is required");
-            }else if((unsigned int)RARRAY_LEN(value_r) < c){
-              throw std::runtime_error("Length is too short");
-            }
-          }
-          v_elm = RARRAY_AREF(value_r, j);
-          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-          if(++j >= c){j = 0; ++i;}
-        }
-      }else{  // [r0c0, r0c1, ...]
-        if((unsigned int)RARRAY_LEN(*value) < len){
-          throw std::runtime_error("Length is too short");
-        }
-        for(; i_elm < len; i_elm++){
-          v_elm = RARRAY_AREF(*value, i_elm);
-          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-          if(++j >= c){j = 0; ++i;}
-        }
-      }
-    }else if(rb_block_given_p()){
-      for(; i_elm < len; i_elm++){
-        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
-        if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-        if(++j >= c){j = 0; ++i;}
-      }
-    }else{
-      replaced = false;
-    }
-    if(replaced && (i_elm < len)){
-      VALUE v_inspect(rb_inspect(v_elm));
-      std::stringstream s;
-      s << "Unknown input (T expected) [" << i << "," << j << "]: ";
-      throw std::runtime_error(
-          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
-    }
-#endif
-    if(!replaced){
+  self_t &replace(bool (*conv)(const void *src, T &dst), const void *replacer = NULL){
+    if(!MatrixUtil::replace(*$self, conv, replacer)){
       throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
   }
 
   self_t &replace(const T *serialized){
-    if(serialized){
-      unsigned int r($self->rows()), c($self->columns());
-      for(unsigned int i(0); i < r; ++i){
-        for(unsigned int j(0); j < c; ++j){
-          (*$self)(i, j) = *(serialized++);
-        }
-      }
+    if(!MatrixUtil::replace(*$self, serialized)){
+      throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
   }
@@ -657,6 +742,17 @@ MAKE_TO_S(Matrix_Frozen)
   %bang swapRows(const unsigned int &, const unsigned int &);
   %bang swapColumns(const unsigned int &, const unsigned int &);
   %rename("replace!") replace;
+  
+  self_t &map_bang(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL){
+    MatrixUtil::each(*$self, each_func, each_which, $self);
+    return *$self;
+  }
+  %rename("map!") map_bang;
+  %alias map_bang "collect!";
 #endif
 };
 
@@ -760,15 +856,17 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
-%init %{
 #if defined(SWIGRUBY)
-  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
-    VALUE singleton = rb_singleton_class(SwigClassMatrix ## suffix ## .klass);
+%fragment("init"{Matrix<type, Array2D_Dense<type > >}, "init") {
+  { /* work around of %alias I "unit,identity"; %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(
+        ((swig_class *)$descriptor(Matrix<type, Array2D_Dense<type > > *)->clientdata)->klass);
     rb_define_alias(singleton, "identity", "I");
     rb_define_alias(singleton, "unit", "I");
   }
+}
+%fragment("init"{Matrix<type, Array2D_Dense<type > >});
 #endif
-%}
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
