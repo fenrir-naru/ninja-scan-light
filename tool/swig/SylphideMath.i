@@ -188,6 +188,120 @@ INSTANTIATE_COMPLEX(double, D);
 #undef INSTANTIATE_COMPLEX
 
 #define DO_NOT_INSTANTIATE_SCALAR_MATRIX
+#define USE_MATRIX_VIEW_FILTER
+
+#if defined(USE_MATRIX_VIEW_FILTER)
+%{
+template <class BaseView = MatrixViewBase<> >
+struct MatrixViewFilter : public BaseView {
+  typedef MatrixViewFilter<BaseView> self_t;
+
+  struct {
+    unsigned int row_offset, column_offset;
+    unsigned int rows, columns;
+    bool transposed;
+  } prop;
+
+  MatrixViewFilter() : BaseView() {
+    prop.row_offset = prop.column_offset = 0;
+    prop.rows = prop.columns = 0; // to be configured
+    prop.transposed = false;
+  }
+  MatrixViewFilter(const self_t &view)
+      : BaseView((const BaseView &)view), prop(view.prop) {
+  }
+  
+  void transpose() {
+    prop.transposed = !prop.transposed;
+  }
+  void partial(
+      const unsigned int &new_rows, const unsigned int &new_columns,
+      const unsigned int &row_offset, const unsigned int &column_offset) {
+    if(prop.transposed){
+      prop.row_offset += column_offset;
+      prop.column_offset += row_offset;
+      prop.rows = new_columns;
+      prop.columns = new_rows;
+    }else{
+      prop.row_offset += row_offset;
+      prop.column_offset += column_offset;
+      prop.rows = new_rows;
+      prop.columns = new_columns;
+    }
+  }
+  
+  template <class T, class Array2D_Type>
+  struct mat_t : public Matrix_Frozen<T, Array2D_Type, self_t> {
+    typedef Matrix_Frozen<T, Array2D_Type, self_t> super_t;
+    mat_t(const Matrix_Frozen<T, Array2D_Type, BaseView> &orig) : super_t(orig) {
+      super_t::view.prop.rows = orig.rows();
+      super_t::view.prop.columns = orig.columns();
+    }
+    mat_t(const Matrix_Frozen<T, Array2D_Type, self_t> &orig) : super_t(orig) {}
+    self_t &view() {return super_t::view;}
+  };
+  
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> transpose(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig){
+    mat_t<T, Array2D_Type> res(orig);
+    res.view().transpose();
+    return res;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> partial(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig,
+      const unsigned int &new_rows, const unsigned int &new_columns,
+      const unsigned int &row_offset, const unsigned int &column_offset) {
+    if(new_rows + row_offset > orig.rows()){
+      throw std::out_of_range("Row size exceeding");
+    }else if(new_columns + column_offset > orig.columns()){
+      throw std::out_of_range("Column size exceeding");
+    }
+    mat_t<T, Array2D_Type> res(orig);
+    res.view().partial(new_rows, new_columns, row_offset, column_offset);
+    return res;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> partial(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig,
+      const unsigned int &new_rows, const unsigned int &new_columns) {
+    return partial(orig, new_rows, new_columns, 0, 0);
+  }
+
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const self_t &view){
+    out 
+        << (view.prop.transposed ? "[T] " : "")
+        << "[Size](" << view.prop.rows << "," << view.prop.columns << ") ";
+    if((view.prop.row_offset > 0) || (view.prop.column_offset > 0)){
+      out << "[Offset](" << view.prop.row_offset << "," << view.prop.column_offset << ") ";
+    }
+    return out << (const BaseView &)view;
+  }
+
+  inline const unsigned int rows(
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
+    return prop.transposed ? prop.columns : prop.rows;
+  }
+  inline const unsigned int columns(
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
+    return prop.transposed ? prop.rows : prop.columns;
+  }
+
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return prop.transposed
+        ? BaseView::template operator()<T, Array2D_Type>(
+          storage, (j + prop.column_offset), (i + prop.row_offset))
+        : BaseView::template operator()<T, Array2D_Type>(
+          storage, (i + prop.row_offset), (j + prop.column_offset));
+  }
+};
+%}
+#endif /* USE_MATRIX_VIEW_FILTER */
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix_Frozen {
@@ -227,23 +341,35 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     self_t &swapColumns(const unsigned int &column1, const unsigned int &column2);
 };
 
-%inline %{
+%inline {
 typedef MatrixViewBase<> MatViewBase;
+#if defined(USE_MATRIX_VIEW_FILTER)
+typedef MatrixViewFilter<MatrixViewBase<> > MatView_f;
+#else
 typedef MatrixViewTranspose<MatrixViewBase<> > MatView_t;
 typedef MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > MatView_p;
 typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > MatView_pt;
-%}
+#endif
+}
 
 %define INSTANTIATE_MATRIX_FUNC(func_orig, func_new)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatViewBase>;
+#if defined(USE_MATRIX_VIEW_FILTER)
+%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_f>;
+#else
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_p>;
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_pt>;
 #endif
+#endif
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatViewBase>;
+#if defined(USE_MATRIX_VIEW_FILTER)
+%template(func_new) func_orig<T, Array2D_Dense<T>, MatView_f>;
+#else
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_t>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_p>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_pt>;
+#endif
 %enddef
 
 %{
@@ -759,7 +885,11 @@ MAKE_TO_S(Matrix_Frozen)
 %define INSTANTIATE_MATRIX_TRANSPOSE(type, storage, view_from, view_to)
 %extend Matrix_Frozen<type, storage, view_from> {
   Matrix_Frozen<type, storage, view_to> transpose() const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::transpose(*$self);
+#else
     return $self->transpose();
+#endif
   }
 };
 %enddef
@@ -769,13 +899,25 @@ MAKE_TO_S(Matrix_Frozen)
   Matrix_Frozen<type, storage, view_to> partial(
       const unsigned int &new_rows, const unsigned int &new_columns,
       const unsigned int &row_offset, const unsigned int &column_offset) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, new_rows, new_columns, row_offset, column_offset);
+#else
     return $self->partial(new_rows, new_columns, row_offset, column_offset);
+#endif
   }
   Matrix_Frozen<type, storage, view_to> row_vector(const unsigned int &row) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, 1, $self->columns(), row, 0);
+#else
     return $self->rowVector(row);
+#endif
   }
   Matrix_Frozen<type, storage, view_to> column_vector(const unsigned int &column) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, $self->rows(), 1, 0, column);
+#else
     return $self->columnVector(column);
+#endif
   }
 };
 %enddef
@@ -811,13 +953,21 @@ MAKE_TO_S(Matrix_Frozen)
 %define INSTANTIATE_MATRIX_EIGEN(type)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatViewBase);
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_f);
+#else
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_p);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_pt);
 #endif
+#endif
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatViewBase);
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_f);
+#else
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_p);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_t);
 INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
+#endif
 %enddef
 
 %define INSTANTIATE_MATRIX(type, suffix)
@@ -830,6 +980,14 @@ INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
     return $self->inverse();
   }
 };
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_f, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatViewBase, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_f, MatView_f);
+
+%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase>;
+%template(Matrix_Scalar ## suffix ## _f) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_f>;
+#else
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_p, MatView_pt);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_p);
 INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatViewBase, MatView_p);
@@ -840,7 +998,17 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_
 %template(Matrix_Scalar ## suffix ## _p) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_p>;
 %template(Matrix_Scalar ## suffix ## _pt) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_pt>;
 #endif
+#endif
 
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_f);
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_f, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatViewBase, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_f, MatView_f);
+
+%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase>;
+%template(Matrix_Frozen ## suffix ## _f) Matrix_Frozen<type, Array2D_Dense<type >, MatView_f>;
+#else
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_t);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_t, MatViewBase);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_p, MatView_pt);
@@ -854,6 +1022,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _t) Matrix_Frozen<type, Array2D_Dense<type >, MatView_t>;
 %template(Matrix_Frozen ## suffix ## _p) Matrix_Frozen<type, Array2D_Dense<type >, MatView_p>;
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
+#endif
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
 #if defined(SWIGRUBY)
