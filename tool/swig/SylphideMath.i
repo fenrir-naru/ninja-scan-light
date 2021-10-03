@@ -483,6 +483,27 @@ struct MatrixUtil {
     unsigned int r(dst.rows()), c(dst.columns()), len(r * c);
     bool replaced(true);
 #if defined(SWIGRUBY)
+    struct bracket_read_t {
+      static VALUE run(VALUE v) {
+        VALUE *values = reinterpret_cast<VALUE *>(v);
+        static const ID id_b(rb_intern("[]"));
+        return rb_funcall2(values[0], id_b, 2, &values[1]);
+      }
+      static bool is_accessible(
+          const VALUE &v, const unsigned int &row = 0, const unsigned int &column = 0) {
+        int state;
+        VALUE values[3] = {v, UINT2NUM(row), UINT2NUM(column)};
+        rb_protect(run, reinterpret_cast<VALUE>(values), &state);
+        return state == 0;
+      }
+      static VALUE read(
+          const VALUE &v, const unsigned int &row = 0, const unsigned int &column = 0) {
+        int state;
+        VALUE values[3] = {v, UINT2NUM(row), UINT2NUM(column)};
+        VALUE res = rb_protect(run, reinterpret_cast<VALUE>(values), &state);
+        return (state == 0) ? res : Qnil;
+      }
+    };
     const VALUE *value(static_cast<const VALUE *>(src));
     unsigned int i(0), j(0), i_elm(0);
     VALUE v_elm;
@@ -514,6 +535,12 @@ struct MatrixUtil {
           if(!conv(&v_elm, dst(i, j))){break;}
           if(++j >= c){j = 0; ++i;}
         }
+      }
+    }else if(value && bracket_read_t::is_accessible(*value)){
+      for(; i_elm < len; i_elm++){
+        v_elm = bracket_read_t::read(*value, i, j);
+        if(!conv(&v_elm, dst(i, j))){break;}
+        if(++j >= c){j = 0; ++i;}
       }
     }else if(rb_block_given_p()){
       for(; i_elm < len; i_elm++){
@@ -812,14 +839,21 @@ MAKE_TO_S(Matrix_Frozen)
 #if defined(SWIGRUBY)
   Matrix(bool (*conv)(const void *src, T &dst), const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
+    static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
     if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
       Matrix<T, Array2D_Type, ViewType> res(
           (unsigned int)RARRAY_LEN(*value),
           (unsigned int)RARRAY_LEN(RARRAY_AREF(*value, 0)));
       MatrixUtil::replace(res, conv, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
+    }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
+      Matrix<T, Array2D_Type, ViewType> res(
+          NUM2UINT(rb_funcall(*value, id_r, 0, 0)), 
+          NUM2UINT(rb_funcall(*value, id_c, 0, 0)));
+      MatrixUtil::replace(res, conv, replacer);
+      return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{
-      throw std::runtime_error("double array [[...], ...] is required");
+      throw std::runtime_error("double array [[...], ...] or Matrix is required");
     }
   }
 #endif
