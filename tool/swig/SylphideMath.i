@@ -200,12 +200,14 @@ struct MatrixViewFilter : public BaseView {
     unsigned int row_offset, column_offset;
     unsigned int rows, columns;
     bool transposed;
+    bool conjugated;
   } prop;
 
   MatrixViewFilter() : BaseView() {
     prop.row_offset = prop.column_offset = 0;
     prop.rows = prop.columns = 0; // to be configured
     prop.transposed = false;
+    prop.conjugated = false;
   }
   MatrixViewFilter(const self_t &view)
       : BaseView((const BaseView &)view), prop(view.prop) {
@@ -213,6 +215,9 @@ struct MatrixViewFilter : public BaseView {
   
   void transpose() {
     prop.transposed = !prop.transposed;
+  }
+  void conjugate() {
+    prop.conjugated = !prop.conjugated;
   }
   void partial(
       const unsigned int &new_rows, const unsigned int &new_columns,
@@ -249,6 +254,18 @@ struct MatrixViewFilter : public BaseView {
     return res;
   }
   template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> conjugate(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig){
+    return mat_t<T, Array2D_Type>(orig);
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<Complex<T>, Array2D_Type, self_t> conjugate(
+      const Matrix_Frozen<Complex<T>, Array2D_Type, ViewType> &orig){
+    mat_t<Complex<T>, Array2D_Type> res(orig);
+    res.view().conjugate();
+    return res;
+  }
+  template <class T, class Array2D_Type, class ViewType>
   static Matrix_Frozen<T, Array2D_Type, self_t> partial(
       const Matrix_Frozen<T, Array2D_Type, ViewType> &orig,
       const unsigned int &new_rows, const unsigned int &new_columns,
@@ -273,7 +290,9 @@ struct MatrixViewFilter : public BaseView {
   friend std::basic_ostream<CharT, Traits> &operator<<(
       std::basic_ostream<CharT, Traits> &out, const self_t &view){
     out 
-        << (view.prop.transposed ? "[T] " : "")
+        << (view.prop.transposed 
+          ? (view.prop.conjugated ? "[*] " : "[T] ") 
+          : (view.prop.conjugated ? "[bar] " : ""))
         << "[Size](" << view.prop.rows << "," << view.prop.columns << ") ";
     if((view.prop.row_offset > 0) || (view.prop.column_offset > 0)){
       out << "[Offset](" << view.prop.row_offset << "," << view.prop.column_offset << ") ";
@@ -290,14 +309,27 @@ struct MatrixViewFilter : public BaseView {
     return prop.transposed ? prop.rows : prop.columns;
   }
 
+  template <class T>
+  struct conjugate_t {
+    static T run(const T &v, const bool &conjugated = false){return v;}
+  };
+  template <class T>
+  struct conjugate_t<Complex<T> > {
+    static Complex<T> run(const Complex<T> &v, const bool &conjugated = false){
+      return conjugated ? v.conjugate() : v;
+    }
+  };
+
   template <class T, class Array2D_Type>
   inline T operator()(
       Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
-    return prop.transposed
-        ? BaseView::template operator()<T, Array2D_Type>(
-          storage, (j + prop.column_offset), (i + prop.row_offset))
-        : BaseView::template operator()<T, Array2D_Type>(
-          storage, (i + prop.row_offset), (j + prop.column_offset));
+    return conjugate_t<T>::run(
+        prop.transposed
+          ? BaseView::template operator()<T, Array2D_Type>(
+            storage, (j + prop.column_offset), (i + prop.row_offset))
+          : BaseView::template operator()<T, Array2D_Type>(
+            storage, (i + prop.row_offset), (j + prop.column_offset)),
+        prop.conjugated);
   }
 };
 %}
@@ -1039,6 +1071,23 @@ INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_f)
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_f, MatView_f);
 INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatViewBase, MatView_f);
 INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_f, MatView_f);
+
+%extend Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase> {
+  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> conjugate() const {
+    return MatView_f::conjugate(*$self);
+  }
+  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> adjoint() const {
+    return MatView_f::conjugate(MatView_f::transpose(*$self));
+  }
+};
+%extend Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> {
+  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> conjugate() const {
+    return MatView_f::conjugate(*$self);
+  }
+  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> adjoint() const {
+    return MatView_f::conjugate(MatView_f::transpose(*$self));
+  }
+};
 
 %template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase>;
 %template(Matrix_Frozen ## suffix ## _f) Matrix_Frozen<type, Array2D_Dense<type >, MatView_f>;
