@@ -755,8 +755,7 @@ struct MatrixUtil {
     static void matrix_yield_with_index(const T &v, T *, const unsigned int &i, const unsigned int &j){
       rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
     }
-    static void matrix_yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      SWIG_Object v(rb_yield_values(1, to_value($descriptor(const T &), src)));
+    static void matrix_assign(const SWIG_Object &v, T *dst, const unsigned int &i, const unsigned int &j){
       if(!from_value(v, $descriptor(T &), *dst)){
         VALUE v_inspect(rb_inspect(v));
         std::stringstream s;
@@ -765,15 +764,30 @@ struct MatrixUtil {
             s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
       }
     }
+    static void matrix_yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_assign(rb_yield_values(1, to_value($descriptor(const T &), src)), dst, i, j);
+    }
+    static void matrix_yield_get_with_index(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_assign(rb_yield_values(3, to_value($descriptor(const T &), src), UINT2NUM(i), UINT2NUM(j)), dst, i, j);
+    }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
-      if(rb_frame_callee() == rb_intern("each_with_index")){
-        return matrix_yield_with_index;
-      }else if((rb_frame_this_func() == rb_intern("map"))
-          || (rb_frame_this_func() == rb_intern("map!"))){
+      ID id_thisf(rb_frame_this_func()), id_callee(rb_frame_callee());
+      if((id_thisf == rb_intern("map")) || (id_thisf == rb_intern("map!"))){
+        ID with_index[] = {
+            rb_intern("map_with_index"), rb_intern("map_with_index!"), 
+            rb_intern("collect_with_index"), rb_intern("collect_with_index!")};
+        for(int i(0); i < sizeof(with_index) / sizeof(with_index[0]); ++i){
+          if(id_callee == with_index[i]){
+            return matrix_yield_get_with_index;
+          }
+        }
         return matrix_yield_get;
-      }
-      return matrix_yield;
+      }else if(id_callee == rb_intern("each_with_index")){
+        return matrix_yield_with_index;
+      }else{
+        return matrix_yield;
+      }     
     }
   }
   %typemap(in,numinputs=0, fragment=SWIG_From_frag(Matrix_Frozen_Helper<T>)) 
@@ -813,7 +827,7 @@ struct MatrixUtil {
     MatrixUtil::each(*$self, each_func, each_which, &res);
     return res;
   }
-  %alias map "collect";
+  %alias map "collect,map_with_index,collect_with_index";
   
   SWIG_Object to_a() const {
     unsigned int i_max($self->rows()), j_max($self->columns());
@@ -944,7 +958,7 @@ MAKE_TO_S(Matrix_Frozen)
     return *$self;
   }
   %rename("map!") map_bang;
-  %alias map_bang "collect!";
+  %alias map_bang "collect!,map_with_index!,collect_with_index!";
 #endif
 };
 
