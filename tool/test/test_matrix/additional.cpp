@@ -22,14 +22,33 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t _A(*A);
-  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta((*A) * (*A) * (*A), _A * _A * _A, ACCEPTABLE_DELTA_DEFAULT);
+  matrix_compare(*A, _A);
+  matrix_compare((*A) * (*A) * (*A), _A * _A * _A);
+
+  {
+    fixed_t _A2(_A); // different from matrix_t(matrix_t), it's deep copy.
+    fixed_t::super_t _A2_shallow(_A2);
+    matrix_compare(_A, _A2);
+    matrix_compare(_A2, _A2_shallow);
+
+    _A2(0, 0) += 1;
+    for(unsigned int i(0), i_end(_A.rows()); i < i_end; ++i){
+      for(unsigned int j(0), j_end(_A.columns()); j < j_end; ++j){
+        BOOST_REQUIRE((_A(i, j) == _A2(i, j)) ^ ((i == 0) && (j == 0)));
+      }
+    }
+    matrix_compare(_A2, _A2_shallow);
+
+    _A2_shallow = _A; // deep copy expected, being different from matrix_t
+    matrix_compare(_A, _A2_shallow);
+    matrix_compare(_A2, _A2_shallow);
+  }
 
   typedef /*typename*/ Matrix_Fixed<Complex<content_t>, SIZE> cfixed_t;
   cfixed_t _Ac1(*A);
   cfixed_t _Ac2(_Ac1.copy());
-  matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
+  matrix_compare(_A, _Ac1);
+  matrix_compare(_A, _Ac2);
 
   try{
     fixed_t inv(_A.inverse());
@@ -44,18 +63,45 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
     BOOST_ERROR("inv_error:" << e.what());
   }
 
+  matrix_compare(A->decomposeQR(), _A.decomposeQR());
+
   try{
-    matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
-    matrix_compare_delta(
+    matrix_compare(A->hessenberg(), _A.hessenberg());
+    matrix_compare(A->eigen(), _A.eigen());
+    matrix_compare(
         A->partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
-        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
-        ACCEPTABLE_DELTA_DEFAULT);
+        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen());
   }catch(std::runtime_error &e){
     BOOST_ERROR("eigen_error:" << e.what());
   }
 }
 
 BOOST_AUTO_TEST_CASE(fixed_types){
+  struct gen_matrix_t {
+    Fixture<content_t>::rand_t gen;
+    gen_matrix_t(Fixture<content_t>::rand_t &gen_) : gen(gen_) {}
+    matrix_t operator()(const unsigned int &r, const unsigned int &c) {
+      matrix_t res(r, c);
+      for(unsigned int i(0); i < r; ++i){
+        for(unsigned int j(0); j < c; ++j){
+          res(i, j) = gen();
+        }
+      }
+      return res;
+    }
+  } gen_mat(gen_rand);
+
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Scalar<
+        Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
+        content_t> > >::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 2, 4> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4)};
+    Matrix_Fixed<content_t, 2, 4> x(
+        Matrix_Fixed<content_t, 2, 4>(src[0]) * 2);
+    matrix_compare(x, src[0] * 2);
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
         Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
@@ -63,6 +109,27 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(8, 16)};
+    Matrix_Fixed<content_t, 2, 16> x(
+        Matrix_Fixed<content_t, 2, 4>(src[0])
+          * (Matrix_Fixed<content_t, 4, 8>(src[1]) * Matrix_Fixed<content_t, 8, 16>(src[2])));
+    matrix_compare(x, src[0] * (src[1] * src[2]));
+  }
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<Complex<content_t>, Array2D_Operator<Complex<content_t>, Array2D_Operator_Multiply_by_Matrix<
+        Matrix_Frozen<Complex<content_t>, Array2D_Fixed<content_t, 2, 4> >,
+        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 8> >,
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
+      Matrix_Fixed<Complex<content_t>, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(8, 16)};
+    Matrix_Fixed<Complex<content_t>, 2, 16> x(
+        Matrix_Fixed<content_t, 2, 4>(src[0]).complex()
+          * (Matrix_Fixed<content_t, 4, 8>(src[1]) * Matrix_Fixed<content_t, 8, 16>(src[2])));
+    matrix_compare(x, src[0].complex() * (src[1] * src[2]));
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
@@ -70,12 +137,26 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 8> > > > >,
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(8, 16)};
+    Matrix_Fixed<content_t, 2, 16> x(
+        (Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1]))
+          * Matrix_Fixed<content_t, 8, 16>(src[2]));
+    matrix_compare(x, (src[0] * src[1]) * src[2]);
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::frozen_t::builder_t::transpose_t>::mat_t
         ::builder_t::transpose_t::builder_t::assignable_t,
       Matrix_Fixed<content_t, 16, 2> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(16, 8)};
+    Matrix_Fixed<content_t, 16, 2> x(
+        ((Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1]))
+          * Matrix_Fixed<content_t, 16, 8>(src[2]).transpose()).transpose());
+    matrix_compare(x, ((src[0] * src[1]) * src[2].transpose()).transpose());
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t::builder_t::transpose_t
@@ -85,6 +166,13 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           ::builder_t::transpose_t>::mat_t
         ::builder_t::transpose_t::builder_t::assignable_t,
       Matrix_Fixed<content_t, 16, 8> >::value)); // < [(2, 4) * (4, 8)]^{t} * [(16, 8) * (8, 2)]^{t} >^{t} => (16, 8)
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(16, 8), gen_mat(8, 2)};
+    Matrix_Fixed<content_t, 16, 8> x(
+        ((Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1])).transpose()
+          * (Matrix_Fixed<content_t, 16, 8>(src[2]) * Matrix_Fixed<content_t, 8, 2>(src[3])).transpose()).transpose());
+    matrix_compare(x, ((src[0] * src[1]).transpose() * (src[2] * src[3]).transpose()).transpose());
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
@@ -93,6 +181,20 @@ BOOST_AUTO_TEST_CASE(fixed_types){
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::frozen_t>::mat_t
         ::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 7), gen_mat(2, 7), gen_mat(7, 16)};
+    Matrix_Fixed<content_t, 2, 16> x(
+        (((Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1]))
+          + Matrix_Fixed<content_t, 3, 7>(src[2])) * 2) * Matrix_Fixed<content_t, 8, 16>(src[3]));
+    matrix_compare(x, (((src[0] * src[1]) + src[2]) * 2) * src[3]);
+  }
+
+  BOOST_CHECK((boost::is_same<
+      matrix_t::builder_t::template resize_t<4, 4, 0, 0>::assignable_t,
+      Matrix_Fixed<content_t, 4, 4> >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::builder_t::template resize_t<4, 4>::assignable_t,
+      matrix_t>::value));
 }
 #endif
 
@@ -158,7 +260,13 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
       as_symmetric(*A) * (as_symmetric(*A) * as_symmetric(*A)),
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(
+      as_symmetric(A->complex()) * (as_symmetric(*A) * as_symmetric(*A)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
       (as_symmetric(*A) * as_symmetric(*A)) * (as_symmetric(*A) * as_symmetric(*A)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      (as_symmetric(*A) * as_symmetric(*A)) * 2 * (as_symmetric(*A) * as_symmetric(*A)) * 2,
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A).inverse(), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) / as_symmetric(*A), "*view: [Symmetric] [Base]");
@@ -229,12 +337,19 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
       as_symmetric(A_fixed) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(
+      as_symmetric(A_fixed.complex()) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
       (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * 2 * (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * 2,
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
   matrix_compare_delta(as_symmetric(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 
   matrix_inspect_contains(A_fixed / as_symmetric(A_fixed), "*view: [Base]");
+  matrix_inspect_contains(A_fixed.complex() / as_symmetric(A_fixed), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / A_fixed_, "*view: [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / matrix_t::getI(A->rows()), "*view: [Symmetric] [Base]");
@@ -277,7 +392,13 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
       as_diagonal(*A) * (as_diagonal(*A) * as_diagonal(*A)),
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
+      as_diagonal(A->complex()) * (as_diagonal(*A) * as_diagonal(*A)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
       (as_diagonal(*A) * as_diagonal(*A)) * (as_diagonal(*A) * as_diagonal(*A)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      (as_diagonal(*A) * as_diagonal(*A)) * 2 * (as_diagonal(*A) * as_diagonal(*A)) * 2,
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A).inverse(), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) / as_diagonal(*A), "*view: [Diagonal] [Base]");
@@ -348,12 +469,19 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
       as_diagonal(A_fixed) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
+      as_diagonal(A_fixed.complex()) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
       (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * 2 * (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * 2,
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
   matrix_compare_delta(as_diagonal(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 
   matrix_inspect_contains(A_fixed / as_diagonal(A_fixed), "*view: [Base]");
+  matrix_inspect_contains(A_fixed.complex() / as_diagonal(A_fixed), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / A_fixed_, "*view: [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / as_diagonal(A_fixed), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / matrix_t::getI(A->rows()), "*view: [Diagonal] [Base]");
