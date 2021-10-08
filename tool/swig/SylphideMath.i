@@ -292,7 +292,7 @@ struct MatrixViewFilter : public BaseView {
     out 
         << (view.prop.transposed 
           ? (view.prop.conjugated ? "[*] " : "[T] ") 
-          : (view.prop.conjugated ? "[bar] " : ""))
+          : (view.prop.conjugated ? "[~] " : ""))
         << "[Size](" << view.prop.rows << "," << view.prop.columns << ") ";
     if((view.prop.row_offset > 0) || (view.prop.column_offset > 0)){
       out << "[Offset](" << view.prop.row_offset << "," << view.prop.column_offset << ") ";
@@ -417,11 +417,11 @@ struct MatrixUtil {
   };
   template <class T, 
       class Array2D_Type, class ViewType,
-      class Array2D_Type2, class ViewType2>
+      class Array2D_Type2 = Array2D_Dense<T>, class ViewType2 = MatrixViewBase<> >
   static void each(
       const Matrix_Frozen<T, Array2D_Type, ViewType> &src,
       void (*each_func)(
-        const T &src, T *dst,
+        const T &src_elm, T *dst_elm,
         const unsigned int &i, const unsigned int &j),
       const each_which_t &each_which = EACH_ALL,
       Matrix<T, Array2D_Type2, ViewType2> *dst = NULL){
@@ -812,8 +812,7 @@ struct MatrixUtil {
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
       const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
-    MatrixUtil::template each<T, Array2D_Type, ViewType, Array2D_Type, ViewType>(
-        *$self, each_func, each_which);
+    MatrixUtil::each(*$self, each_func, each_which);
     return *$self;
   }
   %alias each "each_with_index";
@@ -1050,6 +1049,26 @@ INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
 #endif
 %enddef
 
+#if defined(USE_MATRIX_VIEW_FILTER)
+%extend Matrix_Frozen {
+  Matrix_Frozen<T, Array2D_Type, MatView_f> conjugate() const {
+    return MatView_f::conjugate(*$self);
+  }
+  Matrix_Frozen<T, Array2D_Type, MatView_f> adjoint() const {
+    return MatView_f::conjugate(MatView_f::transpose(*$self));
+  }
+};
+#else
+%extend Matrix_Frozen {
+  Matrix<T, Array2D_Dense<T> > conjugate() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->conjugate());
+  }
+  Matrix<T, Array2D_Dense<T> > adjoint() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->conjugate().transpose());
+  }
+};
+#endif
+
 %define INSTANTIATE_MATRIX(type, suffix)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
@@ -1085,23 +1104,6 @@ INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_f)
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_f, MatView_f);
 INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatViewBase, MatView_f);
 INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_f, MatView_f);
-
-%extend Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase> {
-  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> conjugate() const {
-    return MatView_f::conjugate(*$self);
-  }
-  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> adjoint() const {
-    return MatView_f::conjugate(MatView_f::transpose(*$self));
-  }
-};
-%extend Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> {
-  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> conjugate() const {
-    return MatView_f::conjugate(*$self);
-  }
-  Matrix_Frozen<type, Array2D_Dense<type >, MatView_f> adjoint() const {
-    return MatView_f::conjugate(MatView_f::transpose(*$self));
-  }
-};
 
 %template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase>;
 %template(Matrix_Frozen ## suffix ## _f) Matrix_Frozen<type, Array2D_Dense<type >, MatView_f>;
