@@ -1537,7 +1537,7 @@ class Matrix_Frozen {
     /**
      * Return sum of matrix elements
      *
-     * @return Summentaion
+     * @return Summation
      */
     T sum() const noexcept {
       T sum(0);
