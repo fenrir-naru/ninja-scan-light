@@ -159,12 +159,12 @@ class Complex{
 
     /**
      * 絶対値の二乗を返します。
-     * pow(real(), 2) + pow(imaginary(), 2)をしています。
+     * std::pow(real(), 2) + std::pow(imaginary(), 2)をしています。
      *
      * @return (FloatT) 絶対値の二乗
      * @see pow(FloatT, FloatT)
      */
-    FloatT abs2() const noexcept {return pow(m_Real, 2) + pow(m_Imaginary, 2);}
+    FloatT abs2() const noexcept {return std::pow(m_Real, 2) + std::pow(m_Imaginary, 2);}
     /**
      * 絶対値を返します。
      * sqrt(abs2())をしています。
@@ -173,7 +173,7 @@ class Complex{
      * @see abs2()
      * @see sqrt()
      */
-    FloatT abs() const {return ::sqrt(abs2());}
+    FloatT abs() const {return std::sqrt(abs2());}
     /**
      * 偏角を返します。
      *
@@ -183,7 +183,7 @@ class Complex{
       if((m_Real == FloatT(0)) && (m_Imaginary == FloatT(0))){
         return 0;
       }
-      return atan2(m_Imaginary, m_Real);
+      return std::atan2(m_Imaginary, m_Real);
     }
     /**
      * 指定乗します。
@@ -202,9 +202,9 @@ class Complex{
      */
     Complex<FloatT> power(const FloatT &factor) const {
       if((m_Imaginary == FloatT(0)) && (m_Real >= FloatT(0))){
-        return Complex(pow(m_Real, factor));
+        return Complex(std::pow(m_Real, factor));
       }else{
-        FloatT _abs(pow(abs(), factor));
+        FloatT _abs(std::pow(abs(), factor));
         double _arg(arg() * factor);
         return Complex(_abs * std::cos(_arg), _abs * std::sin(_arg));
       }
