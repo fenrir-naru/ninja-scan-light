@@ -1638,6 +1638,16 @@ class Matrix_Frozen {
       return conjugate_t(*this);
     }
 
+    typedef typename builder_t::transpose_t::builder_t::conjugate_t adjoint_t;
+    /**
+     * Generate adjoint matrix
+     *
+     * @return Adjoint matrix
+     */
+    adjoint_t adjoint() const noexcept {
+      return adjoint_t(*this);
+    }
+
   protected:
     template <class MatrixT>
     static typename MatrixBuilder<MatrixT>::partial_t partial_internal(

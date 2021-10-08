@@ -294,6 +294,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       rAiB->conjugate(),
       (format("*storage: M~(%1%,%1%)") % SIZE).str());
   matrix_inspect_contains(
+      rAiB->adjoint(),
+      (format("*storage: M~t(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
       A->partial(2, 3, 1, 1),
       "*storage: Mp(2,3)");
   matrix_inspect_contains(
@@ -549,6 +552,23 @@ BOOST_AUTO_TEST_CASE(conj){
   matrix_compare(b, _AB_ri.mat_i);
 
   cmatrix_t::conjugate_t::conjugate_t __AB(_AB.conjugate()); // cmatrix_t::conjugate_t::conjugate_t = matrix_t
+  BOOST_TEST_MESSAGE("conj.conj:" << __AB);
+  matrix_compare(*rAiB, __AB);
+}
+BOOST_AUTO_TEST_CASE(adjoint){
+  assign_linear();
+  prologue_print();
+  direct_t a(*A), b(*B);
+  cmatrix_t::adjoint_t _AB(rAiB->adjoint());
+  BOOST_TEST_MESSAGE("adj:" << _AB);
+
+  split_r_i_t _AB_ri(_AB);
+  a.trans = true;
+  matrix_compare(a, _AB_ri.mat_r);
+  b.scalar = -1; b.trans = true;
+  matrix_compare(b, _AB_ri.mat_i);
+
+  cmatrix_t::adjoint_t::adjoint_t __AB(_AB.adjoint()); // cmatrix_t::adjoint_t::adjoint_t = matrix_t
   BOOST_TEST_MESSAGE("conj.conj:" << __AB);
   matrix_compare(*rAiB, __AB);
 }

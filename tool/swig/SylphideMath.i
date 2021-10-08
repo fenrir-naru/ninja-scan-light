@@ -1064,7 +1064,7 @@ INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
     return (Matrix<T, Array2D_Dense<T> >)(($self)->conjugate());
   }
   Matrix<T, Array2D_Dense<T> > adjoint() const {
-    return (Matrix<T, Array2D_Dense<T> >)(($self)->conjugate().transpose());
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->adjoint());
   }
 };
 #endif
