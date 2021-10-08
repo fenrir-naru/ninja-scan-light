@@ -47,8 +47,19 @@ struct Fixture {
   } gen_rand;
 
   typedef Matrix<ElementT> matrix_t;
+  typedef Matrix<Complex<ElementT> > cmatrix_t;
   matrix_t *A, *B;
+  cmatrix_t *rAiB;
   ElementT A_array[SIZE][SIZE], B_array[SIZE][SIZE];
+
+  void assign_rAiB(){
+    for(unsigned int i(0); i < rAiB->rows(); i++){
+      for(unsigned int j(0); j < rAiB->columns(); j++){
+        (*rAiB)(i, j).real() = (*A)(i, j);
+        (*rAiB)(i, j).imaginary() = (*B)(i, j);
+      }
+    }
+  }
 
   void assign_symmetric(){
     for(unsigned int i(0); i < A->rows(); i++){
@@ -65,6 +76,7 @@ struct Fixture {
             = (*B)(i, j) = (*B)(j, i) = gen_rand();
       }
     }
+    assign_rAiB();
   }
   void assign_unsymmetric(){
     for(unsigned int i(0); i < A->rows(); i++){
@@ -77,6 +89,7 @@ struct Fixture {
         B_array[i][j] = (*B)(i, j) = gen_rand();
       }
     }
+    assign_rAiB();
   }
   void assign_intermediate_zeros(const unsigned &row = 1){
     if(row > A->rows()){return;}
@@ -86,6 +99,7 @@ struct Fixture {
     for(unsigned int j(0); j < row; j++){
       B_array[row][j] = (*B)(row, j) = ElementT(0);
     }
+    assign_rAiB();
   }
   void assign_linear(const int &base = 0){
     int counter(base);
@@ -99,6 +113,7 @@ struct Fixture {
         B_array[i][j] = (*B)(i, j) = counter++;
       }
     }
+    assign_rAiB();
   }
   void prologue_print(){
     BOOST_TEST_MESSAGE("A:" << *A);
@@ -106,13 +121,16 @@ struct Fixture {
   }
 
   Fixture()
-      : gen_rand(), A(new matrix_t(SIZE, SIZE)), B(new matrix_t(SIZE, SIZE)){
+      : gen_rand(),
+      A(new matrix_t(SIZE, SIZE)), B(new matrix_t(SIZE, SIZE)),
+      rAiB(new cmatrix_t(SIZE, SIZE)) {
     assign_symmetric();
   }
 
   ~Fixture(){
     delete A;
     delete B;
+    delete rAiB;
   }
 };
 

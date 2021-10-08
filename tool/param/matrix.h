@@ -550,6 +550,9 @@ template <class BaseView>
 struct MatrixViewTranspose;
 
 template <class BaseView>
+struct MatrixViewConjugate;
+
+template <class BaseView>
 struct MatrixViewSizeVariable;
 
 template <class BaseView>
@@ -565,6 +568,7 @@ struct MatrixViewProperty {
   static const bool anchor = true;
   static const bool viewless = false;
   static const bool transposed = false;
+  static const bool conjugated = false;
   static const bool offset = false;
   static const bool variable_size = false;
 
@@ -610,6 +614,7 @@ struct MatrixViewProperty<V2<V1> > {
 
   static const bool viewless = MatrixViewProperty<V2<void> >::template check_of_t<MatrixViewBase>::res;
   static const bool transposed = check_of_t<MatrixViewTranspose>::res;
+  static const bool conjugated = check_of_t<MatrixViewConjugate>::res;
   static const bool offset = check_of_t<MatrixViewOffset>::res;
   static const bool variable_size = check_of_t<MatrixViewSizeVariable>::res;
 
@@ -644,6 +649,7 @@ struct MatrixViewBuilder {
     Loop = Offset,
     SizeVariable,
     Transpose,
+    Conjugate,
   };
 #define make_priority_table(name) \
 template <class U> \
@@ -654,6 +660,7 @@ struct priority_t<MatrixView ## name, U> { \
   make_priority_table(Loop);
   make_priority_table(SizeVariable);
   make_priority_table(Transpose);
+  make_priority_table(Conjugate);
 #undef make_priority_table
 
   template <template <class> class AddView, class BaseView = View>
@@ -746,6 +753,7 @@ struct priority_t<MatrixView ## name, U> { \
   };
 
   typedef typename switch_t<MatrixViewTranspose>::res_t transpose_t;
+  typedef typename switch_t<MatrixViewConjugate>::res_t conjugate_t;
   typedef typename group_t<MatrixViewOffset>::res_t offset_t;
   typedef typename unique_t<MatrixViewSizeVariable>::res_t size_variable_t;
   typedef typename group_t<MatrixViewLoop>::res_t loop_t;
@@ -788,6 +796,7 @@ struct next_t<view_name<V>, DestView> { \
   typedef typename next_t<V, typename MatrixViewBuilder<DestView>::result_type>::res_t res_t; \
 };
     make_entry(MatrixViewTranspose, transpose_t);
+    make_entry(MatrixViewConjugate, conjugate_t);
     make_entry(MatrixViewOffset, offset_t);
     make_entry(MatrixViewSizeVariable, size_variable_t);
     make_entry(MatrixViewLoop, loop_t);
@@ -929,6 +938,36 @@ struct MatrixViewTranspose : public BaseView {
 };
 template <class BaseView>
 const char *MatrixViewTranspose<BaseView>::name = "[T]";
+
+template <class BaseView>
+struct MatrixViewConjugate : public BaseView {
+  typedef MatrixViewConjugate<BaseView> self_t;
+
+  struct {} prop;
+
+  MatrixViewConjugate() : BaseView() {}
+  MatrixViewConjugate(const self_t &view)
+      : BaseView((const BaseView &)view) {}
+
+  template <class View>
+  friend struct MatrixViewBuilder;
+
+  static const char *name;
+
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const MatrixViewConjugate<BaseView> &view){
+    return out << name << " " << (const BaseView &)view;
+  }
+
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return BaseView::DELETE_IF_MSC(template) operator()<T>(storage, i, j).conjugate();
+  }
+};
+template <class BaseView>
+const char *MatrixViewConjugate<BaseView>::name = "[~]";
 
 template <class BaseView>
 struct MatrixViewOffset : public BaseView {
@@ -1095,6 +1134,16 @@ struct MatrixBuilder_ViewTransformerBase<
       typename MatrixViewBuilder<
         typename MatrixViewBuilder<
           typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
+
+  template <class T2 = T>
+  struct check_complex_t {
+    typedef MatrixT<T, Array2D_Type, ViewType> conjugate_t;
+  };
+  template <class T2>
+  struct check_complex_t<Complex<T2> > {
+    typedef MatrixT<T, Array2D_Type, typename view_builder_t::conjugate_t> conjugate_t;
+  };
+  typedef typename check_complex_t<>::conjugate_t conjugate_t;
 
   template <class ViewType2>
   struct view_replace_t {
@@ -1576,6 +1625,15 @@ class Matrix_Frozen {
      */
     typename builder_t::transpose_t transpose() const noexcept {
       return typename builder_t::transpose_t(*this);
+    }
+
+    /**
+     * Generate conjugate matrix
+     *
+     * @return Conjugate matrix
+     */
+    typename builder_t::conjugate_t conjugate() const noexcept {
+      return typename builder_t::conjugate_t(*this);
     }
 
   protected:
@@ -2966,6 +3024,7 @@ class Matrix_Frozen {
         template <class T2, class Array2D_Type2, class View_Type2>
         format_t &operator<<(const Matrix_Frozen<T2, Array2D_Type2, View_Type2> &m){
           (*this) << "M"
+              << (MatrixViewProperty<View_Type2>::conjugated ? "~" : "")
               << (MatrixViewProperty<View_Type2>::transposed ? "t" : "")
               << (MatrixViewProperty<View_Type2>::variable_size ? "p" : "")
               << "(" << m.rows() << "," << m.columns() << ")";
@@ -3251,6 +3310,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     typedef typename builder_t::assignable_t clone_t;
     typedef typename builder_t::transpose_t transpose_t;
+    typedef typename builder_t::conjugate_t conjugate_t;
     typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     typedef typename builder_t::partial_t partial_t;
     typedef typename builder_t::circular_bijective_t circular_bijective_t;
@@ -3490,6 +3550,17 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     transpose_t transpose() const noexcept {
       return transpose_t(*this);
+    }
+
+    /**
+     * Generate conjugate matrix
+     * Be careful, the return value is linked to the original matrix.
+     * In order to unlink, do conjugate().copy().
+     *
+     * @return Conjugate matrix
+     */
+    conjugate_t conjugate() const noexcept {
+      return conjugate_t(*this);
     }
 
     /**

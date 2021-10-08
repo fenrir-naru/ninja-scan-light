@@ -68,6 +68,20 @@ struct direct_t {
   }
 };
 
+struct split_r_i_t {
+  matrix_t mat_r, mat_i;
+  template <class T, class Array2D_Type, class ViewType>
+  split_r_i_t(const Matrix<Complex<T>, Array2D_Type, ViewType> &mat)
+      : mat_r(mat.rows(), mat.columns()), mat_i(mat.rows(), mat.columns()) {
+    for(unsigned int i(0); i < mat.rows(); ++i){
+      for(unsigned int j(0); j < mat.columns(); ++j){
+        mat_r(i, j) = mat(i, j).real();
+        mat_i(i, j) = mat(i, j).imaginary();
+      }
+    }
+  }
+};
+
 BOOST_FIXTURE_TEST_SUITE(matrix, Fixture<content_t>)
 
 BOOST_AUTO_TEST_CASE(init){
@@ -277,6 +291,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       A->transpose(),
       (format("*storage: Mt(%1%,%1%)") % SIZE).str());
   matrix_inspect_contains(
+      rAiB->conjugate(),
+      (format("*storage: M~(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
       A->partial(2, 3, 1, 1),
       "*storage: Mp(2,3)");
   matrix_inspect_contains(
@@ -368,33 +385,42 @@ BOOST_AUTO_TEST_CASE(inv_scalar){
 BOOST_AUTO_TEST_CASE(view_property){
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::conjugated);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::offset);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::viewless);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::transpose_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::conjugated);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::offset);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::conjugated);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::offset);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::conjugated);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_t::view_t>::offset);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::conjugated);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::offset);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::conjugated);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_t::view_t>::offset);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::conjugate_t::view_t>::conjugated);
+  BOOST_CHECK(true  == MatrixViewProperty<cmatrix_t::conjugate_t::view_t>::conjugated);
 }
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
@@ -449,6 +475,19 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > > >::value));
 
   BOOST_CHECK((boost::is_same<
+      matrix_t::conjugate_t::view_t,
+      MatrixViewBase<> >::value));
+  BOOST_CHECK((boost::is_same<
+      cmatrix_t::conjugate_t::view_t,
+      MatrixViewConjugate<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      cmatrix_t::conjugate_t::conjugate_t::view_t,
+      MatrixViewBase<> >::value));
+  BOOST_CHECK((boost::is_same<
+      cmatrix_t::conjugate_t::transpose_t::conjugate_t::view_t,
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
+
+  BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_apply_t<typename matrix_t::transpose_t::view_t>::applied_t::view_t,
       MatrixViewTranspose<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
@@ -482,20 +521,42 @@ BOOST_AUTO_TEST_CASE(view_inspect){
   BOOST_TEST_MESSAGE(os.str());
   BOOST_CHECK(os.is_equal("[T] [Size](0,0) [Offset](0,0) [Loop](0,0) [Offset](0,0) [Base]"));
 }
-BOOST_AUTO_TEST_CASE(trans){
+BOOST_AUTO_TEST_CASE(transpose){
   assign_linear();
   prologue_print();
   direct_t a(*A);
   a.trans = true;
   matrix_t::transpose_t _A(A->transpose());
-  BOOST_TEST_MESSAGE("trans:" << _A);
+  BOOST_TEST_MESSAGE("t:" << _A);
   matrix_compare(a, _A);
   matrix_t __A(_A.copy());
-  BOOST_TEST_MESSAGE("trans.copy:" << __A);
+  BOOST_TEST_MESSAGE("t.copy:" << __A);
   matrix_compare(a, __A);
   matrix_t::transpose_t::transpose_t ___A(_A.transpose()); // matrix_t::transpose_t::transpose_t = matrix_t
-  BOOST_TEST_MESSAGE("trans.trans:" << ___A);
+  BOOST_TEST_MESSAGE("t.trans:" << ___A);
   matrix_compare(*A, ___A);
+}
+BOOST_AUTO_TEST_CASE(conj){
+  assign_linear();
+  prologue_print();
+  direct_t a(*A), b(*B);
+  cmatrix_t::conjugate_t _AB(rAiB->conjugate());
+  BOOST_TEST_MESSAGE("conj:" << _AB);
+
+  split_r_i_t _AB_ri(_AB);
+  matrix_compare(a, _AB_ri.mat_r);
+  b.scalar = -1;
+  matrix_compare(b, _AB_ri.mat_i);
+
+  cmatrix_t __AB(_AB.copy());
+  BOOST_TEST_MESSAGE("conj.copy:" << __AB);
+  split_r_i_t __AB_ri(__AB);
+  matrix_compare(a, __AB_ri.mat_r);
+  matrix_compare(b, __AB_ri.mat_i);
+
+  cmatrix_t::conjugate_t::conjugate_t ___AB(_AB.conjugate()); // cmatrix_t::conjugate_t::conjugate_t = matrix_t
+  BOOST_TEST_MESSAGE("conj.conj:" << ___AB);
+  matrix_compare(*rAiB, ___AB);
 }
 BOOST_AUTO_TEST_CASE(partial){
   assign_linear();
