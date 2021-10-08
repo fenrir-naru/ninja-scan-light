@@ -71,7 +71,7 @@ struct direct_t {
 struct split_r_i_t {
   matrix_t mat_r, mat_i;
   template <class T, class Array2D_Type, class ViewType>
-  split_r_i_t(const Matrix<Complex<T>, Array2D_Type, ViewType> &mat)
+  split_r_i_t(const Matrix_Frozen<Complex<T>, Array2D_Type, ViewType> &mat)
       : mat_r(mat.rows(), mat.columns()), mat_i(mat.rows(), mat.columns()) {
     for(unsigned int i(0); i < mat.rows(); ++i){
       for(unsigned int j(0); j < mat.columns(); ++j){
@@ -548,15 +548,9 @@ BOOST_AUTO_TEST_CASE(conj){
   b.scalar = -1;
   matrix_compare(b, _AB_ri.mat_i);
 
-  cmatrix_t __AB(_AB.copy());
-  BOOST_TEST_MESSAGE("conj.copy:" << __AB);
-  split_r_i_t __AB_ri(__AB);
-  matrix_compare(a, __AB_ri.mat_r);
-  matrix_compare(b, __AB_ri.mat_i);
-
-  cmatrix_t::conjugate_t::conjugate_t ___AB(_AB.conjugate()); // cmatrix_t::conjugate_t::conjugate_t = matrix_t
-  BOOST_TEST_MESSAGE("conj.conj:" << ___AB);
-  matrix_compare(*rAiB, ___AB);
+  cmatrix_t::conjugate_t::conjugate_t __AB(_AB.conjugate()); // cmatrix_t::conjugate_t::conjugate_t = matrix_t
+  BOOST_TEST_MESSAGE("conj.conj:" << __AB);
+  matrix_compare(*rAiB, __AB);
 }
 BOOST_AUTO_TEST_CASE(partial){
   assign_linear();

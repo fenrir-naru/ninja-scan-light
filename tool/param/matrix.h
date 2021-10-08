@@ -1618,22 +1618,24 @@ class Matrix_Frozen {
       return true;
     }
 
+    typedef typename builder_t::transpose_t transpose_t;
     /**
      * Generate transpose matrix
      *
      * @return Transpose matrix
      */
-    typename builder_t::transpose_t transpose() const noexcept {
-      return typename builder_t::transpose_t(*this);
+    transpose_t transpose() const noexcept {
+      return transpose_t(*this);
     }
 
+    typedef typename builder_t::conjugate_t conjugate_t;
     /**
      * Generate conjugate matrix
      *
      * @return Conjugate matrix
      */
-    typename builder_t::conjugate_t conjugate() const noexcept {
-      return typename builder_t::conjugate_t(*this);
+    conjugate_t conjugate() const noexcept {
+      return conjugate_t(*this);
     }
 
   protected:
@@ -1656,6 +1658,7 @@ class Matrix_Frozen {
     }
 
   public:
+    typedef typename builder_t::partial_t partial_t;
     /**
      * Generate partial matrix
      *
@@ -1667,7 +1670,7 @@ class Matrix_Frozen {
      * @return partial matrix
      *
      */
-    typename builder_t::partial_t partial(
+    partial_t partial(
         const unsigned int &new_rows,
         const unsigned int &new_columns,
         const unsigned int &row_offset,
@@ -1683,7 +1686,7 @@ class Matrix_Frozen {
      * @return Row vector
      * @see partial()
      */
-    typename builder_t::partial_t rowVector(const unsigned int &row) const {
+    partial_t rowVector(const unsigned int &row) const {
       return partial(1, columns(), row, 0);
     }
     /**
@@ -1693,7 +1696,7 @@ class Matrix_Frozen {
      * @return Column vector
      * @see partial()
      */
-    typename builder_t::partial_t columnVector(const unsigned int &column) const {
+    partial_t columnVector(const unsigned int &column) const {
       return partial(rows(), 1, 0, column);
     }
 
@@ -1714,6 +1717,7 @@ class Matrix_Frozen {
     }
 
   public:
+    typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     /**
      * Generate partial matrix by just reducing its size;
      * The origins and direction of original and return matrices are the same.
@@ -1723,7 +1727,7 @@ class Matrix_Frozen {
      * @throw std::out_of_range When either row or column size exceeds original one
      * @return partial matrix
      */
-    typename builder_t::partial_offsetless_t partial(
+    partial_offsetless_t partial(
         const unsigned int &new_rows,
         const unsigned int &new_columns) const {
       return partial_internal(*this, new_rows, new_columns);
@@ -1751,6 +1755,7 @@ class Matrix_Frozen {
       return res;
     }
   public:
+    typedef typename builder_t::circular_t circular_t;
     /**
      * Generate matrix with circular view
      * "circular" means its index is treated with roll over correction, for example,
@@ -1771,7 +1776,7 @@ class Matrix_Frozen {
      * @throw std::out_of_range When either row or column loop exceeds original size
      * @return matrix with circular view
      */
-    typename builder_t::circular_t circular(
+    circular_t circular(
         const unsigned int &row_offset,
         const unsigned int &column_offset,
         const unsigned int &new_rows,
@@ -1786,13 +1791,13 @@ class Matrix_Frozen {
         const MatrixT &self,
         const unsigned int &row_offset,
         const unsigned int &column_offset) noexcept {
-      typename MatrixBuilder<MatrixT>::circular_t res(self);
+      typename MatrixBuilder<MatrixT>::circular_bijective_t res(self);
       res.view.update_loop(self.rows(), self.columns());
-      res.view.update_size(self.rows(), self.columns());
       res.view.update_offset(row_offset, column_offset);
       return res;
     }
   public:
+    typedef typename builder_t::circular_bijective_t circular_bijective_t;
     /**
      * Generate matrix with circular view, keeping original size version.
      * For example, [4x3].circular(1,2) is
@@ -1809,7 +1814,7 @@ class Matrix_Frozen {
      *    const unsigned int &, const unsigned int &,
      *    const unsigned int &, const unsigned int &)
      */
-    typename builder_t::circular_bijective_t circular(
+    circular_bijective_t circular(
         const unsigned int &row_offset,
         const unsigned int &column_offset) const noexcept {
       return circular_internal(*this, row_offset, column_offset);
@@ -3309,12 +3314,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     typedef MatrixBuilder<self_t> builder_t;
 
     typedef typename builder_t::assignable_t clone_t;
-    typedef typename builder_t::transpose_t transpose_t;
-    typedef typename builder_t::conjugate_t conjugate_t;
-    typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
-    typedef typename builder_t::partial_t partial_t;
-    typedef typename builder_t::circular_bijective_t circular_bijective_t;
-    typedef typename builder_t::circular_t circular_t;
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
@@ -3541,6 +3540,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     operator clone_t() const;
 
   public:
+    typedef typename builder_t::transpose_t transpose_t;
     /**
      * Generate transpose matrix
      * Be careful, the return value is linked to the original matrix.
@@ -3552,17 +3552,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return transpose_t(*this);
     }
 
-    /**
-     * Generate conjugate matrix
-     * Be careful, the return value is linked to the original matrix.
-     * In order to unlink, do conjugate().copy().
-     *
-     * @return Conjugate matrix
-     */
-    conjugate_t conjugate() const noexcept {
-      return conjugate_t(*this);
-    }
-
+    typedef typename builder_t::partial_t partial_t;
     /**
      * Generate partial matrix
      * Be careful, the return value is linked to the original matrix.
@@ -3585,6 +3575,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
           new_rows, new_columns, row_offset, column_offset);
     }
 
+    typedef typename builder_t::partial_offsetless_t partial_offsetless_t;
     /**
      * Generate partial matrix by just reducing its size;
      * The origins and direction of original and return matrices are the same.
@@ -3604,6 +3595,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     using super_t::circular;
 
+    typedef typename builder_t::circular_bijective_t circular_bijective_t;
     /**
      * Generate matrix with circular view, keeping original size version.
      * This version is still belonged into Matrix class.
