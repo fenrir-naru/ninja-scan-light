@@ -201,9 +201,11 @@ shared_examples 'Matrix' do
     end
     it 'supports conjugated with conjugate' do
       expect(mat.conjugate.to_a).to eq(Matrix[*compare_with].conjugate.to_a) if mat.respond_to?(:conjugate)
+      expect(mat.conjugate.to_a).to eq(Matrix[*compare_with].conj.to_a)
     end
     it 'supports adjointed with adjoint' do
       expect(mat.adjoint.to_a).to eq(Matrix[*compare_with].conjugate.transpose.to_a) if mat.respond_to?(:adjoint)
+      expect(mat.adjoint.to_a).to eq(Matrix[*compare_with].conj.t.to_a)
     end
     it 'supports submatrix with partial' do
       expect(mat.partial(params[:rc][0] - 1, params[:rc][1] - 1, 1, 1).to_a) \
