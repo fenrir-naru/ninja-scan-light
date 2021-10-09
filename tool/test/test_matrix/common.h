@@ -10,8 +10,13 @@
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
 
+#if defined(BOOST_VERSION) && (BOOST_VERSION > 107000)
+#include <boost/test/tools/floating_point_comparison.hpp>
+#include <boost/test/tools/output_test_stream.hpp>
+#else
 #include <boost/test/floating_point_comparison.hpp>
 #include <boost/test/output_test_stream.hpp>
+#endif
 
 #if !defined(BOOST_VERSION)
 #define BOOST_FIXTURE_TEST_SUITE(name, fixture)
