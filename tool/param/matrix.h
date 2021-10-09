@@ -531,10 +531,6 @@ struct MatrixViewBase {
     return _columns;
   }
   template <class T, class Array2D_Type>
-  inline T operator()(const Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
-    return storage.Array2D_Type::operator()(i, j); // direct call instead of via vtable
-  }
-  template <class T, class Array2D_Type>
   inline T operator()(Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
     return storage.Array2D_Type::operator()(i, j); // direct call instead of via vtable
   }
@@ -923,7 +919,7 @@ struct MatrixViewTranspose : public BaseView {
   template <class T, class Array2D_Type>
   inline T operator()(
       Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T>(storage, j, i);
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, j, i);
   }
 
   void update_size(const unsigned int &rows, const unsigned int &columns){
@@ -963,7 +959,7 @@ struct MatrixViewConjugate : public BaseView {
   template <class T, class Array2D_Type>
   inline T operator()(
       Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T>(storage, i, j).conjugate();
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(storage, i, j).conjugate();
   }
 };
 template <class BaseView>
@@ -1001,7 +997,7 @@ struct MatrixViewOffset : public BaseView {
   template <class T, class Array2D_Type>
   inline T operator()(
       Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T>(
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(
         storage, i + prop.row, j + prop.column);
   }
 
@@ -1091,7 +1087,7 @@ struct MatrixViewLoop : public BaseView {
   template <class T, class Array2D_Type>
   inline T operator()(
       Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
-    return BaseView::DELETE_IF_MSC(template) operator()<T>(
+    return BaseView::DELETE_IF_MSC(template) operator()<T, Array2D_Type>(
         storage, i % prop.rows, j % prop.columns);
   }
 
@@ -1301,7 +1297,7 @@ class Matrix_Frozen {
     T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      return view.DELETE_IF_MSC(template) operator()<T>(storage, row, column);
+      return view.DELETE_IF_MSC(template) operator()<T, const Array2D_Type>(storage, row, column);
     }
 
     template <class impl_t>
@@ -3358,7 +3354,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     T &operator()(
         const unsigned int &row,
         const unsigned int &column){
-      return super_t::view.DELETE_IF_MSC(template) operator()<T &>(storage, row, column);
+      return super_t::view.DELETE_IF_MSC(template) operator()<T &, Array2D_Type>(storage, row, column);
     }
 
     using super_t::rows;
