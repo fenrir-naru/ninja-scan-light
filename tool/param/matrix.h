@@ -2561,6 +2561,46 @@ class Matrix_Frozen {
       return this->operator typename builder_t::assignable_t().pivotMerge(row, column, matrix);
     }
 
+    struct complex_t {
+      template <class T2>
+      struct check_t {
+        static const bool hit = false;
+        typedef T2 r_t;
+        typedef Complex<T2> c_t;
+      };
+      template <class T2>
+      struct check_t<Complex<T2> > {
+        static const bool hit = true;
+        typedef T2 r_t;
+        typedef Complex<T2> c_t;
+      };
+      static const bool is_complex = check_t<T>::hit;
+      typedef typename check_t<T>::c_t v_t;
+      typedef typename builder_t::template family_t<v_t>::assignable_t m_t;
+      typedef typename check_t<T>::r_t real_t;
+      static real_t get_real(const real_t &v) noexcept {
+        return v;
+      }
+      static real_t get_real(const v_t &v) noexcept {
+        return v.real();
+      }
+      static real_t get_abs(const real_t &v) noexcept {
+        return v;
+      }
+      static real_t get_abs(const v_t &v) noexcept {
+        return v.abs();
+      }
+    };
+
+    /**
+     * Calculate the 2nd power of Frobenius norm.
+     *
+     * @return tr(A* * A)
+     */
+    typename complex_t::real_t norm2F() const noexcept {
+      return complex_t::get_real((adjoint() * (*this)).trace(false));
+    }
+
     /**
      * Calculate Hessenberg matrix by performing householder conversion
      *
@@ -2568,6 +2608,7 @@ class Matrix_Frozen {
      * If NULL is specified, the store will not be performed, The default is NULL.
      * @return Hessenberg matrix
      * @throw std::logic_error When operation is undefined
+     * @see https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter4.pdf
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename builder_t::assignable_t hessenberg(
@@ -2575,36 +2616,53 @@ class Matrix_Frozen {
       if(!isSquare()){throw std::logic_error("rows() != columns()");}
 
       typename builder_t::assignable_t result(this->operator typename builder_t::assignable_t());
-      typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t omega_buf_t;
-      omega_buf_t omega_buf(omega_buf_t::blank(rows(), 1));
+      typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t x_buf_t;
+      x_buf_t x_buf(x_buf_t::blank(rows() - 1, 1));
       for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
-        T t(0);
-        for(unsigned int i(j + 1), i_end(rows()); i < i_end; i++){
-          t += pow(result(i, j), 2);
-        }
-        T s = ::sqrt(t);
-        if(result(j + 1, j) < 0){s *= -1;}
+        typename x_buf_t::partial_offsetless_t x(x_buf.partial(rows() - (j+1), 1));
+        x.replace(result.partial(x.rows(), 1, j+1, j));
+        // x_0 = {(1,0), (2,0), ..., (N-1,0)}^{T}, (N-1)*1
+        // x_1 = {(2,1), (3,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-        typename omega_buf_t::partial_offsetless_t omega(omega_buf.partial(rows() - (j+1), 1));
-        {
-          for(unsigned int i(0), i_end(omega.rows()); i < i_end; i++){
-            omega(i, 0) = result(j+i+1, j);
+        typename complex_t::real_t x_abs2(x.norm2F());
+        if(x_abs2 == 0){continue;}
+
+        typename complex_t::real_t x_abs(std::sqrt(x_abs2));
+        typename complex_t::real_t x_top_abs(complex_t::get_abs(x(0, 0))); // x(0,0)
+        T rho(x(0, 0) / x_top_abs * -1);
+        // if x(0,0) is real, then who = -sign(x(0,0)),
+        // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
+
+        // x -> x_dash
+        // x_dash_0 = {(1,0) - \rho |x|, (2,0), ..., (N-1,0)}^{T}
+        // x_dash_1 = {(2,1) - \rho |x|, (3,1), ..., (N-1,1)}^{T}, ...
+        // x_dash_abs2
+        //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
+        //   = (x_abs2 + x_top_abs * x_abs) * 2
+        x(0, 0) -= rho * x_abs;
+        typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
+
+        // Householder transformation
+        if(false){ // as definition
+          typename builder_t::assignable_t P(getI(rows()));
+          P.pivotMerge(j+1, j+1, x * x.adjoint() * -2 / x_dash_abs2);
+          result = P * result * P;
+          if(transform){(*transform) *= P;}
+        }else{ // optimized
+          typename builder_t::assignable_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
+          typename builder_t::assignable_t PX(P * result.partial(rows() - (j+1), columns(), j+1, 0));
+          result.partial(rows() - (j+1), columns(), j+1, 0).replace(PX);
+          typename builder_t::assignable_t PXP(result.partial(rows(), columns()-(j+1), 0, j+1) * P);
+          result.partial(rows(), columns()-(j+1), 0, j+1).replace(PXP);
+          if(transform){
+            typename builder_t::assignable_t Pk(transform->partial(rows(), columns() - (j+1), 0, (j+1)) * P);
+            transform->partial(rows(), columns() - (j+1), 0, (j+1)).replace(Pk);
           }
-          omega(0, 0) += s;
         }
-
-        typename builder_t::assignable_t P(getI(rows()));
-        T denom(t + result(j + 1, j) * s);
-        if(denom){
-          P.pivotMerge(j+1, j+1, -(omega * omega.transpose() / denom));
-        }
-
-        result = P * result * P;
-        if(transform){(*transform) *= P;}
       }
 
       //É[Éçèàóù
-      bool sym = isSymmetric();
+      bool sym = isSymmetric() && (!complex_t::is_complex);
       for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
         for(unsigned int i(j + 2), i_end(rows()); i < i_end; i++){
           result(i, j) = T(0);
@@ -2614,23 +2672,6 @@ class Matrix_Frozen {
 
       return result;
     }
-
-
-    struct complex_t {
-      template <class T2>
-      struct check_t {
-        static const bool hit = false;
-        typedef Complex<T2> res_t;
-      };
-      template <class T2>
-      struct check_t<Complex<T2> > {
-        static const bool hit = true;
-        typedef Complex<T2> res_t;
-      };
-      static const bool is_complex = check_t<T>::hit;
-      typedef typename check_t<T>::res_t v_t;
-      typedef typename builder_t::template family_t<v_t>::assignable_t m_t;
-    };
 
     /**
      * Calculate eigenvalues of 2 by 2 partial matrix.

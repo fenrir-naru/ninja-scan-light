@@ -901,6 +901,20 @@ BOOST_AUTO_TEST_CASE(UH){
   matrix_t _A(U * H * U.transpose());
   BOOST_TEST_MESSAGE("U * H * U^{T}:" << _A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
+
+  cmatrix_t Uc(cmatrix_t::getI(A->rows()));
+  cmatrix_t Hc(rAiB->hessenberg(&Uc));
+
+  BOOST_TEST_MESSAGE("hessen(Hc):" << Hc);
+  for(unsigned i(2); i < Hc.rows(); i++){
+    for(unsigned j(0); j < (i - 1); j++){
+      BOOST_CHECK_EQUAL(Hc(i, j), 0);
+    }
+  }
+
+  cmatrix_t _Ac(Uc * Hc * Uc.adjoint());
+  BOOST_TEST_MESSAGE("U * H * U^{*}:" << _Ac);
+  matrix_compare_delta(*rAiB, _Ac, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 BOOST_AUTO_TEST_CASE(UD){
