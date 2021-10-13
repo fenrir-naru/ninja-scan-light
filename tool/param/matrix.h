@@ -2718,27 +2718,39 @@ class Matrix_Frozen {
       }
     }
 
+    struct opt_eigen_t {
+      enum {
+        NOT_CHECKED, SQUARE,
+      } mat_prop;
+      typename complex_t::real_t threshold_abs; ///< Absolute error to be used for convergence determination
+      typename complex_t::real_t threshold_rel; ///< Relative error to be used for convergence determination
+      opt_eigen_t()
+          : mat_prop(NOT_CHECKED),
+          threshold_abs(1E-10), threshold_rel(1E-7)
+          {}
+    };
+
     /**
      * Calculate eigenvalues and eigenvectors.
      * The return (n, n+1) matrix consists of
      * (0,j)-(n-1,j): Eigenvector (j) (0 <= j <= n-1)
      * (j,n): Eigenvalue (j)
      *
-     * @param threshold_abs Absolute error to be used for convergence determination
-     * @param threshold_rel Relative error to be used for convergence determination
+     * @param opt optio to caluclate eigenvalue/eigenvector
      * @return Eigenvalues and eigenvectors
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
     typename MatrixBuilder<typename complex_t::m_t, 0, 1>::assignable_t eigen(
-        const T &threshold_abs = 1E-10,
-        const T &threshold_rel = 1E-7) const {
+        const opt_eigen_t &opt = opt_eigen_t()) const {
 
       typedef typename complex_t::m_t cmat_t;
       typedef typename MatrixBuilder<cmat_t, 0, 1, 1, 0>::assignable_t cvec_t;
       typedef typename MatrixBuilder<cmat_t, 0, 1>::assignable_t res_t;
 
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
+      if((opt.mat_prop == opt_eigen_t::NOT_CHECKED) && (!isSquare())){
+        throw std::logic_error("rows() != columns()");
+      }
 
 #if 0
       //パワー法(べき乗法)
@@ -2874,8 +2886,8 @@ class Matrix_Frozen {
         // Convergence test; 収束判定
 #define _abs(x) ((x) >= 0 ? (x) : -(x))
         T A_m2_abs(_abs(A(m-2, m-2))), A_m1_abs(_abs(A(m-1, m-1)));
-        T epsilon(threshold_abs
-          + threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
+        T epsilon(opt.threshold_abs
+          + opt.threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
 
         //std::cout << "epsil(" << m << ") " << epsilon << std::endl;
 
