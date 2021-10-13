@@ -2601,6 +2601,16 @@ class Matrix_Frozen {
       return complex_t::get_real((adjoint() * (*this)).trace(false));
     }
 
+    struct opt_hessenberg_t {
+      enum {
+        NOT_CHECKED, SQUARE, SYMMETRIC,
+      } mat_prop;
+      bool force_zeros;
+      opt_hessenberg_t()
+          : mat_prop(NOT_CHECKED), force_zeros(true)
+          {};
+    };
+
     /**
      * Calculate Hessenberg matrix by performing householder conversion
      *
@@ -2612,8 +2622,16 @@ class Matrix_Frozen {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename builder_t::assignable_t hessenberg(
-        Matrix<T2, Array2D_Type2, ViewType2> *transform = NULL) const {
-      if(!isSquare()){throw std::logic_error("rows() != columns()");}
+        Matrix<T2, Array2D_Type2, ViewType2> *transform = NULL,
+        const opt_hessenberg_t &opt = opt_hessenberg_t()) const {
+      if((opt.mat_prop == opt_hessenberg_t::NOT_CHECKED) && !isSquare()){
+        throw std::logic_error("rows() != columns()");
+      }
+
+      bool real_symmetric(
+          (!complex_t::is_complex)
+          && ((opt.mat_prop == opt_hessenberg_t::SYMMETRIC)
+            || ((opt.mat_prop == opt_hessenberg_t::NOT_CHECKED) && isSymmetric())));
 
       typename builder_t::assignable_t result(this->operator typename builder_t::assignable_t());
       typedef typename MatrixBuilder<self_t, 0, 1, 1, 0>::assignable_t x_buf_t;
@@ -2661,12 +2679,12 @@ class Matrix_Frozen {
         }
       }
 
-      //É[Éçèàóù
-      bool sym = isSymmetric() && (!complex_t::is_complex);
-      for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
-        for(unsigned int i(j + 2), i_end(rows()); i < i_end; i++){
-          result(i, j) = T(0);
-          if(sym){result(j, i) = T(0);}
+      if(opt.force_zeros){ // Zero clear
+        for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
+          for(unsigned int i(j + 2), i_end(rows()); i < i_end; i++){
+            result(i, j) = T(0);
+            if(real_symmetric){result(j, i) = T(0);}
+          }
         }
       }
 
@@ -2771,7 +2789,9 @@ class Matrix_Frozen {
       bool first = true;
 
       typename builder_t::assignable_t transform(getI(_rows));
-      typename builder_t::assignable_t A(hessenberg(&transform));
+      opt_hessenberg_t opt_A;
+      opt_A.mat_prop = opt_hessenberg_t::SQUARE;
+      typename builder_t::assignable_t A(hessenberg(&transform, opt_A));
       typename builder_t::assignable_t A_(A);
 
       while(true){

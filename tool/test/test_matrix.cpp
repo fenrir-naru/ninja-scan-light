@@ -890,12 +890,14 @@ BOOST_AUTO_TEST_CASE(LU){
 BOOST_AUTO_TEST_CASE(UH){
   prologue_print();
   matrix_t U(matrix_t::getI(A->rows()));
-  matrix_t H(A->hessenberg(&U));
+  matrix_t::opt_hessenberg_t opt_H;
+  opt_H.force_zeros = false;
+  matrix_t H(A->hessenberg(&U, opt_H));
 
   BOOST_TEST_MESSAGE("hessen(H):" << H);
   for(unsigned i(2); i < H.rows(); i++){
     for(unsigned j(0); j < (i - 1); j++){
-      BOOST_CHECK_EQUAL(H(i, j), 0);
+      BOOST_CHECK_SMALL(std::abs(H(i, j)), ACCEPTABLE_DELTA_DEFAULT);
     }
   }
   matrix_t _A(U * H * U.transpose());
@@ -903,12 +905,14 @@ BOOST_AUTO_TEST_CASE(UH){
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 
   cmatrix_t Uc(cmatrix_t::getI(A->rows()));
-  cmatrix_t Hc(rAiB->hessenberg(&Uc));
+  cmatrix_t::opt_hessenberg_t opt_Hc;
+  opt_Hc.force_zeros = false;
+  cmatrix_t Hc(rAiB->hessenberg(&Uc, opt_Hc));
 
   BOOST_TEST_MESSAGE("hessen(Hc):" << Hc);
   for(unsigned i(2); i < Hc.rows(); i++){
     for(unsigned j(0); j < (i - 1); j++){
-      BOOST_CHECK_EQUAL(Hc(i, j), 0);
+      BOOST_CHECK_SMALL(Hc(i, j).abs(), ACCEPTABLE_DELTA_DEFAULT);
     }
   }
 
