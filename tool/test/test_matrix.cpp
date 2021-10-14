@@ -98,7 +98,8 @@ BOOST_AUTO_TEST_CASE(null_copy){
 
 BOOST_AUTO_TEST_CASE(equal){
   prologue_print();
-  matrix_t _A = *A;
+  matrix_t _A;
+  _A = *A;
   BOOST_TEST_MESSAGE("=:" << _A);
   matrix_compare(*A, _A);
 }
@@ -108,6 +109,17 @@ BOOST_AUTO_TEST_CASE(copy){
   matrix_t _A(A->copy());
   BOOST_TEST_MESSAGE("copy:" << _A);
   matrix_compare(*A, _A);
+  _A(0, 0) += 1;
+  BOOST_TEST_MESSAGE("copy_mod:" << _A);
+  for(unsigned int i(0), i_end(A->rows()); i < i_end; ++i){
+    for(unsigned int j(0), j_end(A->columns()); j < j_end; ++j){
+      if((i == 0) && (j == 0)){
+        BOOST_REQUIRE(_A(i, j) != (*A)(i, j));
+      }else{
+        BOOST_REQUIRE(_A(i, j) == (*A)(i, j));
+      }
+    }
+  }
 }
 
 BOOST_AUTO_TEST_CASE(assign_null_matrix){
@@ -815,6 +827,7 @@ BOOST_AUTO_TEST_CASE(eigen22){
 }
 
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
+  assign_unsymmetric();
   prologue_print();
   try{
     cmatrix_t A_copy(A->rows(), A->columns());
