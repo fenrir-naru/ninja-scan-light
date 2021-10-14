@@ -499,6 +499,8 @@ inline Complex<FloatT> iexp(const FloatT &imaginary) noexcept {
   return Complex<FloatT>::exp(imaginary);
 }
 
+namespace std {
+
 /**
  * expÇÃï°ëfêîägí£
  *
@@ -534,6 +536,20 @@ template <class FloatT>
 inline Complex<FloatT> sqrt(const Complex<FloatT> &complex){
   return complex.sqrt();
 }
+
+/**
+ * Calculate absolute value of a complex value
+ *
+ * @param complex target
+ * @param FloatT precision
+ * @return (Complex<FloatT>) result
+ */
+template <class FloatT>
+inline FloatT abs(const Complex<FloatT> &complex) noexcept {
+  return complex.abs();
+}
+
+} // namespace
 
 #if (__cplusplus < 201103L) && defined(noexcept)
 #undef noexcept

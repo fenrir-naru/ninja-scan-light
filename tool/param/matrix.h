@@ -2584,12 +2584,6 @@ class Matrix_Frozen {
       static real_t get_real(const v_t &v) noexcept {
         return v.real();
       }
-      static real_t get_abs(const real_t &v) noexcept {
-        return v;
-      }
-      static real_t get_abs(const v_t &v) noexcept {
-        return v.abs();
-      }
     };
 
     /**
@@ -2646,7 +2640,7 @@ class Matrix_Frozen {
         if(x_abs2 == 0){continue;}
 
         typename complex_t::real_t x_abs(std::sqrt(x_abs2));
-        typename complex_t::real_t x_top_abs(complex_t::get_abs(x(0, 0))); // x(0,0)
+        typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
         T rho(x(0, 0) / x_top_abs * -1);
         // if x(0,0) is real, then who = -sign(x(0,0)),
         // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
