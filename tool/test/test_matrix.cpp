@@ -789,6 +789,31 @@ BOOST_AUTO_TEST_CASE(pivot_add){
   }
 }
 
+BOOST_AUTO_TEST_CASE(eigen22){
+  prologue_print();
+  Complex<content_t> sigma[2];
+
+  for(unsigned i(0); i < A->rows() - 1; ++i){
+    A->eigen22(i, i, sigma[0], sigma[1]);
+    cmatrix_t cmat(2, 2);
+    cmat.replace(A->partial(2, 2, i, i));
+    Complex<content_t> det[2] = {
+        (cmat - sigma[0]).determinant_minor(),
+        (cmat - sigma[1]).determinant_minor()};
+    BOOST_CHECK_SMALL(det[0].abs(), ACCEPTABLE_DELTA_DEFAULT);
+    BOOST_CHECK_SMALL(det[1].abs(), ACCEPTABLE_DELTA_DEFAULT);
+  }
+
+  for(unsigned i(0); i < rAiB->rows() - 1; ++i){
+    rAiB->eigen22(i, i, sigma[0], sigma[1]);
+    Complex<content_t> det[2] = {
+        (rAiB->partial(2, 2, i, i) - sigma[0]).determinant_minor(),
+        (rAiB->partial(2, 2, i, i) - sigma[1]).determinant_minor()};
+    BOOST_CHECK_SMALL(det[0].abs(), ACCEPTABLE_DELTA_DEFAULT);
+    BOOST_CHECK_SMALL(det[1].abs(), ACCEPTABLE_DELTA_DEFAULT);
+  }
+}
+
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
   prologue_print();
   try{

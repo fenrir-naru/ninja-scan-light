@@ -2584,6 +2584,12 @@ class Matrix_Frozen {
       static real_t get_real(const v_t &v) noexcept {
         return v.real();
       }
+      static v_t get_sqrt(const real_t &v) noexcept {
+        return (v >= 0) ? v_t(std::sqrt(v)) : v_t(0, std::sqrt(-v));
+      }
+      static v_t get_sqrt(const v_t &v) noexcept {
+        return v.sqrt();
+      }
     };
 
     /**
@@ -2696,20 +2702,12 @@ class Matrix_Frozen {
     void eigen22(
         const unsigned int &row, const unsigned int &column,
         typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
-      T a((*this)(row, column)),
-        b((*this)(row, column + 1)),
-        c((*this)(row + 1, column)),
-        d((*this)(row + 1, column + 1));
-      T root2(pow((a - d), 2) + b * c * 4);
-      if(complex_t::is_complex || (root2 > 0)){
-        T root(::sqrt(root2));
-        upper = ((a + d + root) / 2);
-        lower = ((a + d - root) / 2);
-      }else{
-        T root(::sqrt(root2 * -1));
-        upper = typename complex_t::v_t((a + d) / 2, root / 2);
-        lower = typename complex_t::v_t((a + d) / 2, root / 2 * -1);
-      }
+      const T
+          &a((*this)(row, column)),     &b((*this)(row, column + 1)),
+          &c((*this)(row + 1, column)), &d((*this)(row + 1, column + 1));
+      typename complex_t::v_t root(complex_t::get_sqrt((a - d) * (a - d) + b * c * 4));
+      upper = ((root + a + d) / 2);
+      lower = ((-root + a + d) / 2);
     }
 
     struct opt_eigen_t {
