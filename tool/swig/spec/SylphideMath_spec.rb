@@ -8,6 +8,7 @@ require 'matrix'
 shared_examples 'Matrix' do
   let(:params){{
     :rc => [8, 8],
+    :acceptable_delta => 1E-10,
   }}
   describe "initializer" do
     let(:compare_with){
@@ -360,12 +361,16 @@ shared_examples 'Matrix' do
     }
     it 'have inverse, inv' do
       [:inverse, :inv].each{|func|
-        #expect(inversible.send(func).to_a).to eq(Matrix[*(inversible.to_a)].send(func).to_a) # TODO
+        (Matrix[*(inversible.send(func).to_a)] - Matrix[*(inversible.to_a)].send(func)).each{|v| 
+          expect(v.abs).to be < params[:acceptable_delta]
+        }
         expect{mat[2].send(func)}.to raise_error(RuntimeError)
       }
     end
     it 'have /(mat)' do
-      #expect((mat[0] / mat[1]).to_a).to eq((Matrix[*compare_with[0]] / Matrix[*compare_with[1]]).to_a) # TODO
+      (Matrix[*((mat[0] / mat[1]).to_a)] - (Matrix[*compare_with[0]] / Matrix[*compare_with[1]])).each{|v|
+        expect(v.abs).to be < params[:acceptable_delta]
+      }
       expect{mat[2] / mat[3]}.to raise_error(RuntimeError)
     end
   end
@@ -382,7 +387,9 @@ shared_examples 'Matrix' do
         mat_l, mat_u, mat_p = src.send(func).collect{|item| Matrix[*item.to_a]}
         expect(mat_l.lower_triangular?).to be(true)
         expect(mat_u.upper_triangular?).to be(true)
-        expect(((mat_l * mat_u * mat_p) - Matrix[*src.to_a]).each.all?{|v| v.abs < 1E-10}).to be(true)
+        ((mat_l * mat_u * mat_p) - Matrix[*src.to_a]).each{|v|
+          expect(v.abs).to be < params[:acceptable_delta]
+        }
       }
     end
   end
@@ -415,7 +422,9 @@ describe SylphideMath::MatrixD do
         mat_u, mat_d = src.send(func).collect{|item| Matrix[*item.to_a]}
         expect(mat_u.upper_triangular?).to be(true)
         expect(mat_d.diagonal?).to be(true)
-        expect(((mat_u * mat_d * mat_u.t) - Matrix[*src.to_a]).each.all?{|v| v.abs < 1E-10}).to be(true)
+        ((mat_u * mat_d * mat_u.t) - Matrix[*src.to_a]).each{|v|
+          expect(v.abs).to be < params[:acceptable_delta]
+        }
       }
     end
     it 'supports eigenvalue' do
@@ -423,16 +432,13 @@ describe SylphideMath::MatrixD do
       expect(mat_l.det).to eq(1)
       expect(mat_u.det).to eq(1)
       src = mat_l * mat_u + Matrix[*mat[:D].to_a]
-=begin
-      # TODO
       mat_v, mat_d = mat_type::new(src.to_a).eigen.collect{|item| Matrix[*item.to_a]}
       expect(mat_d.diagonal?).to be(true)
       mat_d.row_size.times{|i|
-        expect(
-            (src * mat_v.column_vectors[0] - mat_v.column_vectors[0] * mat_d[0, 0]) \
-            .each.all?{|v| v.abs < 1E-10} ).to be(true)
+        (src * mat_v.column_vectors[0] - mat_v.column_vectors[0] * mat_d[0, 0]).each{|v|
+          expect(v.abs).to be < params[:acceptable_delta]
+        }
       }
-=end
     end
   end
 end
