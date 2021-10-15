@@ -2807,9 +2807,9 @@ class Matrix_Frozen {
 
       typename builder_t::assignable_t transform(getI(_rows));
       opt_hessenberg_t opt_A;
-      opt_A.mat_prop = opt_hessenberg_t::SQUARE;
+      opt_A.mat_prop = isSymmetric() ?  opt_hessenberg_t::SYMMETRIC : opt_hessenberg_t::SQUARE;
       typename builder_t::assignable_t A(hessenberg(&transform, opt_A));
-      typename builder_t::assignable_t A_(A);
+      typename builder_t::assignable_t A_(A.copy());
 
       while(true){
 
@@ -2851,7 +2851,7 @@ class Matrix_Frozen {
         //ハウスホルダー変換を繰り返す
         T b1, b2, b3, r;
         for(int i(0); i < m - 1; i++){
-          if(i == 0){
+          if(i == 0){ // first
             b1 = A(0, 0) * A(0, 0) - mu_sum * A(0, 0) + mu_multi + A(0, 1) * A(1, 0);
             b2 = A(1, 0) * (A(0, 0) + A(1, 1) - mu_sum);
             b3 = A(2, 1) * A(1, 0);
@@ -2867,16 +2867,43 @@ class Matrix_Frozen {
           {
             omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
             omega(1, 0) = b2;
-            if(b3 != T(0)){omega(2, 0) = b3;}
+            omega(2, 0) = b3;
+            // caution: omega size is 3x3 if i in [0, m-2), however, 2x2 when i == m-2
           }
-          typename builder_t::assignable_t P(getI(_rows));
-          T denom((omega.transpose() * omega)(0, 0));
-          if(denom){
-            P.pivotMerge(i, i, omega * omega.transpose() * -2 / denom);
-          }
-          //std::cout << "denom(" << m << ") " << denom << std::endl;
 
-          A = P * A * P;
+          typename complex_t::real_t omega_abs2(omega.norm2F());
+          if(omega_abs2 == 0){continue;}
+          //std::cout << "omega_abs(" << m << ") " << omega_abs << std::endl;
+
+          if(false){ // as definition
+            typename builder_t::assignable_t P(getI(_rows));
+            P.pivotMerge(i, i, omega * omega.adjoint() * -2 / omega_abs2);
+            A = P * A * P;
+          }else{ // optimized
+            if(i < m - 2){
+              typename MatrixBuilder<self_t, 3, 3, 0, 0>::assignable_t P(
+                  (omega * omega.adjoint() * -2 / omega_abs2) + 1);
+              // P multiplication from left
+              unsigned i2((i <= 1) ? 0 : i - 2);
+              typename MatrixBuilder<self_t, 3, 0, 0, 1>::assignable_t PX(
+                  P * A.partial(3, m - i2, i, i2));
+              A.partial(3, m - i2, i, i2).replace(PX);
+              // P multiplication from right
+              unsigned i3((i >= m - 3) ? (i + 3) : (i + 4));
+              typename MatrixBuilder<self_t, 0, 3, 1, 0>::assignable_t PXP(
+                  A.partial(i3, 3, 0, i) * P);
+              A.partial(i3, 3, 0, i).replace(PXP);
+            }else{ // i == m - 2
+              typename MatrixBuilder<self_t, 2, 2, 0, 0>::assignable_t P(
+                  ((omega * omega.adjoint()).partial(2, 2) * -2 / omega_abs2) + 1);
+              typename MatrixBuilder<self_t, 2, 3, 0, 0>::assignable_t PX(
+                  P * A.partial(2, 3, i, i - 1));
+              A.partial(2, 3, i, i - 1).replace(PX);
+              typename MatrixBuilder<self_t, 0, 2, 1, 0>::assignable_t PXP(
+                  A.partial(m, 2, 0, i) * P);
+              A.partial(m, 2, 0, i).replace(PXP);
+            }
+          }
         }
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 

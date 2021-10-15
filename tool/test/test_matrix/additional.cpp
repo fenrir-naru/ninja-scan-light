@@ -45,11 +45,11 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   }
 
   try{
-    matrix_compare_delta(A->eigen(), _A.eigen(), ACCEPTABLE_DELTA_DEFAULT);
-    matrix_compare_delta(
+    matrix_compare(A->hessenberg(), _A.hessenberg());
+    matrix_compare(A->eigen(), _A.eigen());
+    matrix_compare(
         A->partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
-        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen(),
-        ACCEPTABLE_DELTA_DEFAULT);
+        _A.partial(SIZE - 1, SIZE - 1, 0, 0).eigen());
   }catch(std::runtime_error &e){
     BOOST_ERROR("eigen_error:" << e.what());
   }
