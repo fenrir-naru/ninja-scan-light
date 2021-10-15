@@ -942,6 +942,9 @@ BOOST_AUTO_TEST_CASE(UH){
   BOOST_TEST_MESSAGE("U * H * U^{T}:" << _A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
 
+  matrix_t H_(A->hessenberg()); // zero clear version with default options
+  matrix_compare_delta(H, H_, ACCEPTABLE_DELTA_DEFAULT);
+
   cmatrix_t Uc(cmatrix_t::getI(A->rows()));
   cmatrix_t::opt_hessenberg_t opt_Hc;
   opt_Hc.force_zeros = false;

@@ -2614,15 +2614,16 @@ class Matrix_Frozen {
     /**
      * Calculate Hessenberg matrix by performing householder conversion
      *
-     * @param transform Pointer to store multiplication of matrices used for the conversion.
+     * @param transform Pointer to store multiplication of matrices used for the transformation.
      * If NULL is specified, the store will not be performed, The default is NULL.
+     * @param opt calculation options
      * @return Hessenberg matrix
      * @throw std::logic_error When operation is undefined
      * @see https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter4.pdf
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     typename builder_t::assignable_t hessenberg(
-        Matrix<T2, Array2D_Type2, ViewType2> *transform = NULL,
+        Matrix<T2, Array2D_Type2, ViewType2> *transform,
         const opt_hessenberg_t &opt = opt_hessenberg_t()) const {
       if((opt.mat_prop == opt_hessenberg_t::NOT_CHECKED) && !isSquare()){
         throw std::logic_error("rows() != columns()");
@@ -2689,6 +2690,18 @@ class Matrix_Frozen {
       }
 
       return result;
+    }
+
+    /**
+     * Calculate Hessenberg matrix by performing householder conversion without return of multipled matrices
+     *
+     * @param opt calculation options
+     * @return Hessenberg matrix
+     * @throw std::logic_error When operation is undefined
+     * @see https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter4.pdf
+     */
+    typename builder_t::assignable_t hessenberg(const opt_hessenberg_t &opt = opt_hessenberg_t()) const {
+      return hessenberg(static_cast<typename builder_t::assignable_t *>(NULL), opt);
     }
 
     /**
