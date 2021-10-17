@@ -527,6 +527,28 @@ struct Matrix_Fixed_multipled_by_Matrix
       Result_FrozenT(typename Result_FrozenT::storage_t(
           buf_t::lhs.rows(), buf_t::rhs.columns(),
         typename Result_FrozenT::storage_t::op_t(buf_t::lhs, buf_t::rhs))) {}
+
+  /* for optimization of scalar multiplication of (M * S) * M, M * (M * S), (M * S) * (M * S) */
+  template <class T>
+  struct Multiply_Matrix_by_Scalar {
+    typedef Matrix_Fixed_multipled_by_Matrix<
+        Result_FrozenT, LHS_T, RHS_T, lhs_buffered, rhs_buffered> lhs_t;
+    typedef T rhs_t;
+    typedef Array2D_Operator_Multiply_by_Scalar<Result_FrozenT, rhs_t> impl_t;
+    typedef Matrix_Frozen<T, Array2D_Operator<T, impl_t> > frozen_t;
+    struct mat_t : protected buf_t, public frozen_t {
+      mat_t(const lhs_t &mat, const rhs_t &scalar)
+          : buf_t(mat.buf_t::lhs, mat.buf_t::rhs),
+          frozen_t(typename frozen_t::storage_t(
+            mat.rows(), mat.columns(),
+            typename frozen_t::storage_t::op_t(
+              buf_t::lhs * buf_t::rhs,
+              scalar))) {}
+    };
+    static mat_t generate(const lhs_t &mat, const rhs_t &scalar) {
+      return mat_t(mat, scalar);
+    }
+  };
 };
 
 template <

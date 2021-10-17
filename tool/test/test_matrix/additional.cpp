@@ -56,6 +56,20 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
 }
 
 BOOST_AUTO_TEST_CASE(fixed_types){
+  struct gen_matrix_t {
+    Fixture<content_t>::rand_t gen;
+    gen_matrix_t(Fixture<content_t>::rand_t &gen_) : gen(gen_) {}
+    matrix_t operator()(const unsigned int &r, const unsigned int &c) {
+      matrix_t res(r, c);
+      for(unsigned int i(0); i < r; ++i){
+        for(unsigned int j(0); j < c; ++j){
+          res(i, j) = gen();
+        }
+      }
+      return res;
+    }
+  } gen_mat(gen_rand);
+
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
         Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
@@ -63,6 +77,13 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 4, 8> >,
           Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(8, 16)};
+    Matrix_Fixed<content_t, 2, 16> x(
+        Matrix_Fixed<content_t, 2, 4>(src[0])
+          * (Matrix_Fixed<content_t, 4, 8>(src[1]) * Matrix_Fixed<content_t, 8, 16>(src[2])));
+    matrix_compare(x, src[0] * (src[1] * src[2]));
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
@@ -70,12 +91,26 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 8> > > > >,
         Matrix_Frozen<content_t,Array2D_Fixed<content_t, 8, 16> > > > >::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(8, 16)};
+    Matrix_Fixed<content_t, 2, 16> x(
+        (Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1]))
+          * Matrix_Fixed<content_t, 8, 16>(src[2]));
+    matrix_compare(x, (src[0] * src[1]) * src[2]);
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 16, 8>::frozen_t::builder_t::transpose_t>::mat_t
         ::builder_t::transpose_t::builder_t::assignable_t,
       Matrix_Fixed<content_t, 16, 2> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(16, 8)};
+    Matrix_Fixed<content_t, 16, 2> x(
+        ((Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1]))
+          * Matrix_Fixed<content_t, 16, 8>(src[2]).transpose()).transpose());
+    matrix_compare(x, ((src[0] * src[1]) * src[2].transpose()).transpose());
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t::builder_t::transpose_t
@@ -85,6 +120,13 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           ::builder_t::transpose_t>::mat_t
         ::builder_t::transpose_t::builder_t::assignable_t,
       Matrix_Fixed<content_t, 16, 8> >::value)); // < [(2, 4) * (4, 8)]^{t} * [(16, 8) * (8, 2)]^{t} >^{t} => (16, 8)
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(16, 8), gen_mat(8, 2)};
+    Matrix_Fixed<content_t, 16, 8> x(
+        ((Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1])).transpose()
+          * (Matrix_Fixed<content_t, 16, 8>(src[2]) * Matrix_Fixed<content_t, 8, 2>(src[3])).transpose()).transpose());
+    matrix_compare(x, ((src[0] * src[1]).transpose() * (src[2] * src[3]).transpose()).transpose());
+  }
   BOOST_CHECK((boost::is_same<
       Matrix_Fixed<content_t, 2, 4>
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 4, 8>::frozen_t>::mat_t
@@ -93,6 +135,13 @@ BOOST_AUTO_TEST_CASE(fixed_types){
         ::template Multiply_Matrix_by_Matrix<Matrix_Fixed<content_t, 8, 16>::frozen_t>::mat_t
         ::builder_t::assignable_t,
       Matrix_Fixed<content_t, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 7), gen_mat(2, 7), gen_mat(7, 16)};
+    Matrix_Fixed<content_t, 2, 16> x(
+        (((Matrix_Fixed<content_t, 2, 4>(src[0]) * Matrix_Fixed<content_t, 4, 8>(src[1]))
+          + Matrix_Fixed<content_t, 3, 7>(src[2])) * 2) * Matrix_Fixed<content_t, 8, 16>(src[3]));
+    matrix_compare(x, (((src[0] * src[1]) + src[2]) * 2) * src[3]);
+  }
 }
 #endif
 
