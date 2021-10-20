@@ -71,6 +71,17 @@ BOOST_AUTO_TEST_CASE(fixed_types){
   } gen_mat(gen_rand);
 
   BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Scalar<
+        Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
+        content_t> > >::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 2, 4> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4)};
+    Matrix_Fixed<content_t, 2, 4> x(
+        Matrix_Fixed<content_t, 2, 4>(src[0]) * 2);
+    matrix_compare(x, src[0] * 2);
+  }
+  BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
         Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
@@ -142,6 +153,13 @@ BOOST_AUTO_TEST_CASE(fixed_types){
           + Matrix_Fixed<content_t, 3, 7>(src[2])) * 2) * Matrix_Fixed<content_t, 8, 16>(src[3]));
     matrix_compare(x, (((src[0] * src[1]) + src[2]) * 2) * src[3]);
   }
+
+  BOOST_CHECK((boost::is_same<
+      matrix_t::builder_t::template resize_t<4, 4, 0, 0>::assignable_t,
+      Matrix_Fixed<content_t, 4, 4> >::value));
+  BOOST_CHECK((boost::is_same<
+      matrix_t::builder_t::template resize_t<4, 4>::assignable_t,
+      matrix_t>::value));
 }
 #endif
 

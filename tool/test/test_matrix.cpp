@@ -870,11 +870,11 @@ void check_LU(const matrix_t &mat){
     }
   } pivot(mat.rows());
 
-  MatrixBuilder<matrix_t, 0, 0, 1, 2>::assignable_t
+  MatrixBuilder<matrix_t>::template resize_t<0, 0, 1, 2>::assignable_t
       LU(mat.decomposeLUP(pivot.num, pivot.indices)),
       LU2(mat.decomposeLU());
   matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
-  MatrixBuilder<matrix_t, 0, 0, 1, 2>::assignable_t::partial_t
+  MatrixBuilder<matrix_t>::template resize_t<0, 0, 1, 2>::assignable_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
   BOOST_TEST_MESSAGE("LU(L):" << L);
