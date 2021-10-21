@@ -2743,7 +2743,7 @@ class Matrix_Frozen {
         if(false){ // as definition
           typename builder_t::assignable_t P(getI(rows()));
           P.pivotMerge(j+1, j+1, x * x.adjoint() * -2 / x_dash_abs2);
-          result = P * result * P;
+          result = (typename builder_t::assignable_t)(P * result * P);
           if(transform){(*transform) *= P;}
         }else{ // optimized
           typename builder_t::assignable_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
@@ -3890,6 +3890,13 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isDifferentSize;
     using super_t::isLU;
 
+    /*
+     * operator+=, operator-=, operator*=, operator/= are shortcuts of this->replace((*this) op another).
+     * Be careful, they affect another variable whose reference is the same as (*this).
+     * They are different from (*this) = (this_type)((*this) op another),
+     * which does not affect another variable whose reference is the same as (*this).
+     */
+
     /**
      * Multiply matrix by scalar (bang method)
      *
@@ -3960,7 +3967,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator*=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-      return operator=((clone_t)(*this * matrix));
+      return replace((clone_t)(*this * matrix));
     }
 
     /**
@@ -3971,7 +3978,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
      */
     template <class T2, class Array2D_Type2, class ViewType2>
     self_t &operator/=(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) {
-      return operator=((clone_t)(*this / matrix));
+      return replace((clone_t)(*this / matrix));
     }
 
     /**
