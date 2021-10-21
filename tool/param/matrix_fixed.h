@@ -424,6 +424,11 @@ struct Matrix_Fixed_multipled_by_Scalar
     : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered>,
     public Result_FrozenT {
   typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered> buf_t;
+  Matrix_Fixed_multipled_by_Scalar(const Matrix_Fixed_multipled_by_Scalar &another) noexcept
+      : buf_t(another.buf_t::lhs, another.buf_t::rhs),
+      Result_FrozenT(typename Result_FrozenT::storage_t(
+        buf_t::lhs.rows(), buf_t::lhs.columns(),
+        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, buf_t::rhs))) {}
   Matrix_Fixed_multipled_by_Scalar(const LHS_T &lhs, const RHS_T &rhs) noexcept
       : buf_t(lhs, rhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
@@ -460,6 +465,11 @@ struct Matrix_Fixed_multipled_by_Matrix
     : protected Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered, rhs_buffered>,
     public Result_FrozenT {
   typedef Matrix_Fixed_BinaryOperator_buffer<LHS_T, RHS_T, lhs_buffered, rhs_buffered> buf_t;
+  Matrix_Fixed_multipled_by_Matrix(const Matrix_Fixed_multipled_by_Matrix &another) noexcept
+      : buf_t(another.buf_t::lhs, another.buf_t::rhs),
+      Result_FrozenT(typename Result_FrozenT::storage_t(
+        buf_t::lhs.rows(), buf_t::rhs.columns(),
+        typename Result_FrozenT::storage_t::op_t(buf_t::lhs, buf_t::rhs))) {}
   Matrix_Fixed_multipled_by_Matrix(const LHS_T &lhs, const RHS_T &rhs) noexcept
       : buf_t(lhs, rhs),
       Result_FrozenT(typename Result_FrozenT::storage_t(
@@ -483,15 +493,7 @@ struct Matrix_Fixed_multipled_by_Matrix
     typedef T rhs_t;
     typedef Array2D_Operator_Multiply_by_Scalar<Result_FrozenT, rhs_t> impl_t;
     typedef Matrix_Frozen<T, Array2D_Operator<T, impl_t> > frozen_t;
-    struct mat_t : protected buf_t, public frozen_t {
-      mat_t(const lhs_t &mat, const rhs_t &scalar)
-          : buf_t(mat.buf_t::lhs, mat.buf_t::rhs),
-          frozen_t(typename frozen_t::storage_t(
-            mat.rows(), mat.columns(),
-            typename frozen_t::storage_t::op_t(
-              buf_t::lhs * buf_t::rhs,
-              scalar))) {}
-    };
+    typedef Matrix_Fixed_multipled_by_Scalar<frozen_t, lhs_t, rhs_t, lhs_buffered || rhs_buffered> mat_t;
     static mat_t generate(const lhs_t &mat, const rhs_t &scalar) {
       return mat_t(mat, scalar);
     }
