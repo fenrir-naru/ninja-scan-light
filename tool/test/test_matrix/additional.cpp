@@ -227,6 +227,9 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(
       (as_symmetric(*A) * as_symmetric(*A)) * (as_symmetric(*A) * as_symmetric(*A)),
       "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
+      (as_symmetric(*A) * as_symmetric(*A)) * 2 * (as_symmetric(*A) * as_symmetric(*A)) * 2,
+      "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A).inverse(), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) / as_symmetric(*A), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(*A) / matrix_t::getI(A->rows()), "*view: [Symmetric] [Base]");
@@ -298,6 +301,9 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_inspect_contains(
       (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
       "*view: [Symmetric] [Base]");
+  /*matrix_inspect_contains(
+      (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * 2 * (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * 2,
+      "*view: [Symmetric] [Base]");*/ // TODO fix build error
   matrix_inspect_contains(as_symmetric(A_fixed).inverse(), "*view: [Symmetric] [Base]");
   matrix_compare_delta(as_symmetric(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 
@@ -345,6 +351,9 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
       (as_diagonal(*A) * as_diagonal(*A)) * (as_diagonal(*A) * as_diagonal(*A)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      (as_diagonal(*A) * as_diagonal(*A)) * 2 * (as_diagonal(*A) * as_diagonal(*A)) * 2,
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A).inverse(), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(*A) / as_diagonal(*A), "*view: [Diagonal] [Base]");
@@ -417,6 +426,9 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_inspect_contains(
       (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
       "*view: [Diagonal] [Base]");
+  /*matrix_inspect_contains(
+      (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * 2 * (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * 2,
+      "*view: [Diagonal] [Base]");*/ // TODO fix build error
   matrix_inspect_contains(as_diagonal(A_fixed).inverse(), "*view: [Diagonal] [Base]");
   matrix_compare_delta(as_diagonal(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 
