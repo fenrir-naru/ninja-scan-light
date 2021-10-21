@@ -1189,6 +1189,9 @@ template <
     template <class, class, class> class MatrixT,
     class T, class Array2D_Type, class ViewType>
 struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Type, ViewType> > {
+  static const int row_buffer = 0; // unknown
+  static const int column_buffer = 0;
+
   template <class T2, bool is_writable_array = Array2D_Type::writable>
   struct assignable_matrix_t {
     typedef Matrix<T2> res_t;
@@ -2591,6 +2594,91 @@ class Matrix_Frozen {
       return complex_t::get_real((adjoint() * (*this)).trace(false));
     }
 
+    struct opt_decomposeQR_t {
+      bool force_zeros;
+      opt_decomposeQR_t()
+          : force_zeros(true)
+          {};
+    };
+
+    /**
+     * Perform QR decomposition
+     * Return matrix is
+     * (0, 0)-(n-1, n-1):  Q matrix
+     * (0, n)-(n-1, n + c): R matrix
+     *
+     * @return QR decomposed matrix
+     */
+    typename builder_t::template resize_t<0, builder_t::row_buffer>::assignable_t decomposeQR(
+        const opt_decomposeQR_t &opt = opt_decomposeQR_t()) const {
+
+      typedef typename builder_t::template resize_t<0, builder_t::row_buffer>::assignable_t res_t;
+      res_t QR(res_t::blank(rows(), rows() + columns()));
+      typename res_t::partial_offsetless_t Q(QR.partial(rows(), rows()));
+      typename res_t::partial_t R(QR.partial(rows(), columns(), 0, rows()));
+      Q.replace(getI(rows()));
+      R.replace(*this);
+
+      typedef typename builder_t::template resize_t<0, builder_t::row_buffer, 1, 0>::assignable_t Q_t;
+      typedef typename builder_t::assignable_t R_t;
+
+      unsigned int rc_min(columns() > rows() ? rows() : columns());
+
+      { // Householder transformation
+        typedef typename builder_t::template resize_t<0, 1, 1, 0>::assignable_t x_buf_t;
+        x_buf_t x_buf(x_buf_t::blank(rows(), 1));
+
+        for(unsigned int j(0); j < rc_min; j++){
+          typename x_buf_t::partial_offsetless_t x(x_buf.partial(rows() - j, 1));
+          x.replace(R.partial(x.rows(), 1, j, j));
+          // x_0 = {(0,0), (1,0), ..., (N-1,0)}^{T}, (N-1)*1
+          // x_1 = {(1,1), (2,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
+
+          typename complex_t::real_t x_abs2(x.norm2F());
+          if(x_abs2 == 0){continue;}
+
+          typename complex_t::real_t x_abs(std::sqrt(x_abs2));
+          typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
+          T rho(x(0, 0) / x_top_abs * -1);
+          // if x(0,0) is real, then rho = -sign(x(0,0)),
+          // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
+
+          // x -> x_dash
+          // x_dash_0 = {(0,0) - \rho |x|, (1,0), ..., (N-1,0)}^{T}
+          // x_dash_1 = {(1,1) - \rho |x|, (2,1), ..., (N-1,1)}^{T}, ...
+          // x_dash_abs2
+          //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
+          //   = (x_abs2 + x_top_abs * x_abs) * 2
+          x(0, 0) -= rho * x_abs;
+          typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
+
+          if(false){ // as definition
+            Q_t P(getI(rows()));
+            P.pivotMerge(j, j, x * x.adjoint() * -2 / x_dash_abs2);
+            R.replace(R_t(P * R));
+            Q.replace(Q_t(Q * P));
+          }else{ // optimized
+            Q_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
+            R.partial(rows() - j, columns(), j, 0).replace(R_t(P * R.partial(rows() - j, columns(), j, 0)));
+            Q.partial(rows(), rows() - j, 0, j).replace(Q_t(Q.partial(rows(), rows() - j, 0, j) * P));
+          }
+        }
+      }
+
+      // TODO Gram-Schmidt orthonormalization
+      // TODO Givens rotation
+
+      if(opt.force_zeros){ // Zero clear
+        for(unsigned int j(0), j_end(rc_min); j < j_end; j++){
+          for(unsigned int i(j + 1), i_end(rows()); i < i_end; i++){
+            R(i, j) = T(0);
+          }
+        }
+      }
+
+      return QR;
+    }
+
     struct opt_hessenberg_t {
       enum {
         NOT_CHECKED, SQUARE, SYMMETRIC,
@@ -3364,6 +3452,9 @@ private:
 
   typedef MatrixBuilder_Dependency<typename unpack_op_t<OperatorT>::mat_t> gen_t;
 public:
+  static const int row_buffer = gen_t::row_buffer;
+  static const int column_buffer = gen_t::column_buffer;
+
   typedef typename gen_t::assignable_t assignable_t;
 
   template <class T2>

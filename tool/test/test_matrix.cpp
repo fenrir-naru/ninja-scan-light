@@ -925,6 +925,48 @@ BOOST_AUTO_TEST_CASE(LU){
   check_LU(*A);
 }
 
+BOOST_AUTO_TEST_CASE(QR){
+  prologue_print();
+
+  {
+    matrix_t::opt_decomposeQR_t opt;
+    opt.force_zeros = false;
+    matrix_t QR(A->decomposeQR(opt));
+    matrix_t::partial_t
+        Q(QR.partial(QR.rows(), QR.rows(), 0, 0)),
+        R(QR.partial(QR.rows(), QR.columns() - QR.rows(), 0, QR.rows()));
+    BOOST_TEST_MESSAGE("Q:" << Q);
+    BOOST_TEST_MESSAGE("R:" << R);
+
+    matrix_compare_delta(matrix_t::getI(A->rows()), Q * Q.transpose(), ACCEPTABLE_DELTA_DEFAULT);
+    for(unsigned i(1); i < R.rows(); i++){
+      for(unsigned j(0); j < i; j++){
+        BOOST_CHECK_SMALL(std::abs(R(i, j)), ACCEPTABLE_DELTA_DEFAULT);
+      }
+    }
+    matrix_compare_delta(*A, Q * R, ACCEPTABLE_DELTA_DEFAULT);
+  }
+
+  {
+    cmatrix_t::opt_decomposeQR_t opt;
+    opt.force_zeros = false;
+    cmatrix_t QR(rAiB->decomposeQR(opt));
+    cmatrix_t::partial_t
+        Q(QR.partial(QR.rows(), QR.rows(), 0, 0)),
+        R(QR.partial(QR.rows(), QR.columns() - QR.rows(), 0, QR.rows()));
+    BOOST_TEST_MESSAGE("Q:" << Q);
+    BOOST_TEST_MESSAGE("R:" << R);
+
+    matrix_compare_delta(cmatrix_t::getI(rAiB->rows()), Q * Q.adjoint(), ACCEPTABLE_DELTA_DEFAULT);
+    for(unsigned i(1); i < R.rows(); i++){
+      for(unsigned j(0); j < i; j++){
+        BOOST_CHECK_SMALL(std::abs(R(i, j)), ACCEPTABLE_DELTA_DEFAULT);
+      }
+    }
+    matrix_compare_delta(*rAiB, Q * R, ACCEPTABLE_DELTA_DEFAULT);
+  }
+}
+
 BOOST_AUTO_TEST_CASE(UH){
   prologue_print();
   matrix_t U(matrix_t::getI(A->rows()));

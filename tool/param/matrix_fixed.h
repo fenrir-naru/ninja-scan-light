@@ -331,23 +331,21 @@ template <
     class T, int nR, int nC, class ViewType>
 struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
 
-private:
-  static const int rows = (MatrixViewProperty<ViewType>::transposed ? nC : nR);
-  static const int columns = (MatrixViewProperty<ViewType>::transposed ? nR : nC);
+  static const int row_buffer = (MatrixViewProperty<ViewType>::transposed ? nC : nR);
+  static const int column_buffer = (MatrixViewProperty<ViewType>::transposed ? nR : nC);
 
-public:
-  typedef Matrix_Fixed<T, rows, columns> assignable_t;
+  typedef Matrix_Fixed<T, row_buffer, column_buffer> assignable_t;
 
   template <class T2>
   struct cast_t {
-    typedef Matrix_Fixed<T2, rows, columns> assignable_t;
+    typedef Matrix_Fixed<T2, row_buffer, column_buffer> assignable_t;
   };
 
   template <int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
   struct resize_t {
     typedef Matrix_Fixed<T,
-      rows * nR_multiply + nR_add,
-      columns * nC_multiply + nC_add> assignable_t;
+      row_buffer * nR_multiply + nR_add,
+      column_buffer * nC_multiply + nC_add> assignable_t;
   };
 };
 

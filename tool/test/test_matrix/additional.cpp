@@ -44,6 +44,8 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
     BOOST_ERROR("inv_error:" << e.what());
   }
 
+  matrix_compare(A->decomposeQR(), _A.decomposeQR());
+
   try{
     matrix_compare(A->hessenberg(), _A.hessenberg());
     matrix_compare(A->eigen(), _A.eigen());
