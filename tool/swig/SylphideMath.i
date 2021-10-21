@@ -677,14 +677,18 @@ struct MatrixUtil {
       Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
       Matrix<T, Array2D_Dense<T> > &output_U (Matrix<T, Array2D_Dense<T> > temp),
       Matrix<T, Array2D_Dense<T> > &output_P (Matrix<T, Array2D_Dense<T> > temp),
-      Matrix<T, Array2D_Dense<T> > &output_D (Matrix<T, Array2D_Dense<T> > temp) %{
+      Matrix<T, Array2D_Dense<T> > &output_D (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_Q (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_R (Matrix<T, Array2D_Dense<T> > temp) %{
     $1 = &temp;
   %}
   %typemap(argout)
       Matrix<T, Array2D_Dense<T> > &output_L,
       Matrix<T, Array2D_Dense<T> > &output_U,
       Matrix<T, Array2D_Dense<T> > &output_P,
-      Matrix<T, Array2D_Dense<T> > &output_D {
+      Matrix<T, Array2D_Dense<T> > &output_D,
+      Matrix<T, Array2D_Dense<T> > &output_Q,
+      Matrix<T, Array2D_Dense<T> > &output_R {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
   void lup(
@@ -719,6 +723,13 @@ struct MatrixUtil {
     output_U = UD.partial($self->rows(), $self->columns()).copy();
     output_D = UD.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
   }
+  void qr(
+      Matrix<T, Array2D_Dense<T> > &output_Q, 
+      Matrix<T, Array2D_Dense<T> > &output_R) const {
+    Matrix<T, Array2D_Dense<T> > QR($self->decomposeQR());
+    output_Q = QR.partial($self->rows(), $self->rows()).copy();
+    output_R = QR.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
+  }
 
   Matrix<T, Array2D_Dense<T> > inverse() const {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->inverse());
@@ -747,6 +758,7 @@ struct MatrixUtil {
   %alias transpose "t";
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
+  %alias qr "qr_decomposition";
   
   %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header"){
     static void matrix_yield(const T &v, T *, const unsigned int &i, const unsigned int &j){
