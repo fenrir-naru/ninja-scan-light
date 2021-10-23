@@ -2583,6 +2583,12 @@ class Matrix_Frozen {
       static v_t get_sqrt(const v_t &v) noexcept {
         return v.sqrt();
       }
+      static real_t get_abs(const real_t &v) noexcept {
+        return std::abs(v);
+      }
+      static real_t get_abs(const v_t &v) noexcept {
+        return v.abs();
+      }
     };
 
     /**
@@ -2752,7 +2758,8 @@ class Matrix_Frozen {
           typename builder_t::assignable_t PXP(result.partial(rows(), columns()-(j+1), 0, j+1) * P);
           result.partial(rows(), columns()-(j+1), 0, j+1).replace(PXP);
           if(transform){
-            typename builder_t::assignable_t Pk(transform->partial(rows(), columns() - (j+1), 0, (j+1)) * P);
+            typename Matrix<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t Pk(
+                transform->partial(rows(), columns() - (j+1), 0, (j+1)) * P);
             transform->partial(rows(), columns() - (j+1), 0, (j+1)).replace(Pk);
           }
         }
@@ -2874,7 +2881,7 @@ class Matrix_Frozen {
       const unsigned int &_rows(rows());
 
       // 結果の格納用の行列
-      res_t result(_rows, _rows + 1);
+      res_t result(res_t::blank(_rows, _rows + 1));
 
       // 固有値の計算
 #define lambda(i) result(i, _rows)
@@ -2995,22 +3002,22 @@ class Matrix_Frozen {
         }
 
         // Convergence test; 収束判定
-#define _abs(x) ((x) >= 0 ? (x) : -(x))
-        T A_m2_abs(_abs(A(m-2, m-2))), A_m1_abs(_abs(A(m-1, m-1)));
-        T epsilon(opt.threshold_abs
+        typename complex_t::real_t
+            A_m2_abs(complex_t::get_abs(A(m-2, m-2))),
+            A_m1_abs(complex_t::get_abs(A(m-1, m-1)));
+        typename complex_t::real_t epsilon(opt.threshold_abs
           + opt.threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
 
         //std::cout << "epsil(" << m << ") " << epsilon << std::endl;
 
-        if(_abs(A(m-1, m-2)) < epsilon){
+        if(complex_t::get_abs(A(m-1, m-2)) < epsilon){
           --m;
           lambda(m) = A(m, m);
-        }else if(_abs(A(m-2, m-3)) < epsilon){
+        }else if(complex_t::get_abs(A(m-2, m-3)) < epsilon){
           A.eigen22(m-2, m-2, lambda(m-1), lambda(m-2));
           m -= 2;
         }
       }
-#undef _abs
 
 #if defined(MATRIX_EIGENVEC_SIMPLE)
       // 固有ベクトルの計算
@@ -3036,20 +3043,16 @@ class Matrix_Frozen {
 #else
       // Inverse Iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
       cmat_t x(cmat_t::getI(_rows));  //固有ベクトル
-      A = A_;
-      cmat_t A_C(_rows, _rows);
-      for(unsigned int i(0); i < _rows; i++){
-        for(unsigned int j(0), j_end(columns()); j < j_end; j++){
-          A_C(i, j) = A(i, j);
-        }
-      }
+      cmat_t A_C_lambda(cmat_t::blank(_rows, _rows));
 
       for(unsigned int j(0); j < _rows; j++){
-        // http://www.prefield.com/algorithm/math/eigensystem.html を参考に
-        // かつ、固有値が等しい場合の対処方法として、
-        // http://www.nrbook.com/a/bookcpdf/c11-7.pdf
-        // を参考に、値を振ってみることにした
-        cmat_t A_C_lambda(A_C.copy());
+        /* https://web.archive.org/web/20120702040824/http://www.prefield.com/algorithm/math/eigensystem.html
+         * (Previously, http://www.prefield.com/algorithm/math/eigensystem.html)
+         * is referred, and Numerical receipt
+         * http://www.nrbook.com/a/bookcpdf/c11-7.pdf
+         * is also utilized in case some eigenvalues are identical.
+         */
+        A_C_lambda.replace(A_, false);
         typename complex_t::v_t approx_lambda(lambda(j));
         if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
           approx_lambda += 2E-3;
@@ -3057,28 +3060,23 @@ class Matrix_Frozen {
         for(unsigned int i(0); i < _rows; i++){
           A_C_lambda(i, i) -= approx_lambda;
         }
-        typename MatrixBuilder<typename complex_t::m_t>::template resize_t<0, 0, 1, 2>::assignable_t
+        typename MatrixBuilder<cmat_t>::template resize_t<0, 0, 1, 2>::assignable_t
             A_C_lambda_LU(A_C_lambda.decomposeLU());
 
         cvec_t target_x(cvec_t::blank(_rows, 1));
-        for(unsigned i(0); i < _rows; ++i){
-          target_x(i, 0) = x(i, j);
-        }
+        target_x.replace(x.columnVector(j), false);
         for(unsigned loop(0); true; loop++){
           cvec_t target_x_new(
               A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
-          T mu((target_x_new.transpose() * target_x)(0, 0).abs2()),
-            v2((target_x_new.transpose() * target_x_new)(0, 0).abs2()),
-            v2s(::sqrt(v2));
-          for(unsigned i(0); i < _rows; ++i){
-            target_x(i, 0) = target_x_new(i, 0) / v2s;
-          }
+          typename complex_t::real_t
+              mu((target_x_new.transpose() * target_x)(0, 0).abs2()),
+              v2((target_x_new.transpose() * target_x_new)(0, 0).abs2()),
+              v2s(std::sqrt(v2));
+          target_x.replace(target_x_new / v2s, false);
           //std::cout << mu << ", " << v2 << std::endl;
           //std::cout << target_x.transpose() << std::endl;
-          if((T(1) - (mu * mu / v2)) < T(1.1)){
-            for(unsigned i(0); i < _rows; ++i){
-              x(i, j) = target_x(i, 0);
-            }
+          if((T(1) - (mu * mu / v2)) < T(1.1)){ // TODO
+            x.columnVector(j).replace(target_x, false);
             break;
           }
           if(loop > 100){
@@ -3097,24 +3095,14 @@ class Matrix_Frozen {
       //std::cout << "x * x^-1" << x * x.inverse() << std::endl;
       std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
 
-      // 結果の格納
-      for(unsigned int j(0), j_end(x.columns()); j < j_end; j++){
-        for(unsigned int i(0), i_end(x.rows()); i < i_end; i++){
-          for(unsigned int k(0), k_end(transform.columns()); k < k_end; k++){
-            result(i, j) += transform(i, k) * x(k, j);
-          }
-        }
+      // Register eigenvectors; 結果の格納
+      result.partial(_rows, _rows).transpose().replace(x.transpose() * transform.transpose(), false);
+      // result.partial(_rows, _rows).replace(transform * x, false); is desireable,
+      // however, (real) * (complex) may occur and fail to build.
 
-        // Normalization; 正規化
-        typename complex_t::v_t _norm;
-        for(unsigned int i(0); i < _rows; i++){
-          _norm += result(i, j).abs2();
-        }
-        T norm = ::sqrt(_norm.real());
-        for(unsigned int i(0); i < _rows; i++){
-          result(i, j) /= norm;
-        }
-        //std::cout << result.partial(_rows, 1, 0, j).transpose() << std::endl;
+      // Normalization; 正規化
+      for(unsigned int j(0), j_end(x.columns()); j < j_end; j++){
+        result.columnVector(j) /= complex_t::get_sqrt(result.columnVector(j).norm2F());
       }
 #undef lambda
 

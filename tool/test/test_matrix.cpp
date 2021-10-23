@@ -839,10 +839,11 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
     cmatrix_t _A(A->eigen());
     BOOST_TEST_MESSAGE("eigen:" << _A);
     for(unsigned i(0); i < A->rows(); i++){
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << A_copy * _A.partial(A->rows(), 1, 0, i));
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()));
-      matrix_compare_delta(A_copy * _A.partial(A->rows(), 1, 0, i),
-          _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), 1E-4);
+      cmatrix_t::partial_t vec(_A.partial(A->rows(), 1, 0, i));
+      BOOST_CHECK_SMALL((vec.adjoint() * vec)(0, 0).abs() - 1, ACCEPTABLE_DELTA_DEFAULT);
+      BOOST_TEST_MESSAGE("eigen(" << i << "):" << A_copy * vec);
+      BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * _A(i, A->rows()));
+      matrix_compare_delta(A_copy * vec, vec * _A(i, A->rows()), 1E-4);
     }
   }catch(std::runtime_error &e){
     BOOST_ERROR("eigen_error:" << e.what());
