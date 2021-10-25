@@ -861,7 +861,8 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(sqrt, 1){
   }
 }
 
-void check_LU(const matrix_t &mat){
+template <class MatrixT>
+void check_LU(const MatrixT &mat){
   struct pivot_t {
     unsigned num;
     unsigned *indices;
@@ -871,11 +872,11 @@ void check_LU(const matrix_t &mat){
     }
   } pivot(mat.rows());
 
-  MatrixBuilder<matrix_t>::template resize_t<0, 0, 1, 2>::assignable_t
+  typename MatrixT::builder_t::template resize_t<0, 0, 1, 2>::assignable_t
       LU(mat.decomposeLUP(pivot.num, pivot.indices)),
       LU2(mat.decomposeLU());
   matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
-  MatrixBuilder<matrix_t>::template resize_t<0, 0, 1, 2>::assignable_t::partial_t
+  typename MatrixT::builder_t::template resize_t<0, 0, 1, 2>::assignable_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
   BOOST_TEST_MESSAGE("LU(L):" << L);
@@ -889,7 +890,7 @@ void check_LU(const matrix_t &mat){
   }
   BOOST_REQUIRE_EQUAL(true, LU.isLU());
 
-  matrix_t LU_multi(L * U);
+  typename MatrixT::builder_t::assignable_t LU_multi(L * U);
   BOOST_TEST_MESSAGE("LU(L) * LU(U):" << LU_multi);
   // column permutation will possibly be performed
   set<unsigned> unused_columns;
@@ -904,10 +905,7 @@ void check_LU(const matrix_t &mat){
       //cout << *it << endl;
       bool matched(true);
       for(unsigned i(0); i < mat.rows(); i++){
-        content_t delta(mat(i, j) - LU_multi(i, *it));
-        //cerr << delta << endl;
-        if(delta < 0){delta *= -1;}
-        if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
+        if(std::abs(mat(i, j) - LU_multi(i, *it)) > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
       if(matched && (pivot.indices[j] == *it)){
         //cerr << "matched: " << *it << endl;
@@ -921,9 +919,11 @@ void check_LU(const matrix_t &mat){
 BOOST_AUTO_TEST_CASE(LU){
   prologue_print();
   check_LU(*A);
+  check_LU(*rAiB);
   assign_intermediate_zeros();
   prologue_print();
   check_LU(*A);
+  check_LU(*rAiB);
 }
 
 BOOST_AUTO_TEST_CASE(QR){
