@@ -84,11 +84,15 @@ struct split_r_i_t {
 
 BOOST_FIXTURE_TEST_SUITE(matrix, Fixture<content_t>)
 
-BOOST_AUTO_TEST_CASE(init){
+BOOST_AUTO_TEST_CASE(copy_ctor){
   prologue_print();
   matrix_t _A(*A);
-  BOOST_TEST_MESSAGE("init:" << _A);
+  BOOST_TEST_MESSAGE("copy_ctor:" << _A);
   matrix_compare(*A, _A);
+
+  cmatrix_t _Ac(*A);
+  BOOST_TEST_MESSAGE("copy_ctor(real->complex):" << _Ac);
+  matrix_compare(*A, _Ac);
 }
 
 BOOST_AUTO_TEST_CASE(null_copy){
@@ -830,12 +834,7 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
   assign_unsymmetric();
   prologue_print();
   try{
-    cmatrix_t A_copy(A->rows(), A->columns());
-    for(unsigned i(0); i < A_copy.rows(); i++){
-      for(unsigned j(0); j < A_copy.columns(); j++){
-        A_copy(i, j).real() = (*A)(i, j);
-      }
-    }
+    cmatrix_t A_copy(*A);
     cmatrix_t _A(A->eigen());
     BOOST_TEST_MESSAGE("eigen:" << _A);
     for(unsigned i(0); i < A->rows(); i++){
