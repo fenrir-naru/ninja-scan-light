@@ -2814,9 +2814,12 @@ class Matrix_Frozen {
       } mat_prop;
       typename complex_t::real_t threshold_abs; ///< Absolute error to be used for convergence determination
       typename complex_t::real_t threshold_rel; ///< Relative error to be used for convergence determination
+      unsigned int inverse_power_max_iter;
+
       opt_eigen_t()
           : mat_prop(NOT_CHECKED),
-          threshold_abs(1E-10), threshold_rel(1E-7)
+          threshold_abs(1E-10), threshold_rel(1E-7),
+          inverse_power_max_iter(10)
           {}
     };
 
@@ -3041,7 +3044,7 @@ class Matrix_Frozen {
         //std::cout << x.partial(_rows, 1, 0, j).transpose() << std::endl;
       }
 #else
-      // Inverse Iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
+      // Inverse iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
       cmat_t x(cmat_t::getI(_rows));  //固有ベクトル
       cmat_t A_C_lambda(cmat_t::blank(_rows, _rows));
 
@@ -3054,9 +3057,7 @@ class Matrix_Frozen {
          */
         A_C_lambda.replace(A_, false);
         typename complex_t::v_t approx_lambda(lambda(j));
-        if((A_C_lambda(j, j) - approx_lambda).abs() <= 1E-3){
-          approx_lambda += 2E-3;
-        }
+        approx_lambda += complex_t::get_abs(approx_lambda) * 1E-4; // 0.01%
         for(unsigned int i(0); i < _rows; i++){
           A_C_lambda(i, i) -= approx_lambda;
         }
@@ -3065,21 +3066,18 @@ class Matrix_Frozen {
 
         cvec_t target_x(cvec_t::blank(_rows, 1));
         target_x.replace(x.columnVector(j), false);
-        for(unsigned loop(0); true; loop++){
+        for(unsigned int loop(0); true; loop++){
           cvec_t target_x_new(
               A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
-          typename complex_t::real_t
-              mu((target_x_new.transpose() * target_x)(0, 0).abs2()),
-              v2((target_x_new.transpose() * target_x_new)(0, 0).abs2()),
-              v2s(std::sqrt(v2));
-          target_x.replace(target_x_new / v2s, false);
-          //std::cout << mu << ", " << v2 << std::endl;
-          //std::cout << target_x.transpose() << std::endl;
-          if((T(1) - (mu * mu / v2)) < T(1.1)){ // TODO
+          typename complex_t::v_t mu((target_x_new.adjoint() * target_x)(0, 0)); // inner product
+          typename complex_t::real_t v2(target_x_new.norm2F());
+          target_x.replace(target_x_new / std::sqrt(v2), false);
+          //std::cout << j << ": " << target_x.transpose() << ", " << mu << ", " << v2 << std::endl;
+          if(std::abs(mu.abs2() / v2 - 1) < opt.threshold_abs){
             x.columnVector(j).replace(target_x, false);
             break;
           }
-          if(loop > 100){
+          if(loop > opt.inverse_power_max_iter){
             throw std::runtime_error("eigen vectors calculation failed");
           }
         }
@@ -3100,10 +3098,12 @@ class Matrix_Frozen {
       // result.partial(_rows, _rows).replace(transform * x, false); is desireable,
       // however, (real) * (complex) may occur and fail to build.
 
-      // Normalization; 正規化
+#if 0
+      // Normalization(正規化) is skipable due to transform matrix is unitary
       for(unsigned int j(0), j_end(x.columns()); j < j_end; j++){
         result.columnVector(j) /= complex_t::get_sqrt(result.columnVector(j).norm2F());
       }
+#endif
 #undef lambda
 
       return result;

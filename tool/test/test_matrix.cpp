@@ -834,15 +834,14 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
   assign_unsymmetric();
   prologue_print();
   try{
-    cmatrix_t A_copy(*A);
-    cmatrix_t _A(A->eigen());
-    BOOST_TEST_MESSAGE("eigen:" << _A);
+    cmatrix_t eig(A->eigen());
+    BOOST_TEST_MESSAGE("eigen:" << eig);
     for(unsigned i(0); i < A->rows(); i++){
-      cmatrix_t::partial_t vec(_A.partial(A->rows(), 1, 0, i));
+      cmatrix_t::partial_t vec(eig.partial(A->rows(), 1, 0, i));
       BOOST_CHECK_SMALL((vec.adjoint() * vec)(0, 0).abs() - 1, ACCEPTABLE_DELTA_DEFAULT);
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << A_copy * vec);
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * _A(i, A->rows()));
-      matrix_compare_delta(A_copy * vec, vec * _A(i, A->rows()), 1E-4);
+      BOOST_TEST_MESSAGE("eigen(" << i << "):" << (vec.transpose() * A->transpose()).transpose());
+      BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * eig(i, A->rows()));
+      matrix_compare_delta((vec.transpose() * A->transpose()).transpose(), vec * eig(i, A->rows()), 1E-6);
     }
   }catch(std::runtime_error &e){
     BOOST_ERROR("eigen_error:" << e.what());
