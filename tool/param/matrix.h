@@ -2854,7 +2854,7 @@ class Matrix_Frozen {
      * (0,j)-(n-1,j): Eigenvector (j) (0 <= j <= n-1)
      * (j,n): Eigenvalue (j)
      *
-     * @param opt optio to caluclate eigenvalue/eigenvector
+     * @param opt option to calculate eigenvalue/eigenvector
      * @return Eigenvalues and eigenvectors
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
@@ -3169,24 +3169,12 @@ class Matrix_Frozen {
     /**
      * Calculate square root of a matrix
      *
-     * @param threshold_abs Absolute error to be used for convergence determination of eigenvalue calculation
-     * @param threshold_rel Relative error to be used for convergence determination of eigenvalue calculation
+     * @param opt option to calculate eigenvalue/eigenvector
      * @return square root
-     * @see eigen(const T &, const T &)
+     * @see eigen(const opt_eigen_t &)
      */
-    typename complex_t::m_t sqrt(
-        const T &threshold_abs,
-        const T &threshold_rel) const {
-      return sqrt(eigen(threshold_abs, threshold_rel));
-    }
-
-    /**
-     * Calculate square root
-     *
-     * @return square root
-     */
-    typename complex_t::m_t sqrt() const {
-      return sqrt(eigen());
+    typename complex_t::m_t sqrt(const opt_eigen_t &opt = opt_eigen_t()) const {
+      return sqrt(eigen(opt));
     }
 
     /**
