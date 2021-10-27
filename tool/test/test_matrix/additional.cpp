@@ -22,14 +22,33 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(fixed, 1){
   prologue_print();
   typedef /*typename*/ Matrix_Fixed<content_t, SIZE> fixed_t;
   fixed_t _A(*A);
-  matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta((*A) * (*A) * (*A), _A * _A * _A, ACCEPTABLE_DELTA_DEFAULT);
+  matrix_compare(*A, _A);
+  matrix_compare((*A) * (*A) * (*A), _A * _A * _A);
+
+  {
+    fixed_t _A2(_A); // different from matrix_t(matrix_t), it's deep copy.
+    fixed_t::super_t _A2_shallow(_A2);
+    matrix_compare(_A, _A2);
+    matrix_compare(_A2, _A2_shallow);
+
+    _A2(0, 0) += 1;
+    for(unsigned int i(0), i_end(_A.rows()); i < i_end; ++i){
+      for(unsigned int j(0), j_end(_A.columns()); j < j_end; ++j){
+        BOOST_REQUIRE((_A(i, j) == _A2(i, j)) ^ ((i == 0) && (j == 0)));
+      }
+    }
+    matrix_compare(_A2, _A2_shallow);
+
+    _A2_shallow = _A; // deep copy expected, being different from matrix_t
+    matrix_compare(_A, _A2_shallow);
+    matrix_compare(_A2, _A2_shallow);
+  }
 
   typedef /*typename*/ Matrix_Fixed<Complex<content_t>, SIZE> cfixed_t;
   cfixed_t _Ac1(*A);
   cfixed_t _Ac2(_Ac1.copy());
-  matrix_compare_delta(_A, _Ac1, ACCEPTABLE_DELTA_DEFAULT);
-  matrix_compare_delta(_A, _Ac2, ACCEPTABLE_DELTA_DEFAULT);
+  matrix_compare(_A, _Ac1);
+  matrix_compare(_A, _Ac2);
 
   try{
     fixed_t inv(_A.inverse());

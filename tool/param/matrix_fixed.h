@@ -127,7 +127,10 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
      */
     ~Array2D_Fixed(){}
 
-    // Assigners, which performs deep copy
+    /**
+     * Assigners, which performs deep copy
+     * This is different from Array2D_Dense::operator=(const self_t &) doing shallow copy
+     */
     self_t &operator=(const self_t &rhs) noexcept {
       if(this != &rhs){
         super_t::m_rows = rhs.m_rows;
@@ -137,6 +140,10 @@ class Array2D_Fixed : public Array2D<T, Array2D_Fixed<T, nR, nC> > {
       return *this;
     }
 
+    /**
+     * Assigners for different type, which performs deep copy
+     * This is same as Array2D_Dense::operator=(const self_t &)
+     */
     template <class T2>
     self_t &operator=(const Array2D_Frozen<T2> &array){
       super_t::m_rows = array.rows();
@@ -250,9 +257,7 @@ class Matrix_Fixed
 
   protected:
     Matrix_Fixed(const storage_t &storage) noexcept
-        : buf_t(), super_t(storage_t(buf_t::buf)) {
-      super_t::storage = storage;
-    }
+        : buf_t(), super_t(storage_t(buf_t::buf) = storage) {}
 
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix;
@@ -286,9 +291,7 @@ class Matrix_Fixed
      * Copy constructor generating deep copy.
      */
     Matrix_Fixed(const self_t &matrix) noexcept
-        : buf_t(), super_t(storage_t(buf_t::buf)) {
-      super_t::storage = matrix.storage;
-    }
+        : buf_t(), super_t(storage_t(buf_t::buf) = matrix.storage) {}
 
     template <class T2, class Array2D_Type2, class ViewType2>
     Matrix_Fixed(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
@@ -300,11 +303,17 @@ class Matrix_Fixed
      */
     virtual ~Matrix_Fixed(){}
 
-    self_t &operator=(const self_t &matrix){
-      super_t::operator=(matrix); // frozen_t::operator=(const frozen_t &) is exactly called.
+    /**
+     * Assigner performing deep copy by Array2D_Fixed::operator=(const Array2D_Fixed &)
+     */
+    self_t &operator=(const self_t &another){
+      super_t::operator=(another); // frozen_t::operator=(const frozen_t &) is exactly called.
       return *this;
     }
 
+    /**
+     * Assigner performing deep copy by Array2D_Fixed::operator=(const Array2D_Frozen &)
+     */
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2> &matrix){
       super_t::operator=(matrix);

@@ -100,12 +100,24 @@ BOOST_AUTO_TEST_CASE(null_copy){
   matrix_t _A, __A(_A);
 }
 
-BOOST_AUTO_TEST_CASE(equal){
+BOOST_AUTO_TEST_CASE(assign){
   prologue_print();
   matrix_t _A;
-  _A = *A;
+  _A = *A; // expect shallow copy due to same type
   BOOST_TEST_MESSAGE("=:" << _A);
   matrix_compare(*A, _A);
+
+  cmatrix_t _Ac;
+  _Ac = _A; // expect deep copy due to same type
+  matrix_compare(_Ac, _A);
+
+  _A(0, 0) += 1;
+  matrix_compare(*A, _A);
+  for(unsigned int i(0), i_end(A->rows()); i < i_end; ++i){
+    for(unsigned int j(0), j_end(A->columns()); j < j_end; ++j){
+      BOOST_REQUIRE((_Ac(i, j) == (*A)(i, j)) ^ ((i == 0) && (j == 0)));
+    }
+  }
 }
 
 BOOST_AUTO_TEST_CASE(copy){
@@ -117,11 +129,7 @@ BOOST_AUTO_TEST_CASE(copy){
   BOOST_TEST_MESSAGE("copy_mod:" << _A);
   for(unsigned int i(0), i_end(A->rows()); i < i_end; ++i){
     for(unsigned int j(0), j_end(A->columns()); j < j_end; ++j){
-      if((i == 0) && (j == 0)){
-        BOOST_REQUIRE(_A(i, j) != (*A)(i, j));
-      }else{
-        BOOST_REQUIRE(_A(i, j) == (*A)(i, j));
-      }
+      BOOST_REQUIRE((_A(i, j) == (*A)(i, j)) ^ ((i == 0) && (j == 0)));
     }
   }
 }

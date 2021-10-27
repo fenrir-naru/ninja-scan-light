@@ -41,7 +41,7 @@
  * but also int used with fixed float for embedded environment.
  * 2) to utilize shallow copy for small memory usage,
  * which is very important for embedded environment.
- * 3) to use views for transpose and partial matrices
+ * 3) to use views for transposed and partial matrices
  * to reduce copies.
  * 4) to use expression template technique
  * for matrix multiplying, adding, and subtracting
@@ -180,7 +180,7 @@ class Array2D : public Array2D_Frozen<T> {
     virtual ~Array2D(){}
 
     /**
-     * Assigner, which performs shallow copy.
+     * Assigner, which performs shallow copy if possible.
      *
      * @param array another one
      * @return (ImplementedT)
@@ -208,7 +208,7 @@ class Array2D : public Array2D_Frozen<T> {
     /**
      * Perform copy
      *
-     * @param is_deep If true, return deep copy, otherwise return shallow copy (just link).
+     * @param is_deep If true, return deep copy if possible, otherwise return shallow copy (just link).
      * @return (ImplementedT) Copy
      */
     virtual ImplementedT copy(const bool &is_deep = false) const = 0;
@@ -353,6 +353,17 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         values = array.values;
       }
       return *this;
+    }
+
+    /**
+     * Assigner for different type, which performs deep copy.
+     *
+     * @param array another one
+     * @return self_t
+     */
+    template <class T2>
+    self_t &operator=(const Array2D_Frozen<T2> &array){
+      return ((*this) = self_t(array));
     }
   protected:
     inline const T &get(
@@ -1254,7 +1265,7 @@ class Matrix_Frozen {
     /**
      * Constructor with storage
      *
-     * @param storage new storage
+     * @param new_storage new storage
      */
     Matrix_Frozen(const storage_t &new_storage)
         : storage(new_storage),
@@ -1393,19 +1404,25 @@ class Matrix_Frozen {
     const_iterator end() const {return const_iterator(*this, rows() * columns());}
 
     /**
-     * Copy constructor generating shallow copy.
+     * Copy constructor generating shallow copy linking to source matrix
      *
-     * @param matrix original
+     * @param another source matrix
      */
-    Matrix_Frozen(const self_t &matrix)
-        : storage(matrix.storage),
-        view(matrix.view){}
+    Matrix_Frozen(const self_t &another)
+        : storage(another.storage),
+        view(another.view){}
 
+		/**
+		 * Constructor with different storage type
+		 */
     template <class T2, class Array2D_Type2>
     Matrix_Frozen(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
         : storage(matrix.storage),
         view(matrix.view) {}
   protected:
+    /**
+     * Constructor with different view
+     */
     template <class ViewType2>
     Matrix_Frozen(const Matrix_Frozen<T, Array2D_Type, ViewType2> &matrix)
         : storage(matrix.storage),
@@ -1441,7 +1458,7 @@ class Matrix_Frozen {
     }
 
     /**
-     * Down cast to Matrix by creating deep copy to make its content changeable
+     * Down cast by creating deep (totally unlinked to this) copy having changeable content
      *
      */
     operator typename builder_t::assignable_t() const {
@@ -1452,16 +1469,24 @@ class Matrix_Frozen {
     }
 
   protected:
-    self_t &operator=(const self_t &matrix){
-      if(this != &matrix){
-        storage = matrix.storage;
-        view = matrix.view;
+    /**
+     * Assigner for subclass to modify storage and view
+     * Its copy storategy is deoendent on storage assigner implementation.
+     */
+    self_t &operator=(const self_t &another){
+      if(this != &another){
+        storage = another.storage;
+        view = another.view;
       }
       return *this;
     }
+    /**
+     * Assigner for subclass to modify storage and view with different storage type
+     * Its copy storategy is deoendent on storage assigner implementation.
+     */
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix){
-      storage = storage_t(matrix.storage);
+      storage = matrix.storage;
       view = matrix.view;
       return *this;
     }
@@ -3506,7 +3531,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     /**
      * Constructor with storage
      *
-     * @param storage new storage
+     * @param new_storage new storage
      */
     Matrix(const storage_t &new_storage) : super_t(new_storage) {}
 
@@ -3619,17 +3644,28 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
 
     /**
-     * Copy constructor generating shallow copy.
+     * Copy constructor generating shallow copy linking to source matrix
      *
-     * @param matrix original
+     * @param another source matrix
      */
-    Matrix(const self_t &matrix)
-        : super_t(matrix){}
+    Matrix(const self_t &another)
+        : super_t(another){}
 
+    /**
+     * Constructor with different storage type
+     * This will be used as Matrix x(Matrix + Matrix) to get calculation results,
+     * where most of calculations are returned in a Matrix_Frozen due to expression template technique.
+     * Another example is Matrix<Complex<double> > (Matrix<double>::getI(N))
+     * to cast real to complex type.
+     */
     template <class T2, class Array2D_Type2>
     Matrix(const Matrix_Frozen<T2, Array2D_Type2, ViewType> &matrix)
         : super_t(matrix) {}
   protected:
+    /**
+     * Constructor with different view
+     * This will be used for view change such as transpose().
+     */
     template <class ViewType2>
     Matrix(const Matrix<T, Array2D_Type, ViewType2> &matrix)
         : super_t(matrix){}
@@ -3665,18 +3701,27 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
   public:
     /**
-     * Assign operator performing shallow copy.
-     * This operation does not have any side effect to another variable which shared the buffer before the operation.
+     * Assigner for the same type matrix
+     * After this operation, another variable which shared the buffer before the operation will be unlinked.
+     * Its modification strategy is dependent on the implementation of storage=(another.storage),
+     * which is called in frozen_t::operator=(const frozen_t &).
+     * For example, storage is a Array2D_Storage, then shallow copy is conducted.
      *
      * @return myself
      */
-    self_t &operator=(const self_t &matrix){
-      super_t::operator=(matrix); // frozen_t::operator=(const frozen_t &) is exactly called
+    self_t &operator=(const self_t &another){
+      super_t::operator=(another); // frozen_t::operator=(const frozen_t &) is exactly called
       return *this;
     }
     /**
-     * Assign operator performing shallow copy.
-     * This operation does not have any side effect to another variable which shared the buffer before the operation.
+     * Assigner for matrix having a different storage type
+     * After this operation, another variable which shared the buffer before the operation will be unlinked.
+     * Its modification strategy is dependent on the implementation of storage=(another.storage),
+     * which is called in frozen_t::operator=(const another_frozen_t &).
+     * For example, storage is a Array2D_Storage, then deep copy is conducted.
+     * This will be used as
+     *   Matrix<Complex<double> > mat_c;
+     *   mat_c = Matrix<double>::getI(N);
      *
      * @return myself
      */
@@ -3820,7 +3865,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     /**
      * Swap rows (bang method).
-     * This operation has a side effect to another variables haring the buffer.
+     * This operation has a side effect to another variables sharing the buffer.
      *
      * @param row1 Target row (1)
      * @param row2 Target row (2)
@@ -3843,7 +3888,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     /**
      * Swap columns (bang method).
-     * This operation has a side effect to another variables haring the buffer.
+     * This operation has a side effect to another variables sharing the buffer.
      *
      * @param column1 Target column (1)
      * @param column2 Target column (2)
