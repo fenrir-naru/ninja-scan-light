@@ -2622,8 +2622,8 @@ class Matrix_Frozen {
       res_t QR(res_t::blank(rows(), rows() + columns()));
       typename res_t::partial_offsetless_t Q(QR.partial(rows(), rows()));
       typename res_t::partial_t R(QR.partial(rows(), columns(), 0, rows()));
-      Q.replace(getI(rows()));
-      R.replace(*this);
+      Q.replace(getI(rows()), false);
+      R.replace(*this, false);
 
       typedef typename builder_t::template resize_t<0, builder_t::row_buffer, 1, 0>::assignable_t Q_t;
       typedef typename builder_t::assignable_t R_t;
@@ -2636,7 +2636,7 @@ class Matrix_Frozen {
 
         for(unsigned int j(0); j < rc_min; j++){
           typename x_buf_t::partial_offsetless_t x(x_buf.partial(rows() - j, 1));
-          x.replace(R.partial(x.rows(), 1, j, j));
+          x.replace(R.partial(x.rows(), 1, j, j), false);
           // x_0 = {(0,0), (1,0), ..., (N-1,0)}^{T}, (N-1)*1
           // x_1 = {(1,1), (2,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
@@ -2661,12 +2661,12 @@ class Matrix_Frozen {
           if(false){ // as definition
             Q_t P(getI(rows()));
             P.pivotMerge(j, j, x * x.adjoint() * -2 / x_dash_abs2);
-            R.replace(R_t(P * R));
-            Q.replace(Q_t(Q * P));
+            R.replace(R_t(P * R), false); // R and Q have partial views, therefore R = P * R, Q = Q * P raise build error.
+            Q.replace(Q_t(Q * P), false);
           }else{ // optimized
             Q_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
-            R.partial(rows() - j, columns(), j, 0).replace(R_t(P * R.partial(rows() - j, columns(), j, 0)));
-            Q.partial(rows(), rows() - j, 0, j).replace(Q_t(Q.partial(rows(), rows() - j, 0, j) * P));
+            R.partial(rows() - j, columns(), j, 0).replace(R_t(P * R.partial(rows() - j, columns(), j, 0)), false);
+            Q.partial(rows(), rows() - j, 0, j).replace(Q_t(Q.partial(rows(), rows() - j, 0, j) * P), false);
           }
         }
       }
@@ -2723,7 +2723,7 @@ class Matrix_Frozen {
       x_buf_t x_buf(x_buf_t::blank(rows() - 1, 1));
       for(unsigned int j(0), j_end(columns() - 2); j < j_end; j++){
         typename x_buf_t::partial_offsetless_t x(x_buf.partial(rows() - (j+1), 1));
-        x.replace(result.partial(x.rows(), 1, j+1, j));
+        x.replace(result.partial(x.rows(), 1, j+1, j), false);
         // x_0 = {(1,0), (2,0), ..., (N-1,0)}^{T}, (N-1)*1
         // x_1 = {(2,1), (3,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
@@ -2749,18 +2749,18 @@ class Matrix_Frozen {
         if(false){ // as definition
           typename builder_t::assignable_t P(getI(rows()));
           P.pivotMerge(j+1, j+1, x * x.adjoint() * -2 / x_dash_abs2);
-          result = (typename builder_t::assignable_t)(P * result * P);
+          result = P * result * P;
           if(transform){(*transform) *= P;}
         }else{ // optimized
           typename builder_t::assignable_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
           typename builder_t::assignable_t PX(P * result.partial(rows() - (j+1), columns(), j+1, 0));
-          result.partial(rows() - (j+1), columns(), j+1, 0).replace(PX);
+          result.partial(rows() - (j+1), columns(), j+1, 0).replace(PX, false);
           typename builder_t::assignable_t PXP(result.partial(rows(), columns()-(j+1), 0, j+1) * P);
-          result.partial(rows(), columns()-(j+1), 0, j+1).replace(PXP);
+          result.partial(rows(), columns()-(j+1), 0, j+1).replace(PXP, false);
           if(transform){
             typename Matrix<T2, Array2D_Type2, ViewType2>::builder_t::assignable_t Pk(
                 transform->partial(rows(), columns() - (j+1), 0, (j+1)) * P);
-            transform->partial(rows(), columns() - (j+1), 0, (j+1)).replace(Pk);
+            transform->partial(rows(), columns() - (j+1), 0, (j+1)).replace(Pk, false);
           }
         }
       }
@@ -2976,21 +2976,21 @@ class Matrix_Frozen {
               unsigned i2((i <= 1) ? 0 : i - 2);
               typename builder_t::template resize_t<3, 0, 0, 1>::assignable_t PX(
                   P * A.partial(3, m - i2, i, i2));
-              A.partial(3, m - i2, i, i2).replace(PX);
+              A.partial(3, m - i2, i, i2).replace(PX, false);
               // P multiplication from right
               unsigned i3((i >= m - 3) ? (i + 3) : (i + 4));
               typename builder_t::template resize_t<0, 3, 1, 0>::assignable_t PXP(
                   A.partial(i3, 3, 0, i) * P);
-              A.partial(i3, 3, 0, i).replace(PXP);
+              A.partial(i3, 3, 0, i).replace(PXP, false);
             }else{ // i == m - 2
               typename builder_t::template resize_t<2, 2, 0, 0>::assignable_t P(
                   ((omega * omega.adjoint()).partial(2, 2) * -2 / omega_abs2) + 1);
               typename builder_t::template resize_t<2, 3, 0, 0>::assignable_t PX(
                   P * A.partial(2, 3, i, i - 1));
-              A.partial(2, 3, i, i - 1).replace(PX);
+              A.partial(2, 3, i, i - 1).replace(PX, false);
               typename builder_t::template resize_t<0, 2, 1, 0>::assignable_t PXP(
                   A.partial(m, 2, 0, i) * P);
-              A.partial(m, 2, 0, i).replace(PXP);
+              A.partial(m, 2, 0, i).replace(PXP, false);
             }
           }
         }
@@ -3666,6 +3666,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
   public:
     /**
      * Assign operator performing shallow copy.
+     * This operation does not have any side effect to another variable which shared the buffer before the operation.
      *
      * @return myself
      */
@@ -3673,6 +3674,12 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       super_t::operator=(matrix); // frozen_t::operator=(const frozen_t &) is exactly called
       return *this;
     }
+    /**
+     * Assign operator performing shallow copy.
+     * This operation does not have any side effect to another variable which shared the buffer before the operation.
+     *
+     * @return myself
+     */
     template <class T2, class Array2D_Type2>
     self_t &operator=(const Matrix<T2, Array2D_Type2, ViewType> &matrix){
       super_t::operator=(matrix); // frozen_t::operator=(const another_frozen_t &) is exactly called
@@ -3813,6 +3820,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     /**
      * Swap rows (bang method).
+     * This operation has a side effect to another variables haring the buffer.
      *
      * @param row1 Target row (1)
      * @param row2 Target row (2)
@@ -3835,6 +3843,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     /**
      * Swap columns (bang method).
+     * This operation has a side effect to another variables haring the buffer.
      *
      * @param column1 Target column (1)
      * @param column2 Target column (2)
@@ -3857,6 +3866,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     /**
      * Replace content
+     * This operation has a side effect to another variable sharing the buffer.
      *
      * @param matrix matrix to be replaced to
      * @param do_check Check matrix size property. The default is true
@@ -3880,9 +3890,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 
     /*
      * operator+=, operator-=, operator*=, operator/= are shortcuts of this->replace((*this) op another).
-     * Be careful, they affect another variable whose reference is the same as (*this).
+     * Be careful, they affect another variable whose referenced buffer is the same as (*this).
      * They are different from (*this) = (this_type)((*this) op another),
-     * which does not affect another variable whose reference is the same as (*this).
+     * which does not affect another variable whose referenced buffer was the same as (*this) before the operation.
      */
 
     /**
