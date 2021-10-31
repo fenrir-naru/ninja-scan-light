@@ -2625,6 +2625,40 @@ class Matrix_Frozen {
       return complex_t::get_real((adjoint() * (*this)).trace(false));
     }
 
+  protected:
+    /**
+     * Convert to a scaled vector having  to be used for Householder transformation
+     *
+     * @param x column vector to be converted (bang method)
+     * @return 2nd power of Frobenius norm of x
+     */
+    template <class Array2D_Type2, class ViewType2>
+    static typename complex_t::real_t householder_vector(
+        Matrix<T, Array2D_Type2, ViewType2> &x){
+      // x = {(0,0), (1,0), ..., (N-1,0)}^{T}
+
+      typename complex_t::real_t x_abs2(x.norm2F());
+      if(x_abs2 == 0){return x_abs2;}
+
+      typename complex_t::real_t x_abs(std::sqrt(x_abs2));
+      typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
+      T rho(x(0, 0) / x_top_abs * -1);
+      // if x(0,0) is real, then rho = -sign(x(0,0)),
+      // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
+
+      // x -> x_dash
+      // x_dash = {(0,0) - \rho |x|, (1,0), ..., (N-1,0)}^{T}
+      // x_dash_abs2
+      //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
+      //   = (x_abs2 + x_top_abs * x_abs) * 2
+      x(0, 0) -= rho * x_abs;
+      typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
+
+      return x_dash_abs2;
+    }
+
+  public:
+
     struct opt_decomposeQR_t {
       bool force_zeros;
       opt_decomposeQR_t()
@@ -2665,31 +2699,18 @@ class Matrix_Frozen {
           // x_0 = {(0,0), (1,0), ..., (N-1,0)}^{T}, (N-1)*1
           // x_1 = {(1,1), (2,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-          typename complex_t::real_t x_abs2(x.norm2F());
+          typename complex_t::real_t x_abs2(householder_vector(x));
+          // x_0 <- {(0,0) - \rho |x|, (1,0), ..., (N-1,0)}^{T}
+          // x_1 <- {(1,1) - \rho |x|, (2,1), ..., (N-1,1)}^{T}, ...
           if(x_abs2 == 0){continue;}
-
-          typename complex_t::real_t x_abs(std::sqrt(x_abs2));
-          typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
-          T rho(x(0, 0) / x_top_abs * -1);
-          // if x(0,0) is real, then rho = -sign(x(0,0)),
-          // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
-
-          // x -> x_dash
-          // x_dash_0 = {(0,0) - \rho |x|, (1,0), ..., (N-1,0)}^{T}
-          // x_dash_1 = {(1,1) - \rho |x|, (2,1), ..., (N-1,1)}^{T}, ...
-          // x_dash_abs2
-          //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
-          //   = (x_abs2 + x_top_abs * x_abs) * 2
-          x(0, 0) -= rho * x_abs;
-          typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
 
           if(false){ // as definition
             Q_t P(getI(rows()));
-            P.pivotMerge(j, j, x * x.adjoint() * -2 / x_dash_abs2);
+            P.pivotMerge(j, j, x * x.adjoint() * -2 / x_abs2);
             R.replace(R_t(P * R), false); // R and Q have partial views, therefore R = P * R, Q = Q * P raise build error.
             Q.replace(Q_t(Q * P), false);
           }else{ // optimized
-            Q_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
+            Q_t P((x * x.adjoint() * -2 / x_abs2) + 1);
             R.partial(rows() - j, columns(), j, 0).replace(R_t(P * R.partial(rows() - j, columns(), j, 0)), false);
             Q.partial(rows(), rows() - j, 0, j).replace(Q_t(Q.partial(rows(), rows() - j, 0, j) * P), false);
           }
@@ -2752,32 +2773,19 @@ class Matrix_Frozen {
         // x_0 = {(1,0), (2,0), ..., (N-1,0)}^{T}, (N-1)*1
         // x_1 = {(2,1), (3,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-        typename complex_t::real_t x_abs2(x.norm2F());
+        typename complex_t::real_t x_abs2(householder_vector(x));
+        // x_0 <- {(1,0) - \rho |x|, (2,0), ..., (N-1,0)}^{T}
+        // x_1 <- {(2,1) - \rho |x|, (3,1), ..., (N-1,1)}^{T}, ...
         if(x_abs2 == 0){continue;}
-
-        typename complex_t::real_t x_abs(std::sqrt(x_abs2));
-        typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
-        T rho(x(0, 0) / x_top_abs * -1);
-        // if x(0,0) is real, then who = -sign(x(0,0)),
-        // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
-
-        // x -> x_dash
-        // x_dash_0 = {(1,0) - \rho |x|, (2,0), ..., (N-1,0)}^{T}
-        // x_dash_1 = {(2,1) - \rho |x|, (3,1), ..., (N-1,1)}^{T}, ...
-        // x_dash_abs2
-        //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
-        //   = (x_abs2 + x_top_abs * x_abs) * 2
-        x(0, 0) -= rho * x_abs;
-        typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
 
         // Householder transformation
         if(false){ // as definition
           typename builder_t::assignable_t P(getI(rows()));
-          P.pivotMerge(j+1, j+1, x * x.adjoint() * -2 / x_dash_abs2);
+          P.pivotMerge(j+1, j+1, x * x.adjoint() * -2 / x_abs2);
           result = P * result * P;
           if(transform){(*transform) *= P;}
         }else{ // optimized
-          typename builder_t::assignable_t P((x * x.adjoint() * -2 / x_dash_abs2) + 1);
+          typename builder_t::assignable_t P((x * x.adjoint() * -2 / x_abs2) + 1);
           typename builder_t::assignable_t PX(P * result.partial(rows() - (j+1), columns(), j+1, 0));
           result.partial(rows() - (j+1), columns(), j+1, 0).replace(PX, false);
           typename builder_t::assignable_t PXP(result.partial(rows(), columns()-(j+1), 0, j+1) * P);
@@ -2914,10 +2922,7 @@ class Matrix_Frozen {
       // 固有値の計算
 #define lambda(i) result(i, _rows)
 
-      T mu_sum(0), mu_multi(0);
-      typename complex_t::v_t p1, p2;
       int m = _rows;
-      bool first = true;
 
       typename builder_t::assignable_t transform(getI(_rows));
       opt_hessenberg_t opt_A;
@@ -2936,56 +2941,24 @@ class Matrix_Frozen {
           break;
         }
 
-        //μ、μ*の更新(4.143)
-        {
-          typename complex_t::v_t p1_new, p2_new;
-          A.eigen22(m-2, m-2, p1_new, p2_new);
-          if(first ? (first = false) : true){
-            if((p1_new - p1).abs() > p1_new.abs() / 2){
-              if((p2_new - p2).abs() > p2_new.abs() / 2){
-                mu_sum = (p1 + p2).real();
-                mu_multi = (p1 * p2).real();
-              }else{
-                mu_sum = p2_new.real() * 2;
-                mu_multi = pow(p2_new.real(), 2);
-              }
-            }else{
-              if((p2_new - p2).abs() > p2_new.abs() / 2){
-                mu_sum = p1_new.real() * 2;
-                mu_multi = p1_new.real() * p1_new.real();
-              }else{
-                mu_sum = (p1_new + p2_new).real();
-                mu_multi = (p1_new * p2_new).real();
-              }
-            }
-          }
-          p1 = p1_new, p2 = p2_new;
-        }
-
         //ハウスホルダー変換を繰り返す
-        T b1, b2, b3, r;
         for(int i(0); i < m - 1; i++){
-          if(i == 0){ // first
-            b1 = A(0, 0) * A(0, 0) - mu_sum * A(0, 0) + mu_multi + A(0, 1) * A(1, 0);
-            b2 = A(1, 0) * (A(0, 0) + A(1, 1) - mu_sum);
-            b3 = A(2, 1) * A(1, 0);
-          }else{
-            b1 = A(i, i - 1);
-            b2 = A(i + 1, i - 1);
-            b3 = (i == m - 2 ? T(0) : A(i + 2, i - 1));
-          }
-
-          r = ::sqrt((b1 * b1) + (b2 * b2) + (b3 * b3));
-
           typename builder_t::template resize_t<3, 1, 0, 0>::assignable_t omega(3, 1);
-          {
-            omega(0, 0) = b1 + r * (b1 >= T(0) ? 1 : -1);
-            omega(1, 0) = b2;
-            omega(2, 0) = b3;
+          if(i == 0){ // calculate double shift of initial Householder transformation
+            // @see https://people.inf.ethz.ch/arbenz/ewp/Lnotes/chapter4.pdf
+            T trace_22(A(m-2, m-2) + A(m-1, m-1));
+            T det_22(A(m-2, m-2) * A(m-1, m-1) - A(m-2, m-1) * A(m-1, m-2));
+            omega(0, 0) = A(0, 0) * A(0, 0)  + A(0, 1) * A(1, 0) - trace_22 * A(0, 0) + det_22;
+            omega(1, 0) = A(1, 0) * (A(0, 0) + A(1, 1) - trace_22);
+            omega(2, 0) = A(2, 1) * A(1, 0);
+          }else{
+            omega(0, 0) = A(i, i - 1);
+            omega(1, 0) = A(i + 1, i - 1);
+            omega(2, 0) = (i == m - 2 ? T(0) : A(i + 2, i - 1));
             // caution: omega size is 3x3 if i in [0, m-2), however, 2x2 when i == m-2
           }
 
-          typename complex_t::real_t omega_abs2(omega.norm2F());
+          typename complex_t::real_t omega_abs2(householder_vector(omega));
           if(omega_abs2 == 0){continue;}
           //std::cout << "omega_abs(" << m << ") " << omega_abs << std::endl;
 
