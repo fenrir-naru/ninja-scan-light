@@ -1013,23 +1013,23 @@ MAKE_TO_S(Matrix_Frozen)
 };
 %enddef
 
-%define INSTANTIATE_MATRIX_EIGEN2(type, storage, view)
+%define INSTANTIATE_MATRIX_EIGEN2(type, ctype, storage, view)
 %extend Matrix_Frozen<type, storage, view> {
   %typemap(in,numinputs=0)
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D 
-        (Matrix<Complex<type>, Array2D_Dense<Complex<type> > > temp),
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V 
-        (Matrix<Complex<type>, Array2D_Dense<Complex<type> > > temp) %{
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D 
+        (Matrix<ctype, Array2D_Dense<ctype > > temp),
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V 
+        (Matrix<ctype, Array2D_Dense<ctype > > temp) %{
     $1 = &temp;
   %}
   %typemap(argout)
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D,
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V {
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D,
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
   void eigen(
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V, 
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D) const {
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V, 
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D) const {
     typedef typename Matrix_Frozen<type, storage, view >::complex_t::m_t cmat_t;
     cmat_t VD($self->eigen());
     output_V = VD.partial($self->rows(), $self->rows()).copy();
@@ -1041,23 +1041,23 @@ MAKE_TO_S(Matrix_Frozen)
   }
 };
 %enddef
-%define INSTANTIATE_MATRIX_EIGEN(type)
+%define INSTANTIATE_MATRIX_EIGEN(type, ctype)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatViewBase);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatViewBase);
 #if defined(USE_MATRIX_VIEW_FILTER)
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_f);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatView_f);
 #else
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_p);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_pt);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatView_p);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatView_pt);
 #endif
 #endif
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatViewBase);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatViewBase);
 #if defined(USE_MATRIX_VIEW_FILTER)
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_f);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_f);
 #else
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_p);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_t);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_p);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_t);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_pt);
 #endif
 %enddef
 
@@ -1150,8 +1150,9 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
-INSTANTIATE_MATRIX_EIGEN(double);
+INSTANTIATE_MATRIX_EIGEN(double, Complex<double>);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);
+INSTANTIATE_MATRIX_EIGEN(Complex<double>, Complex<double>);
 
 #undef INSTANTIATE_MATRIX_FUNC
 #undef INSTANTIATE_MATRIX_TRANSPOSE

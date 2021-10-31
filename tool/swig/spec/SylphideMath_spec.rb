@@ -380,6 +380,8 @@ shared_examples 'Matrix' do
     let(:mat){{
       :L => mat_type::new(compare_with).map_with_index!{|v, i, j| (i >= j) ? (i == j ? 1 : v) : 0},
       :U => mat_type::new(compare_with).map_with_index!{|v, i, j| (i <= j) ? (i == j ? 1 : v) : 0},
+      :D => mat_type::new(compare_with).map_with_index!{|v, i, j| (i == j) ? v : 0},
+      :Q => mat_type::new(params[:rc][0].times.map{(params[:rc][0] * 2).times.map{gen_elm.call}}).qr[0],
     }}
     it 'supports LU' do
       src = mat_type::new(Matrix[*mat[:L].to_a] * Matrix[*mat[:U].to_a])
@@ -409,6 +411,19 @@ shared_examples 'Matrix' do
         }
       }
     end
+    it 'supports eigenvalue' do
+      mat_q, mat_u = [:Q, :U].collect{|k| Matrix[*mat[k].map{|v| v}.to_a]}
+      expect((mat_q.det - 1).abs).to be < params[:acceptable_delta]
+      expect(mat_u.det).to eq(1)
+      src = mat_q * mat_u * Matrix[*mat[:D].to_a]
+      mat_v, mat_d = mat_type::new(src.to_a).eigen.collect{|item| Matrix[*item.to_a]}
+      expect(mat_d.diagonal?).to be(true)
+      mat_d.row_size.times{|i|
+        (src * mat_v.column_vectors[0] - mat_v.column_vectors[0] * mat_d[0, 0]).each{|v|
+          expect(v.abs).to be < params[:acceptable_delta]
+        }
+      }
+    end
   end
 end
 
@@ -427,10 +442,8 @@ describe SylphideMath::MatrixD do
   describe 'decomposition' do
     let(:compare_with){ params[:rc][0].times.map{params[:rc][0].times.map{gen_elm.call} } }
     let(:mat){{
-      :L => mat_type::new(compare_with).map_with_index!{|v, i, j| (i >= j) ? (i == j ? 1 : v) : 0},
       :U => mat_type::new(compare_with).map_with_index!{|v, i, j| (i <= j) ? (i == j ? 1 : v) : 0},
       :D => mat_type::new(compare_with).map_with_index!{|v, i, j| (i == j) ? v : 0},
-      :Q => mat_type::new(params[:rc][0].times.map{(params[:rc][0] * 2).times.map{gen_elm.call}}).qr[0],
     }}
     it 'supports UD' do
       src = mat_type::new((Matrix[*mat[:U].to_a] * Matrix[*mat[:D].to_a] * Matrix[*mat[:U].t.to_a]).to_a)
@@ -441,19 +454,6 @@ describe SylphideMath::MatrixD do
         expect(mat_u.upper_triangular?).to be(true)
         expect(mat_d.diagonal?).to be(true)
         ((mat_u * mat_d * mat_u.t) - Matrix[*src.to_a]).each{|v|
-          expect(v.abs).to be < params[:acceptable_delta]
-        }
-      }
-    end
-    it 'supports eigenvalue' do
-      mat_q, mat_u = [:Q, :U].collect{|k| Matrix[*mat[k].map{|v| v}.to_a]}
-      expect((mat_q.det - 1).abs).to be < params[:acceptable_delta]
-      expect(mat_u.det).to eq(1)
-      src = mat_q * mat_u * Matrix[*mat[:D].to_a]
-      mat_v, mat_d = mat_type::new(src.to_a).eigen.collect{|item| Matrix[*item.to_a]}
-      expect(mat_d.diagonal?).to be(true)
-      mat_d.row_size.times{|i|
-        (src * mat_v.column_vectors[0] - mat_v.column_vectors[0] * mat_d[0, 0]).each{|v|
           expect(v.abs).to be < params[:acceptable_delta]
         }
       }

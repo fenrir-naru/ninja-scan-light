@@ -2614,6 +2614,17 @@ class Matrix_Frozen {
       static real_t get_abs(const v_t &v) noexcept {
         return v.abs();
       }
+      static bool is_nan_or_infinite(const real_t &v) noexcept {
+#if defined(_MSC_VER)
+        return _isnan(v) || !_finite(v);
+#else
+        return std::isnan(v) || !std::isfinite(v);
+#endif
+      }
+      static bool is_nan_or_infinite(const v_t &v) noexcept {
+        return is_nan_or_infinite(v.real())
+            || is_nan_or_infinite(v.imaginary());
+      }
     };
 
     /**
@@ -2994,11 +3005,7 @@ class Matrix_Frozen {
         }
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 
-#if defined(_MSC_VER)
-        if(_isnan(A(m-1,m-2)) || !_finite(A(m-1,m-2))){
-#else
-        if(std::isnan(A(m-1,m-2)) || !std::isfinite(A(m-1,m-2))){
-#endif
+        if(complex_t::is_nan_or_infinite(A(m-1,m-2))){
           throw std::runtime_error("eigen values calculation failed");
         }
 

@@ -842,14 +842,18 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
   assign_unsymmetric();
   prologue_print();
   try{
-    cmatrix_t eig(A->eigen());
-    BOOST_TEST_MESSAGE("eigen:" << eig);
-    for(unsigned i(0); i < A->rows(); i++){
-      cmatrix_t::partial_t vec(eig.partial(A->rows(), 1, 0, i));
-      BOOST_CHECK_SMALL((vec.adjoint() * vec)(0, 0).abs() - 1, ACCEPTABLE_DELTA_DEFAULT);
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << (vec.transpose() * A->transpose()).transpose());
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * eig(i, A->rows()));
-      matrix_compare_delta((vec.transpose() * A->transpose()).transpose(), vec * eig(i, A->rows()), 1E-6);
+    cmatrix_t src[] = {*A, *rAiB};
+    for(unsigned idx(0); idx < sizeof(src) / sizeof(src[0]); ++idx){
+      cmatrix_t &target(src[idx]);
+      cmatrix_t eig(target.eigen());
+      BOOST_TEST_MESSAGE("eigen:" << eig);
+      for(unsigned i(0); i < target.rows(); i++){
+        cmatrix_t::partial_t vec(eig.partial(target.rows(), 1, 0, i));
+        BOOST_CHECK_SMALL((vec.adjoint() * vec)(0, 0).abs() - 1, ACCEPTABLE_DELTA_DEFAULT);
+        BOOST_TEST_MESSAGE("eigen(" << i << "):" << (vec.transpose() * target.transpose()).transpose());
+        BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * eig(i, target.rows()));
+        matrix_compare_delta(target * vec, vec * eig(i, target.rows()), 1E-6);
+      }
     }
   }catch(std::runtime_error &e){
     BOOST_ERROR("eigen_error:" << e.what());
