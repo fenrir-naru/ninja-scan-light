@@ -337,17 +337,17 @@ struct MatrixBuilder<Matrix_Fixed<T, nR, nC> >
 
 template <
     template <class, class, class> class MatrixT,
-    class T, int nR, int nC, class ViewType>
-struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> > {
+    class T, class T2, int nR, int nC, class ViewType>
+struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Fixed<T2, nR, nC>, ViewType> > {
 
   static const int row_buffer = (MatrixViewProperty<ViewType>::transposed ? nC : nR);
   static const int column_buffer = (MatrixViewProperty<ViewType>::transposed ? nR : nC);
 
   typedef Matrix_Fixed<T, row_buffer, column_buffer> assignable_t;
 
-  template <class T2>
+  template <class T3>
   struct cast_t {
-    typedef Matrix_Fixed<T2, row_buffer, column_buffer> assignable_t;
+    typedef Matrix_Fixed<T3, row_buffer, column_buffer> assignable_t;
   };
 
   template <int nR_add = 0, int nC_add = 0, int nR_multiply = 1, int nC_multiply = 1>
@@ -359,7 +359,7 @@ struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Fixed<T, nR, nC>, ViewType> >
 };
 
 template <
-    class T,
+    class T, class T2, class T3,
     class ViewType,
     int nR_L, int nC_L, class ViewType_L,
     int nR_R, int nC_R, class ViewType_R>
@@ -367,8 +367,8 @@ struct MatrixBuilder_Dependency<
     Matrix_Frozen<
         T,
         Array2D_Operator<T, Array2D_Operator_Multiply_by_Matrix<
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_L, nC_L>, ViewType_L>,
-          Matrix_Frozen<T, Array2D_Fixed<T, nR_R, nC_R>, ViewType_R> > >,
+          Matrix_Frozen<T, Array2D_Fixed<T2, nR_L, nC_L>, ViewType_L>,
+          Matrix_Frozen<T, Array2D_Fixed<T3, nR_R, nC_R>, ViewType_R> > >,
         ViewType> >
     : public MatrixBuilder_Dependency<
         Matrix_Frozen<

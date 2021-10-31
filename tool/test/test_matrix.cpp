@@ -813,6 +813,12 @@ BOOST_AUTO_TEST_CASE(pivot_add){
   }
 }
 
+BOOST_AUTO_TEST_CASE(cast_element){
+  prologue_print();
+  // complex() is the shortcut to generate Matrix<Complex<T>, Array2D<T, ...>, ViewType>
+  matrix_compare(cmatrix_t(*A), A->complex());
+}
+
 BOOST_AUTO_TEST_CASE(eigen22){
   prologue_print();
   Complex<content_t> sigma[2];
@@ -850,7 +856,7 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
       for(unsigned i(0); i < target.rows(); i++){
         cmatrix_t::partial_t vec(eig.partial(target.rows(), 1, 0, i));
         BOOST_CHECK_SMALL((vec.adjoint() * vec)(0, 0).abs() - 1, ACCEPTABLE_DELTA_DEFAULT);
-        BOOST_TEST_MESSAGE("eigen(" << i << "):" << (vec.transpose() * target.transpose()).transpose());
+        BOOST_TEST_MESSAGE("eigen(" << i << "):" << target * vec);
         BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * eig(i, target.rows()));
         matrix_compare_delta(target * vec, vec * eig(i, target.rows()), 1E-6);
       }

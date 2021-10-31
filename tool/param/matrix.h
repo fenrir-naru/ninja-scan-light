@@ -1248,7 +1248,8 @@ class Matrix_Frozen {
     template <class T2, class Array2D_Type2, class ViewType2>
     friend class Matrix_Frozen;
 
-    static char (&check_storage(Array2D_Frozen<T> *) )[1];
+    template <class T2>
+    static char (&check_storage(Array2D_Frozen<T2> *) )[1];
     static const int storage_t_should_be_derived_from_Array2D_Frozen
         = sizeof(check_storage(static_cast<storage_t *>(0)));
 
@@ -1299,7 +1300,10 @@ class Matrix_Frozen {
     T operator()(
         const unsigned int &row,
         const unsigned int &column) const {
-      return view.DELETE_IF_MSC(template) operator()<T, const Array2D_Type>(storage, row, column);
+      // T and Array2D_Type::content_t are not always identical,
+      // for example, T = Complex<double>, Array2D_Type::content_t = double
+      return (T)(view.DELETE_IF_MSC(template) operator()<
+          typename Array2D_Type::content_t, const Array2D_Type>(storage, row, column));
     }
 
     template <class impl_t>
@@ -2627,6 +2631,11 @@ class Matrix_Frozen {
       }
     };
 
+    Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>
+        complex() const noexcept {
+      return Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>(*this);
+    }
+
     /**
      * Calculate the 2nd power of Frobenius norm.
      *
@@ -3051,7 +3060,6 @@ class Matrix_Frozen {
 #else
       // Inverse iteration to compute eigenvectors; 固有ベクトルの計算(逆反復法)
       cmat_t x(cmat_t::getI(_rows));  //固有ベクトル
-      cmat_t A_C_lambda(cmat_t::blank(_rows, _rows));
 
       for(unsigned int j(0); j < _rows; j++){
         /* https://web.archive.org/web/20120702040824/http://www.prefield.com/algorithm/math/eigensystem.html
@@ -3060,14 +3068,10 @@ class Matrix_Frozen {
          * http://www.nrbook.com/a/bookcpdf/c11-7.pdf
          * is also utilized in case some eigenvalues are identical.
          */
-        A_C_lambda.replace(A_, false);
         typename complex_t::v_t approx_lambda(lambda(j));
         approx_lambda += complex_t::get_abs(approx_lambda) * 1E-4; // 0.01%
-        for(unsigned int i(0); i < _rows; i++){
-          A_C_lambda(i, i) -= approx_lambda;
-        }
         typename MatrixBuilder<cmat_t>::template resize_t<0, 0, 1, 2>::assignable_t
-            A_C_lambda_LU(A_C_lambda.decomposeLU());
+            A_C_lambda_LU((A_.complex() - approx_lambda).decomposeLU(false));
 
         cvec_t target_x(cvec_t::blank(_rows, 1));
         target_x.replace(x.columnVector(j), false);
@@ -3099,7 +3103,7 @@ class Matrix_Frozen {
       std::cout << "x * lambda * x^-1:" << x * lambda2 * x.inverse() << std::endl;*/
 
       // Register eigenvectors; 結果の格納
-      result.partial(_rows, _rows).transpose().replace(x.transpose() * transform.transpose(), false);
+      result.partial(_rows, _rows).replace(transform.complex() * x, false);
       // result.partial(_rows, _rows).replace(transform * x, false); is desireable,
       // however, (real) * (complex) may occur and fail to build.
 
