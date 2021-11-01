@@ -359,16 +359,17 @@ struct MatrixBuilder_Dependency<MatrixT<T, Array2D_Fixed<T2, nR, nC>, ViewType> 
 };
 
 template <
-    class T, class T2, class T3,
+    class T, class T_op,
+    class T2, class T3, class T4, class T5,
     class ViewType,
     int nR_L, int nC_L, class ViewType_L,
     int nR_R, int nC_R, class ViewType_R>
 struct MatrixBuilder_Dependency<
     Matrix_Frozen<
         T,
-        Array2D_Operator<T, Array2D_Operator_Multiply_by_Matrix<
-          Matrix_Frozen<T, Array2D_Fixed<T2, nR_L, nC_L>, ViewType_L>,
-          Matrix_Frozen<T, Array2D_Fixed<T3, nR_R, nC_R>, ViewType_R> > >,
+        Array2D_Operator<T_op, Array2D_Operator_Multiply_by_Matrix<
+          Matrix_Frozen<T2, Array2D_Fixed<T3, nR_L, nC_L>, ViewType_L>,
+          Matrix_Frozen<T4, Array2D_Fixed<T5, nR_R, nC_R>, ViewType_R> > >,
         ViewType> >
     : public MatrixBuilder_Dependency<
         Matrix_Frozen<
@@ -508,15 +509,15 @@ struct Matrix_Fixed_multipled_by_Matrix
 };
 
 template <
-    class T, class Array2D_Type, class ViewType,
-    int nR_R, int nC_R>
+    class T_L, class Array2D_Type, class ViewType,
+    class T_R, int nR_R, int nC_R>
 struct Array2D_Operator_Multiply_by_Matrix<
-    Matrix_Frozen<T, Array2D_Type, ViewType>,
-    Matrix_Fixed<T, nR_R, nC_R> > {
-  typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
-  typedef Matrix_Fixed<T, nR_R, nC_R> rhs_t;
+    Matrix_Frozen<T_L, Array2D_Type, ViewType>,
+    Matrix_Fixed<T_R, nR_R, nC_R> > {
+  typedef Matrix_Frozen<T_L, Array2D_Type, ViewType> lhs_t;
+  typedef Matrix_Fixed<T_R, nR_R, nC_R> rhs_t;
   typedef Array2D_Operator_Multiply_by_Matrix<lhs_t, typename rhs_t::frozen_t> op_t;
-  typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > frozen_t;
+  typedef Matrix_Frozen<T_L, Array2D_Operator<T_L, op_t> > frozen_t;
   typedef Matrix_Fixed_multipled_by_Matrix<frozen_t, lhs_t, rhs_t, false, true> mat_t;
   static mat_t generate(const lhs_t &lhs, const rhs_t &rhs) noexcept {
     return mat_t(lhs, rhs);
@@ -524,15 +525,15 @@ struct Array2D_Operator_Multiply_by_Matrix<
 };
 
 template <
-    class T, int nR_L, int nC_L,
-    class Array2D_Type, class ViewType>
+    class T_L, int nR_L, int nC_L,
+    class T_R, class Array2D_Type, class ViewType>
 struct Array2D_Operator_Multiply_by_Matrix<
-    Matrix_Fixed<T, nR_L, nC_L>,
-    Matrix_Frozen<T, Array2D_Type, ViewType> > {
-  typedef Matrix_Fixed<T, nR_L, nC_L> lhs_t;
-  typedef Matrix_Frozen<T, Array2D_Type, ViewType> rhs_t;
+    Matrix_Fixed<T_L, nR_L, nC_L>,
+    Matrix_Frozen<T_R, Array2D_Type, ViewType> > {
+  typedef Matrix_Fixed<T_L, nR_L, nC_L> lhs_t;
+  typedef Matrix_Frozen<T_R, Array2D_Type, ViewType> rhs_t;
   typedef Array2D_Operator_Multiply_by_Matrix<typename lhs_t::frozen_t, rhs_t> op_t;
-  typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > frozen_t;
+  typedef Matrix_Frozen<T_L, Array2D_Operator<T_L, op_t> > frozen_t;
   typedef Matrix_Fixed_multipled_by_Matrix<frozen_t, lhs_t, rhs_t, true, false> mat_t;
   static mat_t generate(const lhs_t &lhs, const rhs_t &rhs) noexcept {
     return mat_t(lhs, rhs);
@@ -540,15 +541,16 @@ struct Array2D_Operator_Multiply_by_Matrix<
 };
 
 template <
-    class T, int nR_L, int nC_L, int nR_R, int nC_R>
+    class T_L, int nR_L, int nC_L,
+    class T_R, int nR_R, int nC_R>
 struct Array2D_Operator_Multiply_by_Matrix<
-    Matrix_Fixed<T, nR_L, nC_L>,
-    Matrix_Fixed<T, nR_R, nC_R> > {
-  typedef Matrix_Fixed<T, nR_L, nC_L> lhs_t;
-  typedef Matrix_Fixed<T, nR_R, nC_R> rhs_t;
+    Matrix_Fixed<T_L, nR_L, nC_L>,
+    Matrix_Fixed<T_R, nR_R, nC_R> > {
+  typedef Matrix_Fixed<T_L, nR_L, nC_L> lhs_t;
+  typedef Matrix_Fixed<T_R, nR_R, nC_R> rhs_t;
   typedef Array2D_Operator_Multiply_by_Matrix<
       typename lhs_t::frozen_t, typename rhs_t::frozen_t> op_t;
-  typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > frozen_t;
+  typedef Matrix_Frozen<T_L, Array2D_Operator<T_L, op_t> > frozen_t;
   typedef Matrix_Fixed_multipled_by_Matrix<frozen_t, lhs_t, rhs_t, true, true> mat_t;
   static mat_t generate(const lhs_t &lhs, const rhs_t &rhs) noexcept {
     return mat_t(lhs, rhs);
@@ -601,15 +603,15 @@ struct MatrixBuilderSpecial<
 
 // { /* for operator/(special(Matrix_Fixed)) */
 template <
-    class T, class Array2D_Type, class ViewType,
-    int nR, int nC, class Result_FrozenT>
+    class T_L, class Array2D_Type, class ViewType,
+    class T_R, int nR, int nC, class Result_FrozenT>
 struct Array2D_Operator_Multiply_by_Matrix<
-    Matrix_Frozen<T, Array2D_Type, ViewType>,
-    Matrix_Fixed_Wrapped<T, nR, nC, Result_FrozenT> > {
-  typedef Matrix_Frozen<T, Array2D_Type, ViewType> lhs_t;
-  typedef Matrix_Fixed_Wrapped<T, nR, nC, Result_FrozenT> rhs_t;
+    Matrix_Frozen<T_L, Array2D_Type, ViewType>,
+    Matrix_Fixed_Wrapped<T_R, nR, nC, Result_FrozenT> > {
+  typedef Matrix_Frozen<T_L, Array2D_Type, ViewType> lhs_t;
+  typedef Matrix_Fixed_Wrapped<T_R, nR, nC, Result_FrozenT> rhs_t;
   typedef Array2D_Operator_Multiply_by_Matrix<lhs_t, Result_FrozenT> op_t;
-  typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > frozen_t;
+  typedef Matrix_Frozen<T_L, Array2D_Operator<T_L, op_t> > frozen_t;
   typedef Matrix_Fixed_multipled_by_Matrix<frozen_t, lhs_t, rhs_t, false, true> mat_t;
   static mat_t generate(const lhs_t &lhs, const rhs_t &rhs) noexcept {
     return mat_t(lhs, rhs);

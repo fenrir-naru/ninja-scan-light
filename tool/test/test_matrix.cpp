@@ -356,6 +356,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       (((A->partial(2, 3, 1, 1).transpose()) * (B->partial(2, 3, 1, 1))) + (A->partial(3, 3, 1, 2))).transpose(),
       "*storage: (+, (*, Mtp(3,2), Mp(2,3)), Mp(3,3))t");
+  matrix_inspect_contains(
+      ((*A) + (*B)).complex(),
+      (format("*storage: (+, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
 
   // optimized cases
   matrix_inspect_contains(

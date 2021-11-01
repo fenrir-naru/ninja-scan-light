@@ -117,6 +117,20 @@ BOOST_AUTO_TEST_CASE(fixed_types){
     matrix_compare(x, src[0] * (src[1] * src[2]));
   }
   BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<Complex<content_t>, Array2D_Operator<Complex<content_t>, Array2D_Operator_Multiply_by_Matrix<
+        Matrix_Frozen<Complex<content_t>, Array2D_Fixed<content_t, 2, 4> >,
+        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 8> >,
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 8, 16> > > > > > > >::builder_t::assignable_t,
+      Matrix_Fixed<Complex<content_t>, 2, 16> >::value));
+  {
+    matrix_t src[] = {gen_mat(2, 4), gen_mat(4, 8), gen_mat(8, 16)};
+    Matrix_Fixed<Complex<content_t>, 2, 16> x(
+        Matrix_Fixed<content_t, 2, 4>(src[0]).complex()
+          * (Matrix_Fixed<content_t, 4, 8>(src[1]) * Matrix_Fixed<content_t, 8, 16>(src[2])));
+    matrix_compare(x, src[0].complex() * (src[1] * src[2]));
+  }
+  BOOST_CHECK((boost::is_same<
       Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
         Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Multiply_by_Matrix<
           Matrix_Frozen<content_t, Array2D_Fixed<content_t, 2, 4> >,
@@ -246,6 +260,9 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
       as_symmetric(*A) * (as_symmetric(*A) * as_symmetric(*A)),
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(
+      as_symmetric(A->complex()) * (as_symmetric(*A) * as_symmetric(*A)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
       (as_symmetric(*A) * as_symmetric(*A)) * (as_symmetric(*A) * as_symmetric(*A)),
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(
@@ -320,6 +337,9 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
       as_symmetric(A_fixed) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(
+      as_symmetric(A_fixed.complex()) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
+      "*view: [Symmetric] [Base]");
+  matrix_inspect_contains(
       (as_symmetric(A_fixed) * as_symmetric(A_fixed)) * (as_symmetric(A_fixed) * as_symmetric(A_fixed)),
       "*view: [Symmetric] [Base]");
   matrix_inspect_contains(
@@ -329,6 +349,7 @@ BOOST_AUTO_TEST_CASE(force_symmetric){
   matrix_compare_delta(as_symmetric(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 
   matrix_inspect_contains(A_fixed / as_symmetric(A_fixed), "*view: [Base]");
+  matrix_inspect_contains(A_fixed.complex() / as_symmetric(A_fixed), "*view: [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / A_fixed_, "*view: [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / as_symmetric(A_fixed), "*view: [Symmetric] [Base]");
   matrix_inspect_contains(as_symmetric(A_fixed) / matrix_t::getI(A->rows()), "*view: [Symmetric] [Base]");
@@ -369,6 +390,9 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
       as_diagonal(*A) * (as_diagonal(*A) * as_diagonal(*A)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
+      as_diagonal(A->complex()) * (as_diagonal(*A) * as_diagonal(*A)),
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
       (as_diagonal(*A) * as_diagonal(*A)) * (as_diagonal(*A) * as_diagonal(*A)),
@@ -445,6 +469,9 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
       as_diagonal(A_fixed) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
+      as_diagonal(A_fixed.complex()) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
+      "*view: [Diagonal] [Base]");
+  matrix_inspect_contains(
       (as_diagonal(A_fixed) * as_diagonal(A_fixed)) * (as_diagonal(A_fixed) * as_diagonal(A_fixed)),
       "*view: [Diagonal] [Base]");
   matrix_inspect_contains(
@@ -454,6 +481,7 @@ BOOST_AUTO_TEST_CASE(force_diagonal){
   matrix_compare_delta(as_diagonal(A_fixed).inverse(), A_fixed_.inverse(), 1E-5);
 
   matrix_inspect_contains(A_fixed / as_diagonal(A_fixed), "*view: [Base]");
+  matrix_inspect_contains(A_fixed.complex() / as_diagonal(A_fixed), "*view: [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / A_fixed_, "*view: [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / as_diagonal(A_fixed), "*view: [Diagonal] [Base]");
   matrix_inspect_contains(as_diagonal(A_fixed) / matrix_t::getI(A->rows()), "*view: [Diagonal] [Base]");

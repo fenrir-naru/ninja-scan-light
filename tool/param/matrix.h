@@ -1869,8 +1869,8 @@ class Matrix_Frozen {
           static const int tag = OPERATOR_NONE;
           typedef void operator_t;
         };
-        template <class OperatorT>
-        struct check2_t<Array2D_Operator<T2, OperatorT> >{
+        template <class T2_op, class OperatorT>
+        struct check2_t<Array2D_Operator<T2_op, OperatorT> >{
           static const int tag = OperatorT::tag;
           typedef OperatorT operator_t;
         };
@@ -3224,12 +3224,12 @@ class Matrix_Frozen {
           return (*this) << op.lhs << ", " << op.rhs;
         }
 
-        template <class T2, class OperatorT, class View_Type2>
+        template <class T2, class T2_op, class OperatorT, class View_Type2>
         format_t &operator<<(
-            const Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> &m){
+            const Matrix_Frozen<T2, Array2D_Operator<T2_op, OperatorT>, View_Type2> &m){
           const char *symbol = "";
           switch(OperatorProperty<
-              Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT>, View_Type2> >::tag){
+              Matrix_Frozen<T2, Array2D_Operator<T2_op, OperatorT>, View_Type2> >::tag){
             case OPERATOR_2_Multiply_Matrix_by_Scalar:
             case OPERATOR_2_Multiply_Matrix_by_Matrix:
               symbol = "*"; break;
@@ -3393,21 +3393,11 @@ struct Array2D_Operator_Multiply_by_Matrix<
  * type(((M1 * M2) * M3) + M4) will be type((M1 * M2) * M3), then type(M1 * M3), and finally type(M1).
  */
 template <
-    class T, class OperatorT, class ViewType>
+    class T, class T_op, class OperatorT, class ViewType>
 struct MatrixBuilder_Dependency<
-    Matrix_Frozen<T, Array2D_Operator<T, OperatorT>, ViewType> > {
+    Matrix_Frozen<T, Array2D_Operator<T_op, OperatorT>, ViewType> > {
 
 private:
-  template <class MatrixT>
-  struct unpack_mat_t {
-    typedef MatrixT mat_t;
-  };
-  template <class T2, class OperatorT2, class ViewType2>
-  struct unpack_mat_t<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> > {
-    typedef typename MatrixBuilder<Matrix_Frozen<T2, Array2D_Operator<T2, OperatorT2>, ViewType2> >
-        ::assignable_t::frozen_t mat_t;
-  };
-
   template <class OperatorT2>
   struct unpack_op_t {
     // consequently, M * S, M + M are captured
@@ -3423,19 +3413,20 @@ private:
         class U = void>
     struct check_op_t {
       typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Multiply_by_Matrix<
-          typename unpack_mat_t<LHS_T>::mat_t,
-          typename unpack_mat_t<RHS_T>::mat_t> >, ViewType> res_t;
+          typename MatrixBuilder<LHS_T>::assignable_t::frozen_t,
+          typename MatrixBuilder<RHS_T>::assignable_t::frozen_t> >, ViewType> res_t;
     };
     template <class U>
     struct check_op_t<void, void, U> {
       // active when both left and right hand side terms are none operator
       // This may be overwritten by (M * M) if its MatrixBuilder specialization exists
-      typedef typename MatrixBuilder<LHS_T>::template view_apply_t<ViewType>::applied_t res_t;
+      typedef typename MatrixBuilder<LHS_T>
+          ::template view_apply_t<ViewType>::applied_t res_t;
     };
     typedef typename check_op_t<>::res_t mat_t;
   };
 
-  typedef MatrixBuilder_Dependency<typename unpack_op_t<OperatorT>::mat_t> gen_t;
+  typedef MatrixBuilder<typename unpack_op_t<OperatorT>::mat_t> gen_t;
 public:
   static const int row_buffer = gen_t::row_buffer;
   static const int column_buffer = gen_t::column_buffer;
