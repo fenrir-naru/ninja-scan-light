@@ -164,18 +164,20 @@ __RINEX_NAV_TEXT__
       
       expect(pvt.position_solved?).to be(true)
       expect(pvt.receiver_time.to_a).to eq([1849, 172413])
-      expect(pvt.llh.to_a[0] / Math::PI * 180).to be_within(1E-9).of(35.6992591268) # latitude
-      expect(pvt.llh.to_a[1] / Math::PI * 180).to be_within(1E-9).of(139.541502292) # longitude
-      expect(pvt.llh.to_a[2])                 .to be_within(1E-4).of(104.279402455) # altitude
+      expect(pvt.llh.to_a).to eq([:lat, :lng, :alt].collect{|k| pvt.llh.send(k)})
+      expect(pvt.llh.lat / Math::PI * 180).to be_within(1E-9).of(35.6992591268) # latitude
+      expect(pvt.llh.lng / Math::PI * 180).to be_within(1E-9).of(139.541502292) # longitude
+      expect(pvt.llh.alt)                 .to be_within(1E-4).of(104.279402455) # altitude
       expect(pvt.receiver_error).to be_within(1E-4).of(1259087.83603)
       expect(pvt.gdop).to be_within(1E-10).of(3.83282723293)
       expect(pvt.pdop).to be_within(1E-10).of(3.30873220653)
       expect(pvt.hdop).to be_within(1E-10).of(2.56304399953)
       expect(pvt.vdop).to be_within(1E-10).of(2.09248996915)
       expect(pvt.tdop).to be_within(1E-10).of(1.9346461648)
-      expect( pvt.velocity.to_a[1]).to be_within(1E-7).of(-0.839546227836) # north
-      expect( pvt.velocity.to_a[0]).to be_within(1E-7).of(-1.05805616381)  # east
-      expect(-pvt.velocity.to_a[2]).to be_within(1E-7).of(-0.12355474006)  # down
+      expect(pvt.velocity.to_a).to eq([:e, :n, :u].collect{|k| pvt.velocity.send(k)})
+      expect(pvt.velocity.north).to be_within(1E-7).of(-0.839546227836) # north
+      expect(pvt.velocity.east) .to be_within(1E-7).of(-1.05805616381)  # east
+      expect(pvt.velocity.down) .to be_within(1E-7).of(-0.12355474006)  # down
       expect(pvt.receiver_error_rate).to be_within(1E-7).of(-1061.92654151)
 
       meas.each{|prn, k, v|
