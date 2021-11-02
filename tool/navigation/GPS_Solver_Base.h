@@ -286,7 +286,7 @@ struct GPS_Solver_Base {
       dop_t() {}
       dop_t(const matrix_t &C_enu)
           : g(std::sqrt(C_enu.trace())),
-          p(std::sqrt(C_enu.trace())),
+          p(std::sqrt(C_enu.partial(3, 3).trace())),
           h(std::sqrt(C_enu.partial(2, 2).trace())),
           v(std::sqrt(C_enu(2, 2))),
           t(std::sqrt(C_enu(3, 3))) {}
