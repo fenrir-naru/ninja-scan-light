@@ -385,17 +385,21 @@ protected:
      * Transform coordinate of design matrix G
      * y = G x + v = G (R x') + v = G' x' + v, where R is a rotation matrix, for example, ECEF to ENU.
      *
+     * @param G_ original design matrix
      * @param rotation_matrix 3 by 3 matrix
      * @return transformed design matrix G'
      */
-    matrix_t rotate_G(const matrix_t &rotation_matrix) const {
-      matrix_t res(G.rows(), 4);
-      res.partial(G.rows(), 3).replace(G.partial(G.rows(), 3) * rotation_matrix);
-      for(unsigned int i(0), i_end(G.rows()); i < i_end; ++i){
-        res(i, 3) = G(i, 3);
-      }
+    static matrix_t rotate_G(const MatrixT &G_, const matrix_t &rotation_matrix){
+      matrix_t res(G_.rows(), 4);
+      res.partial(G_.rows(), 3).replace(G_.partial(G_.rows(), 3) * rotation_matrix);
+      res.partial(G_.rows(), 1, 0, 3).replace(G_.partial(G_.rows(), 1, 0, 3));
       return res;
     }
+
+    matrix_t G_rotated(const matrix_t &rotation_matrix) const {
+      return rotate_G(G, rotation_matrix);
+    }
+
     /**
      * Calculate C matrix, which is required to obtain DOP
      * C = G^t * W * G
