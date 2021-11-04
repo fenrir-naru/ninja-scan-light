@@ -17,7 +17,7 @@ require_relative 'ubx'
 ubx_fname = File::join(File::dirname(__FILE__), '..', 'test_log', '150616_bicycle.ubx')
 ubx = UBX::new(open(ubx_fname))
 
-OUTPUT_ITEMS = [
+OUTPUT_PVT_ITEMS = [
   [:week, proc{|pvt| pvt.receiver_time.week}],
   [:itow_rcv, proc{|pvt| pvt.receiver_time.seconds}],
 ] + [[
@@ -57,7 +57,9 @@ OUTPUT_ITEMS = [
     }.join('_')
   }],
 ] + [[
-  (1..32).collect{|i| ["range_residual(#{i})", "weight(#{i})"]}.flatten,
+  (1..32).collect{|prn|
+    [:range_residual, :weight].collect{|str| "#{str}(#{prn})"} # TODO :azimuth, :elevation
+  }.flatten,
   proc{|pvt|
     next ([nil] * 64) unless pvt.position_solved?
     sats = pvt.used_satellite_list
@@ -70,24 +72,37 @@ OUTPUT_ITEMS = [
 ]] + [[
   [:wssr, :wssr_sf, :weight_max, :slopeH_max, :slopeH_max_PRN, :slopeV_max, :slopeV_max_PRN],
   proc{|pvt| pvt.fd || ([nil] * 7)}
+]] + [[
+  [:wssr_FDE_min, :wssr_FDE_min_PRN, :wssr_FDE_2nd, :wssr_FDE_2nd_PRN],
+  proc{|pvt|
+    [:fde_min, :fde_2nd].collect{|f|
+      info = pvt.send(f)
+      next ([nil] * 2) if (!info) || info.empty?
+      [info[0], info[-3]] 
+    }.flatten
+  }
 ]]
 
-=begin
-# TODO
-[
-  [[:wssr_FDE_min, :wssr_FDE_min_PRN]],
-  [[:wssr_FDE_2nd, :wssr_FDE_2nd_PRN]],
-]
-(1..32).collect{|i| [
-  ["L1_range(#{i})".to_sym, ],
-  ["L2_range(#{i})".to_sym, ],
-  ["L1_rate(#{i})".to_sym, ],
-  ["azimuth(#{i})".to_sym, ],
-  ["elevation(#{i})".to_sym, ],
-]}.flatten(1)
-=end
+C1C = GPS::Measurement::L1_PSEUDORANGE
+D1C = GPS::Measurement::L1_DOPPLER
+R1C = GPS::Measurement::L1_RANGE_RATE
 
-puts OUTPUT_ITEMS.transpose[0].flatten.join(',')
+OUTPUT_MEAS_ITEMS = [[
+  (1..32).collect{|prn|
+    [:L1_range, :L1_rate].collect{|str| "#{str}(#{prn})"}
+  }.flatten,
+  proc{|meas|
+    meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
+    (1..32).collect{|prn|
+      [
+        meas_hash[[prn, C1C]], 
+        meas_hash[[prn, R1C]] || ((GPS::SpaceNode.L1_WaveLength * meas_hash[[prn, D1C]]) rescue nil),
+      ]
+    }
+  }
+]]
+
+puts (OUTPUT_PVT_ITEMS + OUTPUT_MEAS_ITEMS).transpose[0].flatten.join(',')
 
 solver = GPS::Solver::new
 sn = solver.gps_space_node
@@ -100,15 +115,13 @@ run_solver = proc{|meas, t_meas|
     $stderr.puts "XYZ(PRN:#{prn}): #{eph.constellation(t_meas)[0].to_a} (iodc: #{eph.iodc}, iode: #{eph.iode})"
   } if false 
   pvt = solver.solve(meas, t_meas)
-  puts OUTPUT_ITEMS.transpose[1].collect{|task|
-    next unless task
+  puts (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
     task.call(pvt)
-  }.join(',')
+  } + OUTPUT_MEAS_ITEMS.transpose[1].collect{|task|
+    task.call(meas)
+  }).flatten.join(',')
 }
 
-C1C = GPS::Measurement::L1_PSEUDORANGE
-D1C = GPS::Measurement::L1_DOPPLER
-R1C = GPS::Measurement::L1_RANGE_RATE
 eph_list = Hash[*(1..32).collect{|prn|
   eph = GPS::Ephemeris::new
   eph.svid = prn
