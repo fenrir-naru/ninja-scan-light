@@ -147,7 +147,7 @@ __RINEX_NAV_TEXT__
           :receiver_error,
           [:velocity, proc{|xyz| xyz.to_a}],
           :receiver_error_rate,
-          [:G, proc{|mat| mat.to_s}],
+          [:G_enu, proc{|mat| mat.to_s}],
           :fd,
           :fde_min,
           :fde_2nd,
@@ -182,6 +182,7 @@ __RINEX_NAV_TEXT__
       expect(pvt.G.rows).to eq(6)
       expect(pvt.W.rows).to eq(6)
       expect(pvt.delta_r.rows).to eq(6)
+      expect(pvt.G_enu.rows).to eq(6)
       expect(pvt.used_satellites).to eq(6)
       expect(pvt.used_satellite_list).to eq([12,18, 24, 25, 29, 31])
 

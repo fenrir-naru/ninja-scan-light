@@ -411,8 +411,9 @@ template <class FloatT>
 struct GPS_User_PVT 
     : protected GPS_Solver_RAIM_LSR<FloatT,
       GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > >::user_pvt_t {
-  typedef typename GPS_Solver_RAIM_LSR<FloatT, 
-      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > >::user_pvt_t base_t;
+  typedef GPS_Solver_RAIM_LSR<FloatT, 
+      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > > solver_t;
+  typedef typename solver_t::user_pvt_t base_t;
   GPS_User_PVT() : base_t() {}
   GPS_User_PVT(const base_t &base) : base_t(base) {}
   enum {
@@ -447,6 +448,17 @@ struct GPS_User_PVT
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &G() const {return base_t::G;}
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &W() const {return base_t::W;}
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &delta_r() const {return base_t::delta_r;}
+  Matrix<FloatT, Array2D_Dense<FloatT> > G_enu() const {
+    struct proxy_t : public solver_t {
+      static Matrix<FloatT, Array2D_Dense<FloatT> > G_enu(
+          const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &G,
+          const typename solver_t::matrix_t &rot){
+        return solver_t::template linear_solver_t<Matrix<FloatT, Array2D_Dense<FloatT> > >::rotate_G(
+            G, rot);
+      }
+    };
+    return proxy_t::G_enu(base_t::G, base_t::user_position.ecef2enu());
+  }
   
   void fd(const typename base_t::detection_t **out) const {*out = &(base_t::FD);}
   void fde_min(
