@@ -439,7 +439,8 @@ struct GPS_User_PVT
   const FloatT &hdop() const {return base_t::dop.h;}
   const FloatT &vdop() const {return base_t::dop.v;}
   const FloatT &tdop() const {return base_t::dop.t;}
-  std::vector<int> used_satellites() const {return base_t::used_satellite_mask.indices_one();}
+  const unsigned int &used_satellites() const {return base_t::used_satellites;}
+  std::vector<int> used_satellite_list() const {return base_t::used_satellite_mask.indices_one();}
   bool position_solved() const {return base_t::position_solved();}
   bool velocity_solved() const {return base_t::velocity_solved();}
   

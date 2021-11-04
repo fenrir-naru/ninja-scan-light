@@ -142,7 +142,7 @@ __RINEX_NAV_TEXT__
           :error_code,
           :position_solved?,
           [:receiver_time, proc{|v| v.to_a}],
-          :used_satellites,
+          :used_satellite_list,
           [:llh, proc{|llh| llh.to_a.zip([180.0 / Math::PI] * 2 + [1]).collect{|v, sf| v * sf}}],
           :receiver_error,
           [:velocity, proc{|xyz| xyz.to_a}],
@@ -179,6 +179,11 @@ __RINEX_NAV_TEXT__
       expect(pvt.velocity.east) .to be_within(1E-7).of(-1.05805616381)  # east
       expect(pvt.velocity.down) .to be_within(1E-7).of(-0.12355474006)  # down
       expect(pvt.receiver_error_rate).to be_within(1E-7).of(-1061.92654151)
+      expect(pvt.G.rows).to eq(6)
+      expect(pvt.W.rows).to eq(6)
+      expect(pvt.delta_r.rows).to eq(6)
+      expect(pvt.used_satellites).to eq(6)
+      expect(pvt.used_satellite_list).to eq([12,18, 24, 25, 29, 31])
 
       meas.each{|prn, k, v|
         solver.gps_options.exclude(prn)
