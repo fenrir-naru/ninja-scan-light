@@ -143,25 +143,19 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
 #endif
     $1 = temp;
   }
-  %typemap(default) (const unsigned int *buf) {
-    $1 = NULL;
-  }
-  %typemap(in) const unsigned int *buf {
+  %typemap(in) const unsigned int *buf (unsigned int temp[10]) {
 #ifdef SWIGRUBY
-    if(!RB_TYPE_P($input, T_ARRAY)){
-      SWIG_exception(SWIG_TypeError, "array is expected");
+    if((!RB_TYPE_P($input, T_ARRAY))
+        || (RARRAY_LEN($input) < sizeof(temp) / sizeof(temp[0]))){
+      SWIG_exception(SWIG_TypeError, "array is expected, or too short array");
     }
-    $1 = new unsigned int [RARRAY_LEN($input)];
-    for(int i(0); i < RARRAY_LEN($input); ++i){
-      SWIG_Object obj(RARRAY_AREF($input, i));
-      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(obj, &($1[i])))){
+    $1 = temp;
+    for(int i(0); i < sizeof(temp) / sizeof(temp[0]); ++i){
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(RARRAY_AREF($input, i), &($1[i])))){
         SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
       }
     }
 #endif
-  }
-  %typemap(freearg) const unsigned int *buf {
-    delete [] $1;
   }
   %rename("alpha=") set_alpha;
   void set_alpha(const FloatT values[4]){
@@ -196,6 +190,11 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
   MAKE_ACCESSOR(DN, unsigned int);
   MAKE_ACCESSOR(delta_t_LSF, int);
   static GPS_Ionospheric_UTC_Parameters<FloatT> parse(const unsigned int *buf){
+    typedef typename GPS_SpaceNode<FloatT>
+        ::template BroadcastedMessage<unsigned int, 30> parser_t;
+    if((parser_t::subframe_id(buf) != 4) || (parser_t::sv_page_id(buf) != 56)){
+      throw std::runtime_error("Not valid data");
+    }
     typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters::raw_t raw;
     raw.template update<2, 0>(buf);
     GPS_Ionospheric_UTC_Parameters<FloatT> res;
@@ -207,8 +206,17 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
 %inline %{
 template <class FloatT>
 struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris {
+  int iode_subframe3;
+  void invalidate() {
+    this->iodc = this->iode = iode_subframe3 = -1; 
+  }
+  bool is_consistent() const {
+    return !((this->iodc < 0) 
+        || (this->iode != this->iode_subframe3)
+        || ((this->iodc & 0xFF) != this->iode));
+  }
   GPS_Ephemeris() : GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris() {
-    this->iodc = -1;
+    invalidate();
   }
 };
 %}
@@ -244,34 +252,32 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   MAKE_ACCESSOR(omega, FloatT);
   MAKE_ACCESSOR(dot_Omega0, FloatT);
   MAKE_ACCESSOR(dot_i0, FloatT);
-  %typemap(default) (const unsigned int *buf) {
-    $1 = NULL;
-  }
-  %typemap(in) const unsigned int *buf {
+  %typemap(in) const unsigned int *buf (unsigned int temp[10]) {
 #ifdef SWIGRUBY
-    if(!RB_TYPE_P($input, T_ARRAY)){
-      SWIG_exception(SWIG_TypeError, "array is expected");
+    if((!RB_TYPE_P($input, T_ARRAY))
+        || (RARRAY_LEN($input) < sizeof(temp) / sizeof(temp[0]))){
+      SWIG_exception(SWIG_TypeError, "array is expected, or too short array");
     }
-    $1 = new unsigned int [RARRAY_LEN($input)];
-    for(int i(0); i < RARRAY_LEN($input); ++i){
-      SWIG_Object obj(RARRAY_AREF($input, i));
-      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(obj, &($1[i])))){
+    $1 = temp;
+    for(int i(0); i < sizeof(temp) / sizeof(temp[0]); ++i){
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(RARRAY_AREF($input, i), &($1[i])))){
         SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
       }
     }
 #endif
   }
-  %typemap(freearg) const unsigned int *buf {
-    delete [] $1;
-  }
-  int parse(const unsigned int &subframe_no, const unsigned int *buf){
-    int res;
+  %apply int *OUTPUT { int *subframe_no, int *iodc_or_iode };
+  void parse(const unsigned int *buf, int *subframe_no, int *iodc_or_iode){
     typedef typename GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris eph_t;
     typename eph_t::raw_t raw;
     eph_t eph;
-    switch(subframe_no){
+    *subframe_no = GPS_SpaceNode<FloatT>
+        ::template BroadcastedMessage<unsigned int, 30>
+        ::subframe_id(buf);
+    *iodc_or_iode = -1; 
+    switch(*subframe_no){
       case 1: 
-        res = raw.template update_subframe1<2, 0>(buf);
+        *iodc_or_iode = raw.template update_subframe1<2, 0>(buf);
         eph = raw;
         self->WN = eph.WN;
         self->URA = eph.URA;
@@ -284,9 +290,8 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         self->a_f0 = eph.a_f0;
         break;
       case 2: 
-        res = raw.template update_subframe2<2, 0>(buf);
+        *iodc_or_iode = raw.template update_subframe2<2, 0>(buf);
         eph = raw;
-        if((self->iodc < 0) || ((self->iodc & 0xFF) != res)){return -1;}
         self->iode = eph.iode;
         self->c_rs = eph.c_rs;
         self->delta_n = eph.delta_n;
@@ -299,9 +304,8 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         self->fit_interval = eph_t::raw_t::fit_interval(raw.fit_interval_flag, self->iodc);
         break;
       case 3: 
-        res = raw.template update_subframe3<2, 0>(buf);
+        *iodc_or_iode = self->iode_subframe3 = raw.template update_subframe3<2, 0>(buf);
         eph = raw;
-        if((self->iodc < 0) || ((self->iodc & 0xFF) != res)){return -1;}
         self->c_ic = eph.c_ic;
         self->Omega0 = eph.Omega0;
         self->c_is = eph.c_is;
@@ -311,10 +315,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         self->dot_Omega0 = eph.dot_Omega0;
         self->dot_i0 = eph.dot_i0;
         break;
-      default:
-        return -1;
     }
-    return res;
   }
   %typemap(in,numinputs=0) System_XYZ<FloatT, WGS84> & (System_XYZ<FloatT, WGS84> temp) %{
     $1 = &temp;
@@ -331,6 +332,9 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     position = res.position;
     velocity = res.velocity;
   }
+#if defined(SWIGRUBY)
+  %rename("consistent?") is_consistent;
+#endif
 }
 
 %extend GPS_SpaceNode {
