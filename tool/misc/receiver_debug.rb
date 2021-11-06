@@ -14,7 +14,8 @@ require 'GPS.so'
 
 require_relative 'ubx'
 
-ubx_fname = File::join(File::dirname(__FILE__), '..', 'test_log', '150616_bicycle.ubx')
+#ubx_fname = File::join(File::dirname(__FILE__), '..', 'test_log', '150616_bicycle.ubx')
+ubx_fname = File::join(File::dirname(__FILE__), '..', 'test_log', 'log.013.ubx')
 ubx = UBX::new(open(ubx_fname))
 
 OUTPUT_PVT_ITEMS = [
@@ -83,10 +84,6 @@ OUTPUT_PVT_ITEMS = [
   }
 ]]
 
-C1C = GPS::Measurement::L1_PSEUDORANGE
-D1C = GPS::Measurement::L1_DOPPLER
-R1C = GPS::Measurement::L1_RANGE_RATE
-
 OUTPUT_MEAS_ITEMS = [[
   (1..32).collect{|prn|
     [:L1_range, :L1_rate].collect{|str| "#{str}(#{prn})"}
@@ -94,10 +91,9 @@ OUTPUT_MEAS_ITEMS = [[
   proc{|meas|
     meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
     (1..32).collect{|prn|
-      [
-        meas_hash[[prn, C1C]], 
-        meas_hash[[prn, R1C]] || ((GPS::SpaceNode.L1_WaveLength * meas_hash[[prn, D1C]]) rescue nil),
-      ]
+      [:L1_PSEUDORANGE, [:L1_DOPPLER, GPS::SpaceNode.L1_WaveLength]].collect{|k, sf|
+        meas_hash[[prn, GPS::Measurement.const_get(k)]] * (sf || 1) rescue nil
+      }
     }
   }
 ]]
@@ -122,38 +118,14 @@ run_solver = proc{|meas, t_meas|
   }).flatten.join(',')
 }
 
-eph_list = Hash[*(1..32).collect{|prn|
-  eph = GPS::Ephemeris::new
-  eph.svid = prn
-  [prn, eph]
-}.flatten(1)]
-ubx_kind = Hash::new(0)
-
-t_meas = nil
-while packet = ubx.read_packet
-  ubx_kind[packet[2..3]] += 1
-  case packet[2..3]
-  when [0x02, 0x10] # RXM-RAW
-    msec, week = [[0, 4, "V"], [4, 2, "v"]].collect{|offset, len, str|
-      packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
-    }
-    t_meas = GPS::Time::new(week, msec.to_f / 1000)
-    meas = GPS::Measurement::new
-    packet[6 + 6].times{|i|
-      prange, doppler, prn = [[16, 8, "d"], [24, 4, "f"], [28, 1, "C"]].collect{|offset, len, str|
-        packet.slice(6 + offset + (i * 24), len).pack("C*").unpack(str)[0]
-      }
-      meas.add(prn, C1C, prange)
-      meas.add(prn, D1C, doppler)
-    }
-    run_solver.call(meas, t_meas)
-  when [0x02, 0x15] # RXM-RAWX
-  when [0x02, 0x11] # RXM-SFRB
-    prn = packet[6 + 1]
+register_ephemeris = proc{
+  eph_list = Hash[*(1..32).collect{|prn|
+    eph = GPS::Ephemeris::new
+    eph.svid = prn
+    [prn, eph]
+  }.flatten(1)]
+  proc{|t_meas, prn, bcast_data|
     next unless eph = eph_list[prn]
-    bcast_data = packet.slice(6 + 2, 40).each_slice(4).collect{|v|
-      (v.pack("C*").unpack("V")[0] & 0xFFFFFF) << 6
-    }
     subframe, iodc_or_iode = eph.parse(bcast_data)
     if iodc_or_iode < 0 then
       begin
@@ -171,7 +143,78 @@ while packet = ubx.read_packet
       sn.register_ephemeris(prn, eph)
       eph.invalidate
     end
+  }
+}.call
+ubx_kind = Hash::new(0)
+
+t_meas = nil
+while packet = ubx.read_packet
+  ubx_kind[packet[2..3]] += 1
+  case packet[2..3]
+  when [0x02, 0x10] # RXM-RAW
+    msec, week = [[0, 4, "V"], [4, 2, "v"]].collect{|offset, len, str|
+      packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
+    }
+    t_meas = GPS::Time::new(week, msec.to_f / 1000)
+    meas = GPS::Measurement::new
+    packet[6 + 6].times{|i|
+      loader = proc{|offset, len, str|
+        ary = packet.slice(6 + offset + (i * 24), len)
+        str ? ary.pack("C*").unpack(str)[0] : ary
+      }
+      prn = loader.call(28, 1)[0]
+      {
+        :L1_PSEUDORANGE => [16, 8, "E"],
+        :L1_DOPPLER => [24, 4, "e"],
+      }.each{|k, prop|
+        meas.add(prn, GPS::Measurement.const_get(k), loader.call(*prop))
+      }
+    }
+    run_solver.call(meas, t_meas)
+  when [0x02, 0x15] # RXM-RAWX
+    sec, week = [[0, 8, "E"], [8, 2, "v"]].collect{|offset, len, str|
+      packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
+    }
+    t_meas = GPS::Time::new(week, sec)
+    meas = GPS::Measurement::new
+    packet[6 + 11].times{|i|
+      loader = proc{|offset, len, str, post|
+        v = packet.slice(6 + offset + (i * 32), len)
+        v = str ? v.pack("C*").unpack(str)[0] : v
+        v = post.call(v) if post
+        v
+      }
+      next unless (gnss = loader.call(36, 1)[0]) == 0
+      svid = loader.call(37, 1)[0]
+      trk_stat = loader.call(46, 1)[0]
+      {
+        :L1_PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
+        :L1_PSEUDORANGE_SIGMA => [43, 1, nil, proc{|v|
+          (trk_stat & 0x1 == 0x1) ? (1E-2 * (v[0] & 0xF)) : nil
+        }],
+        :L1_DOPPLER => [32, 4, "e"],
+        :L1_DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (v[0] & 0xF)}],
+      }.each{|k, prop|
+        next unless v = loader.call(*prop)
+        meas.add(svid, GPS::Measurement.const_get(k), v)
+      }
+    }
+    run_solver.call(meas, t_meas)
+  when [0x02, 0x11] # RXM-SFRB
+    register_ephemeris.call(
+        t_meas,
+        packet[6 + 1],
+        packet.slice(6 + 2, 40).each_slice(4).collect{|v|
+          (v.pack("C*").unpack("V")[0] & 0xFFFFFF) << 6
+        })
   when [0x02, 0x13] # RXM-SFRBX
+    next unless (gnss = packet[6]) == 0
+    register_ephemeris.call(
+        t_meas,
+        packet[6 + 1],
+        packet.slice(6 + 8, 4 * packet[6 + 4]).each_slice(4).collect{|v|
+          v.pack("C*").unpack("V")[0]
+        })
   end
 end
 $stderr.puts ubx_kind.inspect
