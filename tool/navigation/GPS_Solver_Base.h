@@ -383,15 +383,20 @@ protected:
         : G(G_), W(W_), delta_r(delta_r_) {}
     /**
      * Transform coordinate of design matrix G
-     * y = G x + v = G (R x') + v = G' x' + v, where R is a rotation matrix, for example, ECEF to ENU.
+     * y = G x + v = G (R^{-1} x') + v = (G R^t) x' + v = G' x' + v,
+     * where R x = x' and R is a rotation matrix.
+     * For example, x is in ECEF with G being calculated in ECEF,
+     * and if x' in ENU is required,
+     * then, R is the ecef2enu matrix, because x' = ecef2enu x.
      *
      * @param G_ original design matrix
-     * @param rotation_matrix 3 by 3 matrix
+     * @param rotation_matrix 3 by 3 rotation matrix
      * @return transformed design matrix G'
      */
     static matrix_t rotate_G(const MatrixT &G_, const matrix_t &rotation_matrix){
       matrix_t res(G_.rows(), 4);
-      res.partial(G_.rows(), 3).replace(G_.partial(G_.rows(), 3) * rotation_matrix);
+      res.partial(G_.rows(), 3).replace(
+          G_.partial(G_.rows(), 3) * rotation_matrix.transpose());
       res.partial(G_.rows(), 1, 0, 3).replace(G_.partial(G_.rows(), 1, 0, 3));
       return res;
     }
@@ -411,20 +416,21 @@ protected:
     }
     /**
      * Transform coordinate of matrix C, which will be used to calculate HDOP/VDOP
-     * C' = (G * R)^t W * (G * R) = R^t * G^t * W * G * R = R^t * C * R,
+     * C' = (G * R^t)^t W * (G * R^t) = R * G^t * W * G * R^t = R * C * R^t,
      * where R is a rotation matrix, for example, ECEF to ENU.
      *
-     * @param rotation_matrix 3 by 3 matrix
+     * @param rotation_matrix 3 by 3 rotation matrix
      * @return transformed matrix C'
+     * @see rotate_G
      */
     static matrix_t rotate_C(const matrix_t &C, const matrix_t &rotation_matrix){
       matrix_t res(4, 4);
       res.partial(3, 3).replace( // upper left
-          rotation_matrix.transpose() * C.partial(3, 3) * rotation_matrix);
+          rotation_matrix * C.partial(3, 3) * rotation_matrix.transpose());
       res.partial(3, 1, 0, 3).replace( // upper right
-          rotation_matrix.transpose() * C.partial(3, 1, 0, 3));
+          rotation_matrix * C.partial(3, 1, 0, 3));
       res.partial(1, 3, 3, 0).replace( // lower left
-          C.partial(1, 3, 3, 0) * rotation_matrix);
+          C.partial(1, 3, 3, 0) * rotation_matrix.transpose());
       res(3, 3) = C(3, 3); // lower right
       return res;
     }
@@ -454,17 +460,17 @@ protected:
     }
     /**
      * Transform coordinate of coefficient matrix of solution S
-     * R x' = x = S y; S' = R^{-1} S = R^{T} S, where R is a rotation matrix, for example, ECEF to ENU.
+     * x' = R x = R S y, where R is a rotation matrix, for example, ECEF to ENU.
      * Be careful, R is not ENU to ECEF in the example, which should be consistent to rotate_G().
      *
      * @param S coefficient matrix of solution
-     * @param rotation_matrix 3 by 3 matrix
+     * @param rotation_matrix 3 by 3 rotation matrix
      * @return transformed coefficient matrix S'
-     * @see rotate_G(const matrix_t &)
+     * @see rotate_G
      */
     static matrix_t rotate_S(const matrix_t &S, const matrix_t &rotation_matrix){
       matrix_t res(4, S.columns());
-      res.partial(3, S.columns()).replace(rotation_matrix.transpose() * S.partial(3, S.columns()));
+      res.partial(3, S.columns()).replace(rotation_matrix * S.partial(3, S.columns()));
       for(unsigned int j(0), j_end(S.columns()); j < j_end; ++j){
         res(3, j) = S(3, j);
       }
