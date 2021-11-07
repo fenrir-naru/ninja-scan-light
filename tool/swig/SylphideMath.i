@@ -93,6 +93,29 @@ bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v){
 
 #ifdef SWIGRUBY
 %header {
+static VALUE funcall_throw_if_error(VALUE (*func)(VALUE), VALUE arg) {
+  int state;
+  VALUE res = rb_protect(func, arg, &state);
+  if(state != 0){
+    VALUE e_str(rb_inspect(rb_errinfo()));
+    rb_set_errinfo(Qnil);
+    throw std::runtime_error(std::string(RSTRING_PTR(e_str), RSTRING_LEN(e_str)));
+  }
+  return res;
+}
+static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
+  struct yield_t {
+    const int &argc;
+    const VALUE *argv;
+    static VALUE run(VALUE v){
+      yield_t *arg(reinterpret_cast<yield_t *>(v));
+      return rb_yield_values2(arg->argc, arg->argv);
+    }
+  } arg = {argc, argv};
+  return funcall_throw_if_error(yield_t::run, reinterpret_cast<VALUE>(&arg));
+}
+}
+%header {
 template <class T>
 SWIG_Object to_value(swig_type_info *info, const Complex<T> &v){
   return rb_complex_new(
@@ -518,22 +541,18 @@ struct MatrixUtil {
     struct bracket_read_t {
       static VALUE run(VALUE v) {
         VALUE *values = reinterpret_cast<VALUE *>(v);
-        static const ID id_b(rb_intern("[]"));
-        return rb_funcall2(values[0], id_b, 2, &values[1]);
+        static const ID id_func(rb_intern("[]"));
+        return rb_funcall2(values[0], id_func, 2, &values[1]);
       }
-      static bool is_accessible(
-          const VALUE &v, const unsigned int &row = 0, const unsigned int &column = 0) {
-        int state;
-        VALUE values[3] = {v, UINT2NUM(row), UINT2NUM(column)};
-        rb_protect(run, reinterpret_cast<VALUE>(values), &state);
-        return state == 0;
+      static bool is_accessible(const VALUE &v) {
+        static const ID id_func(rb_intern("[]"));
+        return rb_respond_to(v, id_func) != 0;
       }
       static VALUE read(
           const VALUE &v, const unsigned int &row = 0, const unsigned int &column = 0) {
         int state;
         VALUE values[3] = {v, UINT2NUM(row), UINT2NUM(column)};
-        VALUE res = rb_protect(run, reinterpret_cast<VALUE>(values), &state);
-        return (state == 0) ? res : Qnil;
+        return funcall_throw_if_error(run, reinterpret_cast<VALUE>(values));
       }
     };
     const VALUE *value(static_cast<const VALUE *>(src));
@@ -576,7 +595,8 @@ struct MatrixUtil {
       }
     }else if(rb_block_given_p()){
       for(; i_elm < len; i_elm++){
-        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
+        VALUE args[2] = {UINT2NUM(i), UINT2NUM(j)};
+        v_elm = yield_throw_if_error(2, args);
         if(!conv(&v_elm, dst(i, j))){break;}
         if(++j >= c){j = 0; ++i;}
       }
@@ -777,16 +797,21 @@ struct MatrixUtil {
       }
     }
     static void matrix_yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      matrix_assign(rb_yield_values(1, to_value($descriptor(const T &), src)), dst, i, j);
+      VALUE values[] = {to_value($descriptor(const T &), src)};
+      matrix_assign(yield_throw_if_error(1, values), dst, i, j);
     }
     static void matrix_yield_get_with_index(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      matrix_assign(rb_yield_values(3, to_value($descriptor(const T &), src), UINT2NUM(i), UINT2NUM(j)), dst, i, j);
+      VALUE values[] = {to_value($descriptor(const T &), src), UINT2NUM(i), UINT2NUM(j)};
+      matrix_assign(yield_throw_if_error(3, values), dst, i, j);
     }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
       ID id_thisf(rb_frame_this_func()), id_callee(rb_frame_callee());
-      if((id_thisf == rb_intern("map")) || (id_thisf == rb_intern("map!"))){
-        ID with_index[] = {
+      static const ID 
+          id_map(rb_intern("map")), id_mapb(rb_intern("map!")), 
+          id_eachwi(rb_intern("each_with_index"));
+      if((id_thisf == id_map) || (id_thisf == id_mapb)){
+        static const ID with_index[] = {
             rb_intern("map_with_index"), rb_intern("map_with_index!"), 
             rb_intern("collect_with_index"), rb_intern("collect_with_index!")};
         for(int i(0); i < sizeof(with_index) / sizeof(with_index[0]); ++i){
@@ -795,7 +820,7 @@ struct MatrixUtil {
           }
         }
         return matrix_yield_get;
-      }else if(id_callee == rb_intern("each_with_index")){
+      }else if(id_callee == id_eachwi){
         return matrix_yield_with_index;
       }else{
         return matrix_yield;
@@ -894,6 +919,7 @@ MAKE_TO_S(Matrix_Frozen)
     return new Matrix<T, Array2D_Type, ViewType>(res);
   }
 #if defined(SWIGRUBY)
+  %fragment(SWIG_AsVal_frag(unsigned int));
   Matrix(bool (*conv)(const void *src, T &dst), const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
@@ -904,9 +930,19 @@ MAKE_TO_S(Matrix_Frozen)
       MatrixUtil::replace(res, conv, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
-      Matrix<T, Array2D_Type, ViewType> res(
-          NUM2UINT(rb_funcall(*value, id_r, 0, 0)), 
-          NUM2UINT(rb_funcall(*value, id_c, 0, 0)));
+      unsigned int r, c;
+      VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r))
+          || !SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c))){
+        VALUE v_inspect[2] = {rb_inspect(v_r), rb_inspect(v_c)};
+        throw std::runtime_error(
+            std::string("Unexpected length [")
+              .append(RSTRING_PTR(v_inspect[0]), RSTRING_LEN(v_inspect[0]))
+              .append(", ")
+              .append(RSTRING_PTR(v_inspect[1]), RSTRING_LEN(v_inspect[1]))
+              .append("]"));
+      }
+      Matrix<T, Array2D_Type, ViewType> res(r, c);
       MatrixUtil::replace(res, conv, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{

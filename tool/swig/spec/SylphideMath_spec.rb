@@ -29,6 +29,25 @@ shared_examples 'Matrix' do
       expect( mat_type::new(Matrix::build(*params[:rc]){0}).rows ).to equal(params[:rc][0])
       expect( mat_type::new(Matrix::build(*params[:rc]){0}).columns ).to equal(params[:rc][1])
     end
+    it 'accepts (custom class)' do
+      r, c = params[:rc]
+      a_gen = proc{Class.new{
+        define_method(:row_size){r}
+        define_method(:column_size){c}
+        define_method(:[]){|i, j| i + j}
+      }::new}
+      a = a_gen.call
+      expect{ mat_type::new(a) }.not_to raise_error
+      expect( mat_type::new(a).rows ).to equal(params[:rc][0])
+      expect( mat_type::new(a).columns ).to equal(params[:rc][1])
+
+      a.define_singleton_method(:[]){|i, j| raise(IndexError) if i != j; 0}
+      expect{ mat_type::new(a) }.to raise_error(RuntimeError)
+
+      a = a_gen.call
+      a.define_singleton_method(:row_size){-1}
+      expect{ mat_type::new(a) }.to raise_error(RuntimeError)
+    end
     it 'is invoked with I, identity, unit' do
       [:I, :identity, :unit].each{|f|
         expect{ mat_type::send(f, params[:rc][0]) }.not_to raise_error
@@ -46,12 +65,12 @@ shared_examples 'Matrix' do
       expect{ mat_type::new(params[:rc][0], params[:rc][1], compare_with.flatten[0..-2]) }.to raise_error(RuntimeError)
       expect( mat_type::new(params[:rc][0], params[:rc][1], compare_with.flatten + [gen_elm.call]).to_a ).to eq(compare_with)
       expect{ mat_type::new(params[:rc][0], params[:rc][1], compare_with.flatten[0..-2] + [nil]) }.to raise_error(RuntimeError)
-  
+
       expect( mat_type::new(params[:rc][0], params[:rc][1], compare_with).to_a ).to eq(compare_with)
       expect{ mat_type::new(params[:rc][0], params[:rc][1], compare_with[0..-2]) }.to raise_error(RuntimeError)
       expect( mat_type::new(params[:rc][0], params[:rc][1], compare_with + [params[:rc][1].times.map{gen_elm.call}]).to_a ).to eq(compare_with)
       expect( mat_type::new(compare_with).to_a ).to eq(compare_with)
-      
+
       expect( mat_type::new(Matrix[*compare_with]).to_a ).to eq(compare_with)
     end
     it 'sets its elements with {}' do
@@ -59,6 +78,8 @@ shared_examples 'Matrix' do
       expect{ mat_type::new(*params[:rc]){nil}.to_a }.to raise_error(RuntimeError)
       expect{ mat_type::new(compare_with){|i, j| compare_with[i][j]} }.to raise_error(ArgumentError)
       expect{ mat_type::new(Matrix[*compare_with]){|i, j| compare_with[i][j]} }.to raise_error(ArgumentError)
+
+      expect{ mat_type::new(*params[:rc]){raise(IndexError) } }.to raise_error(RuntimeError)
     end
   end
   
