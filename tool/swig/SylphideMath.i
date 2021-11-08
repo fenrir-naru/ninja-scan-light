@@ -34,6 +34,13 @@
   try {
     $action
   } catch (const std::exception& e) {
+#ifdef SWIGRUBY
+    VALUE v_e(rb_errinfo());
+    if(!NIL_P(v_e)){
+      rb_set_errinfo(Qnil);
+      rb_exc_raise(v_e);
+    }
+#endif
     SWIG_exception(SWIG_RuntimeError, e.what());
   }
 }
@@ -96,11 +103,7 @@ bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v){
 static VALUE funcall_throw_if_error(VALUE (*func)(VALUE), VALUE arg) {
   int state;
   VALUE res = rb_protect(func, arg, &state);
-  if(state != 0){
-    VALUE e_str(rb_inspect(rb_errinfo()));
-    rb_set_errinfo(Qnil);
-    throw std::runtime_error(std::string(RSTRING_PTR(e_str), RSTRING_LEN(e_str)));
-  }
+  if(state != 0){throw std::exception();}
   return res;
 }
 static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {

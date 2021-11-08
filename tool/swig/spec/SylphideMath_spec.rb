@@ -42,7 +42,7 @@ shared_examples 'Matrix' do
       expect( mat_type::new(a).columns ).to equal(params[:rc][1])
 
       a.define_singleton_method(:[]){|i, j| raise(IndexError) if i != j; 0}
-      expect{ mat_type::new(a) }.to raise_error(RuntimeError)
+      expect{ mat_type::new(a) }.to raise_error(IndexError)
 
       a = a_gen.call
       a.define_singleton_method(:row_size){-1}
@@ -79,7 +79,7 @@ shared_examples 'Matrix' do
       expect{ mat_type::new(compare_with){|i, j| compare_with[i][j]} }.to raise_error(ArgumentError)
       expect{ mat_type::new(Matrix[*compare_with]){|i, j| compare_with[i][j]} }.to raise_error(ArgumentError)
 
-      expect{ mat_type::new(*params[:rc]){raise(IndexError) } }.to raise_error(RuntimeError)
+      expect{ mat_type::new(*params[:rc]){raise(IndexError) } }.to raise_error(IndexError)
     end
   end
   
