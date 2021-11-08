@@ -88,6 +88,15 @@
     *week = self->week;
     *seconds = self->seconds;
   }
+  %fragment(SWIG_From_frag(GPS_Time<FloatT>),"header") {
+    template <class T>
+    SWIG_Object SWIG_From_dec(GPS_Time)(const T &v);
+    template <>
+    SWIG_Object SWIG_From_dec(GPS_Time)(const GPS_Time<FloatT> &v){
+      return SWIG_NewPointerObj(
+          new GPS_Time<FloatT>(v), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN);
+    }
+  }
 }
 
 %define MAKE_ACCESSOR(name, type)
@@ -218,6 +227,9 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   GPS_Ephemeris() : GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris() {
     invalidate();
   }
+  GPS_Ephemeris(const typename GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris &eph) 
+      : GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris(eph),
+      iode_subframe3(eph.iode) {}
 };
 %}
 %extend GPS_Ephemeris {
@@ -350,10 +362,9 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
       const int &priority_delta = 1){
     self->satellite(prn).register_ephemeris(eph, priority_delta);
   }
-  const GPS_Ephemeris<FloatT> &ephemeris(const int &prn) const {
-    return %reinterpret_cast(
-        %const_cast(self, GPS_SpaceNode<FloatT> *)->satellite(prn).ephemeris(), 
-        const GPS_Ephemeris<FloatT> &);
+  GPS_Ephemeris<FloatT> ephemeris(const int &prn) const {
+    return GPS_Ephemeris<FloatT>(
+        %const_cast(self, GPS_SpaceNode<FloatT> *)->satellite(prn).ephemeris());
   }
   %typemap(out) pierce_point_res_t {
     %append_output(SWIG_From(double)((double)($1.latitude)));
@@ -644,6 +655,112 @@ struct GPS_Solver
 };
 %}
 
+%extend RINEX_Observation {
+  %exception read {
+#ifdef SWIGRUBY
+    if(!rb_block_given_p()){
+      return rb_enumeratorize(self, ID2SYM(rb_intern("read")), argc, argv);
+    }
+#endif
+    $action
+  }
+  %fragment(SWIG_From_frag(GPS_Time<FloatT>));
+}
+%fragment(SWIG_From_frag(int));
+%fragment(SWIG_From_frag(bool));
+%fragment(SWIG_From_frag(double));
+%fragment(SWIG_From_frag(char));
+%inline {
+template <class FloatT>
+struct RINEX_Observation {
+  static void read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    struct reader_t : public RINEX_OBS_Reader<FloatT> {
+      typedef RINEX_OBS_Reader<FloatT> super_t;
+      SWIG_Object header;
+      SWIG_Object obs_types;
+      reader_t(std::istream &in) : RINEX_OBS_Reader<FloatT>(in) {
+#ifdef SWIGRUBY
+        { // header
+          header = rb_hash_new();
+          typedef typename super_t::header_t header_t;
+          for(typename header_t::const_iterator
+              it(super_t::header().begin()), it_end(super_t::header().end());
+              it != it_end; ++it){
+            SWIG_Object types_per_key(rb_ary_new_capa(it->second.size()));
+            for(typename header_t::mapped_type::const_iterator
+                it2(it->second.begin()), it2_end(it->second.end());
+                it2 != it2_end; ++it2){
+              rb_ary_push(types_per_key, rb_str_new_cstr(it2->c_str()));
+            }
+            rb_hash_aset(header, rb_str_new_cstr(it->first.c_str()), types_per_key);
+          }
+        }
+        { // observation types
+          obs_types = rb_hash_new();
+          typedef typename super_t::obs_types_t types_t;
+          for(typename types_t::const_iterator
+              it(super_t::obs_types.begin()), it_end(super_t::obs_types.end());
+              it != it_end; ++it){
+            SWIG_Object types_per_sys(rb_ary_new_capa(it->second.size()));
+            for(typename types_t::mapped_type::const_iterator
+                it2(it->second.begin()), it2_end(it->second.end());
+                it2 != it2_end; ++it2){
+              rb_ary_push(types_per_sys, rb_str_new_cstr(it2->c_str()));
+            }
+            rb_hash_aset(obs_types, SWIG_From(char)(it->first), types_per_sys);
+          }
+        }
+#endif
+      }
+    } reader(fin);
+    while(reader.has_next()){
+      typedef typename reader_t::observation_t obs_t;
+      obs_t obs(reader.next());
+#ifdef SWIGRUBY
+      SWIG_Object res(rb_hash_new());
+      static const SWIG_Object
+          sym_header(ID2SYM(rb_intern("header"))),
+          sym_t(ID2SYM(rb_intern("time"))),
+          sym_clke(ID2SYM(rb_intern("rcv_clock_error"))),
+          sym_meas(ID2SYM(rb_intern("meas"))),
+          sym_meas_types(ID2SYM(rb_intern("meas_types")));
+      rb_hash_aset(res, sym_header, reader.header);
+      rb_hash_aset(res, sym_t, SWIG_From(GPS_Time)(obs.t_epoch));
+      rb_hash_aset(res, sym_clke, SWIG_From(double)((double)obs.receiver_clock_error));
+      SWIG_Object meas(rb_hash_new());
+      for(typename obs_t::per_satellite_t::const_iterator 
+          it(obs.per_satellite.begin()), it_end(obs.per_satellite.end());
+          it != it_end; ++it){
+        SWIG_Object meas_per_sat(rb_ary_new_capa(it->second.size()));
+        int i(0);
+        for(typename obs_t::per_satellite_t::mapped_type::const_iterator 
+            it2(it->second.begin()), it2_end(it->second.end());
+            it2 != it2_end; ++it2, ++i){
+          if(!it2->valid){continue;}
+          rb_ary_store(meas_per_sat, i,
+              rb_ary_new_from_args(3,
+                SWIG_From(double)((double)it2->value),
+                SWIG_From(int)(it2->lli),
+                SWIG_From(int)(it2->ss)));
+        }
+        int offset;
+        char sys_c(reader_t::serial2sys(it->first, offset));
+        rb_hash_aset(meas, 
+            rb_ary_new_from_args(2,
+              SWIG_From(char)(sys_c),
+              SWIG_From(int)(offset)),
+            meas_per_sat);
+      }
+      rb_hash_aset(res, sym_meas, meas);
+      rb_hash_aset(res, sym_meas_types, reader.obs_types);
+      rb_yield_values(1, res);
+#endif
+    }
+  }
+};
+}
+
 #undef MAKE_ACCESSOR
 #undef MAKE_VECTOR2ARRAY
 
@@ -656,6 +773,8 @@ struct GPS_Solver
 %template(Measurement) GPS_Measurement<type>;
 %template(SolverOptions) GPS_SolverOptions<type>;
 %template(Solver) GPS_Solver<type>;
+
+%template(RINEX_Observation) RINEX_Observation<type>;
 %enddef
 
 CONCRETIZE(double);
