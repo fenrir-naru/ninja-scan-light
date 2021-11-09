@@ -68,13 +68,31 @@ struct direct_t {
   }
 };
 
+struct split_r_i_t {
+  matrix_t mat_r, mat_i;
+  template <class T, class Array2D_Type, class ViewType>
+  split_r_i_t(const Matrix_Frozen<Complex<T>, Array2D_Type, ViewType> &mat)
+      : mat_r(mat.rows(), mat.columns()), mat_i(mat.rows(), mat.columns()) {
+    for(unsigned int i(0); i < mat.rows(); ++i){
+      for(unsigned int j(0); j < mat.columns(); ++j){
+        mat_r(i, j) = mat(i, j).real();
+        mat_i(i, j) = mat(i, j).imaginary();
+      }
+    }
+  }
+};
+
 BOOST_FIXTURE_TEST_SUITE(matrix, Fixture<content_t>)
 
-BOOST_AUTO_TEST_CASE(init){
+BOOST_AUTO_TEST_CASE(copy_ctor){
   prologue_print();
   matrix_t _A(*A);
-  BOOST_TEST_MESSAGE("init:" << _A);
+  BOOST_TEST_MESSAGE("copy_ctor:" << _A);
   matrix_compare(*A, _A);
+
+  cmatrix_t _Ac(*A);
+  BOOST_TEST_MESSAGE("copy_ctor(real->complex):" << _Ac);
+  matrix_compare(*A, _Ac);
 }
 
 BOOST_AUTO_TEST_CASE(null_copy){
@@ -82,11 +100,24 @@ BOOST_AUTO_TEST_CASE(null_copy){
   matrix_t _A, __A(_A);
 }
 
-BOOST_AUTO_TEST_CASE(equal){
+BOOST_AUTO_TEST_CASE(assign){
   prologue_print();
-  matrix_t _A = *A;
+  matrix_t _A;
+  _A = *A; // expect shallow copy due to same type
   BOOST_TEST_MESSAGE("=:" << _A);
   matrix_compare(*A, _A);
+
+  cmatrix_t _Ac;
+  _Ac = _A; // expect deep copy due to same type
+  matrix_compare(_Ac, _A);
+
+  _A(0, 0) += 1;
+  matrix_compare(*A, _A);
+  for(unsigned int i(0), i_end(A->rows()); i < i_end; ++i){
+    for(unsigned int j(0), j_end(A->columns()); j < j_end; ++j){
+      BOOST_REQUIRE((_Ac(i, j) == (*A)(i, j)) ^ ((i == 0) && (j == 0)));
+    }
+  }
 }
 
 BOOST_AUTO_TEST_CASE(copy){
@@ -94,6 +125,13 @@ BOOST_AUTO_TEST_CASE(copy){
   matrix_t _A(A->copy());
   BOOST_TEST_MESSAGE("copy:" << _A);
   matrix_compare(*A, _A);
+  _A(0, 0) += 1;
+  BOOST_TEST_MESSAGE("copy_mod:" << _A);
+  for(unsigned int i(0), i_end(A->rows()); i < i_end; ++i){
+    for(unsigned int j(0), j_end(A->columns()); j < j_end; ++j){
+      BOOST_REQUIRE((_A(i, j) == (*A)(i, j)) ^ ((i == 0) && (j == 0)));
+    }
+  }
 }
 
 BOOST_AUTO_TEST_CASE(assign_null_matrix){
@@ -277,6 +315,12 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       A->transpose(),
       (format("*storage: Mt(%1%,%1%)") % SIZE).str());
   matrix_inspect_contains(
+      rAiB->conjugate(),
+      (format("*storage: M~(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
+      rAiB->adjoint(),
+      (format("*storage: M~t(%1%,%1%)") % SIZE).str());
+  matrix_inspect_contains(
       A->partial(2, 3, 1, 1),
       "*storage: Mp(2,3)");
   matrix_inspect_contains(
@@ -312,6 +356,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       (((A->partial(2, 3, 1, 1).transpose()) * (B->partial(2, 3, 1, 1))) + (A->partial(3, 3, 1, 2))).transpose(),
       "*storage: (+, (*, Mtp(3,2), Mp(2,3)), Mp(3,3))t");
+  matrix_inspect_contains(
+      ((*A) + (*B)).complex(),
+      (format("*storage: (+, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
 
   // optimized cases
   matrix_inspect_contains(
@@ -368,33 +415,42 @@ BOOST_AUTO_TEST_CASE(inv_scalar){
 BOOST_AUTO_TEST_CASE(view_property){
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::conjugated);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::offset);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::viewless);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::transpose_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::conjugated);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::offset);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::transpose_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::conjugated);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::offset);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_offsetless_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::partial_t::view_t>::conjugated);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_t::view_t>::offset);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::partial_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::conjugated);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::offset);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_bijective_t::view_t>::variable_size);
 
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::viewless);
   BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::transposed);
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::circular_t::view_t>::conjugated);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_t::view_t>::offset);
   BOOST_CHECK(true  == MatrixViewProperty<matrix_t::circular_t::view_t>::variable_size);
+
+  BOOST_CHECK(false == MatrixViewProperty<matrix_t::conjugate_t::view_t>::conjugated);
+  BOOST_CHECK(true  == MatrixViewProperty<cmatrix_t::conjugate_t::view_t>::conjugated);
 }
 BOOST_AUTO_TEST_CASE(view){
   BOOST_CHECK((boost::is_same<
@@ -449,6 +505,19 @@ BOOST_AUTO_TEST_CASE(view){
       MatrixViewOffset<MatrixViewLoop<MatrixViewOffset<MatrixViewLoop<MatrixViewBase<> > > > > >::value));
 
   BOOST_CHECK((boost::is_same<
+      matrix_t::conjugate_t::view_t,
+      MatrixViewBase<> >::value));
+  BOOST_CHECK((boost::is_same<
+      cmatrix_t::conjugate_t::view_t,
+      MatrixViewConjugate<MatrixViewBase<> > >::value));
+  BOOST_CHECK((boost::is_same<
+      cmatrix_t::conjugate_t::conjugate_t::view_t,
+      MatrixViewBase<> >::value));
+  BOOST_CHECK((boost::is_same<
+      cmatrix_t::conjugate_t::transpose_t::conjugate_t::view_t,
+      MatrixViewTranspose<MatrixViewBase<> > >::value));
+
+  BOOST_CHECK((boost::is_same<
       typename matrix_t::builder_t::template view_apply_t<typename matrix_t::transpose_t::view_t>::applied_t::view_t,
       MatrixViewTranspose<MatrixViewBase<> > >::value));
   BOOST_CHECK((boost::is_same<
@@ -482,20 +551,53 @@ BOOST_AUTO_TEST_CASE(view_inspect){
   BOOST_TEST_MESSAGE(os.str());
   BOOST_CHECK(os.is_equal("[T] [Size](0,0) [Offset](0,0) [Loop](0,0) [Offset](0,0) [Base]"));
 }
-BOOST_AUTO_TEST_CASE(trans){
+BOOST_AUTO_TEST_CASE(transpose){
   assign_linear();
   prologue_print();
   direct_t a(*A);
   a.trans = true;
   matrix_t::transpose_t _A(A->transpose());
-  BOOST_TEST_MESSAGE("trans:" << _A);
+  BOOST_TEST_MESSAGE("t:" << _A);
   matrix_compare(a, _A);
   matrix_t __A(_A.copy());
-  BOOST_TEST_MESSAGE("trans.copy:" << __A);
+  BOOST_TEST_MESSAGE("t.copy:" << __A);
   matrix_compare(a, __A);
   matrix_t::transpose_t::transpose_t ___A(_A.transpose()); // matrix_t::transpose_t::transpose_t = matrix_t
-  BOOST_TEST_MESSAGE("trans.trans:" << ___A);
+  BOOST_TEST_MESSAGE("t.trans:" << ___A);
   matrix_compare(*A, ___A);
+}
+BOOST_AUTO_TEST_CASE(conj){
+  assign_linear();
+  prologue_print();
+  direct_t a(*A), b(*B);
+  cmatrix_t::conjugate_t _AB(rAiB->conjugate());
+  BOOST_TEST_MESSAGE("conj:" << _AB);
+
+  split_r_i_t _AB_ri(_AB);
+  matrix_compare(a, _AB_ri.mat_r);
+  b.scalar = -1;
+  matrix_compare(b, _AB_ri.mat_i);
+
+  cmatrix_t::conjugate_t::conjugate_t __AB(_AB.conjugate()); // cmatrix_t::conjugate_t::conjugate_t = matrix_t
+  BOOST_TEST_MESSAGE("conj.conj:" << __AB);
+  matrix_compare(*rAiB, __AB);
+}
+BOOST_AUTO_TEST_CASE(adjoint){
+  assign_linear();
+  prologue_print();
+  direct_t a(*A), b(*B);
+  cmatrix_t::adjoint_t _AB(rAiB->adjoint());
+  BOOST_TEST_MESSAGE("adj:" << _AB);
+
+  split_r_i_t _AB_ri(_AB);
+  a.trans = true;
+  matrix_compare(a, _AB_ri.mat_r);
+  b.scalar = -1; b.trans = true;
+  matrix_compare(b, _AB_ri.mat_i);
+
+  cmatrix_t::adjoint_t::adjoint_t __AB(_AB.adjoint()); // cmatrix_t::adjoint_t::adjoint_t = matrix_t
+  BOOST_TEST_MESSAGE("conj.conj:" << __AB);
+  matrix_compare(*rAiB, __AB);
 }
 BOOST_AUTO_TEST_CASE(partial){
   assign_linear();
@@ -714,22 +816,53 @@ BOOST_AUTO_TEST_CASE(pivot_add){
   }
 }
 
+BOOST_AUTO_TEST_CASE(cast_element){
+  prologue_print();
+  // complex() is the shortcut to generate Matrix<Complex<T>, Array2D<T, ...>, ViewType>
+  matrix_compare(cmatrix_t(*A), A->complex());
+}
+
+BOOST_AUTO_TEST_CASE(eigen22){
+  prologue_print();
+  Complex<content_t> sigma[2];
+
+  for(unsigned i(0); i < A->rows() - 1; ++i){
+    A->eigen22(i, i, sigma[0], sigma[1]);
+    cmatrix_t cmat(2, 2);
+    cmat.replace(A->partial(2, 2, i, i));
+    Complex<content_t> det[2] = {
+        (cmat - sigma[0]).determinant_minor(),
+        (cmat - sigma[1]).determinant_minor()};
+    BOOST_CHECK_SMALL(det[0].abs(), ACCEPTABLE_DELTA_DEFAULT);
+    BOOST_CHECK_SMALL(det[1].abs(), ACCEPTABLE_DELTA_DEFAULT);
+  }
+
+  for(unsigned i(0); i < rAiB->rows() - 1; ++i){
+    rAiB->eigen22(i, i, sigma[0], sigma[1]);
+    Complex<content_t> det[2] = {
+        (rAiB->partial(2, 2, i, i) - sigma[0]).determinant_minor(),
+        (rAiB->partial(2, 2, i, i) - sigma[1]).determinant_minor()};
+    BOOST_CHECK_SMALL(det[0].abs(), ACCEPTABLE_DELTA_DEFAULT);
+    BOOST_CHECK_SMALL(det[1].abs(), ACCEPTABLE_DELTA_DEFAULT);
+  }
+}
+
 BOOST_AUTO_TEST_CASE_MAY_FAILURES(eigen, 1){
+  assign_unsymmetric();
   prologue_print();
   try{
-    cmatrix_t A_copy(A->rows(), A->columns());
-    for(unsigned i(0); i < A_copy.rows(); i++){
-      for(unsigned j(0); j < A_copy.columns(); j++){
-        A_copy(i, j).real() = (*A)(i, j);
+    cmatrix_t src[] = {*A, *rAiB};
+    for(unsigned idx(0); idx < sizeof(src) / sizeof(src[0]); ++idx){
+      cmatrix_t &target(src[idx]);
+      cmatrix_t eig(target.eigen());
+      BOOST_TEST_MESSAGE("eigen:" << eig);
+      for(unsigned i(0); i < target.rows(); i++){
+        cmatrix_t::partial_t vec(eig.partial(target.rows(), 1, 0, i));
+        BOOST_CHECK_SMALL((vec.adjoint() * vec)(0, 0).abs() - 1, ACCEPTABLE_DELTA_DEFAULT);
+        BOOST_TEST_MESSAGE("eigen(" << i << "):" << target * vec);
+        BOOST_TEST_MESSAGE("eigen(" << i << "):" << vec * eig(i, target.rows()));
+        matrix_compare_delta(target * vec, vec * eig(i, target.rows()), 1E-6);
       }
-    }
-    cmatrix_t _A(A->eigen());
-    BOOST_TEST_MESSAGE("eigen:" << _A);
-    for(unsigned i(0); i < A->rows(); i++){
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << A_copy * _A.partial(A->rows(), 1, 0, i));
-      BOOST_TEST_MESSAGE("eigen(" << i << "):" << _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()));
-      matrix_compare_delta(A_copy * _A.partial(A->rows(), 1, 0, i),
-          _A.partial(A->rows(), 1, 0, i) * _A(i, A->rows()), 1E-4);
     }
   }catch(std::runtime_error &e){
     BOOST_ERROR("eigen_error:" << e.what());
@@ -747,7 +880,8 @@ BOOST_AUTO_TEST_CASE_MAY_FAILURES(sqrt, 1){
   }
 }
 
-void check_LU(const matrix_t &mat){
+template <class MatrixT>
+void check_LU(const MatrixT &mat){
   struct pivot_t {
     unsigned num;
     unsigned *indices;
@@ -757,11 +891,11 @@ void check_LU(const matrix_t &mat){
     }
   } pivot(mat.rows());
 
-  MatrixBuilder<matrix_t, 0, 0, 1, 2>::assignable_t
+  typename MatrixT::builder_t::template resize_t<0, 0, 1, 2>::assignable_t
       LU(mat.decomposeLUP(pivot.num, pivot.indices)),
       LU2(mat.decomposeLU());
   matrix_compare_delta(LU, LU2, ACCEPTABLE_DELTA_DEFAULT);
-  MatrixBuilder<matrix_t, 0, 0, 1, 2>::assignable_t::partial_t
+  typename MatrixT::builder_t::template resize_t<0, 0, 1, 2>::assignable_t::partial_t
       L(LU.partial(LU.rows(), LU.rows(), 0, 0)),
       U(LU.partial(LU.rows(), LU.rows(), 0, LU.rows()));
   BOOST_TEST_MESSAGE("LU(L):" << L);
@@ -775,7 +909,7 @@ void check_LU(const matrix_t &mat){
   }
   BOOST_REQUIRE_EQUAL(true, LU.isLU());
 
-  matrix_t LU_multi(L * U);
+  typename MatrixT::builder_t::assignable_t LU_multi(L * U);
   BOOST_TEST_MESSAGE("LU(L) * LU(U):" << LU_multi);
   // column permutation will possibly be performed
   set<unsigned> unused_columns;
@@ -790,10 +924,7 @@ void check_LU(const matrix_t &mat){
       //cout << *it << endl;
       bool matched(true);
       for(unsigned i(0); i < mat.rows(); i++){
-        content_t delta(mat(i, j) - LU_multi(i, *it));
-        //cerr << delta << endl;
-        if(delta < 0){delta *= -1;}
-        if(delta > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
+        if(std::abs(mat(i, j) - LU_multi(i, *it)) > ACCEPTABLE_DELTA_DEFAULT){matched = false;}
       }
       if(matched && (pivot.indices[j] == *it)){
         //cerr << "matched: " << *it << endl;
@@ -807,25 +938,90 @@ void check_LU(const matrix_t &mat){
 BOOST_AUTO_TEST_CASE(LU){
   prologue_print();
   check_LU(*A);
+  check_LU(*rAiB);
   assign_intermediate_zeros();
   prologue_print();
   check_LU(*A);
+  check_LU(*rAiB);
+}
+
+BOOST_AUTO_TEST_CASE(QR){
+  prologue_print();
+
+  {
+    matrix_t::opt_decomposeQR_t opt;
+    opt.force_zeros = false;
+    matrix_t QR(A->decomposeQR(opt));
+    matrix_t::partial_t
+        Q(QR.partial(QR.rows(), QR.rows(), 0, 0)),
+        R(QR.partial(QR.rows(), QR.columns() - QR.rows(), 0, QR.rows()));
+    BOOST_TEST_MESSAGE("Q:" << Q);
+    BOOST_TEST_MESSAGE("R:" << R);
+
+    matrix_compare_delta(matrix_t::getI(A->rows()), Q * Q.transpose(), ACCEPTABLE_DELTA_DEFAULT);
+    for(unsigned i(1); i < R.rows(); i++){
+      for(unsigned j(0); j < i; j++){
+        BOOST_CHECK_SMALL(std::abs(R(i, j)), ACCEPTABLE_DELTA_DEFAULT);
+      }
+    }
+    matrix_compare_delta(*A, Q * R, ACCEPTABLE_DELTA_DEFAULT);
+  }
+
+  {
+    cmatrix_t::opt_decomposeQR_t opt;
+    opt.force_zeros = false;
+    cmatrix_t QR(rAiB->decomposeQR(opt));
+    cmatrix_t::partial_t
+        Q(QR.partial(QR.rows(), QR.rows(), 0, 0)),
+        R(QR.partial(QR.rows(), QR.columns() - QR.rows(), 0, QR.rows()));
+    BOOST_TEST_MESSAGE("Q:" << Q);
+    BOOST_TEST_MESSAGE("R:" << R);
+
+    matrix_compare_delta(cmatrix_t::getI(rAiB->rows()), Q * Q.adjoint(), ACCEPTABLE_DELTA_DEFAULT);
+    for(unsigned i(1); i < R.rows(); i++){
+      for(unsigned j(0); j < i; j++){
+        BOOST_CHECK_SMALL(std::abs(R(i, j)), ACCEPTABLE_DELTA_DEFAULT);
+      }
+    }
+    matrix_compare_delta(*rAiB, Q * R, ACCEPTABLE_DELTA_DEFAULT);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(UH){
   prologue_print();
   matrix_t U(matrix_t::getI(A->rows()));
-  matrix_t H(A->hessenberg(&U));
+  matrix_t::opt_hessenberg_t opt_H;
+  opt_H.force_zeros = false;
+  matrix_t H(A->hessenberg(&U, opt_H));
 
   BOOST_TEST_MESSAGE("hessen(H):" << H);
   for(unsigned i(2); i < H.rows(); i++){
     for(unsigned j(0); j < (i - 1); j++){
-      BOOST_CHECK_EQUAL(H(i, j), 0);
+      BOOST_CHECK_SMALL(std::abs(H(i, j)), ACCEPTABLE_DELTA_DEFAULT);
     }
   }
   matrix_t _A(U * H * U.transpose());
   BOOST_TEST_MESSAGE("U * H * U^{T}:" << _A);
   matrix_compare_delta(*A, _A, ACCEPTABLE_DELTA_DEFAULT);
+
+  matrix_t H_(A->hessenberg()); // zero clear version with default options
+  matrix_compare_delta(H, H_, ACCEPTABLE_DELTA_DEFAULT);
+
+  cmatrix_t Uc(cmatrix_t::getI(A->rows()));
+  cmatrix_t::opt_hessenberg_t opt_Hc;
+  opt_Hc.force_zeros = false;
+  cmatrix_t Hc(rAiB->hessenberg(&Uc, opt_Hc));
+
+  BOOST_TEST_MESSAGE("hessen(Hc):" << Hc);
+  for(unsigned i(2); i < Hc.rows(); i++){
+    for(unsigned j(0); j < (i - 1); j++){
+      BOOST_CHECK_SMALL(Hc(i, j).abs(), ACCEPTABLE_DELTA_DEFAULT);
+    }
+  }
+
+  cmatrix_t _Ac(Uc * Hc * Uc.adjoint());
+  BOOST_TEST_MESSAGE("U * H * U^{*}:" << _Ac);
+  matrix_compare_delta(*rAiB, _Ac, ACCEPTABLE_DELTA_DEFAULT);
 }
 
 BOOST_AUTO_TEST_CASE(UD){

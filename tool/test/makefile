@@ -72,6 +72,7 @@ $(BUILD_DIR)/%.h.gch : ../%.h
 
 $(BUILD_DIR)/%.o :
 	$(MAKE) $(addsuffix .gch,$(addprefix $(BUILD_DIR)/,$(patsubst ../%.h,%.h,$(filter ../%.h, $^))))
+	mkdir -p $(@D)
 	$(CXX) -c $(CFLAGS) -I$(BUILD_DIR) $(INCLUDES) -o $@ $<
 
 $(BUILD_DIR)/%.out : $(BUILD_DIR)/%.o $(OBJS_COMMON)

@@ -8,8 +8,10 @@
 #define ENABLE_IOSTREAM 1
 
 %{
+#include <string>
 #include <sstream>
 #include <vector>
+#include <exception>
 
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
@@ -25,18 +27,34 @@
 #endif
 %}
 
-//%include std_common.i
+%include std_common.i
 %include std_string.i
 //%include std_vector.i
 %include exception.i
 
+#if !defined(SWIGIMPORTED)
+%header {
+struct native_exception : public std::exception {
+#if defined(SWIGRUBY)
+  int state;
+  native_exception(const int &state_) : std::exception(), state(state_) {}
+  void regenerate() const {rb_jump_tag(state);}
+#else
+  void regenerate() const {}
+#endif
+};
+}
 %exception {
   try {
     $action
+  } catch (const native_exception &e) {
+    e.regenerate();
+    SWIG_fail;
   } catch (const std::exception& e) {
-    SWIG_exception(SWIG_RuntimeError, e.what());
+    SWIG_exception_fail(SWIG_RuntimeError, e.what());
   }
 }
+#endif
 
 %define MAKE_ACCESSOR(name, type)
 %rename(%str(name ## =)) set_ ## name;
@@ -58,56 +76,28 @@ type get_ ## name () {
 };
 %enddef
 
-%header {
-template <class T>
-SWIG_Object to_value(swig_type_info *info, const T &v){
-  return SWIG_NewPointerObj((void *)&v, info, 0);
-}
-template <class T>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, T &v){
-  T *ptr;
-  int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 0) : SWIG_ERROR);
-  if(SWIG_IsOK(res)){
-    if(ptr){v = *ptr;} // if nil, then keep current v
-    if(SWIG_IsNewObj(res)){delete ptr;}
-    return true;
-  }
-  return false;
-}
-template <>
-SWIG_Object to_value(swig_type_info *info, const double &v);
-template <>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v);
-}
-
-%wrapper {
-template <>
-SWIG_Object to_value(swig_type_info *info, const double &v){
-  return SWIG_From(double)(v);
-}
-template <>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v){
-  return SWIG_IsOK(SWIG_AsVal(double)(obj, &v)) ? true : false;
-}
-}
-
 #ifdef SWIGRUBY
 %header {
-template <class T>
-SWIG_Object to_value(swig_type_info *info, const Complex<T> &v){
-  return rb_complex_new(
-      to_value(info, v.real()), 
-      to_value(info, v.imaginary()));
+static VALUE funcall_throw_if_error(VALUE (*func)(VALUE), VALUE arg) {
+  int state;
+  VALUE res = rb_protect(func, arg, &state);
+  if(state != 0){throw native_exception(state);}
+  return res;
 }
-template <class T>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, Complex<T> &v){
-  if(RB_TYPE_P(obj, T_COMPLEX)){
-    return from_value(rb_complex_real(obj), NULL, v.real())
-        && from_value(rb_complex_imag(obj), NULL, v.imaginary());
-  }else{
-    v.imaginary() = T(0);
-    return from_value(obj, NULL, v.real());
-  }
+static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
+  struct yield_t {
+    const int &argc;
+    const VALUE *argv;
+    static VALUE run(VALUE v){
+      yield_t *arg(reinterpret_cast<yield_t *>(v));
+      return rb_yield_values2(arg->argc, arg->argv);
+    }
+  } arg = {argc, argv};
+  return funcall_throw_if_error(yield_t::run, reinterpret_cast<VALUE>(&arg));
+}
+static std::string inspect_str(const VALUE &v){
+  VALUE v_inspect(rb_inspect(v));
+  return std::string(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect));
 }
 }
 #endif
@@ -124,25 +114,86 @@ class Complex;
 
 %copyctor Complex;
 
+%fragment(SWIG_Traits_frag(ComplexGeneric), "header", fragment="StdTraits"){
+// SWIG_Traits_frag(Complex) is invalid, which will be hidden by SWIG_Traits_frag(Complex<T>)
+#ifdef SWIGRUBY
+  namespace swig {
+    template <class T> struct traits< Complex<T> > {
+      typedef value_category category;
+    };
+    template <class T> struct traits_asval< Complex<T> > {
+      typedef Complex<T> value_type;
+      static int asval(VALUE obj, value_type *v) {
+        if(RB_TYPE_P(obj, T_COMPLEX)){
+#if RUBY_API_VERSION_CODE < 20600
+          static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
+          int res = swig::asval(rb_funcall(obj, id_r, 0), &(v->real()));
+          if(!SWIG_IsOK(res)){return res;}
+          return swig::asval(rb_funcall(obj, id_i, 0), &(v->imaginary()));
+#else
+          int res = swig::asval(rb_complex_real(obj), &(v->real()));
+          if(!SWIG_IsOK(res)){return res;}
+          return swig::asval(rb_complex_imag(obj), &(v->imaginary()));
+#endif 
+        }else{
+          v->imaginary() = T(0);
+          return swig::asval(obj, &(v->real()));
+        }
+      }
+    };
+    template <class T> struct traits_from< Complex<T> > {
+      typedef Complex<T> value_type;
+      static VALUE from(const value_type &v) {
+        return rb_complex_new(swig::from(v.real()), swig::from(v.imaginary()));
+      }
+    };
+    template <class T> struct traits_check< Complex<T>, value_category> {
+      static bool check(VALUE obj) {
+        if(RB_TYPE_P(obj, T_COMPLEX)){
+#if RUBY_API_VERSION_CODE < 20600
+          static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
+          return swig::check<T>(rb_funcall(obj, id_r, 0))
+              && swig::check<T>(rb_funcall(obj, id_i, 0));
+#else
+          return swig::check<T>(rb_complex_real(obj))
+              && swig::check<T>(rb_complex_imag(obj));
+#endif
+        }else{
+          return swig::check<T>(obj);
+        }
+      }
+    };
+  }
+#endif
+}
+
 %extend Complex {
+  %fragment(SWIG_Traits_frag(Complex<FloatT>), "header",
+      fragment=SWIG_Traits_frag(FloatT),
+      fragment=SWIG_Traits_frag(ComplexGeneric)){
+    namespace swig {
+      template <>
+      inline swig_type_info *type_info<Complex<FloatT> >() {
+        return $descriptor(Complex<FloatT> *);
+      }
+      template <>
+      inline swig_type_info *type_info<Complex<FloatT> *>() {
+        return $descriptor(Complex<FloatT> *);
+      }
+    }
+  }
+  %fragment(SWIG_Traits_frag(Complex<FloatT>));
   %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const Complex<FloatT> & {
-    void *vptr = 0;
-    Complex<FloatT> temp;
-    $1 = SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
-    $1 = $1 || from_value($input, $1_descriptor, temp);
+    $1 = swig::check<$1_ltype >($input) || swig::check<$*1_ltype >($input);
   }
   %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
-    do{
-      if(SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){break;}
-      if(from_value($input, $1_descriptor, temp)){
-        $1 = &temp;
-        break;
-      }
+    if((!SWIG_IsOK(swig::asptr($input, &$1)))
+        && (!SWIG_IsOK(swig::asval($input, ($1 = &temp))))){
       SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
-    }while(false);
+    }
   }
   %typemap(out) Complex<FloatT> {
-    $result = to_value($&1_descriptor, $1);
+    $result = swig::from($1);
   }
 
   static Complex<FloatT> rectangular(const FloatT &r, const FloatT &i = FloatT(0)) noexcept {
@@ -152,7 +203,7 @@ class Complex;
   MAKE_ACCESSOR(real, FloatT);
   MAKE_ACCESSOR(imaginary, FloatT);
 
-#ifdef SWIGRUBY
+#if defined(SWIGRUBY)
   %alias power "**";
   %alias arg "angle,phase";
   %alias conjugate "conj";
@@ -171,14 +222,16 @@ MAKE_TO_S(Complex);
 
 %define INSTANTIATE_COMPLEX(type, suffix)
 %template(Complex ## suffix) Complex<type>;
-%init %{
-#if SWIGRUBY
-  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
-    VALUE singleton = rb_singleton_class(SwigClassComplex ## suffix ## .klass);
+#if defined(SWIGRUBY)
+%fragment("init"{ComplexInit<type>}, "init") {
+  { /* work around of %alias rectangular "rect"; %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(
+        ((swig_class *)$descriptor(Complex<type> *)->clientdata)->klass);
     rb_define_alias(singleton, "rect", "rectangular");
   }
+}
+%fragment("init"{ComplexInit<type>});
 #endif
-%}
 %enddef
 
 INSTANTIATE_COMPLEX(double, D);
@@ -186,6 +239,152 @@ INSTANTIATE_COMPLEX(double, D);
 #undef INSTANTIATE_COMPLEX
 
 #define DO_NOT_INSTANTIATE_SCALAR_MATRIX
+#define USE_MATRIX_VIEW_FILTER
+
+#if defined(USE_MATRIX_VIEW_FILTER)
+%{
+template <class BaseView = MatrixViewBase<> >
+struct MatrixViewFilter : public BaseView {
+  typedef MatrixViewFilter<BaseView> self_t;
+
+  struct {
+    unsigned int row_offset, column_offset;
+    unsigned int rows, columns;
+    bool transposed;
+    bool conjugated;
+  } prop;
+
+  MatrixViewFilter() : BaseView() {
+    prop.row_offset = prop.column_offset = 0;
+    prop.rows = prop.columns = 0; // to be configured
+    prop.transposed = false;
+    prop.conjugated = false;
+  }
+  MatrixViewFilter(const self_t &view)
+      : BaseView((const BaseView &)view), prop(view.prop) {
+  }
+  
+  void transpose() {
+    prop.transposed = !prop.transposed;
+  }
+  void conjugate() {
+    prop.conjugated = !prop.conjugated;
+  }
+  void partial(
+      const unsigned int &new_rows, const unsigned int &new_columns,
+      const unsigned int &row_offset, const unsigned int &column_offset) {
+    if(prop.transposed){
+      prop.row_offset += column_offset;
+      prop.column_offset += row_offset;
+      prop.rows = new_columns;
+      prop.columns = new_rows;
+    }else{
+      prop.row_offset += row_offset;
+      prop.column_offset += column_offset;
+      prop.rows = new_rows;
+      prop.columns = new_columns;
+    }
+  }
+  
+  template <class T, class Array2D_Type>
+  struct mat_t : public Matrix_Frozen<T, Array2D_Type, self_t> {
+    typedef Matrix_Frozen<T, Array2D_Type, self_t> super_t;
+    mat_t(const Matrix_Frozen<T, Array2D_Type, BaseView> &orig) : super_t(orig) {
+      super_t::view.prop.rows = orig.rows();
+      super_t::view.prop.columns = orig.columns();
+    }
+    mat_t(const Matrix_Frozen<T, Array2D_Type, self_t> &orig) : super_t(orig) {}
+    self_t &view() {return super_t::view;}
+  };
+  
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> transpose(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig){
+    mat_t<T, Array2D_Type> res(orig);
+    res.view().transpose();
+    return res;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> conjugate(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig){
+    return mat_t<T, Array2D_Type>(orig);
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<Complex<T>, Array2D_Type, self_t> conjugate(
+      const Matrix_Frozen<Complex<T>, Array2D_Type, ViewType> &orig){
+    mat_t<Complex<T>, Array2D_Type> res(orig);
+    res.view().conjugate();
+    return res;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> partial(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig,
+      const unsigned int &new_rows, const unsigned int &new_columns,
+      const unsigned int &row_offset, const unsigned int &column_offset) {
+    if(new_rows + row_offset > orig.rows()){
+      throw std::out_of_range("Row size exceeding");
+    }else if(new_columns + column_offset > orig.columns()){
+      throw std::out_of_range("Column size exceeding");
+    }
+    mat_t<T, Array2D_Type> res(orig);
+    res.view().partial(new_rows, new_columns, row_offset, column_offset);
+    return res;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static Matrix_Frozen<T, Array2D_Type, self_t> partial(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig,
+      const unsigned int &new_rows, const unsigned int &new_columns) {
+    return partial(orig, new_rows, new_columns, 0, 0);
+  }
+
+  template<class CharT, class Traits>
+  friend std::basic_ostream<CharT, Traits> &operator<<(
+      std::basic_ostream<CharT, Traits> &out, const self_t &view){
+    out 
+        << (view.prop.transposed 
+          ? (view.prop.conjugated ? "[*] " : "[T] ") 
+          : (view.prop.conjugated ? "[~] " : ""))
+        << "[Size](" << view.prop.rows << "," << view.prop.columns << ") ";
+    if((view.prop.row_offset > 0) || (view.prop.column_offset > 0)){
+      out << "[Offset](" << view.prop.row_offset << "," << view.prop.column_offset << ") ";
+    }
+    return out << (const BaseView &)view;
+  }
+
+  inline const unsigned int rows(
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
+    return prop.transposed ? prop.columns : prop.rows;
+  }
+  inline const unsigned int columns(
+      const unsigned int &_rows, const unsigned int &_columns) const noexcept {
+    return prop.transposed ? prop.rows : prop.columns;
+  }
+
+  template <class T>
+  struct conjugate_t {
+    static T run(const T &v, const bool &conjugated = false){return v;}
+  };
+  template <class T>
+  struct conjugate_t<Complex<T> > {
+    static Complex<T> run(const Complex<T> &v, const bool &conjugated = false){
+      return conjugated ? v.conjugate() : v;
+    }
+  };
+
+  template <class T, class Array2D_Type>
+  inline T operator()(
+      Array2D_Type &storage, const unsigned int &i, const unsigned int &j) const {
+    return conjugate_t<T>::run(
+        prop.transposed
+          ? BaseView::template operator()<T, Array2D_Type>(
+            storage, (j + prop.column_offset), (i + prop.row_offset))
+          : BaseView::template operator()<T, Array2D_Type>(
+            storage, (i + prop.row_offset), (j + prop.column_offset)),
+        prop.conjugated);
+  }
+};
+%}
+#endif /* USE_MATRIX_VIEW_FILTER */
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
 class Matrix_Frozen {
@@ -225,24 +424,234 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     self_t &swapColumns(const unsigned int &column1, const unsigned int &column2);
 };
 
-%inline %{
+%inline {
 typedef MatrixViewBase<> MatViewBase;
+#if defined(USE_MATRIX_VIEW_FILTER)
+typedef MatrixViewFilter<MatrixViewBase<> > MatView_f;
+#else
 typedef MatrixViewTranspose<MatrixViewBase<> > MatView_t;
 typedef MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > MatView_p;
 typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBase<> > > > MatView_pt;
-%}
+#endif
+}
 
 %define INSTANTIATE_MATRIX_FUNC(func_orig, func_new)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatViewBase>;
+#if defined(USE_MATRIX_VIEW_FILTER)
+%template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_f>;
+#else
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_p>;
 %template(func_new) func_orig<T, Array2D_ScaledUnit<T>, MatView_pt>;
 #endif
+#endif
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatViewBase>;
+#if defined(USE_MATRIX_VIEW_FILTER)
+%template(func_new) func_orig<T, Array2D_Dense<T>, MatView_f>;
+#else
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_t>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_p>;
 %template(func_new) func_orig<T, Array2D_Dense<T>, MatView_pt>;
+#endif
 %enddef
+
+%{
+struct MatrixUtil {
+  enum each_which_t {
+    EACH_ALL,
+    EACH_DIAGONAL,
+    EACH_OFF_DIAGONAL,
+    EACH_LOWER,
+    EACH_UPPER,
+    EACH_STRICT_LOWER,
+    EACH_STRICT_UPPER,
+  };
+  template <class T, 
+      class Array2D_Type, class ViewType,
+      class Array2D_Type2 = Array2D_Dense<T>, class ViewType2 = MatrixViewBase<> >
+  static void each(
+      const Matrix_Frozen<T, Array2D_Type, ViewType> &src,
+      void (*each_func)(
+        const T &src_elm, T *dst_elm,
+        const unsigned int &i, const unsigned int &j),
+      const each_which_t &each_which = EACH_ALL,
+      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL){
+    unsigned int i_max(src.rows()), j_max(src.columns());
+    switch(each_which){
+      case EACH_DIAGONAL:
+        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
+          (*each_func)(src(k, k), (dst ? &((*dst)(k, k)) : NULL), k, k);
+        }
+        break;
+      case EACH_OFF_DIAGONAL:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            if(i != j){
+              (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+            }
+          }
+        }
+        break;
+      case EACH_LOWER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j <= i; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_UPPER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_STRICT_LOWER:
+        for(unsigned int i(1); i < i_max; ++i){
+          for(unsigned int j(0); j < i; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_STRICT_UPPER:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(i + 1); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+      case EACH_ALL:
+      default:
+        for(unsigned int i(0); i < i_max; ++i){
+          for(unsigned int j(0); j < j_max; ++j){
+            (*each_func)(src(i, j), (dst ? &((*dst)(i, j)) : NULL), i, j);
+          }
+        }
+        break;
+    }
+  }
+#if defined(SWIGRUBY)
+  static const each_which_t &sym2each_which(const VALUE &value){
+    if(!RB_TYPE_P(value, T_SYMBOL)){
+      std::runtime_error("Symbol is required");
+    }
+    static const struct {
+      VALUE sym;
+      each_which_t which;
+    } cmp[] = {
+      {ID2SYM(rb_intern("all")),          EACH_ALL},
+      {ID2SYM(rb_intern("diagonal")),     EACH_DIAGONAL},
+      {ID2SYM(rb_intern("off_diagonal")), EACH_OFF_DIAGONAL},
+      {ID2SYM(rb_intern("lower")),        EACH_LOWER},
+      {ID2SYM(rb_intern("upper")),        EACH_UPPER},
+      {ID2SYM(rb_intern("strict_lower")), EACH_STRICT_LOWER},
+      {ID2SYM(rb_intern("strict_upper")), EACH_STRICT_UPPER},
+    };
+    unsigned int i(0);
+    while(value != cmp[i].sym){
+      if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
+    }
+    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
+      std::runtime_error("Unknown enumerate direction");
+    }
+    return cmp[i].which;
+  }
+#endif
+
+  template <class T, class Array2D_Type, class ViewType>
+  static bool replace(
+      Matrix<T, Array2D_Type, ViewType> &dst,
+      const void *src = NULL){
+    unsigned int r(dst.rows()), c(dst.columns()), len(r * c);
+    bool replaced(true);
+#if defined(SWIGRUBY)
+    struct bracket_read_t {
+      static VALUE run(VALUE v) {
+        VALUE *values = reinterpret_cast<VALUE *>(v);
+        static const ID id_func(rb_intern("[]"));
+        return rb_funcall2(values[0], id_func, 2, &values[1]);
+      }
+      static bool is_accessible(const VALUE &v) {
+        static const ID id_func(rb_intern("[]"));
+        return rb_respond_to(v, id_func) != 0;
+      }
+      static VALUE read(
+          const VALUE &v, const unsigned int &row = 0, const unsigned int &column = 0) {
+        int state;
+        VALUE values[3] = {v, UINT2NUM(row), UINT2NUM(column)};
+        return funcall_throw_if_error(run, reinterpret_cast<VALUE>(values));
+      }
+    };
+    const VALUE *value(static_cast<const VALUE *>(src));
+    unsigned int i(0), j(0), i_elm(0);
+    VALUE v_elm;
+    if(value && RB_TYPE_P(*value, T_ARRAY)){
+      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
+        if((unsigned int)RARRAY_LEN(*value) < r){
+          throw std::runtime_error("Length is too short");
+        }
+        VALUE value_r;
+        for(; i_elm < len; i_elm++){
+          if(j == 0){
+            value_r = RARRAY_AREF(*value, i);
+            if(!RB_TYPE_P(value_r, T_ARRAY)){
+              throw std::runtime_error("double array [[...], ...] is required");
+            }else if((unsigned int)RARRAY_LEN(value_r) < c){
+              throw std::runtime_error("Length is too short");
+            }
+          }
+          v_elm = RARRAY_AREF(value_r, j);
+          if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }else{ // [r0c0, r0c1, ...]
+        if((unsigned int)RARRAY_LEN(*value) < len){
+          throw std::runtime_error("Length is too short");
+        }
+        for(; i_elm < len; i_elm++){
+          v_elm = RARRAY_AREF(*value, i_elm);
+          if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
+          if(++j >= c){j = 0; ++i;}
+        }
+      }
+    }else if(value && bracket_read_t::is_accessible(*value)){
+      for(; i_elm < len; i_elm++){
+        v_elm = bracket_read_t::read(*value, i, j);
+        if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
+        if(++j >= c){j = 0; ++i;}
+      }
+    }else if(rb_block_given_p()){
+      for(; i_elm < len; i_elm++){
+        VALUE args[2] = {UINT2NUM(i), UINT2NUM(j)};
+        v_elm = yield_throw_if_error(2, args);
+        if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
+        if(++j >= c){j = 0; ++i;}
+      }
+    }else{
+      replaced = false;
+    }
+    if(replaced && (i_elm < len)){
+      std::stringstream s;
+      s << "Unexpected input [" << i << "," << j << "]: ";
+      throw std::runtime_error(s.str().append(inspect_str(v_elm)));
+    }
+#endif
+    return replaced;
+  }
+  template <class T, class Array2D_Type, class ViewType>
+  static bool replace(
+      Matrix<T, Array2D_Type, ViewType> &dst,
+      const T *src){
+    if(!src){return false;}
+    for(unsigned int i(0), r(dst.rows()); i < r; ++i){
+      for(unsigned int j(0), c(dst.columns()); j < c; ++j){
+        dst(i, j) = *(src++);
+      }
+    }
+    return true;
+  }
+};
+%}
 
 %extend Matrix_Frozen {
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
@@ -313,14 +722,18 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
       Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
       Matrix<T, Array2D_Dense<T> > &output_U (Matrix<T, Array2D_Dense<T> > temp),
       Matrix<T, Array2D_Dense<T> > &output_P (Matrix<T, Array2D_Dense<T> > temp),
-      Matrix<T, Array2D_Dense<T> > &output_D (Matrix<T, Array2D_Dense<T> > temp) %{
+      Matrix<T, Array2D_Dense<T> > &output_D (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_Q (Matrix<T, Array2D_Dense<T> > temp),
+      Matrix<T, Array2D_Dense<T> > &output_R (Matrix<T, Array2D_Dense<T> > temp) %{
     $1 = &temp;
   %}
   %typemap(argout)
       Matrix<T, Array2D_Dense<T> > &output_L,
       Matrix<T, Array2D_Dense<T> > &output_U,
       Matrix<T, Array2D_Dense<T> > &output_P,
-      Matrix<T, Array2D_Dense<T> > &output_D {
+      Matrix<T, Array2D_Dense<T> > &output_D,
+      Matrix<T, Array2D_Dense<T> > &output_Q,
+      Matrix<T, Array2D_Dense<T> > &output_R {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
   void lup(
@@ -355,6 +768,13 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
     output_U = UD.partial($self->rows(), $self->columns()).copy();
     output_D = UD.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
   }
+  void qr(
+      Matrix<T, Array2D_Dense<T> > &output_Q, 
+      Matrix<T, Array2D_Dense<T> > &output_R) const {
+    Matrix<T, Array2D_Dense<T> > QR($self->decomposeQR());
+    output_Q = QR.partial($self->rows(), $self->rows()).copy();
+    output_R = QR.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
+  }
 
   Matrix<T, Array2D_Dense<T> > inverse() const {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->inverse());
@@ -383,110 +803,103 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
   %alias transpose "t";
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
+  %alias qr "qr_decomposition";
   
-  %typemap(in,numinputs=0) 
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
+  %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header", 
+      fragment=SWIG_Traits_frag(T)){
+    template <bool with_index = false, bool assign = false>
+    static inline void matrix_yield_internal(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      SWIG_Object v;
+      if(with_index){
+        VALUE values[] = {swig::from(src), UINT2NUM(i), UINT2NUM(j)};
+        v = yield_throw_if_error(3, values);
+      }else{
+        VALUE values[] = {swig::from(src)};
+        v = yield_throw_if_error(1, values);
+      }
+      if(assign && !SWIG_IsOK(swig::asval(v, dst))){
+        std::stringstream s;
+        s << "Unknown input (T expected) [" << i << "," << j << "]: ";
+        throw std::runtime_error(s.str().append(inspect_str(v)));
+      }
+    }
+    static void matrix_yield(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal<false, false>(src, dst, i, j);
+    }
+    static void matrix_yield_with_index(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal<true, false>(src, dst, i, j);
+    }
+    static void matrix_yield_get(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal<false, true>(src, dst, i, j);
+    }
+    static void matrix_yield_get_with_index(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal<true, true>(src, dst, i, j);
+    }
+    static void (*matrix_each(const T *))
+        (const T &, T *, const unsigned int &, const unsigned int &) {
+      ID id_thisf(rb_frame_this_func()), id_callee(rb_frame_callee());
+      static const ID 
+          id_map(rb_intern("map")), id_mapb(rb_intern("map!")), 
+          id_eachwi(rb_intern("each_with_index"));
+      if((id_thisf == id_map) || (id_thisf == id_mapb)){
+        static const ID with_index[] = {
+            rb_intern("map_with_index"), rb_intern("map_with_index!"), 
+            rb_intern("collect_with_index"), rb_intern("collect_with_index!")};
+        for(int i(0); i < sizeof(with_index) / sizeof(with_index[0]); ++i){
+          if(id_callee == with_index[i]){
+            return matrix_yield_get_with_index;
+          }
+        }
+        return matrix_yield_get;
+      }else if(id_callee == id_eachwi){
+        return matrix_yield_with_index;
+      }else{
+        return matrix_yield;
+      }     
+    }
+  }
+  %typemap(in,numinputs=0, fragment=SWIG_From_frag(Matrix_Frozen_Helper<T>)) 
+      void (*each_func)(const T &src, T *dst, const unsigned int &i, const unsigned int &j) {
     if(!rb_block_given_p()){
       return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
     }
-    struct proc_t {
-      static void yield(const T &v, const unsigned int &i, const unsigned int &j){
-        rb_yield_values(1, to_value($descriptor(const T &), v));
-      }
-      static void yield_with_index(const T &v, const unsigned int &i, const unsigned int &j){
-        rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
-      }
-    };
-    $1 = proc_t::yield;
-    if(rb_frame_callee() == rb_intern("each_with_index")){
-      $1 = proc_t::yield_with_index;
-    }
+    $1 = matrix_each((const T *)0);
   }
-  %typemap(argout)
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j) {
-    $result = self;
-  }
-  %typemap(typecheck) const unsigned int &each_which {
+  %typemap(typecheck) const typename MatrixUtil::each_which_t &each_which {
     $1 = RB_TYPE_P($input, T_SYMBOL);
   }
-  %typemap(in) const unsigned int &each_which (unsigned int temp = 0) {
-    $1 = &temp;
-    if(!RB_TYPE_P($input, T_SYMBOL)){
-      SWIG_exception(SWIG_TypeError, "Symbol is required");
-    }
-    static const SWIG_Object cmp[] = {
-      ID2SYM(rb_intern("all")),
-      ID2SYM(rb_intern("diagonal")),
-      ID2SYM(rb_intern("off_diagonal")),
-      ID2SYM(rb_intern("lower")),
-      ID2SYM(rb_intern("upper")),
-      ID2SYM(rb_intern("strict_lower")),
-      ID2SYM(rb_intern("strict_upper")),
-    };
-    while($input != cmp[temp]){
-      if(++temp >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
-    }
-    if(temp >= (sizeof(cmp) / sizeof(cmp[0]))){
-      SWIG_exception(SWIG_RuntimeError, "Unknown enumerate direction");
+  %typemap(in) const typename MatrixUtil::each_which_t &each_which {
+    try{
+      $1 = &const_cast<typename MatrixUtil::each_which_t &>(MatrixUtil::sym2each_which($input));
+    }catch(std::runtime_error &e){
+      SWIG_exception(SWIG_TypeError, e.what());
     }
   }
-  void each(
-      void (*each_func)(const T &v, const unsigned int &i, const unsigned int &j), 
-      const unsigned int &each_which = 0) const {
-    unsigned int i_max($self->rows()), j_max($self->columns());
-    switch(each_which){
-      case 1: // diagonal
-        for(unsigned int k(0), k_max(i_max >= j_max ? j_max : i_max); k < k_max; ++k){
-          (*each_func)((*($self))(k, k), k, k);
-        }
-        break;
-      case 2: // off_diagonal
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(i != j){(*each_func)((*($self))(i, j), i, j);}
-          }
-        }
-        break;
-      case 3: // lower
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(j >= i){break;}
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 4: // upper
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(i); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 5: // strict_lower
-        for(unsigned int i(1); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            if(j >= i){break;}
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 6: // strict_upper
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(i + 1); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-      case 0: default: // all
-        for(unsigned int i(0); i < i_max; ++i){
-          for(unsigned int j(0); j < j_max; ++j){
-            (*each_func)((*($self))(i, j), i, j);
-          }
-        }
-        break;
-    }
+  const Matrix_Frozen<T, Array2D_Type, ViewType> &each(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+    MatrixUtil::each(*$self, each_func, each_which);
+    return *$self;
   }
   %alias each "each_with_index";
+  
+  Matrix<T, Array2D_Dense<T> > map(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+    Matrix<T, Array2D_Dense<T> > res($self->operator Matrix<T, Array2D_Dense<T> >());
+    MatrixUtil::each(*$self, each_func, each_which, &res);
+    return res;
+  }
+  %alias map "collect,map_with_index,collect_with_index";
   
   SWIG_Object to_a() const {
     unsigned int i_max($self->rows()), j_max($self->columns());
@@ -494,7 +907,7 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
     for(unsigned int i(0); i < i_max; ++i){
       SWIG_Object row = rb_ary_new2(j_max);
       for(unsigned int j(0); j < j_max; ++j){
-        rb_ary_store(row, j, to_value($descriptor(const T &), (*($self))(i, j)));
+        rb_ary_store(row, j, swig::from((*($self))(i, j)));
       }
       rb_ary_store(res, i, row);
     }
@@ -520,43 +933,54 @@ MAKE_TO_S(Matrix_Frozen)
   %typemap(in) const void *replacer {
     $1 = &$input;
   }
+  %fragment(SWIG_Traits_frag(T));
 
   Matrix(const unsigned int &rows, const unsigned int &columns, 
       const void *replacer = NULL){
-    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+    Matrix<T, Array2D_Type, ViewType> res(rows, columns);
+    MatrixUtil::replace(res, replacer);
+    return new Matrix<T, Array2D_Type, ViewType>(res);
   }
   Matrix(const unsigned int &rows, const unsigned int &columns,
       const T *serialized){
-    return new Matrix<T, Array2D_Type, ViewType>(rows, columns);
+    Matrix<T, Array2D_Type, ViewType> res(rows, columns);
+    MatrixUtil::replace(res, serialized);
+    return new Matrix<T, Array2D_Type, ViewType>(res);
   }
 #if defined(SWIGRUBY)
-  %exception Matrix {
-    $action
-    if(argc > 2){
-      rb_funcall2(self, rb_intern("replace!"), argc - 2, &argv[2]);
-    }else if(rb_block_given_p()){
-      rb_funcall_passing_block(self, rb_intern("replace!"), 0, NULL);
-    }
-  }
+  %fragment(SWIG_AsVal_frag(unsigned int));
   Matrix(const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
+    static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
     if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
-      return new Matrix<T, Array2D_Type, ViewType>(
+      Matrix<T, Array2D_Type, ViewType> res(
           (unsigned int)RARRAY_LEN(*value),
           (unsigned int)RARRAY_LEN(RARRAY_AREF(*value, 0)));
+      MatrixUtil::replace(res, replacer);
+      return new Matrix<T, Array2D_Type, ViewType>(res);
+    }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
+      /* "unsigned" is remove because SWIG_AsVal(unsigned int)
+       * can not detect less than zero in Windows Ruby devkit.
+       */
+      int r, c; 
+      VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
+      if(!SWIG_IsOK(SWIG_AsVal(int)(v_r, &r)) || (r < 0)
+          || !SWIG_IsOK(SWIG_AsVal(int)(v_c, &c)) || (c < 0)){
+        throw std::runtime_error(
+            std::string("Unexpected length [")
+              .append(inspect_str(v_r)).append(", ")
+              .append(inspect_str(v_c)).append("]"));
+      }
+      Matrix<T, Array2D_Type, ViewType> res(r, c);
+      MatrixUtil::replace(res, replacer);
+      return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{
-      throw std::runtime_error("double array [[...], ...] is required");
-    }
-  }
-  %exception Matrix(const void *replacer) {
-    try {
-      $action
-      rb_funcall2(self, rb_intern("replace!"), argc, argv);
-    } catch (const std::exception& e) {
-      SWIG_exception(SWIG_RuntimeError, e.what());
+      throw std::runtime_error("double array [[...], ...] or Matrix is required");
     }
   }
 #endif
+
+  %typemap(out) self_t & "$result = self;"
 
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
@@ -583,72 +1007,15 @@ MAKE_TO_S(Matrix_Frozen)
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
   self_t &replace(const void *replacer = NULL){
-    unsigned int r($self->rows()), c($self->columns()), len(r * c);
-    bool replaced(true);
-#if defined(SWIGRUBY)
-    const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
-    unsigned int i(0), j(0), i_elm(0);
-    VALUE v_elm;
-    if(value && RB_TYPE_P(*value, T_ARRAY)){
-      if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
-        if((unsigned int)RARRAY_LEN(*value) < r){
-          throw std::runtime_error("Length is too short");
-        }
-        VALUE value_r;
-        for(; i_elm < len; i_elm++){
-          if(j == 0){
-            value_r = RARRAY_AREF(*value, i);
-            if(!RB_TYPE_P(value_r, T_ARRAY)){
-              throw std::runtime_error("double array [[...], ...] is required");
-            }else if((unsigned int)RARRAY_LEN(value_r) < c){
-              throw std::runtime_error("Length is too short");
-            }
-          }
-          v_elm = RARRAY_AREF(value_r, j);
-          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-          if(++j >= c){j = 0; ++i;}
-        }
-      }else{  // [r0c0, r0c1, ...]
-        if((unsigned int)RARRAY_LEN(*value) < len){
-          throw std::runtime_error("Length is too short");
-        }
-        for(; i_elm < len; i_elm++){
-          v_elm = RARRAY_AREF(*value, i_elm);
-          if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-          if(++j >= c){j = 0; ++i;}
-        }
-      }
-    }else if(rb_block_given_p()){
-      for(; i_elm < len; i_elm++){
-        v_elm = rb_yield_values(2, UINT2NUM(i), UINT2NUM(j));
-        if(!from_value(v_elm, $descriptor(T &), (*$self)(i, j))){break;}
-        if(++j >= c){j = 0; ++i;}
-      }
-    }else{
-      replaced = false;
-    }
-    if(replaced && (i_elm < len)){
-      VALUE v_inspect(rb_inspect(v_elm));
-      std::stringstream s;
-      s << "Unknown input (T expected) [" << i << "," << j << "]: ";
-      throw std::runtime_error(
-          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
-    }
-#endif
-    if(!replaced){
+    if(!MatrixUtil::replace(*$self, replacer)){
       throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
   }
 
   self_t &replace(const T *serialized){
-    if(serialized){
-      unsigned int r($self->rows()), c($self->columns());
-      for(unsigned int i(0); i < r; ++i){
-        for(unsigned int j(0); j < c; ++j){
-          (*$self)(i, j) = *(serialized++);
-        }
-      }
+    if(!MatrixUtil::replace(*$self, serialized)){
+      throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
   }
@@ -657,13 +1024,28 @@ MAKE_TO_S(Matrix_Frozen)
   %bang swapRows(const unsigned int &, const unsigned int &);
   %bang swapColumns(const unsigned int &, const unsigned int &);
   %rename("replace!") replace;
+  
+  self_t &map_bang(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j), 
+      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL){
+    MatrixUtil::each(*$self, each_func, each_which, $self);
+    return *$self;
+  }
+  %rename("map!") map_bang;
+  %alias map_bang "collect!,map_with_index!,collect_with_index!";
 #endif
 };
 
 %define INSTANTIATE_MATRIX_TRANSPOSE(type, storage, view_from, view_to)
 %extend Matrix_Frozen<type, storage, view_from> {
   Matrix_Frozen<type, storage, view_to> transpose() const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::transpose(*$self);
+#else
     return $self->transpose();
+#endif
   }
 };
 %enddef
@@ -673,34 +1055,46 @@ MAKE_TO_S(Matrix_Frozen)
   Matrix_Frozen<type, storage, view_to> partial(
       const unsigned int &new_rows, const unsigned int &new_columns,
       const unsigned int &row_offset, const unsigned int &column_offset) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, new_rows, new_columns, row_offset, column_offset);
+#else
     return $self->partial(new_rows, new_columns, row_offset, column_offset);
+#endif
   }
   Matrix_Frozen<type, storage, view_to> row_vector(const unsigned int &row) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, 1, $self->columns(), row, 0);
+#else
     return $self->rowVector(row);
+#endif
   }
   Matrix_Frozen<type, storage, view_to> column_vector(const unsigned int &column) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, $self->rows(), 1, 0, column);
+#else
     return $self->columnVector(column);
+#endif
   }
 };
 %enddef
 
-%define INSTANTIATE_MATRIX_EIGEN2(type, storage, view)
+%define INSTANTIATE_MATRIX_EIGEN2(type, ctype, storage, view)
 %extend Matrix_Frozen<type, storage, view> {
   %typemap(in,numinputs=0)
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D 
-        (Matrix<Complex<type>, Array2D_Dense<Complex<type> > > temp),
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V 
-        (Matrix<Complex<type>, Array2D_Dense<Complex<type> > > temp) %{
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D 
+        (Matrix<ctype, Array2D_Dense<ctype > > temp),
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V 
+        (Matrix<ctype, Array2D_Dense<ctype > > temp) %{
     $1 = &temp;
   %}
   %typemap(argout)
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D,
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V {
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D,
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
   void eigen(
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_V, 
-      Matrix<Complex<type>, Array2D_Dense<Complex<type> > > &output_D) const {
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V, 
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D) const {
     typedef typename Matrix_Frozen<type, storage, view >::complex_t::m_t cmat_t;
     cmat_t VD($self->eigen());
     output_V = VD.partial($self->rows(), $self->rows()).copy();
@@ -712,17 +1106,45 @@ MAKE_TO_S(Matrix_Frozen)
   }
 };
 %enddef
-%define INSTANTIATE_MATRIX_EIGEN(type)
+%define INSTANTIATE_MATRIX_EIGEN(type, ctype)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatViewBase);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_p);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_ScaledUnit<type >, MatView_pt);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatViewBase);
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatView_f);
+#else
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatView_p);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_ScaledUnit<type >, MatView_pt);
 #endif
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatViewBase);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_p);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_t);
-INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
+#endif
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatViewBase);
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_f);
+#else
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_p);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_t);
+INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_pt);
+#endif
 %enddef
+
+#if defined(USE_MATRIX_VIEW_FILTER)
+%extend Matrix_Frozen {
+  Matrix_Frozen<T, Array2D_Type, MatView_f> conjugate() const {
+    return MatView_f::conjugate(*$self);
+  }
+  Matrix_Frozen<T, Array2D_Type, MatView_f> adjoint() const {
+    return MatView_f::conjugate(MatView_f::transpose(*$self));
+  }
+};
+#else
+%extend Matrix_Frozen {
+  Matrix<T, Array2D_Dense<T> > conjugate() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->conjugate());
+  }
+  Matrix<T, Array2D_Dense<T> > adjoint() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->adjoint());
+  }
+};
+#endif
 
 %define INSTANTIATE_MATRIX(type, suffix)
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
@@ -734,6 +1156,14 @@ INSTANTIATE_MATRIX_EIGEN2(type, Array2D_Dense<type >, MatView_pt);
     return $self->inverse();
   }
 };
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_f, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatViewBase, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_f, MatView_f);
+
+%template(Matrix_Scalar ## suffix) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase>;
+%template(Matrix_Scalar ## suffix ## _f) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_f>;
+#else
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_p, MatView_pt);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_p);
 INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatViewBase, MatView_p);
@@ -744,7 +1174,17 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_ScaledUnit<type >, MatView_pt, MatView_
 %template(Matrix_Scalar ## suffix ## _p) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_p>;
 %template(Matrix_Scalar ## suffix ## _pt) Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatView_pt>;
 #endif
+#endif
 
+#if defined(USE_MATRIX_VIEW_FILTER)
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_f);
+INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_f, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatViewBase, MatView_f);
+INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_f, MatView_f);
+
+%template(Matrix_Frozen ## suffix) Matrix_Frozen<type, Array2D_Dense<type >, MatViewBase>;
+%template(Matrix_Frozen ## suffix ## _f) Matrix_Frozen<type, Array2D_Dense<type >, MatView_f>;
+#else
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatViewBase, MatView_t);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_t, MatViewBase);
 INSTANTIATE_MATRIX_TRANSPOSE(type, Array2D_Dense<type >, MatView_p, MatView_pt);
@@ -758,22 +1198,26 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _t) Matrix_Frozen<type, Array2D_Dense<type >, MatView_t>;
 %template(Matrix_Frozen ## suffix ## _p) Matrix_Frozen<type, Array2D_Dense<type >, MatView_p>;
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
+#endif
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
-%init %{
 #if defined(SWIGRUBY)
-  { /* work around of %alias I "unit,identity"; // %alias cannot be applied to singleton method */
-    VALUE singleton = rb_singleton_class(SwigClassMatrix ## suffix ## .klass);
+%fragment("init"{Matrix<type, Array2D_Dense<type > >}, "init") {
+  { /* work around of %alias I "unit,identity"; %alias cannot be applied to singleton method */
+    VALUE singleton = rb_singleton_class(
+        ((swig_class *)$descriptor(Matrix<type, Array2D_Dense<type > > *)->clientdata)->klass);
     rb_define_alias(singleton, "identity", "I");
     rb_define_alias(singleton, "unit", "I");
   }
+}
+%fragment("init"{Matrix<type, Array2D_Dense<type > >});
 #endif
-%}
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
-INSTANTIATE_MATRIX_EIGEN(double);
+INSTANTIATE_MATRIX_EIGEN(double, Complex<double>);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);
+INSTANTIATE_MATRIX_EIGEN(Complex<double>, Complex<double>);
 
 #undef INSTANTIATE_MATRIX_FUNC
 #undef INSTANTIATE_MATRIX_TRANSPOSE

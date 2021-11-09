@@ -54,7 +54,7 @@ using namespace boost::math;
 %enddef
 
 %define INSTANTIATE(dist_name, type, class_name)
-%include /usr/include/boost/math/distributions/ ## dist_name ## .hpp
+%include boost/math/distributions/ ## dist_name ## .hpp
 ADD_BASIC_METHODS(dist_name ## _distribution);
 %template(class_name) boost::math:: ## dist_name ## _distribution<type, policies::policy<> >;
 %enddef
@@ -105,8 +105,10 @@ ADD_BASIC_METHODS(dist_name ## _distribution);
   std::pair<RealT, RealT> range() const {return range(*$self);}
   std::pair<RealT, RealT> support() const {return support(*$self);}
 };
-%include /usr/include/boost/math/distributions/hyperexponential.hpp
+#if !defined(__MINGW__)
+%include boost/math/distributions/hyperexponential.hpp
 %template(Hyperexponential) boost::math::hyperexponential_distribution<double, policies::policy<> >;
+#endif
 
 INSTANTIATE(arcsine, double, Arcsine);
 INSTANTIATE(bernoulli, double, Bernoulli);

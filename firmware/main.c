@@ -172,6 +172,7 @@ typedef struct {
   gps_pos_t upper, lower;
   u8 polarity;
 } position_range_t;
+#define POSITION_RANGE_POLARITY_NEG 0x10
 static volatile __code __at(CONFIG_ADDRESS + sizeof(config_t))
     position_range_t position_range = {
   {{ // position upper
@@ -180,7 +181,7 @@ static volatile __code __at(CONFIG_ADDRESS + sizeof(config_t))
   {{ // position lower
     -1800000000, -900000000, -100000000, // W180, S90, -100km
   }},
-  0x7, // all positive; required condition is lower < target < upper, neither target < lower nor upper < target
+  0x7, // 0bXXX[!]_X[H][lat][lng]; default: required condition is lower < target < upper, neither target < lower nor upper < target
 };
 static void position_monitor(__xdata gps_pos_t *pos){
   typedef enum {
@@ -198,17 +199,18 @@ static void position_monitor(__xdata gps_pos_t *pos){
     case GPS_FIX_3D:
     case GPS_FIX_DEAD_RECKONING_COMBINED:
       if(gps_pos_accuracy >= GPS_POS_ACC_100M){
-        u8 i, j;
-        current = GPS_IN_RANGE;
+        u8 i, j, in_range = POSITION_RANGE_POLARITY_NEG;
         for(i = 0, j = 0x01; i < 3; ++i, j <<= 1){
           u8
               a = (position_range.upper.v[i] < pos->v[i]),
               b = (position_range.lower.v[i] > pos->v[i]);
           if((position_range.polarity & j) ? (a || b) : (a && b)){
-            current = GPS_OUT_OF_RANGE;
+            in_range = 0x00;
             break;
           }
         }
+        current = ((position_range.polarity & POSITION_RANGE_POLARITY_NEG) ^ in_range)
+            ? GPS_IN_RANGE : GPS_OUT_OF_RANGE;
       }
       break;
     default:
@@ -255,6 +257,9 @@ static void position_check(FIL *f){
       if(buf_range->upper.v[i] >= buf_range->lower.v[i]){
         buf_range->polarity |= j;
       }
+    }
+    if(data_hub_read_long(f) > 0){
+      buf_range->polarity |= POSITION_RANGE_POLARITY_NEG;
     }
     if((i == 3) && (memcmp(&position_range, buf_range, sizeof(position_range_t)) != 0)){
       config_renew(buf);
