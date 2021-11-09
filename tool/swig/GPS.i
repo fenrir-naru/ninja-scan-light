@@ -31,9 +31,35 @@
   try {
     $action
   } catch (const std::exception& e) {
+#ifdef SWIGRUBY
+    VALUE v_e(rb_errinfo());
+    if(!NIL_P(v_e)){
+      rb_set_errinfo(Qnil);
+      rb_exc_raise(v_e);
+    }
+#endif
     SWIG_exception(SWIG_RuntimeError, e.what());
   }
 }
+
+#ifdef SWIGRUBY
+%header {
+static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
+  struct yield_t {
+    const int &argc;
+    const VALUE *argv;
+    static VALUE run(VALUE v){
+      yield_t *arg(reinterpret_cast<yield_t *>(v));
+      return rb_yield_values2(arg->argc, arg->argv);
+    }
+  } arg = {argc, argv};
+  int state;
+  VALUE res(rb_protect(yield_t::run, reinterpret_cast<VALUE>(&arg), &state));
+  if(state != 0){throw std::exception();}
+  return res;
+}
+}
+#endif
 
 %feature("autodoc", "1");
 
@@ -504,9 +530,12 @@ struct GPS_User_PVT
             it2(it->second.begin()), it2_end(it->second.end());
           it2 != it2_end; ++it2){
 #ifdef SWIGRUBY
-        rb_yield_values(3,
-            SWIG_From(int)(it->first), 
-            SWIG_From(int)(it2->first), SWIG_From(double)((double)it2->second));
+        VALUE values[] = {
+          SWIG_From(int)(it->first), 
+          SWIG_From(int)(it2->first),
+          SWIG_From(double)((double)it2->second)
+        };
+        yield_throw_if_error(3, values);
 #endif
       }
     }
@@ -754,7 +783,7 @@ struct RINEX_Observation {
       }
       rb_hash_aset(res, sym_meas, meas);
       rb_hash_aset(res, sym_meas_types, reader.obs_types);
-      rb_yield_values(1, res);
+      yield_throw_if_error(1, &res);
 #endif
     }
   }
