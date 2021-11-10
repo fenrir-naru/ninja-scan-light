@@ -784,14 +784,18 @@ struct MatrixUtil {
   %alias qr "qr_decomposition";
   
   %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header"){
-    static void matrix_yield(const T &v, T *, const unsigned int &i, const unsigned int &j){
-      rb_yield_values(1, to_value($descriptor(const T &), v));
-    }
-    static void matrix_yield_with_index(const T &v, T *, const unsigned int &i, const unsigned int &j){
-      rb_yield_values(3, to_value($descriptor(const T &), v), UINT2NUM(i), UINT2NUM(j));
-    }
-    static void matrix_assign(const SWIG_Object &v, T *dst, const unsigned int &i, const unsigned int &j){
-      if(!from_value(v, $descriptor(T &), *dst)){
+    static void matrix_yield_internal(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j,
+        const bool &with_index = false, const bool &assign = false){
+      SWIG_Object v;
+      if(with_index){
+        VALUE values[] = {to_value($descriptor(const T &), src), UINT2NUM(i), UINT2NUM(j)};
+        v = yield_throw_if_error(3, values);
+      }else{
+        VALUE values[] = {to_value($descriptor(const T &), src)};
+        v = yield_throw_if_error(1, values);
+      }
+      if(assign && !from_value(v, $descriptor(T &), *dst)){
         VALUE v_inspect(rb_inspect(v));
         std::stringstream s;
         s << "Unknown input (T expected) [" << i << "," << j << "]: ";
@@ -799,13 +803,21 @@ struct MatrixUtil {
             s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
       }
     }
-    static void matrix_yield_get(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      VALUE values[] = {to_value($descriptor(const T &), src)};
-      matrix_assign(yield_throw_if_error(1, values), dst, i, j);
+    static void matrix_yield(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal(src, dst, i, j, false, false);
     }
-    static void matrix_yield_get_with_index(const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      VALUE values[] = {to_value($descriptor(const T &), src), UINT2NUM(i), UINT2NUM(j)};
-      matrix_assign(yield_throw_if_error(3, values), dst, i, j);
+    static void matrix_yield_with_index(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal(src, dst, i, j, true, false);
+    }
+    static void matrix_yield_get(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal(src, dst, i, j, false, true);
+    }
+    static void matrix_yield_get_with_index(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      matrix_yield_internal(src, dst, i, j, true, true);
     }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
