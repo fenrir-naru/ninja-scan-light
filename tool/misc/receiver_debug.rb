@@ -12,12 +12,6 @@ Debug GPS receiver with Ruby via SWIG interface
 }
 require 'GPS.so'
 
-require_relative 'ubx'
-
-#ubx_fname = File::join(File::dirname(__FILE__), '..', 'test_log', '150616_bicycle.ubx')
-ubx_fname = File::join(File::dirname(__FILE__), '..', 'test_log', 'log.013.ubx')
-ubx = UBX::new(open(ubx_fname))
-
 OUTPUT_PVT_ITEMS = [
   [:week, proc{|pvt| pvt.receiver_time.week}],
   [:itow_rcv, proc{|pvt| pvt.receiver_time.seconds}],
@@ -145,77 +139,136 @@ register_ephemeris = proc{
     end
   }
 }.call
-ubx_kind = Hash::new(0)
 
-t_meas = nil
-while packet = ubx.read_packet
-  ubx_kind[packet[2..3]] += 1
-  case packet[2..3]
-  when [0x02, 0x10] # RXM-RAW
-    msec, week = [[0, 4, "V"], [4, 2, "v"]].collect{|offset, len, str|
-      packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
-    }
-    t_meas = GPS::Time::new(week, msec.to_f / 1000)
-    meas = GPS::Measurement::new
-    packet[6 + 6].times{|i|
-      loader = proc{|offset, len, str|
-        ary = packet.slice(6 + offset + (i * 24), len)
-        str ? ary.pack("C*").unpack(str)[0] : ary
+parse_ubx = proc{|ubx_fname|
+  $stderr.puts "Reading UBX file (%s) ..."%[ubx_fname]
+  require_relative 'ubx'
+
+  ubx = UBX::new(open(ubx_fname))  
+  ubx_kind = Hash::new(0)
+  
+  t_meas = nil
+  while packet = ubx.read_packet
+    ubx_kind[packet[2..3]] += 1
+    case packet[2..3]
+    when [0x02, 0x10] # RXM-RAW
+      msec, week = [[0, 4, "V"], [4, 2, "v"]].collect{|offset, len, str|
+        packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
       }
-      prn = loader.call(28, 1)[0]
-      {
-        :L1_PSEUDORANGE => [16, 8, "E"],
-        :L1_DOPPLER => [24, 4, "e"],
-      }.each{|k, prop|
-        meas.add(prn, GPS::Measurement.const_get(k), loader.call(*prop))
+      t_meas = GPS::Time::new(week, msec.to_f / 1000)
+      meas = GPS::Measurement::new
+      packet[6 + 6].times{|i|
+        loader = proc{|offset, len, str|
+          ary = packet.slice(6 + offset + (i * 24), len)
+          str ? ary.pack("C*").unpack(str)[0] : ary
+        }
+        prn = loader.call(28, 1)[0]
+        {
+          :L1_PSEUDORANGE => [16, 8, "E"],
+          :L1_DOPPLER => [24, 4, "e"],
+        }.each{|k, prop|
+          meas.add(prn, GPS::Measurement.const_get(k), loader.call(*prop))
+        }
       }
-    }
-    run_solver.call(meas, t_meas)
-  when [0x02, 0x15] # RXM-RAWX
-    sec, week = [[0, 8, "E"], [8, 2, "v"]].collect{|offset, len, str|
-      packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
-    }
-    t_meas = GPS::Time::new(week, sec)
-    meas = GPS::Measurement::new
-    packet[6 + 11].times{|i|
-      loader = proc{|offset, len, str, post|
-        v = packet.slice(6 + offset + (i * 32), len)
-        v = str ? v.pack("C*").unpack(str)[0] : v
-        v = post.call(v) if post
-        v
+      run_solver.call(meas, t_meas)
+    when [0x02, 0x15] # RXM-RAWX
+      sec, week = [[0, 8, "E"], [8, 2, "v"]].collect{|offset, len, str|
+        packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
       }
-      next unless (gnss = loader.call(36, 1)[0]) == 0
-      svid = loader.call(37, 1)[0]
-      trk_stat = loader.call(46, 1)[0]
-      {
-        :L1_PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
-        :L1_PSEUDORANGE_SIGMA => [43, 1, nil, proc{|v|
-          (trk_stat & 0x1 == 0x1) ? (1E-2 * (v[0] & 0xF)) : nil
-        }],
-        :L1_DOPPLER => [32, 4, "e"],
-        :L1_DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (v[0] & 0xF)}],
-      }.each{|k, prop|
-        next unless v = loader.call(*prop)
-        meas.add(svid, GPS::Measurement.const_get(k), v)
+      t_meas = GPS::Time::new(week, sec)
+      meas = GPS::Measurement::new
+      packet[6 + 11].times{|i|
+        loader = proc{|offset, len, str, post|
+          v = packet.slice(6 + offset + (i * 32), len)
+          v = str ? v.pack("C*").unpack(str)[0] : v
+          v = post.call(v) if post
+          v
+        }
+        next unless (gnss = loader.call(36, 1)[0]) == 0
+        svid = loader.call(37, 1)[0]
+        trk_stat = loader.call(46, 1)[0]
+        {
+          :L1_PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
+          :L1_PSEUDORANGE_SIGMA => [43, 1, nil, proc{|v|
+            (trk_stat & 0x1 == 0x1) ? (1E-2 * (v[0] & 0xF)) : nil
+          }],
+          :L1_DOPPLER => [32, 4, "e"],
+          :L1_DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (v[0] & 0xF)}],
+        }.each{|k, prop|
+          next unless v = loader.call(*prop)
+          meas.add(svid, GPS::Measurement.const_get(k), v)
+        }
       }
-    }
-    run_solver.call(meas, t_meas)
-  when [0x02, 0x11] # RXM-SFRB
-    register_ephemeris.call(
-        t_meas,
-        packet[6 + 1],
-        packet.slice(6 + 2, 40).each_slice(4).collect{|v|
-          (v.pack("C*").unpack("V")[0] & 0xFFFFFF) << 6
-        })
-  when [0x02, 0x13] # RXM-SFRBX
-    next unless (gnss = packet[6]) == 0
-    register_ephemeris.call(
-        t_meas,
-        packet[6 + 1],
-        packet.slice(6 + 8, 4 * packet[6 + 4]).each_slice(4).collect{|v|
-          v.pack("C*").unpack("V")[0]
-        })
+      run_solver.call(meas, t_meas)
+    when [0x02, 0x11] # RXM-SFRB
+      register_ephemeris.call(
+          t_meas,
+          packet[6 + 1],
+          packet.slice(6 + 2, 40).each_slice(4).collect{|v|
+            (v.pack("C*").unpack("V")[0] & 0xFFFFFF) << 6
+          })
+    when [0x02, 0x13] # RXM-SFRBX
+      next unless (gnss = packet[6]) == 0
+      register_ephemeris.call(
+          t_meas,
+          packet[6 + 1],
+          packet.slice(6 + 8, 4 * packet[6 + 4]).each_slice(4).collect{|v|
+            v.pack("C*").unpack("V")[0]
+          })
+    end
   end
-end
-$stderr.puts ubx_kind.inspect
+  $stderr.puts "Finish to parse UBX file (%s), found packets are %s"%[ubx_fname, ubx_kind.inspect]
+}
 
+parse_rinex_obs = proc{|fname|
+  types = nil
+  GPS::RINEX_Observation::read(fname){|item|
+    t_meas = item[:time]
+    sn.update_all_ephemeris(t_meas)
+    
+    meas = GPS::Measurement::new
+    types ||= (item[:meas_types]['G'] || item[:meas_types][' ']).collect.with_index{|type_, i|
+      case type_
+      when "C1"
+        [i, GPS::Measurement::L1_PSEUDORANGE]
+      when "D1"
+        [i, GPS::Measurement::L1_RANGE_RATE]
+      else
+        nil 
+      end
+    }.compact
+    item[:meas].each{|k, v|
+      sys, prn = k
+      next unless sys == 'G' # GPS only
+      types.each{|i, type_|
+        meas.add(prn, type_, v[i][0]) if v[i]
+      }
+    }
+    run_solver.call(meas, t_meas)
+  }
+}
+
+# check options
+ARGV.reject!{|arg|
+  next false unless arg =~ /^--[^=]+=?/
+  true
+}
+ARGV.each{|arg|
+  raise "File not found: #{arg}" unless File::exist?(arg)
+}
+
+# parse RINEX NAV
+ARGV.reject!{|arg|
+  next false unless arg =~ /\.\d{2}n$/
+  $stderr.puts "Read RINEX NAV file (%s): %d items."%[arg, sn.read(arg)]
+}
+
+# other files
+ARGV.each{|arg|
+  case arg
+  when /\.ubx$/
+    parse_ubx.call(arg)
+  when /\.\d{2}o$/
+    parse_rinex_obs.call(arg)
+  end
+}
