@@ -154,7 +154,7 @@ protected:
         user_position_init, receiver_error_init,
         good_init, with_velocity);
 
-    if((pvt.error_code != user_pvt_t::ERROR_NO)
+    if(!pvt.position_solved()
         || (!pvt.FD.valid)
         || (pvt.used_satellites < 6)){return;}
 
