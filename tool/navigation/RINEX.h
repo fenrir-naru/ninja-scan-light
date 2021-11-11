@@ -723,6 +723,9 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
         {
           if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
           std::string epoch_str(buf);
+          if((epoch_str.size() < 80) && (epoch_str.size() >= 32)){ // minimum 32 characters are required.
+            epoch_str.append(80 - epoch_str.size(), ' '); // add blank in case line is truncated
+          }
 
           epoch_flag_t epoch_flag;
           super_t::convert(epoch_flag_v2, epoch_str, &epoch_flag);
@@ -759,6 +762,9 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
             if(offset >= 80){
               if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
               obs_str = std::string(buf);
+              if(obs_str.size() < 80){
+                obs_str.append(80 - obs_str.size(), ' '); // add blank in case line is truncated
+              }
               offset = 0;
             }
             typename observation_t::record_t record = {false, 0};
@@ -790,6 +796,9 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
         {
           if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
           std::string epoch_str(buf);
+          if((epoch_str.size() < 56) && (epoch_str.size() >= 35)){
+            epoch_str.append(56 - epoch_str.size(), ' ');
+          }
 
           super_t::convert(epoch_flag_v3, epoch_str, &epoch_flag);
           epoch_flag.epoch.tm_year = epoch_flag.epoch_year4 - 1900; // greater than 1980
@@ -812,6 +821,11 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
           int types(obs_types[obs_str[0]].size()), serial;
           super_t::template conv_t<int>::d(obs_str, 1, 3, &serial);
           serial += sys2serial(obs_str[0]);
+          do{
+            int truncated((3 + 16 * types) - obs_str.size());
+            if(truncated <= 0){break;}
+            obs_str.append(truncated, ' ');
+          }while(false);
           for(int j(0), offset(3); j < types; j++, offset += 16){
             typename observation_t::record_t record = {false, 0};
             std::string record_str(obs_str.substr(offset, 16));

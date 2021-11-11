@@ -10,6 +10,7 @@
 
 #include <boost/format.hpp>
 #include <boost/cstdint.hpp>
+#include <boost/xpressive/xpressive.hpp>
 
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
@@ -37,6 +38,32 @@ void compare_lines(const T1 &a, const T2 &b){
   }
 }
 
+static std::string modify_trailer(
+    const std::string &src,
+    const bool &remove_blank = false, const char *new_eol = "\n"){
+  using namespace boost::xpressive;
+  return regex_replace(src,
+      sregex::compile("( *)(?:\r\n?|\n)"),
+      std::string(remove_blank ? "" : "$1").append(new_eol));
+}
+
+template <class ReaderT>
+static void check_reader_versatility_to_input(const char *src){
+  struct opt_t {
+    bool no_trailing_blank;
+    const char *eol;
+  } opts[] = {
+    {false, "\n"}, /*{false, "\r"},*/ {false, "\r\n"}, // TODO Mac
+    {true,  "\n"}, /*{true,  "\r"},*/ {true,  "\r\n"},
+  };
+  for(unsigned i(0); i < sizeof(opts) / sizeof(opts[0]); ++i){
+    std::stringbuf sbuf(modify_trailer(src, opts[i].no_trailing_blank, opts[i].eol));
+    std::istream in(&sbuf);
+    ReaderT reader(in);
+    while(reader.has_next()){reader.next();}
+  }
+}
+
 BOOST_AUTO_TEST_CASE(nav_GPS_v2){
   const char *src = \
       "     2.10           N: GPS NAV DATA                         RINEX VERSION / TYPE\n"
@@ -59,6 +86,8 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v2){
 
   typedef RINEX_NAV_Reader<fnum_t> reader_t;
   typedef RINEX_NAV_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
 
   gps_t gps;
   {
@@ -162,6 +191,8 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
 
   typedef RINEX_NAV_Reader<fnum_t> reader_t;
   typedef RINEX_NAV_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
 
   gps_t gps;
   {
@@ -267,6 +298,8 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v2){
 
   typedef RINEX_OBS_Reader<fnum_t> reader_t;
   typedef RINEX_OBS_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
 
   {
     std::stringbuf sbuf(src);
@@ -401,6 +434,8 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3){
 
   typedef RINEX_OBS_Reader<fnum_t> reader_t;
   typedef RINEX_OBS_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
 
   {
     std::stringbuf sbuf(src);
