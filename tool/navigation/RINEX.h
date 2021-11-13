@@ -61,7 +61,49 @@ class RINEX_Reader {
     
   protected:
     header_t _header;
-    std::istream &src;
+    struct src_stream_t : public std::istream {
+      src_stream_t(std::istream &is) : std::istream(is.rdbuf()) {}
+      /**
+       * getline() for multi-platform (in addition to \n, \r\n and \r are supported)
+       *
+       * @see https://stackoverflow.com/questions/6089231/getting-std-ifstream-to-handle-lf-cr-and-crlf
+       * @see https://en.cppreference.com/w/cpp/io/basic_istream/getline
+       * TODO gcount() mismatch
+       */
+      std::istream& getline(
+          typename std::istream::char_type* s,
+          std::streamsize n){
+        std::streamsize i(1), consumed(0);
+        {
+          typename std::istream::sentry se(*this, true);
+          std::streambuf* sb(this->rdbuf());
+          for(; i < n; ++i){
+            int c(sb->sbumpc());
+            if(c == std::streambuf::traits_type::eof()){
+              this->setstate(std::ios::eofbit);
+              break;
+            }
+            ++consumed;
+            if(c == '\n'){
+              break;
+            }else if(c == '\r'){
+              if(sb->sgetc() == '\n'){
+                sb->sbumpc();
+                ++consumed;
+              }
+              break;
+            }
+            *(s++) = (typename std::istream::char_type)c;
+          }
+        }
+        if(((i == 1) && (consumed == 0)) || (i == n)){
+          this->setstate(std::ios::failbit);
+        }else{
+          *s = '\0';
+        }
+        return *this;
+      }
+    } src;
     bool _has_next;
     
   public:
@@ -784,7 +826,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
     }
 
     void seek_next_v3() {
-      char buf[256];
+      char buf[1024];
       typedef std::vector<int> sat_list_t;
       sat_list_t sat_list;
       obs.per_satellite.clear();
