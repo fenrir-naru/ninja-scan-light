@@ -233,10 +233,10 @@ parse_rinex_obs = proc{|fname|
     meas = GPS::Measurement::new
     types ||= (item[:meas_types]['G'] || item[:meas_types][' ']).collect.with_index{|type_, i|
       case type_
-      when "C1"
+      when "C1", "C1C"
         [i, GPS::Measurement::L1_PSEUDORANGE]
-      when "D1"
-        [i, GPS::Measurement::L1_RANGE_RATE]
+      when "D1", "D1C"
+        [i, GPS::Measurement::L1_DOPPLER]
       else
         nil 
       end
