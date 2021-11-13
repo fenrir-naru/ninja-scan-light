@@ -96,6 +96,10 @@ puts (OUTPUT_PVT_ITEMS + OUTPUT_MEAS_ITEMS).transpose[0].flatten.join(',')
 
 solver = GPS::Solver::new
 sn = solver.gps_space_node
+proc{|opt|
+  opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg
+  opt.residual_mask = 1E4 # 10 km
+}.call(solver.gps_options)
 
 run_solver = proc{|meas, t_meas|
   #$stderr.puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %d:%d:%d UTC"%[*t_meas.c_tm]})"
