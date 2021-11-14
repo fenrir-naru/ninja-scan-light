@@ -53,15 +53,19 @@ OUTPUT_PVT_ITEMS = [
   }],
 ] + [[
   (1..32).collect{|prn|
-    [:range_residual, :weight].collect{|str| "#{str}(#{prn})"} # TODO :azimuth, :elevation
+    [:range_residual, :weight, :azimuth, :elevation].collect{|str| "#{str}(#{prn})"}
   }.flatten,
   proc{|pvt|
-    next ([nil] * 64) unless pvt.position_solved?
+    next ([nil] * 4 * 32) unless pvt.position_solved?
     sats = pvt.used_satellite_list
-    r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
+    r, w, g = [:delta_r, :W, :G_enu].collect{|f| pvt.send(f)}
     (1..32).collect{|i|
-      next [nil, nil] unless i2 = sats.index(i)
-      [r[i2, 0], w[i2, i2]]
+      next ([nil] * 4) unless i2 = sats.index(i)
+      [r[i2, 0], w[i2, i2]] +
+          [Math::atan2(-g[i2, 0], -g[i2, 1]), Math::asin(-g[i2, 2])].collect{|rad|
+            # G_enu is measured in the direction from satellite to user positions
+            rad / Math::PI * 180
+          }
     }.flatten
   },
 ]] + [[
