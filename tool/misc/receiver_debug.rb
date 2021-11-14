@@ -149,14 +149,15 @@ register_ephemeris = proc{
 }.call
 
 parse_ubx = proc{|ubx_fname|
-  $stderr.puts "Reading UBX file (%s) ..."%[ubx_fname]
+  $stderr.print "Reading UBX file (%s) "%[ubx_fname]
   require_relative 'ubx'
 
   ubx = UBX::new(open(ubx_fname))  
   ubx_kind = Hash::new(0)
   
   t_meas = nil
-  while packet = ubx.read_packet
+  ubx.each_packet.with_index(1){|packet, i|
+    $stderr.print '.' if i % 1000 == 0
     ubx_kind[packet[2..3]] += 1
     case packet[2..3]
     when [0x02, 0x10] # RXM-RAW
@@ -224,13 +225,16 @@ parse_ubx = proc{|ubx_fname|
             v.pack("C*").unpack("V")[0]
           })
     end
-  end
-  $stderr.puts "Finish to parse UBX file (%s), found packets are %s"%[ubx_fname, ubx_kind.inspect]
+  }
+  $stderr.puts ", found packets are %s"%[ubx_kind.inspect]
 }
 
 parse_rinex_obs = proc{|fname|
+  $stderr.print "Reading RINEX observation file (%s)"%[fname]
   types = nil
+  count = 0
   GPS::RINEX_Observation::read(fname){|item|
+    $stderr.print '.' if (count += 1) % 1000 == 0
     t_meas = item[:time]
     sn.update_all_ephemeris(t_meas)
     
@@ -254,6 +258,7 @@ parse_rinex_obs = proc{|fname|
     }
     run_solver.call(meas, t_meas)
   }
+  $stderr.puts ", %d epochs."%[count] 
 }
 
 # check options
