@@ -128,8 +128,14 @@ SWIG_Object to_value(swig_type_info *info, const Complex<T> &v){
 template <class T>
 bool from_value(const SWIG_Object &obj, swig_type_info *info, Complex<T> &v){
   if(RB_TYPE_P(obj, T_COMPLEX)){
+#if RUBY_API_VERSION_CODE < 20600
+    static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
+    return from_value(rb_funcall(obj, id_r, 0), NULL, v.real())
+        && from_value(rb_funcall(obj, id_i, 0), NULL, v.imaginary());
+#else
     return from_value(rb_complex_real(obj), NULL, v.real())
         && from_value(rb_complex_imag(obj), NULL, v.imaginary());
+#endif
   }else{
     v.imaginary() = T(0);
     return from_value(obj, NULL, v.real());
