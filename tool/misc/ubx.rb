@@ -96,6 +96,19 @@ class UBX
     return nil
   end
   
+  def each_packet(&b)
+    res = Enumerator::new{|y|
+      while packet = read_packet
+        y << packet
+      end
+    }
+    b ? res.each(&b) : res
+  end
+  
+  def read_packets
+    each_packet.to_a
+  end
+  
   GNSS_ID = {
     :GPS => 0,
     :SBAS => 1,
