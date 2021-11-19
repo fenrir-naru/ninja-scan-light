@@ -76,14 +76,14 @@ struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
 struct GPS_Solver_RAIM_LSR : public SolverBaseT {
-  typedef SolverBaseT base_t;
+  typedef SolverBaseT super_t;
   typedef GPS_Solver_RAIM_LSR<FloatT, SolverBaseT> self_t;
   virtual ~GPS_Solver_RAIM_LSR() {}
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
-#define inheritate_type(x) typedef typename base_t::x x;
+#define inheritate_type(x) typedef typename super_t::x x;
 #else
-#define inheritate_type(x) using typename base_t::x;
+#define inheritate_type(x) using typename super_t::x;
 #endif
 
   inheritate_type(float_t);
@@ -96,18 +96,19 @@ struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   inheritate_type(measurement2_t);
 #undef inheritate_type
 
-  typedef GPS_PVT_RAIM_LSR<float_t, typename base_t::user_pvt_t> user_pvt_t;
+  typedef GPS_PVT_RAIM_LSR<float_t, typename super_t::user_pvt_t> user_pvt_t;
 
-  typename base_t::template solver_interface_t<self_t> solve() const {
-    return typename base_t::template solver_interface_t<self_t>(*this);
+  typename super_t::template solver_interface_t<self_t> solve() const {
+    return typename super_t::template solver_interface_t<self_t>(*this);
   }
 
 protected:
-  virtual bool update_position_solution(
+  typedef GPS_Solver_Base<FloatT> base_t;
+  bool update_position_solution( // overriding function
       const geometric_matrices_t &geomat,
-      typename GPS_Solver_Base<FloatT>::user_pvt_t &res) const {
+      typename base_t::user_pvt_t &res) const {
 
-    if(!base_t::update_position_solution(geomat, res)){return false;}
+    if(!super_t::update_position_solution(geomat, res)){return false;}
 
     user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
     if(!(pvt.FD.valid = (pvt.used_satellites >= 5))){return true;}
@@ -134,25 +135,25 @@ protected:
   }
 
 public:
-  using base_t::user_pvt;
+  using super_t::user_pvt;
 protected:
-  void user_pvt(
-      typename GPS_Solver_Base<FloatT>::user_pvt_t &res,
+  void user_pvt( // overriding function
+      typename base_t::user_pvt_t &res,
       const measurement2_t &measurement,
       const gps_time_t &receiver_time,
       const pos_t &user_position_init,
       const float_t &receiver_error_init,
-      const bool &good_init = true,
-      const bool &with_velocity = true) const {
+      const typename base_t::user_pvt_opt_t &opt
+          = typename base_t::user_pvt_opt_t()) const {
 
     user_pvt_t &pvt(static_cast<user_pvt_t &>(res));
     pvt.FD.valid = pvt.FDE_min.valid = pvt.FDE_2nd.valid = false;
 
     // Solution with full satellites
-    base_t::user_pvt(res,
+    super_t::user_pvt(res,
         measurement, receiver_time,
         user_position_init, receiver_error_init,
-        good_init, with_velocity);
+        opt);
 
     if(!pvt.position_solved()
         || (!pvt.FD.valid)
@@ -169,14 +170,15 @@ protected:
     // Subset calculation for Fault Exclusion
     pvt.FDE_min.wssr = pvt.FDE_2nd.wssr = pvt.FD.wssr;
     user_pvt_t pvt_FDE(pvt);
+    typename base_t::user_pvt_opt_t opt_subset(true, false); // good init, without velocity
     for(unsigned int i(0); i < pvt.used_satellites - 1;
         ++i, fullset.push_back(fullset.front()), fullset.pop_front()){
       pvt_FDE.FD.valid = false;
       measurement2_t subset(fullset.begin(), fullset.end() - 1);
-      base_t::user_pvt(pvt_FDE,
+      super_t::user_pvt(pvt_FDE,
           subset, receiver_time,
           pvt.user_position, pvt.receiver_error,
-          true, false);
+          opt_subset);
 
       if(!pvt_FDE.FD.valid){continue;}
       switch(pvt_FDE.error_code){

@@ -463,7 +463,7 @@ class GPS_SinglePositioning : public SolverBaseT {
       base_t::user_pvt(
           res,
           measurement2, receiver_time, user_position_init, receiver_error_init,
-          good_init, with_velocity);
+          typename base_t::user_pvt_opt_t(good_init, with_velocity));
     }
 
     xyz_t *satellite_position(

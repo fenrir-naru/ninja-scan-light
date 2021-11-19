@@ -604,6 +604,22 @@ protected:
     return (delta_user_position.dist() <= 1E-6);
   }
 
+  struct user_pvt_opt_t {
+    /**
+     * how many iterations are required to perform coarse estimation before fine one;
+     * If initial position and clock error are goodly guessed, this will be zero.
+     */
+    int warmup;
+    int max_trial;
+    bool estimate_velocity;
+    user_pvt_opt_t(
+        const bool &good_init = true,
+        const bool &with_velocity = true)
+        : warmup(good_init ? 0 : 5),
+        max_trial(10),
+        estimate_velocity(with_velocity) {}
+  };
+
   /**
    * Calculate User position/velocity by using associated solvers.
    * This function can be overridden in a subclass.
@@ -614,8 +630,7 @@ protected:
    * @param receiver_time receiver time at measurement
    * @param user_position_init initial solution of user position in XYZ meters and LLH
    * @param receiver_error_init initial solution of receiver clock error in meters
-   * @param good_init if true, initial position and clock error are goodly guessed.
-   * @param with_velocity if true, perform velocity estimation.
+   * @param opt options for user PVT calculation
    * @see update_ephemeris(), register_ephemeris
    */
   virtual void user_pvt(
@@ -624,8 +639,7 @@ protected:
       const gps_time_t &receiver_time,
       const pos_t &user_position_init,
       const float_t &receiver_error_init,
-      const bool &good_init = true,
-      const bool &with_velocity = true) const {
+      const user_pvt_opt_t &opt = user_pvt_opt_t()) const {
 
     res.receiver_time = receiver_time;
 
@@ -641,7 +655,7 @@ protected:
 
     // If initialization is not appropriate, more iteration will be performed.
     bool converged(false);
-    for(int i_trial(good_init ? 0 : -2); i_trial < 10; i_trial++){
+    for(int i_trial(-opt.warmup); i_trial < opt.max_trial; i_trial++){
 
       idx_rate_rel.clear();
       unsigned int i_row(0), i_measurement(0);
@@ -709,7 +723,7 @@ protected:
       return;
     }
 
-    if(!with_velocity){
+    if(!opt.estimate_velocity){
       res.error_code = user_pvt_t::ERROR_VELOCITY_SKIPPED;
       return;
     }
@@ -794,7 +808,7 @@ public:
     user_pvt(
         res,
         measurement2, receiver_time, user_position_init, receiver_error_init,
-        good_init, with_velocity);
+        user_pvt_opt_t(good_init, with_velocity));
   }
 
   template <class SolverT>
