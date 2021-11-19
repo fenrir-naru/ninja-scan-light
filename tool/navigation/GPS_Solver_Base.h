@@ -601,7 +601,7 @@ protected:
     const float_t &delta_receiver_error(delta_x(3, 0));
     res.receiver_error += delta_receiver_error;
 
-    return (delta_user_position.dist() <= 1E-6);
+    return ((delta_x.transpose() * delta_x)(0, 0) <= 1E-6); // equivalent to abs(x) <= 1E-3 [m]
   }
 
   struct user_pvt_opt_t {
