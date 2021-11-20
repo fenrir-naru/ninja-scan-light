@@ -629,10 +629,12 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
 %}
 
 %extend GPS_Solver {
+  %ignore super_t;
   %ignore base_t;
   %ignore gps_t;
   %ignore gps;
   %ignore select;
+  %ignore update_position_solution;
   %typemap(in) const std::map<int, std::map<int, FloatT> > &measurement (
       std::map<int, std::map<int, FloatT> > temp) {
     $1 = &temp;
@@ -647,27 +649,34 @@ struct GPS_Solver
     : public GPS_Solver_RAIM_LSR<FloatT, 
         GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > > {
   typedef GPS_Solver_RAIM_LSR<FloatT, 
-      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > > base_t;
+      GPS_Solver_Base_Debug<FloatT, GPS_Solver_Base<FloatT> > > super_t;
+  typedef GPS_Solver_Base<FloatT> base_t;
   struct gps_t {
     GPS_SpaceNode<FloatT> space_node;
     GPS_SolverOptions<FloatT> options;
     GPS_SinglePositioning<FloatT> solver;
     gps_t() : space_node(), options(), solver(space_node) {}
   } gps;
-  GPS_Solver() : base_t(), gps() {}
+  GPS_Solver() : super_t(), gps() {}
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
-  const GPS_Solver_Base<FloatT> &select(
-      const typename GPS_Solver_Base<FloatT>::prn_t &prn) const {
+  const base_t &select(
+      const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
     return *this;
+  }
+  virtual bool update_position_solution(
+      const typename base_t::geometric_matrices_t &geomat,
+      typename base_t::user_pvt_t &res) const {
+    // TODO
+    return super_t::update_position_solution(geomat, res);
   }
   GPS_User_PVT<FloatT> solve(
       const std::map<int, std::map<int, FloatT> > &measurement,
       const GPS_Time<FloatT> &receiver_time) const {
     const_cast<gps_t &>(gps).space_node.update_all_ephemeris(receiver_time);
     const_cast<gps_t &>(gps).solver.update_options(gps.options);
-    return base_t::solve().user_pvt(measurement, receiver_time);
+    return super_t::solve().user_pvt(measurement, receiver_time);
   }
   GPS_User_PVT<FloatT> solve(
       const GPS_Measurement<FloatT> &measurement,
