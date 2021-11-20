@@ -2618,6 +2618,12 @@ class Matrix_Frozen {
       static real_t get_abs(const v_t &v) noexcept {
         return v.abs();
       }
+      static real_t get_abs2(const real_t &v) noexcept {
+        return v * v;
+      }
+      static real_t get_abs2(const v_t &v) noexcept {
+        return v.abs2();
+      }
       static bool is_nan_or_infinite(const real_t &v) noexcept {
 #if defined(_MSC_VER)
         return _isnan(v) || !_finite(v);
@@ -2642,7 +2648,19 @@ class Matrix_Frozen {
      * @return tr(A* * A)
      */
     typename complex_t::real_t norm2F() const noexcept {
-      return complex_t::get_real((adjoint() * (*this)).trace(false));
+      // return complex_t::get_real((adjoint() * (*this)).trace(false));
+      /* The above is as definition, however, double calculation may occure
+       * when (*this) is a expression matrix such as multiplication.
+       * To avoid such overhead, its expansion form to take summation of
+       * abs(element)**2 is used.
+       */
+      typename complex_t::real_t res(0);
+      for(unsigned int i(0), i_end(rows()); i < i_end; ++i){
+        for(unsigned int j(0), j_end(columns()); j < j_end; ++j){
+          res += complex_t::get_abs2((*this)(i, j));
+        }
+      }
+      return res;
     }
 
   protected:
