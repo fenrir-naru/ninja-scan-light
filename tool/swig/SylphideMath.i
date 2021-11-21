@@ -25,7 +25,7 @@
 #endif
 %}
 
-//%include std_common.i
+%include std_common.i
 %include std_string.i
 //%include std_vector.i
 %include exception.i
@@ -65,39 +65,6 @@ type get_ ## name () {
 };
 %enddef
 
-%header {
-template <class T>
-SWIG_Object to_value(swig_type_info *info, const T &v){
-  return SWIG_NewPointerObj((void *)&v, info, 0);
-}
-template <class T>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, T &v){
-  T *ptr;
-  int res(info ? SWIG_ConvertPtr(obj, (void **)&ptr, info, 0) : SWIG_ERROR);
-  if(SWIG_IsOK(res)){
-    if(ptr){v = *ptr;} // if nil, then keep current v
-    if(SWIG_IsNewObj(res)){delete ptr;}
-    return true;
-  }
-  return false;
-}
-template <>
-SWIG_Object to_value(swig_type_info *info, const double &v);
-template <>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v);
-}
-
-%wrapper {
-template <>
-SWIG_Object to_value(swig_type_info *info, const double &v){
-  return SWIG_From(double)(v);
-}
-template <>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, double &v){
-  return SWIG_IsOK(SWIG_AsVal(double)(obj, &v)) ? true : false;
-}
-}
-
 #ifdef SWIGRUBY
 %header {
 static VALUE funcall_throw_if_error(VALUE (*func)(VALUE), VALUE arg) {
@@ -118,30 +85,6 @@ static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
   return funcall_throw_if_error(yield_t::run, reinterpret_cast<VALUE>(&arg));
 }
 }
-%header {
-template <class T>
-SWIG_Object to_value(swig_type_info *info, const Complex<T> &v){
-  return rb_complex_new(
-      to_value(info, v.real()), 
-      to_value(info, v.imaginary()));
-}
-template <class T>
-bool from_value(const SWIG_Object &obj, swig_type_info *info, Complex<T> &v){
-  if(RB_TYPE_P(obj, T_COMPLEX)){
-#if RUBY_API_VERSION_CODE < 20600
-    static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
-    return from_value(rb_funcall(obj, id_r, 0), NULL, v.real())
-        && from_value(rb_funcall(obj, id_i, 0), NULL, v.imaginary());
-#else
-    return from_value(rb_complex_real(obj), NULL, v.real())
-        && from_value(rb_complex_imag(obj), NULL, v.imaginary());
-#endif
-  }else{
-    v.imaginary() = T(0);
-    return from_value(obj, NULL, v.real());
-  }
-}
-}
 #endif
 
 %feature("autodoc", "1");
@@ -156,17 +99,75 @@ class Complex;
 
 %copyctor Complex;
 
+%fragment(SWIG_Traits_frag(ComplexGeneric), "header", fragment="StdTraits"){
+// SWIG_Traits_frag(Complex) is invalid, which will be hidden by SWIG_Traits_frag(Complex<T>)
+#ifdef SWIGRUBY
+  namespace swig {
+    template <class T> struct traits< Complex<T> > {
+      typedef value_category category;
+      static const char* type_name() { return "Complex"; }
+    };
+    template <class T> struct traits_asval< Complex<T> > {
+      typedef Complex<T> value_type;
+      static int asval(VALUE obj, value_type *v) {
+        if(RB_TYPE_P(obj, T_COMPLEX)){
+#if RUBY_API_VERSION_CODE < 20600
+          static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
+          int res = swig::asval(rb_funcall(obj, id_r, 0), &(v->real()));
+          if(!SWIG_IsOK(res)){return res;}
+          return swig::asval(rb_funcall(obj, id_i, 0), &(v->imaginary()));
+#else
+          int res = swig::asval(rb_complex_real(obj), &(v->real()));
+          if(!SWIG_IsOK(res)){return res;}
+          return swig::asval(rb_complex_imag(obj), &(v->imaginary()));
+#endif 
+        }else{
+          v->imaginary() = T(0);
+          return swig::asval(obj, &(v->real()));
+        }
+      }
+    };
+    template <class T> struct traits_from< Complex<T> > {
+      typedef Complex<T> value_type;
+      static VALUE from(const value_type &v) {
+        return rb_complex_new(swig::from(v.real()), swig::from(v.imaginary()));
+      }
+    };
+    template <class T> struct traits_check< Complex<T>, value_category> {
+      static bool check(VALUE obj) {
+        if(RB_TYPE_P(obj, T_COMPLEX)){
+          return swig::check<T>(rb_complex_real(obj))
+              && swig::check<T>(rb_complex_imag(obj));
+        }else{
+          return swig::check<T>(obj);
+        }
+      }
+    };
+  }
+#endif
+}
+
 %extend Complex {
+  %fragment(SWIG_Traits_frag(Complex<FloatT>), "header",
+      fragment=SWIG_Traits_frag(FloatT),
+      fragment=SWIG_Traits_frag(ComplexGeneric)){
+    namespace swig {
+      template <> struct traits< Complex<FloatT> > {
+        typedef value_category category;
+        static const char* type_name() { return "Complex<" %str(FloatT) ">"; }
+      };
+    }    
+  }
+  %fragment(SWIG_Traits_frag(Complex<FloatT>));
   %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const Complex<FloatT> & {
     void *vptr = 0;
-    Complex<FloatT> temp;
     $1 = SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
-    $1 = $1 || from_value($input, $1_descriptor, temp);
+    $1 = $1 || swig::check<Complex<FloatT> >($input);
   }
   %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
     do{
       if(SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){break;}
-      if(from_value($input, $1_descriptor, temp)){
+      if(SWIG_IsOK(swig::asval($input, &temp))){
         $1 = &temp;
         break;
       }
@@ -174,7 +175,7 @@ class Complex;
     }while(false);
   }
   %typemap(out) Complex<FloatT> {
-    $result = to_value($&1_descriptor, $1);
+    $result = swig::from($1);
   }
 
   static Complex<FloatT> rectangular(const FloatT &r, const FloatT &i = FloatT(0)) noexcept {
@@ -542,7 +543,6 @@ struct MatrixUtil {
   template <class T, class Array2D_Type, class ViewType>
   static bool replace(
       Matrix<T, Array2D_Type, ViewType> &dst,
-      bool (*conv)(const void *src, T &dst),
       const void *src = NULL){
     unsigned int r(dst.rows()), c(dst.columns()), len(r * c);
     bool replaced(true);
@@ -583,7 +583,7 @@ struct MatrixUtil {
             }
           }
           v_elm = RARRAY_AREF(value_r, j);
-          if(!conv(&v_elm, dst(i, j))){break;}
+          if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
           if(++j >= c){j = 0; ++i;}
         }
       }else{ // [r0c0, r0c1, ...]
@@ -592,21 +592,21 @@ struct MatrixUtil {
         }
         for(; i_elm < len; i_elm++){
           v_elm = RARRAY_AREF(*value, i_elm);
-          if(!conv(&v_elm, dst(i, j))){break;}
+          if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
           if(++j >= c){j = 0; ++i;}
         }
       }
     }else if(value && bracket_read_t::is_accessible(*value)){
       for(; i_elm < len; i_elm++){
         v_elm = bracket_read_t::read(*value, i, j);
-        if(!conv(&v_elm, dst(i, j))){break;}
+        if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
         if(++j >= c){j = 0; ++i;}
       }
     }else if(rb_block_given_p()){
       for(; i_elm < len; i_elm++){
         VALUE args[2] = {UINT2NUM(i), UINT2NUM(j)};
         v_elm = yield_throw_if_error(2, args);
-        if(!conv(&v_elm, dst(i, j))){break;}
+        if(!SWIG_IsOK(swig::asval(v_elm, &dst(i, j)))){break;}
         if(++j >= c){j = 0; ++i;}
       }
     }else{
@@ -789,19 +789,20 @@ struct MatrixUtil {
   %alias ud "ud_decomposition";
   %alias qr "qr_decomposition";
   
-  %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header"){
+  %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header", 
+      fragment=SWIG_Traits_frag(T)){
     static void matrix_yield_internal(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j,
         const bool &with_index = false, const bool &assign = false){
       SWIG_Object v;
       if(with_index){
-        VALUE values[] = {to_value($descriptor(const T &), src), UINT2NUM(i), UINT2NUM(j)};
+        VALUE values[] = {swig::from(src), UINT2NUM(i), UINT2NUM(j)};
         v = yield_throw_if_error(3, values);
       }else{
-        VALUE values[] = {to_value($descriptor(const T &), src)};
+        VALUE values[] = {swig::from(src)};
         v = yield_throw_if_error(1, values);
       }
-      if(assign && !from_value(v, $descriptor(T &), *dst)){
+      if(assign && !SWIG_IsOK(swig::asval(v, dst))){
         VALUE v_inspect(rb_inspect(v));
         std::stringstream s;
         s << "Unknown input (T expected) [" << i << "," << j << "]: ";
@@ -892,7 +893,7 @@ struct MatrixUtil {
     for(unsigned int i(0); i < i_max; ++i){
       SWIG_Object row = rb_ary_new2(j_max);
       for(unsigned int j(0); j < j_max; ++j){
-        rb_ary_store(row, j, to_value($descriptor(const T &), (*($self))(i, j)));
+        rb_ary_store(row, j, swig::from((*($self))(i, j)));
       }
       rb_ary_store(res, i, row);
     }
@@ -918,19 +919,12 @@ MAKE_TO_S(Matrix_Frozen)
   %typemap(in) const void *replacer {
     $1 = &$input;
   }
-  %fragment(SWIG_From_frag(MatrixHelper<T>), "header"){
-    static bool from_value(const void *src, T &dst){
-      return from_value(*static_cast<const SWIG_Object *>(src), $descriptor(T &), dst);
-    }
-  }
-  %typemap(in, numinputs=0, fragment=SWIG_From_frag(MatrixHelper<T>)) bool (*conv)(const void *src, T &dst) {
-    $1 = from_value;
-  }
+  %fragment(SWIG_Traits_frag(T));
 
   Matrix(const unsigned int &rows, const unsigned int &columns, 
-      bool (*conv)(const void *src, T &dst), const void *replacer = NULL){
+      const void *replacer = NULL){
     Matrix<T, Array2D_Type, ViewType> res(rows, columns);
-    MatrixUtil::replace(res, conv, replacer);
+    MatrixUtil::replace(res, replacer);
     return new Matrix<T, Array2D_Type, ViewType>(res);
   }
   Matrix(const unsigned int &rows, const unsigned int &columns,
@@ -941,14 +935,14 @@ MAKE_TO_S(Matrix_Frozen)
   }
 #if defined(SWIGRUBY)
   %fragment(SWIG_AsVal_frag(unsigned int));
-  Matrix(bool (*conv)(const void *src, T &dst), const void *replacer){
+  Matrix(const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
     if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
       Matrix<T, Array2D_Type, ViewType> res(
           (unsigned int)RARRAY_LEN(*value),
           (unsigned int)RARRAY_LEN(RARRAY_AREF(*value, 0)));
-      MatrixUtil::replace(res, conv, replacer);
+      MatrixUtil::replace(res, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
       unsigned int r, c;
@@ -964,7 +958,7 @@ MAKE_TO_S(Matrix_Frozen)
               .append("]"));
       }
       Matrix<T, Array2D_Type, ViewType> res(r, c);
-      MatrixUtil::replace(res, conv, replacer);
+      MatrixUtil::replace(res, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{
       throw std::runtime_error("double array [[...], ...] or Matrix is required");
@@ -998,8 +992,8 @@ MAKE_TO_S(Matrix_Frozen)
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
-  self_t &replace(bool (*conv)(const void *src, T &dst), const void *replacer = NULL){
-    if(!MatrixUtil::replace(*$self, conv, replacer)){
+  self_t &replace(const void *replacer = NULL){
+    if(!MatrixUtil::replace(*$self, replacer)){
       throw std::runtime_error("Unsupported replacement");
     }
     return *$self;
