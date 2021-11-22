@@ -105,7 +105,6 @@ class Complex;
   namespace swig {
     template <class T> struct traits< Complex<T> > {
       typedef value_category category;
-      static const char* type_name() { return "Complex"; }
     };
     template <class T> struct traits_asval< Complex<T> > {
       typedef Complex<T> value_type;
@@ -136,8 +135,14 @@ class Complex;
     template <class T> struct traits_check< Complex<T>, value_category> {
       static bool check(VALUE obj) {
         if(RB_TYPE_P(obj, T_COMPLEX)){
+#if RUBY_API_VERSION_CODE < 20600
+          static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
+          return swig::check<T>(rb_funcall(obj, id_r, 0))
+              && swig::check<T>(rb_funcall(obj, id_i, 0));
+#else
           return swig::check<T>(rb_complex_real(obj))
               && swig::check<T>(rb_complex_imag(obj));
+#endif
         }else{
           return swig::check<T>(obj);
         }
@@ -152,27 +157,25 @@ class Complex;
       fragment=SWIG_Traits_frag(FloatT),
       fragment=SWIG_Traits_frag(ComplexGeneric)){
     namespace swig {
-      template <> struct traits< Complex<FloatT> > {
-        typedef value_category category;
-        static const char* type_name() { return "Complex<" %str(FloatT) ">"; }
-      };
-    }    
+      template <>
+      inline swig_type_info *type_info<Complex<FloatT> >() {
+        return $descriptor(Complex<FloatT> *);
+      }
+      template <>
+      inline swig_type_info *type_info<Complex<FloatT> *>() {
+        return $descriptor(Complex<FloatT> *);
+      }
+    }
   }
   %fragment(SWIG_Traits_frag(Complex<FloatT>));
   %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const Complex<FloatT> & {
-    void *vptr = 0;
-    $1 = SWIG_CheckState(SWIG_ConvertPtr($input, &vptr, $1_descriptor, 0));
-    $1 = $1 || swig::check<Complex<FloatT> >($input);
+    $1 = swig::check<$1_ltype >($input) || swig::check<$*1_ltype >($input);
   }
   %typemap(in) const Complex<FloatT> & (Complex<FloatT> temp) {
-    do{
-      if(SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0))){break;}
-      if(SWIG_IsOK(swig::asval($input, &temp))){
-        $1 = &temp;
-        break;
-      }
+    if((!SWIG_IsOK(swig::asptr($input, &$1)))
+        && (!SWIG_IsOK(swig::asval($input, ($1 = &temp))))){
       SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
-    }while(false);
+    }
   }
   %typemap(out) Complex<FloatT> {
     $result = swig::from($1);
