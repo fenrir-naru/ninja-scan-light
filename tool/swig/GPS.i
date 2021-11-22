@@ -533,39 +533,63 @@ struct GPS_User_PVT
       }
     }
   }
-  GPS_Measurement(SWIG_Object obj) {
-    GPS_Measurement<FloatT> res;
+  %fragment(SWIG_Traits_frag(GPS_Measurement<FloatT>), "header",
+      fragment=SWIG_Traits_frag(FloatT)){
+    namespace swig {
+      template <>
+      bool check<GPS_Measurement<FloatT> >(SWIG_Object obj) {
 #ifdef SWIGRUBY
-    if(RB_TYPE_P(obj, T_ARRAY)){
-      int i(0), i_end(RARRAY_LEN(obj));
-      VALUE values;
-      for(; i < i_end; ++i){
-        values = RARRAY_AREF(obj, i);
-        if((!RB_TYPE_P(values, T_ARRAY)) || (RARRAY_LEN(values) < 3)){
-          break;
-        }
-        int prn, key;
-        FloatT v;
-        if((!SWIG_IsOK(SWIG_AsVal(int)(RARRAY_AREF(values, 0), &prn)))
-            || (!SWIG_IsOK(SWIG_AsVal(int)(RARRAY_AREF(values, 1), &key)))
-            || (!SWIG_IsOK(swig::asval(RARRAY_AREF(values, 2), &v)))){
-          break;
-        }
-        res.add(prn, key, v);
-      }
-      if(i < i_end){
-        VALUE v_inspect(rb_inspect(values));
-        SWIG_exception(SWIG_TypeError, 
-            std::string("Unexpected input [").append(std::to_string(i)).append("]: ")
-              .append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)).c_str());
-      }
-    }else{
-      SWIG_exception(SWIG_TypeError, "[[prn, key, value], ...] is expected");
-    }
+        return RB_TYPE_P(obj, T_ARRAY);
+#else
+        return false;
 #endif
-    return new GPS_Measurement<FloatT>(res);
+      }
+      template <>
+      int asval(SWIG_Object obj, GPS_Measurement<FloatT> *val) {
+#ifdef SWIGRUBY
+        if(RB_TYPE_P(obj, T_ARRAY)){
+          int i(0), i_end(RARRAY_LEN(obj));
+          VALUE values;
+          for(; i < i_end; ++i){
+            values = RARRAY_AREF(obj, i);
+            if((!RB_TYPE_P(values, T_ARRAY)) || (RARRAY_LEN(values) < 3)){
+              break;
+            }
+            int prn, key;
+            FloatT v;
+            if((!SWIG_IsOK(SWIG_AsVal(int)(RARRAY_AREF(values, 0), &prn)))
+                || (!SWIG_IsOK(SWIG_AsVal(int)(RARRAY_AREF(values, 1), &key)))
+                || (!SWIG_IsOK(swig::asval(RARRAY_AREF(values, 2), &v)))){
+              break;
+            }
+            val->add(prn, key, v);
+          }
+          if(i < i_end){
+            VALUE v_inspect(rb_inspect(values));
+            SWIG_exception(SWIG_TypeError, 
+                std::string("Unexpected input [").append(std::to_string(i)).append("]: ")
+                  .append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)).c_str());
+          }
+          return SWIG_OK;
+        }
+#endif
+        return SWIG_ERROR;
+      }
+    }
+  }
+  %fragment(SWIG_Traits_frag(GPS_Measurement<FloatT>));
+  %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const GPS_Measurement<FloatT> & {
+    $1 = SWIG_CheckState(SWIG_ConvertPtr($input, (void **)0, $1_descriptor, 0))
+        || swig::check<GPS_Measurement<FloatT> >($input);
+  }
+  %typemap(in) const GPS_Measurement<FloatT> & (GPS_Measurement<FloatT> temp) {
+    if((!SWIG_IsOK(SWIG_ConvertPtr($input, (void **)&$1, $1_descriptor, 0)))
+        && (!SWIG_IsOK(swig::asval($input, ($1 = &temp))))){
+      SWIG_exception(SWIG_TypeError, "in method '$symname', expecting type $*1_ltype");
+    }
   }
 }
+%copyctor GPS_Measurement;
 #ifdef SWIGRUBY
 %mixin GPS_Measurement "Enumerable";
 #endif
@@ -574,7 +598,6 @@ template <class FloatT>
 struct GPS_Measurement {
   typedef std::map<int, std::map<int, FloatT> > items_t;
   items_t items;
-  GPS_Measurement() : items() {}
   enum {
     L1_PSEUDORANGE,
     L1_DOPPLER,
@@ -668,13 +691,6 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
   %ignore gps;
   %ignore select;
   %ignore update_position_solution;
-  %typemap(in) const std::map<int, std::map<int, FloatT> > &measurement (
-      std::map<int, std::map<int, FloatT> > temp) {
-    $1 = &temp;
-#ifdef SWIGRUBY
-    // TODO
-#endif
-  }
 }
 %inline %{
 template <class FloatT>
@@ -705,16 +721,11 @@ struct GPS_Solver
     return super_t::update_position_solution(geomat, res);
   }
   GPS_User_PVT<FloatT> solve(
-      const std::map<int, std::map<int, FloatT> > &measurement,
+      const GPS_Measurement<FloatT> &measurement,
       const GPS_Time<FloatT> &receiver_time) const {
     const_cast<gps_t &>(gps).space_node.update_all_ephemeris(receiver_time);
     const_cast<gps_t &>(gps).solver.update_options(gps.options);
-    return super_t::solve().user_pvt(measurement, receiver_time);
-  }
-  GPS_User_PVT<FloatT> solve(
-      const GPS_Measurement<FloatT> &measurement,
-      const GPS_Time<FloatT> &receiver_time) const {
-    return solve(measurement.items, receiver_time);
+    return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
 };
 %}
