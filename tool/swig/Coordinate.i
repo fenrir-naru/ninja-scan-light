@@ -12,6 +12,7 @@
 #include "navigation/coordinate.h"
 %}
 
+%include std_common.i
 %include std_string.i
 %include exception.i
 
@@ -46,19 +47,14 @@ type set_ ## name (const type &v) {
 };
 
 %extend System_3D {
-  %fragment(SWIG_From_frag(System_3D), "header", fragment=SWIG_From_frag(double)){
-    static SWIG_Object system3d_c2target(const double &v){
-      return SWIG_From(double)(v);
-    }
-  }
-  %fragment(SWIG_From_frag(System_3D));
+  %fragment(SWIG_Traits_frag(FloatT));
 #if !defined(SWIGRUBY)
   %typemap(in,numinputs=0) FloatT values[3] (FloatT temp[3]) %{
     $1 = temp;
   %}
   %typemap(argout) FloatT values[3] {
     for(int i(0); i < 3; ++i){
-      %append_output(system3d_c2target($1[i]));
+      %append_output(swig::from($1[i]));
     }
   }
   void to_a(FloatT values[3]) const {
@@ -78,7 +74,7 @@ type set_ ## name (const type &v) {
   void each() const {
     for(int i(0); i < 3; ++i){
 #ifdef SWIGRUBY
-      rb_yield_values(1, system3d_c2target((*self)[i]));
+      rb_yield_values(1, swig::from((*self)[i]));
 #endif
     }
   }
@@ -96,21 +92,18 @@ type set_ ## name (const type &v) {
 };
 
 %extend System_LLH {
-  %typemap(in,numinputs=0) FloatT (&res)[3][3] {
-    $1 = &($1_type)(*(new FloatT[9]));
-  }
-  %typemap(freearg) FloatT (&res)[3][3] {
-    delete [] &(FloatT (&)[])(*$1);
+  %typemap(in,numinputs=0) (FloatT (&res)[3][3]) (FloatT temp[3][3]) {
+    $1 = &($1_type)(temp);
   }
 #ifdef SWIGRUBY
-  %typemap(argout, fragment=SWIG_From_frag(System_3D)) FloatT (&res)[3][3] {
+  %typemap(argout, fragment=SWIG_Traits_frag(FloatT)) FloatT (&res)[3][3] {
     $result = rb_ary_new_capa(3);
     for(int i(0); i < 3; ++i){
       rb_ary_store($result, i,
           rb_ary_new_from_args(3,
-            system3d_c2target((*$1)[i][0]), 
-            system3d_c2target((*$1)[i][1]),
-            system3d_c2target((*$1)[i][2]) ));
+            swig::from((*$1)[i][0]), 
+            swig::from((*$1)[i][1]),
+            swig::from((*$1)[i][2]) ));
     }
   }
   %alias latitude "lat";
