@@ -791,9 +791,9 @@ struct MatrixUtil {
   
   %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header", 
       fragment=SWIG_Traits_frag(T)){
-    static void matrix_yield_internal(
-        const T &src, T *dst, const unsigned int &i, const unsigned int &j,
-        const bool &with_index = false, const bool &assign = false){
+    template <bool with_index = false, bool assign = false>
+    static inline void matrix_yield_internal(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
       SWIG_Object v;
       if(with_index){
         VALUE values[] = {swig::from(src), UINT2NUM(i), UINT2NUM(j)};
@@ -812,19 +812,19 @@ struct MatrixUtil {
     }
     static void matrix_yield(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      matrix_yield_internal(src, dst, i, j, false, false);
+      matrix_yield_internal<false, false>(src, dst, i, j);
     }
     static void matrix_yield_with_index(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      matrix_yield_internal(src, dst, i, j, true, false);
+      matrix_yield_internal<true, false>(src, dst, i, j);
     }
     static void matrix_yield_get(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      matrix_yield_internal(src, dst, i, j, false, true);
+      matrix_yield_internal<false, true>(src, dst, i, j);
     }
     static void matrix_yield_get_with_index(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      matrix_yield_internal(src, dst, i, j, true, true);
+      matrix_yield_internal<true, true>(src, dst, i, j);
     }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
