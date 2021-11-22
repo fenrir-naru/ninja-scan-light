@@ -233,6 +233,7 @@ __RINEX_OBS_TEXT__
           meas.add(prn, k, v)
         }
       }
+      expect(GPS::Measurement::new(meas.to_a).to_a.sort).to eq(meas.to_a.sort)
       
       t_meas = GPS::Time::new(1849, 172413)
       puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %02d:%02d:%02d UTC"%[*t_meas.c_tm]})"

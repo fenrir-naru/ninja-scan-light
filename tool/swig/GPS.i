@@ -533,6 +533,38 @@ struct GPS_User_PVT
       }
     }
   }
+  GPS_Measurement(SWIG_Object obj) {
+    GPS_Measurement<FloatT> res;
+#ifdef SWIGRUBY
+    if(RB_TYPE_P(obj, T_ARRAY)){
+      int i(0), i_end(RARRAY_LEN(obj));
+      VALUE values;
+      for(; i < i_end; ++i){
+        values = RARRAY_AREF(obj, i);
+        if((!RB_TYPE_P(values, T_ARRAY)) || (RARRAY_LEN(values) < 3)){
+          break;
+        }
+        int prn, key;
+        FloatT v;
+        if((!SWIG_IsOK(SWIG_AsVal(int)(RARRAY_AREF(values, 0), &prn)))
+            || (!SWIG_IsOK(SWIG_AsVal(int)(RARRAY_AREF(values, 1), &key)))
+            || (!SWIG_IsOK(swig::asval(RARRAY_AREF(values, 2), &v)))){
+          break;
+        }
+        res.add(prn, key, v);
+      }
+      if(i < i_end){
+        VALUE v_inspect(rb_inspect(values));
+        SWIG_exception(SWIG_TypeError, 
+            std::string("Unexpected input [").append(std::to_string(i)).append("]: ")
+              .append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)).c_str());
+      }
+    }else{
+      SWIG_exception(SWIG_TypeError, "[[prn, key, value], ...] is expected");
+    }
+#endif
+    return new GPS_Measurement<FloatT>(res);
+  }
 }
 #ifdef SWIGRUBY
 %mixin GPS_Measurement "Enumerable";
@@ -542,6 +574,7 @@ template <class FloatT>
 struct GPS_Measurement {
   typedef std::map<int, std::map<int, FloatT> > items_t;
   items_t items;
+  GPS_Measurement() : items() {}
   enum {
     L1_PSEUDORANGE,
     L1_DOPPLER,
