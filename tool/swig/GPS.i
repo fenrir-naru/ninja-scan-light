@@ -24,6 +24,7 @@
 %}
 
 %include typemaps.i
+%include std_common.i
 %include std_string.i
 %include exception.i
 
@@ -114,15 +115,6 @@ static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
     *week = self->week;
     *seconds = self->seconds;
   }
-  %fragment(SWIG_From_frag(GPS_Time<FloatT>),"header") {
-    template <class T>
-    SWIG_Object SWIG_From_dec(GPS_Time)(const T &v);
-    template <>
-    SWIG_Object SWIG_From_dec(GPS_Time)(const GPS_Time<FloatT> &v){
-      return SWIG_NewPointerObj(
-          new GPS_Time<FloatT>(v), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN);
-    }
-  }
 }
 
 %define MAKE_ACCESSOR(name, type)
@@ -153,12 +145,13 @@ template <class FloatT>
 struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters {};
 %}
 %extend GPS_Ionospheric_UTC_Parameters {
+  %fragment(SWIG_Traits_frag(FloatT));
   %typemap(in,numinputs=0) FloatT values[4] (FloatT temp[4]) %{
     $1 = temp;
   %}
   %typemap(argout) FloatT values[4] {
     for(int i(0); i < 4; ++i){
-      %append_output(SWIG_From(double)((double)($1[i])));
+      %append_output(swig::from($1[i]));
     }
   }
   %typemap(in) const FloatT values[4] (FloatT temp[4]) {
@@ -168,10 +161,7 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
     }
     for(int i(0); i < 4; ++i){
       SWIG_Object obj(RARRAY_AREF($input, i));
-      double v;
-      if(SWIG_IsOK(SWIG_AsVal(double)(obj, &v))){
-        temp[i] = (FloatT)v;
-      }else{
+      if(!SWIG_IsOK(swig::asval(obj, &temp[i]))){
         SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
       }
     }
@@ -376,6 +366,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
 }
 
 %extend GPS_SpaceNode {
+  %fragment(SWIG_Traits_frag(FloatT));
   %typemap(out) const Ionospheric_UTC_Parameters & {
     %set_output(SWIG_NewPointerObj(
         %reinterpret_cast($1, GPS_Ionospheric_UTC_Parameters<FloatT> *),
@@ -393,8 +384,8 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         %const_cast(self, GPS_SpaceNode<FloatT> *)->satellite(prn).ephemeris());
   }
   %typemap(out) pierce_point_res_t {
-    %append_output(SWIG_From(double)((double)($1.latitude)));
-    %append_output(SWIG_From(double)((double)($1.longitude)));
+    %append_output(swig::from($1.latitude));
+    %append_output(swig::from($1.longitude));
   }
   %ignore iono_correction() const;
   %ignore tropo_correction() const;
@@ -414,17 +405,18 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   %rename("position_solved?") position_solved;
   %rename("velocity_solved?") velocity_solved;
 #endif
+  %fragment(SWIG_Traits_frag(FloatT));
   %typemap(in, numinputs=0) const typename base_t::detection_t ** (typename base_t::detection_t *temp) {
     $1 = &temp;
   }
   %typemap(argout) const typename base_t::detection_t ** {
     if((*$1)->valid){
-      %append_output(SWIG_From(double)((double)((*$1)->wssr)));
-      %append_output(SWIG_From(double)((double)((*$1)->wssr_sf)));
-      %append_output(SWIG_From(double)((double)((*$1)->weight_max)));
-      %append_output(SWIG_From(double)((double)((*$1)->slope_HV[0].max)));
+      %append_output(swig::from((*$1)->wssr));
+      %append_output(swig::from((*$1)->wssr_sf));
+      %append_output(swig::from((*$1)->weight_max));
+      %append_output(swig::from((*$1)->slope_HV[0].max));
       %append_output(SWIG_From(int)(((*$1)->slope_HV[0].prn)));
-      %append_output(SWIG_From(double)((double)((*$1)->slope_HV[1].max)));
+      %append_output(swig::from((*$1)->slope_HV[1].max));
       %append_output(SWIG_From(int)(((*$1)->slope_HV[1].prn)));
     }
   }
@@ -522,6 +514,7 @@ struct GPS_User_PVT
 #endif
     $action
   }
+  %fragment(SWIG_Traits_frag(FloatT));
   void each() const {
     for(typename GPS_Measurement<FloatT>::items_t::const_iterator
           it(self->items.begin()), it_end(self->items.end());
@@ -533,7 +526,7 @@ struct GPS_User_PVT
         VALUE values[] = {
           SWIG_From(int)(it->first), 
           SWIG_From(int)(it2->first),
-          SWIG_From(double)((double)it2->second)
+          swig::from(it2->second)
         };
         yield_throw_if_error(3, values);
 #endif
@@ -684,6 +677,10 @@ struct GPS_Solver
 };
 %}
 
+%fragment(SWIG_From_frag(int));
+%fragment(SWIG_From_frag(bool));
+%fragment(SWIG_From_frag(char));
+
 %extend RINEX_Observation {
   %exception read {
 #ifdef SWIGRUBY
@@ -693,15 +690,7 @@ struct GPS_Solver
 #endif
     $action
   }
-  %fragment(SWIG_From_frag(GPS_Time<FloatT>));
-}
-%fragment(SWIG_From_frag(int));
-%fragment(SWIG_From_frag(bool));
-%fragment(SWIG_From_frag(double));
-%fragment(SWIG_From_frag(char));
-%inline {
-template <class FloatT>
-struct RINEX_Observation {
+  %fragment(SWIG_Traits_frag(FloatT));
   static void read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     struct reader_t : public RINEX_OBS_Reader<FloatT> {
@@ -755,8 +744,11 @@ struct RINEX_Observation {
           sym_meas(ID2SYM(rb_intern("meas"))),
           sym_meas_types(ID2SYM(rb_intern("meas_types")));
       rb_hash_aset(res, sym_header, reader.header);
-      rb_hash_aset(res, sym_t, SWIG_From(GPS_Time)(obs.t_epoch));
-      rb_hash_aset(res, sym_clke, SWIG_From(double)((double)obs.receiver_clock_error));
+      rb_hash_aset(res, sym_t, 
+          SWIG_NewPointerObj(
+            new GPS_Time<FloatT>(obs.t_epoch), 
+            $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN));
+      rb_hash_aset(res, sym_clke, swig::from(obs.receiver_clock_error));
       SWIG_Object meas(rb_hash_new());
       for(typename obs_t::per_satellite_t::const_iterator 
           it(obs.per_satellite.begin()), it_end(obs.per_satellite.end());
@@ -769,7 +761,7 @@ struct RINEX_Observation {
           if(!it2->valid){continue;}
           rb_ary_store(meas_per_sat, i,
               rb_ary_new_from_args(3,
-                SWIG_From(double)((double)it2->value),
+                swig::from(it2->value),
                 SWIG_From(int)(it2->lli),
                 SWIG_From(int)(it2->ss)));
         }
@@ -787,7 +779,11 @@ struct RINEX_Observation {
 #endif
     }
   }
-};
+}
+
+%inline {
+template <class FloatT>
+struct RINEX_Observation {};
 }
 
 #undef MAKE_ACCESSOR
