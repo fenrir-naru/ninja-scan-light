@@ -689,7 +689,9 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
   %ignore base_t;
   %ignore gps_t;
   %ignore gps;
-  %ignore select;
+  %ignore select_solver;
+  %ignore relative_property;
+  %ignore satellite_position;
   %ignore update_position_solution;
 }
 %inline %{
@@ -709,10 +711,28 @@ struct GPS_Solver
   GPS_Solver() : super_t(), gps() {}
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
-  const base_t &select(
+  const base_t &select_solver(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
     return *this;
+  }
+  virtual typename base_t::relative_property_t relative_property(
+      const typename base_t::prn_t &prn,
+      const typename base_t::measurement_t::mapped_type &measurement,
+      const typename base_t::float_t &receiver_error,
+      const typename base_t::gps_time_t &time_arrival,
+      const typename base_t::pos_t &usr_pos,
+      const typename base_t::xyz_t &usr_vel) const {
+    // TODO
+    return select_solver(prn).relative_property(
+        prn, measurement, receiver_error, time_arrival,
+        usr_pos, usr_vel);
+  }
+  virtual typename base_t::xyz_t *satellite_position(
+      const typename base_t::prn_t &prn,
+      const typename base_t::gps_time_t &time,
+      typename base_t::xyz_t &res) const {
+    return select_solver(prn).satellite_position(prn, time, res);
   }
   virtual bool update_position_solution(
       const typename base_t::geometric_matrices_t &geomat,
