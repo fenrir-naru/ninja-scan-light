@@ -774,6 +774,21 @@ protected:
 
 public:
   /**
+   * Calculate satellite position
+   *
+   * @param prn satellite number
+   * @param time GPS time
+   * @param res object to which results are stored
+   * @return If position is available, &res will be returned, otherwise NULL.
+   */
+  virtual xyz_t *satellite_position(
+      const prn_t &prn,
+      const gps_time_t &time,
+      xyz_t &res) const {
+    return NULL;
+  }
+
+  /**
    * Calculate User position/velocity with hint
    * This is multi-constellation version,
    * and reference implementation to be hidden by optimized one in sub class.
@@ -802,7 +817,11 @@ public:
         it != it_end; ++it){
       typename measurement2_t::value_type v = {
           it->first, &(it->second), &select(it->first)}; // prn, measurement, solver
-      if(v.solver == this){continue;} // skip because of not-implemented satellite system
+      xyz_t sat;
+      if(!v.solver->satellite_position(v.prn, receiver_time, sat)){
+        // pre-check satellite availability; remove it when its position is unknown
+        continue;
+      }
       measurement2.push_back(v);
     }
     user_pvt(
@@ -984,21 +1003,6 @@ public:
 
   solver_interface_t<GPS_Solver_Base<FloatT> > solve() const {
     return solver_interface_t<GPS_Solver_Base<FloatT> >(*this);
-  }
-
-  /**
-   * Calculate satellite position
-   *
-   * @param prn satellite number
-   * @param time GPS time
-   * @param res object to which results are stored
-   * @return If position is available, &res will be returned, otherwise NULL.
-   */
-  virtual xyz_t *satellite_position(
-      const prn_t &prn,
-      const gps_time_t &time,
-      xyz_t &res) const {
-    return NULL;
   }
 
   static typename user_pvt_t::dop_t dop(const matrix_t &C, const pos_t &user_position) {
