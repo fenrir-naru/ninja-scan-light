@@ -59,6 +59,22 @@ static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
   if(state != 0){throw std::exception();}
   return res;
 }
+static VALUE proc_call_throw_if_error(
+    const VALUE &arg0, const int &argc, const VALUE *argv) {
+  struct proc_call_t {
+    const VALUE &arg0;
+    const int &argc;
+    const VALUE *argv;
+    static VALUE run(VALUE v){
+      proc_call_t *arg(reinterpret_cast<proc_call_t *>(v));
+      return rb_proc_call_with_block(arg->arg0, arg->argc, arg->argv, Qnil);
+    }
+  } arg = {arg0, argc, argv};
+  int state;
+  VALUE res(rb_protect(proc_call_t::run, reinterpret_cast<VALUE>(&arg), &state));
+  if(state != 0){throw std::exception();}
+  return res;
+}
 static std::string inspect_str(const VALUE &v){
   VALUE v_inspect(rb_inspect(v));
   return std::string(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect));
@@ -696,8 +712,52 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
   %ignore relative_property;
   %ignore satellite_position;
   %ignore update_position_solution;
+  %immutable hooks;
+  %fragment("hook"{GPS_Solver<FloatT>}, "header",
+      fragment=SWIG_From_frag(int),
+      fragment=SWIG_Traits_frag(FloatT)){
+    template <>
+    typename GPS_Solver<FloatT>::base_t::relative_property_t
+        GPS_Solver<FloatT>::relative_property(
+          const typename GPS_Solver<FloatT>::base_t::prn_t &prn,
+          const typename GPS_Solver<FloatT>::base_t::measurement_t::mapped_type &measurement,
+          const typename GPS_Solver<FloatT>::base_t::float_t &receiver_error,
+          const typename GPS_Solver<FloatT>::base_t::gps_time_t &time_arrival,
+          const typename GPS_Solver<FloatT>::base_t::pos_t &usr_pos,
+          const typename GPS_Solver<FloatT>::base_t::xyz_t &usr_vel) const {
+      typename base_t::relative_property_t res(
+          select_solver(prn).relative_property(
+            prn, measurement, receiver_error, time_arrival,
+            usr_pos, usr_vel));
+#ifdef SWIGRUBY
+      do{
+        static const VALUE key(ID2SYM(rb_intern("relative_property")));
+        VALUE hook(rb_hash_lookup(hooks, key));
+        if(NIL_P(hook)){break;}
+        VALUE values[] = {
+            SWIG_From(int)(prn), // prn
+            rb_ary_new_from_args(5, // relative_property
+              swig::from(res.weight),
+              swig::from(res.range_corrected), swig::from(res.range_residual),
+              swig::from(res.rate_relative_neg),
+              rb_ary_new_from_args(3,
+                swig::from(res.los_neg[0]), swig::from(res.los_neg[1]), swig::from(res.los_neg[2]))),
+            swig::from(receiver_error), // receiver_error
+            SWIG_NewPointerObj( // time_arrival
+              new base_t::gps_time_t(time_arrival), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN),
+            SWIG_NewPointerObj( // usr_pos.xyz
+              new base_t::xyz_t(usr_pos.xyz), $descriptor(System_XYZ<FloatT> *), SWIG_POINTER_OWN),
+            SWIG_NewPointerObj( // usr_vel
+              new base_t::xyz_t(usr_vel), $descriptor(System_XYZ<FloatT> *), SWIG_POINTER_OWN)};
+        proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values);
+      }while(false);
+#endif
+      return res;
+    }
+  }
+  %fragment("hook"{GPS_Solver<FloatT>});
 }
-%inline %{
+%inline {
 template <class FloatT>
 struct GPS_Solver 
     : public GPS_Solver_RAIM_LSR<FloatT, 
@@ -711,7 +771,19 @@ struct GPS_Solver
     GPS_SinglePositioning<FloatT> solver;
     gps_t() : space_node(), options(), solver(space_node) {}
   } gps;
-  GPS_Solver() : super_t(), gps() {}
+  SWIG_Object hooks;
+  GPS_Solver() : super_t(), gps(), hooks() {
+#ifdef SWIGRUBY
+    hooks = rb_hash_new();
+    struct hash_t {
+      static VALUE aset(VALUE hash, VALUE key, VALUE val){
+        //swig_owntype own = {0}; own = SWIG_AcquirePtr(val, own); // needless
+        return rb_hash_aset(hash, key, val); // register in C world, instead of Ruby world
+      }
+    };
+    rb_define_singleton_method(hooks, "[]=", VALUEFUNC(hash_t::aset), 2);
+#endif
+  }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
   const base_t &select_solver(
@@ -725,12 +797,7 @@ struct GPS_Solver
       const typename base_t::float_t &receiver_error,
       const typename base_t::gps_time_t &time_arrival,
       const typename base_t::pos_t &usr_pos,
-      const typename base_t::xyz_t &usr_vel) const {
-    // TODO
-    return select_solver(prn).relative_property(
-        prn, measurement, receiver_error, time_arrival,
-        usr_pos, usr_vel);
-  }
+      const typename base_t::xyz_t &usr_vel) const;
   virtual typename base_t::xyz_t *satellite_position(
       const typename base_t::prn_t &prn,
       const typename base_t::gps_time_t &time,
@@ -751,7 +818,7 @@ struct GPS_Solver
     return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
 };
-%}
+}
 
 %fragment(SWIG_From_frag(int));
 %fragment(SWIG_From_frag(bool));

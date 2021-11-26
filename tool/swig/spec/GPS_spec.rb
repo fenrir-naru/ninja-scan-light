@@ -312,6 +312,23 @@ __RINEX_OBS_TEXT__
       }
     end
     
+    it 'can be modified through hooks' do
+      sn = solver.gps_space_node
+      sn.read(input[:rinex_nav])
+      t_meas = GPS::Time::new(1849, 172413)
+      sn.update_all_ephemeris(t_meas)
+      solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_ps, us_vel|
+        expect(input[:measurement]).to include(prn)
+        weight, range_c, range_r, rate_rel_neg, los_neg = rel_prop
+        rel_prop
+      }
+      pvt = solver.solve(
+          input[:measurement].collect{|prn, items|
+            items.collect{|k, v| [prn, k, v]}
+          }.flatten(1),
+          t_meas)
+    end
+    
     it 'calculates position without any error with RINEX obs file' do
       sn = solver.gps_space_node
       puts "RINEX NAV read: %d items."%[sn.read(input[:rinex_nav])]
