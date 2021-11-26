@@ -8,6 +8,7 @@
 #define ENABLE_IOSTREAM 1
 
 %{
+#include <string>
 #include <sstream>
 #include <vector>
 
@@ -83,6 +84,10 @@ static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
     }
   } arg = {argc, argv};
   return funcall_throw_if_error(yield_t::run, reinterpret_cast<VALUE>(&arg));
+}
+static std::string inspect_str(const VALUE &v){
+  VALUE v_inspect(rb_inspect(v));
+  return std::string(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect));
 }
 }
 #endif
@@ -616,11 +621,9 @@ struct MatrixUtil {
       replaced = false;
     }
     if(replaced && (i_elm < len)){
-      VALUE v_inspect(rb_inspect(v_elm));
       std::stringstream s;
       s << "Unexpected input [" << i << "," << j << "]: ";
-      throw std::runtime_error(
-          s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+      throw std::runtime_error(s.str().append(inspect_str(v_elm)));
     }
 #endif
     return replaced;
@@ -806,11 +809,9 @@ struct MatrixUtil {
         v = yield_throw_if_error(1, values);
       }
       if(assign && !SWIG_IsOK(swig::asval(v, dst))){
-        VALUE v_inspect(rb_inspect(v));
         std::stringstream s;
         s << "Unknown input (T expected) [" << i << "," << j << "]: ";
-        throw std::runtime_error(
-            s.str().append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)));
+        throw std::runtime_error(s.str().append(inspect_str(v)));
       }
     }
     static void matrix_yield(
@@ -952,13 +953,10 @@ MAKE_TO_S(Matrix_Frozen)
       VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
       if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r))
           || !SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c))){
-        VALUE v_inspect[2] = {rb_inspect(v_r), rb_inspect(v_c)};
         throw std::runtime_error(
             std::string("Unexpected length [")
-              .append(RSTRING_PTR(v_inspect[0]), RSTRING_LEN(v_inspect[0]))
-              .append(", ")
-              .append(RSTRING_PTR(v_inspect[1]), RSTRING_LEN(v_inspect[1]))
-              .append("]"));
+              .append(inspect_str(v_r)).append(", ")
+              .append(inspect_str(v_c)).append("]"));
       }
       Matrix<T, Array2D_Type, ViewType> res(r, c);
       MatrixUtil::replace(res, replacer);
