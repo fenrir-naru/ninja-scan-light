@@ -59,6 +59,10 @@ static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
   if(state != 0){throw std::exception();}
   return res;
 }
+static std::string inspect_str(const VALUE &v){
+  VALUE v_inspect(rb_inspect(v));
+  return std::string(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect));
+}
 }
 #endif
 
@@ -565,10 +569,9 @@ struct GPS_User_PVT
             val->add(prn, key, v);
           }
           if(i < i_end){
-            VALUE v_inspect(rb_inspect(values));
             SWIG_exception(SWIG_TypeError, 
                 std::string("Unexpected input [").append(std::to_string(i)).append("]: ")
-                  .append(RSTRING_PTR(v_inspect), RSTRING_LEN(v_inspect)).c_str());
+                  .append(inspect_str(values)).c_str());
           }
           return SWIG_OK;
         }
