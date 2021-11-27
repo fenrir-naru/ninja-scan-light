@@ -713,6 +713,7 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
   %ignore satellite_position;
   %ignore update_position_solution;
   %immutable hooks;
+  %ignore mark;
   %fragment("hook"{GPS_Solver<FloatT>}, "header",
       fragment=SWIG_From_frag(int),
       fragment=SWIG_Traits_frag(FloatT)){
@@ -772,16 +773,16 @@ struct GPS_Solver
     gps_t() : space_node(), options(), solver(space_node) {}
   } gps;
   SWIG_Object hooks;
+#ifdef SWIGRUBY
+  static void mark(void *ptr){
+    GPS_Solver<FloatT> *solver = (GPS_Solver<FloatT> *)ptr;
+    if(solver->hooks == Qnil){return;}
+    rb_gc_mark(solver->hooks);
+  }
+#endif
   GPS_Solver() : super_t(), gps(), hooks() {
 #ifdef SWIGRUBY
     hooks = rb_hash_new();
-    struct hash_t {
-      static VALUE aset(VALUE hash, VALUE key, VALUE val){
-        //swig_owntype own = {0}; own = SWIG_AcquirePtr(val, own); // needless
-        return rb_hash_aset(hash, key, val); // register in C world, instead of Ruby world
-      }
-    };
-    rb_define_singleton_method(hooks, "[]=", VALUEFUNC(hash_t::aset), 2);
 #endif
   }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
@@ -940,6 +941,9 @@ struct RINEX_Observation {};
 %template(PVT) GPS_User_PVT<type>;
 %template(Measurement) GPS_Measurement<type>;
 %template(SolverOptions) GPS_SolverOptions<type>;
+#if defined(SWIGRUBY)
+%markfunc GPS_Solver<type> "GPS_Solver<type>::mark";
+#endif
 %template(Solver) GPS_Solver<type>;
 
 %template(RINEX_Observation) RINEX_Observation<type>;
