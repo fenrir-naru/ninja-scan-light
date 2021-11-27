@@ -319,14 +319,16 @@ __RINEX_OBS_TEXT__
       sn.update_all_ephemeris(t_meas)
       solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_ps, us_vel|
         expect(input[:measurement]).to include(prn)
-        weight, range_c, range_r, rate_rel_neg, los_neg = rel_prop
-        rel_prop
+        weight, range_c, range_r, rate_rel_neg, *los_neg = rel_prop
+        weight = 1
+        [weight, range_c, range_r, rate_rel_neg] + los_neg
       }
       pvt = solver.solve(
           input[:measurement].collect{|prn, items|
             items.collect{|k, v| [prn, k, v]}
           }.flatten(1),
           t_meas)
+      expect(pvt.W).to eq(SylphideMath::MatrixD::I(pvt.W.rows))
     end
     
     it 'calculates position without any error with RINEX obs file' do

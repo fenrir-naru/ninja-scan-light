@@ -726,23 +726,29 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
           const typename GPS_Solver<FloatT>::base_t::gps_time_t &time_arrival,
           const typename GPS_Solver<FloatT>::base_t::pos_t &usr_pos,
           const typename GPS_Solver<FloatT>::base_t::xyz_t &usr_vel) const {
-      typename base_t::relative_property_t res(
+      union {
+        typename base_t::relative_property_t prop;
+        FloatT values[7];
+      } res = {
           select_solver(prn).relative_property(
             prn, measurement, receiver_error, time_arrival,
-            usr_pos, usr_vel));
+            usr_pos, usr_vel)};
 #ifdef SWIGRUBY
       do{
         static const VALUE key(ID2SYM(rb_intern("relative_property")));
+        static const int prop_items(sizeof(res.values) / sizeof(res.values[0]));
         VALUE hook(rb_hash_lookup(hooks, key));
         if(NIL_P(hook)){break;}
         VALUE values[] = {
             SWIG_From(int)(prn), // prn
-            rb_ary_new_from_args(5, // relative_property
-              swig::from(res.weight),
-              swig::from(res.range_corrected), swig::from(res.range_residual),
-              swig::from(res.rate_relative_neg),
-              rb_ary_new_from_args(3,
-                swig::from(res.los_neg[0]), swig::from(res.los_neg[1]), swig::from(res.los_neg[2]))),
+            rb_ary_new_from_args(prop_items, // relative_property
+              swig::from(res.prop.weight),
+              swig::from(res.prop.range_corrected),
+              swig::from(res.prop.range_residual),
+              swig::from(res.prop.rate_relative_neg),
+              swig::from(res.prop.los_neg[0]),
+              swig::from(res.prop.los_neg[1]),
+              swig::from(res.prop.los_neg[2])),
             swig::from(receiver_error), // receiver_error
             SWIG_NewPointerObj( // time_arrival
               new base_t::gps_time_t(time_arrival), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN),
@@ -750,10 +756,26 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
               new base_t::xyz_t(usr_pos.xyz), $descriptor(System_XYZ<FloatT> *), SWIG_POINTER_OWN),
             SWIG_NewPointerObj( // usr_vel
               new base_t::xyz_t(usr_vel), $descriptor(System_XYZ<FloatT> *), SWIG_POINTER_OWN)};
-        proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values);
+        VALUE res_hook(proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values));
+        if((!RB_TYPE_P(res_hook, T_ARRAY))
+            || (RARRAY_LEN(res_hook) != prop_items)){
+          throw std::runtime_error(
+              std::string("[d * ").append(std::to_string(prop_items))
+                .append("] is expected (d: " %str(FloatT) "), however ")
+                .append(inspect_str(res_hook)));
+        }
+        for(int i(0); i < prop_items; ++i){
+          VALUE v(RARRAY_AREF(res_hook, i));
+          if(!SWIG_IsOK(swig::asval(v, &res.values[i]))){
+            throw std::runtime_error(
+                std::string(%str(FloatT) " is exepcted, however ")
+                  .append(inspect_str(v))
+                  .append(" @ [").append(std::to_string(i)).append("]"));
+          }
+        }
       }while(false);
 #endif
-      return res;
+      return res.prop;
     }
   }
   %fragment("hook"{GPS_Solver<FloatT>});
