@@ -99,6 +99,10 @@ OUTPUT_MEAS_ITEMS = [[
 puts (OUTPUT_PVT_ITEMS + OUTPUT_MEAS_ITEMS).transpose[0].flatten.join(',')
 
 solver = GPS::Solver::new
+solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_ps, us_vel|
+  rel_prop[0] = 1 # weight = 1
+  rel_prop
+}
 sn = solver.gps_space_node
 proc{|opt|
   opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg
