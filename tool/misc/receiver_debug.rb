@@ -58,19 +58,24 @@ OUTPUT_PVT_ITEMS = [
   proc{|pvt|
     next ([nil] * 4 * 32) unless pvt.position_solved?
     sats = pvt.used_satellite_list
-    r, w, g = [:delta_r, :W, :G_enu].collect{|f| pvt.send(f)}
+    r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
     (1..32).collect{|i|
       next ([nil] * 4) unless i2 = sats.index(i)
       [r[i2, 0], w[i2, i2]] +
-          [Math::atan2(-g[i2, 0], -g[i2, 1]), Math::asin(-g[i2, 2])].collect{|rad|
-            # G_enu is measured in the direction from satellite to user positions
-            rad / Math::PI * 180
+          [:azimuth, :elevation].collect{|f|
+            pvt.send(f)[i] / Math::PI * 180
           }
     }.flatten
   },
 ]] + [[
-  [:wssr, :wssr_sf, :weight_max, :slopeH_max, :slopeH_max_PRN, :slopeV_max, :slopeV_max_PRN],
-  proc{|pvt| pvt.fd || ([nil] * 7)}
+  [:wssr, :wssr_sf, :weight_max,
+      :slopeH_max, :slopeH_max_PRN, :slopeH_max_elevation,
+      :slopeV_max, :slopeV_max_PRN, :slopeV_max_elevation],
+  proc{|pvt|
+    next [nil] * 9 unless fd = pvt.fd
+    el_deg = [4, 6].collect{|i| pvt.elevation[fd[i]] / Math::PI * 180}
+    fd[0..4] + [el_deg[0]] + fd[5..6] + [el_deg[1]]
+  }
 ]] + [[
   [:wssr_FDE_min, :wssr_FDE_min_PRN, :wssr_FDE_2nd, :wssr_FDE_2nd_PRN],
   proc{|pvt|
@@ -116,7 +121,20 @@ run_solver = proc{|meas, t_meas|
     eph = sn.ephemeris(prn)
     $stderr.puts "XYZ(PRN:#{prn}): #{eph.constellation(t_meas)[0].to_a} (iodc: #{eph.iodc}, iode: #{eph.iode})"
   } if false 
+
   pvt = solver.solve(meas, t_meas)
+  sats, az, el = proc{|g|
+    pvt.used_satellite_list.collect.with_index{|prn, i|
+      # G_enu is measured in the direction from satellite to user positions
+      [prn,
+          Math::atan2(-g[i, 0], -g[i, 1]),
+          Math::asin(-g[i, 2])]
+    }.transpose
+  }.call(pvt.G_enu) rescue [[], [], []]
+  [[:azimuth, az], [:elevation, el]].each{|f, values|
+    pvt.define_singleton_method(f){Hash[*(sats.zip(values).flatten(1))]}
+  }
+
   puts (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
     task.call(pvt)
   } + OUTPUT_MEAS_ITEMS.transpose[1].collect{|task|
