@@ -53,18 +53,18 @@ OUTPUT_PVT_ITEMS = [
   }],
 ] + [[
   (1..32).collect{|prn|
-    [:range_residual, :weight, :azimuth, :elevation].collect{|str| "#{str}(#{prn})"}
+    [:range_residual, :weight, :azimuth, :elevation, :slopeH, :slopeV].collect{|str| "#{str}(#{prn})"}
   }.flatten,
   proc{|pvt|
-    next ([nil] * 4 * 32) unless pvt.position_solved?
+    next ([nil] * 6 * 32) unless pvt.position_solved?
     sats = pvt.used_satellite_list
     r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
     (1..32).collect{|i|
-      next ([nil] * 4) unless i2 = sats.index(i)
+      next ([nil] * 6) unless i2 = sats.index(i)
       [r[i2, 0], w[i2, i2]] +
           [:azimuth, :elevation].collect{|f|
             pvt.send(f)[i] / Math::PI * 180
-          }
+          } + [pvt.slopeH[i], pvt.slopeV[i]]
     }.flatten
   },
 ]] + [[
@@ -133,6 +133,9 @@ run_solver = proc{|meas, t_meas|
   }.call(pvt.G_enu) rescue [[], [], []]
   [[:azimuth, az], [:elevation, el]].each{|f, values|
     pvt.define_singleton_method(f){Hash[*(sats.zip(values).flatten(1))]}
+  }
+  [:slopeH, :slopeV].zip((pvt.slope_HV_enu.to_a.transpose rescue [nil, nil])).each{|f, values|
+    pvt.define_singleton_method(f){Hash[*(values ? sats.zip(values).flatten(1) : [])]}
   }
 
   puts (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
