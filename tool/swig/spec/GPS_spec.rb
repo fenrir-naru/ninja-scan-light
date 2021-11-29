@@ -298,6 +298,17 @@ __RINEX_OBS_TEXT__
       expect(pvt.W.rows).to eq(6)
       expect(pvt.delta_r.rows).to eq(6)
       expect(pvt.G_enu.rows).to eq(6)
+      expect(Math::sqrt(pvt.C[3, 3])).to be_within(1E-10).of(pvt.tdop)
+      expect(Math::sqrt(pvt.C_enu[2, 2])).to be_within(1E-10).of(pvt.vdop)
+      pvt.S.to_a.flatten.zip(
+          ((pvt.G.t * pvt.W * pvt.G).inv * (pvt.G.t * pvt.W)).to_a.flatten).each{|a, b|
+        expect(a).to be_within(1E-10).of(b)
+      }
+      pvt.S_enu.to_a.flatten.zip(
+          ((pvt.G_enu.t * pvt.W * pvt.G_enu).inv * (pvt.G_enu.t * pvt.W)).to_a.flatten).each{|a, b|
+        expect(a).to be_within(1E-10).of(b)
+      }
+      expect([:rows, :columns].collect{|f| pvt.slope_HV_enu.send(f)}).to eq([6, 2])
       expect(pvt.used_satellites).to eq(6)
       expect(pvt.used_satellite_list).to eq([12,18, 24, 25, 29, 31])
 

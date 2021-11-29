@@ -418,7 +418,10 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
 %include navigation/GPS.h
 
 %extend GPS_User_PVT {
+  %ignore solver_t;
   %ignore base_t;
+  %ignore proxy_t;
+  %ignore linear_solver;
   %ignore GPS_User_PVT(const base_t &);
   MAKE_VECTOR2ARRAY(int);
 #ifdef SWIGRUBY
@@ -497,16 +500,36 @@ struct GPS_User_PVT
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &G() const {return base_t::G;}
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &W() const {return base_t::W;}
   const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &delta_r() const {return base_t::delta_r;}
+  struct proxy_t : public solver_t {
+    typedef typename solver_t
+        ::template linear_solver_t<Matrix<FloatT, Array2D_Dense<FloatT> > >
+        linear_solver_t;
+  };
   Matrix<FloatT, Array2D_Dense<FloatT> > G_enu() const {
-    struct proxy_t : public solver_t {
-      static Matrix<FloatT, Array2D_Dense<FloatT> > G_enu(
-          const Matrix_Frozen<FloatT, Array2D_Dense<FloatT> > &G,
-          const typename solver_t::matrix_t &rot){
-        return solver_t::template linear_solver_t<Matrix<FloatT, Array2D_Dense<FloatT> > >::rotate_G(
-            G, rot);
-      }
-    };
-    return proxy_t::G_enu(base_t::G, base_t::user_position.ecef2enu());
+    return proxy_t::linear_solver_t::rotate_G(base_t::G, base_t::user_position.ecef2enu());
+  }
+  typename proxy_t::linear_solver_t linear_solver() const {
+    return typename proxy_t::linear_solver_t(base_t::G, base_t::W, base_t::delta_r);
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > C() const {
+    return linear_solver().C();
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > C_enu() const {
+    return proxy_t::linear_solver_t::rotate_C(C(), base_t::user_position.ecef2enu());
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > S() const {
+    Matrix<FloatT, Array2D_Dense<FloatT> > res;
+    linear_solver().least_square(res);
+    return res;
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > S_enu() const {
+    return proxy_t::linear_solver_t::rotate_S(S(), base_t::user_position.ecef2enu());
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > slope_HV() const {
+    return linear_solver().slope_HV(S());
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > slope_HV_enu() const {
+    return linear_solver().slope_HV(S(), base_t::user_position.ecef2enu());
   }
   
   void fd(const typename base_t::detection_t **out) const {*out = &(base_t::FD);}
