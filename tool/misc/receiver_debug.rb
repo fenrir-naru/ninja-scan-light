@@ -104,7 +104,7 @@ OUTPUT_MEAS_ITEMS = [[
 puts (OUTPUT_PVT_ITEMS + OUTPUT_MEAS_ITEMS).transpose[0].flatten.join(',')
 
 solver = GPS::Solver::new
-solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_ps, us_vel|
+solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_pos, usr_vel|
   rel_prop[0] = 1 if rel_prop[0] > 0 # weight = 1
   rel_prop
 }
@@ -288,7 +288,23 @@ parse_rinex_obs = proc{|fname|
 
 # check options
 ARGV.reject!{|arg|
-  next false unless arg =~ /^--[^=]+=?/
+  next false unless arg =~ /^--([^=]+)=?/
+  k, v = [$1.to_sym, $']
+  case k
+  when :weight
+    case (v.to_sym rescue nil)
+    when :elevation
+      solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_pos, usr_vel|
+        if rel_prop[0] > 0 then
+          elv = Coordinate::ENU::relative_rel(
+              Coordinate::XYZ::new(*rel_prop[4..6]), usr_pos).elevation
+          rel_prop[0] = (Math::sin(elv)/0.8)**2
+        end
+        rel_prop
+      }
+    when :identical # same as default
+    end
+  end
   true
 }
 ARGV.each{|arg|
