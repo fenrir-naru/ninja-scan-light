@@ -328,8 +328,11 @@ __RINEX_OBS_TEXT__
       sn.read(input[:rinex_nav])
       t_meas = GPS::Time::new(1849, 172413)
       sn.update_all_ephemeris(t_meas)
-      solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_ps, us_vel|
+      solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_pos, usr_vel|
         expect(input[:measurement]).to include(prn)
+        expect(t_arv).to be_a_kind_of(GPS::Time)
+        expect(usr_pos).to be_a_kind_of(Coordinate::XYZ)
+        expect(usr_vel).to be_a_kind_of(Coordinate::XYZ)
         weight, range_c, range_r, rate_rel_neg, *los_neg = rel_prop
         weight = 1
         [weight, range_c, range_r, rate_rel_neg] + los_neg

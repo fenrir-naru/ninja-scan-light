@@ -776,9 +776,9 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
             SWIG_NewPointerObj( // time_arrival
               new base_t::gps_time_t(time_arrival), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN),
             SWIG_NewPointerObj( // usr_pos.xyz
-              new base_t::xyz_t(usr_pos.xyz), $descriptor(System_XYZ<FloatT> *), SWIG_POINTER_OWN),
+              new base_t::xyz_t(usr_pos.xyz), $descriptor(System_XYZ<FloatT, WGS84> *), SWIG_POINTER_OWN),
             SWIG_NewPointerObj( // usr_vel
-              new base_t::xyz_t(usr_vel), $descriptor(System_XYZ<FloatT> *), SWIG_POINTER_OWN)};
+              new base_t::xyz_t(usr_vel), $descriptor(System_XYZ<FloatT, WGS84> *), SWIG_POINTER_OWN)};
         VALUE res_hook(proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values));
         if((!RB_TYPE_P(res_hook, T_ARRAY))
             || (RARRAY_LEN(res_hook) != prop_items)){
