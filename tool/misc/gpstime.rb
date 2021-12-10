@@ -77,15 +77,21 @@ class GPSTime
   def initialize(t = Time::now)
     case t
     when Array
-      @seek, @sec = t[0..1]
+      @week, @sec = t[0..1]
       return
     when Numeric
       @sec = t
     when Time
       @sec = GPSTime::time2gpssec(t)
     when String
-      require 'time'
-      @sec = GPSTime::time2gpssec(Time::parse(t))
+      case t.downcase
+      when /^(?:(\d+)w)?(\d+(?:\.\d*)?|\.\d+)$/
+        @week, @sec = [$1.to_i, $2.to_f]
+        return
+      else
+        require 'time'
+        @sec = GPSTime::time2gpssec(Time::parse(t))
+      end
     else
       raise "Unsupported input: #{t}"
     end
@@ -93,7 +99,7 @@ class GPSTime
   end
   
   def to_a
-    [@seek, @sec]
+    [@week, @sec]
   end
   
   def cycle_week
