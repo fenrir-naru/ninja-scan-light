@@ -74,8 +74,8 @@ class RINEX_Reader {
           typename std::istream::char_type* s,
           std::streamsize n){
         std::streamsize i(1), consumed(0);
-        {
-          typename std::istream::sentry se(*this, true);
+        typename std::istream::sentry se(*this, true);
+        if((bool)se){
           std::streambuf* sb(this->rdbuf());
           for(; i < n; ++i){
             int c(sb->sbumpc());

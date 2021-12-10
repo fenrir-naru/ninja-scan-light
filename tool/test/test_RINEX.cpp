@@ -53,7 +53,7 @@ static void check_reader_versatility_to_input(const char *src){
     bool no_trailing_blank;
     const char *eol;
   } opts[] = {
-    {false, "\n"}, {false, "\r"}, {false, "\r\n"}, // TODO Mac
+    {false, "\n"}, {false, "\r"}, {false, "\r\n"},
     {true,  "\n"}, {true,  "\r"}, {true,  "\r\n"},
   };
   for(unsigned i(0); i < sizeof(opts) / sizeof(opts[0]); ++i){
