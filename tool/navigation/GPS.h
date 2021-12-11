@@ -936,7 +936,7 @@ static s ## bits ## _t name(const InputT *buf){ \
            * because (t - t_oc), and (t - t_oe) in equations are normally negative.
            * @see 20.3.4.5, Table 20-XIII
            */
-          inline float_t period_from_first_valid_transmittion(const gps_time_t &t) const {
+          inline float_t period_from_first_valid_transmission(const gps_time_t &t) const {
             return period_from_time_of_clock(t) + (fit_interval / 2);
           }
 
@@ -955,12 +955,12 @@ static s ## bits ## _t name(const InputT *buf){ \
            * @param t GPS time
            */
           bool maybe_better_one_avilable(const gps_time_t &t) const {
-            float_t delta_t(period_from_first_valid_transmittion(t));
-            float_t transmittion_interval( // @see IDC 20.3.4.5 Reference Times, Table 20-XIII
+            float_t delta_t(period_from_first_valid_transmission(t));
+            float_t transmission_interval( // @see IDC 20.3.4.5 Reference Times, Table 20-XIII
                 (fit_interval > (4 * 60 * 60))
                   ? fit_interval / 2 // fit_interval is more than 4 hour, fit_interval / 2
                   : (1 * 60 * 60));  // fit_interval equals to 4 hour, some SVs transmits every one hour.
-            return !((delta_t >= 0) && (delta_t < transmittion_interval));
+            return !((delta_t >= 0) && (delta_t < transmission_interval));
           }
           
           static const float_t URA_limits[];
@@ -1912,7 +1912,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           return eph_history.select(
               target_time,
               &eph_t::is_valid,
-              &eph_t::period_from_first_valid_transmittion) || is_valid;
+              &eph_t::period_from_time_of_clock) || is_valid;
         }
 
         float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const{

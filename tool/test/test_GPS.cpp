@@ -264,4 +264,29 @@ BOOST_AUTO_TEST_CASE(gps_time){
   }
 }
 
+BOOST_AUTO_TEST_CASE(satellite_ephemeris){
+  typedef space_node_t::Satellite sat_t;
+  sat_t sat;
+  for(int i(1); i < 3; ++i){
+    sat_t::eph_t eph;
+    eph.WN = 2000;
+    eph.t_oc = eph.t_oe = (2 * i + 1) * 60 * 60; // every 2 hr; 3, 5
+    eph.fit_interval = 4 * 60 * 60; // 4 hr
+    sat.register_ephemeris(eph);
+  }
+
+  struct {
+    space_node_t::float_t hr_in, hr_out;
+  } target[] = {
+    {0, 0},
+    {1, 3}, {2, 3}, {2.9, 3}, {3, 3}, {3.9, 3}, {4, 3},
+    {4.1, 5}, {5, 5}, {6, 5}, {7, 5},
+  };
+  for(int i(0); i < sizeof(target) / sizeof(target[0]); ++i){
+    sat.select_ephemeris(space_node_t::gps_time_t(2000, target[i].hr_in * 60 * 60));
+    BOOST_TEST_MESSAGE(target[i].hr_in);
+    BOOST_REQUIRE_EQUAL(sat.ephemeris().t_oc, target[i].hr_out * 60 * 60);
+  }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
