@@ -31,20 +31,29 @@
 //%include std_vector.i
 %include exception.i
 
+#if !defined(SWIGIMPORTED)
 %exception {
   try {
     $action
   } catch (const std::exception& e) {
-#ifdef SWIGRUBY
-    VALUE v_e(rb_errinfo());
-    if(!NIL_P(v_e)){
-      rb_set_errinfo(Qnil);
-      rb_exc_raise(v_e);
-    }
-#endif
+    if(catch_native_error()){SWIG_fail;}
     SWIG_exception(SWIG_RuntimeError, e.what());
   }
 }
+%header {
+#ifdef SWIGRUBY
+bool catch_native_error() {
+  VALUE v_e(rb_errinfo());
+  if(NIL_P(v_e)){return false;}
+  rb_set_errinfo(Qnil);
+  rb_exc_raise(v_e);
+  return true;
+}
+#else
+inline bool catch_native_error() {return false;}
+#endif
+}
+#endif
 
 %define MAKE_ACCESSOR(name, type)
 %rename(%str(name ## =)) set_ ## name;
