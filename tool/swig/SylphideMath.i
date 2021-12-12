@@ -11,6 +11,7 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <exception>
 
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
@@ -32,26 +33,26 @@
 %include exception.i
 
 #if !defined(SWIGIMPORTED)
+%header {
+struct native_exception : public std::exception {
+#if defined(SWIGRUBY)
+  int state;
+  native_exception(const int &state_) : std::exception(), state(state_) {}
+  void regenerate() const {rb_jump_tag(state);}
+#else
+  void regenerate() const {}
+#endif
+};
+}
 %exception {
   try {
     $action
+  } catch (const native_exception &e) {
+    e.regenerate();
+    SWIG_fail;
   } catch (const std::exception& e) {
-    if(catch_native_error()){SWIG_fail;}
-    SWIG_exception(SWIG_RuntimeError, e.what());
+    SWIG_exception_fail(SWIG_RuntimeError, e.what());
   }
-}
-%header {
-#ifdef SWIGRUBY
-bool catch_native_error() {
-  VALUE v_e(rb_errinfo());
-  if(NIL_P(v_e)){return false;}
-  rb_set_errinfo(Qnil);
-  rb_exc_raise(v_e);
-  return true;
-}
-#else
-inline bool catch_native_error() {return false;}
-#endif
 }
 #endif
 
@@ -80,7 +81,7 @@ type get_ ## name () {
 static VALUE funcall_throw_if_error(VALUE (*func)(VALUE), VALUE arg) {
   int state;
   VALUE res = rb_protect(func, arg, &state);
-  if(state != 0){throw std::exception();}
+  if(state != 0){throw native_exception(state);}
   return res;
 }
 static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
