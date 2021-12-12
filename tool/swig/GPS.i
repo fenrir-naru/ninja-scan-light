@@ -14,6 +14,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <exception>
 
 #include "navigation/GPS.h"
 #include "navigation/RINEX.h"
@@ -28,20 +29,29 @@
 %include std_string.i
 %include exception.i
 
+#if !defined(SWIGIMPORTED)
+%header {
+struct native_exception : public std::exception {
+#if defined(SWIGRUBY)
+  int state;
+  native_exception(const int &state_) : std::exception(), state(state_) {}
+  void regenerate() const {rb_jump_tag(state);}
+#else
+  void regenerate() const {}
+#endif
+};
+}
 %exception {
   try {
     $action
+  } catch (const native_exception &e) {
+    e.regenerate();
+    SWIG_fail;
   } catch (const std::exception& e) {
-#ifdef SWIGRUBY
-    VALUE v_e(rb_errinfo());
-    if(!NIL_P(v_e)){
-      rb_set_errinfo(Qnil);
-      rb_exc_raise(v_e);
-    }
-#endif
-    SWIG_exception(SWIG_RuntimeError, e.what());
+    SWIG_exception_fail(SWIG_RuntimeError, e.what());
   }
 }
+#endif
 
 #ifdef SWIGRUBY
 %header {
@@ -56,7 +66,7 @@ static VALUE yield_throw_if_error(const int &argc, const VALUE *argv) {
   } arg = {argc, argv};
   int state;
   VALUE res(rb_protect(yield_t::run, reinterpret_cast<VALUE>(&arg), &state));
-  if(state != 0){throw std::exception();}
+  if(state != 0){throw native_exception(state);}
   return res;
 }
 static VALUE proc_call_throw_if_error(
@@ -72,7 +82,7 @@ static VALUE proc_call_throw_if_error(
   } arg = {arg0, argc, argv};
   int state;
   VALUE res(rb_protect(proc_call_t::run, reinterpret_cast<VALUE>(&arg), &state));
-  if(state != 0){throw std::exception();}
+  if(state != 0){throw native_exception(state);}
   return res;
 }
 static std::string inspect_str(const VALUE &v){
@@ -555,7 +565,14 @@ struct GPS_User_PVT
       return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
     }
 #endif
-    $action
+    try {
+      $action
+    } catch (const native_exception &e) {
+      e.regenerate();
+      SWIG_fail;
+    } catch (const std::exception& e) {
+      SWIG_exception_fail(SWIG_RuntimeError, e.what());
+    }
   }
   %fragment(SWIG_Traits_frag(FloatT));
   void each() const {
@@ -877,7 +894,14 @@ struct GPS_Solver
       return rb_enumeratorize(self, ID2SYM(rb_intern("read")), argc, argv);
     }
 #endif
-    $action
+    try {
+      $action
+    } catch (const native_exception &e) {
+      e.regenerate();
+      SWIG_fail;
+    } catch (const std::exception& e) {
+      SWIG_exception_fail(SWIG_RuntimeError, e.what());
+    }
   }
   %fragment(SWIG_Traits_frag(FloatT));
   static void read(const char *fname) {

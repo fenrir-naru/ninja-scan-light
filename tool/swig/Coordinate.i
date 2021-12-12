@@ -3,6 +3,7 @@
 %{
 #include <sstream>
 #include <string>
+#include <exception>
 
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
@@ -18,14 +19,6 @@
 
 //%import "SylphideMath.i"
 
-%exception {
-  try {
-    $action
-  } catch (const std::exception& e) {
-    SWIG_exception(SWIG_RuntimeError, e.what());
-  }
-}
-
 %feature("autodoc", "1");
 
 %define MAKE_SETTER(name, type)
@@ -35,19 +28,30 @@ type set_ ## name (const type &v) {
 }
 %enddef
 
+#if !defined(SWIGIMPORTED)
+%header {
+struct native_exception : public std::exception {
+#if defined(SWIGRUBY)
+  int state;
+  native_exception(const int &state_) : std::exception(), state(state_) {}
+  void regenerate() const {rb_jump_tag(state);}
+#else
+  void regenerate() const {}
+#endif
+};
+}
+#endif
+
 %extend System_3D {
   std::string __str__() const {
     std::stringstream s;
     s << (*self);
     return s.str();
   }
-  %typemap(out) FloatT & {
-    $result = SWIG_From(double)(*$1);
-  }
-};
-
-%extend System_3D {
   %fragment(SWIG_Traits_frag(FloatT));
+  %typemap(out) FloatT & {
+    $result = swig::from(*$1);
+  }
 #if !defined(SWIGRUBY)
   %typemap(in,numinputs=0) FloatT values[3] (FloatT temp[3]) %{
     $1 = temp;
@@ -69,12 +73,28 @@ type set_ ## name (const type &v) {
       return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
     }
 #endif
-    $action
+    try {
+      $action
+    } catch (const native_exception &e) {
+      e.regenerate();
+      SWIG_fail;
+    } catch (const std::exception& e) {
+      SWIG_exception(SWIG_RuntimeError, e.what());
+    }
   }
   void each() const {
     for(int i(0); i < 3; ++i){
 #ifdef SWIGRUBY
-      rb_yield_values(1, swig::from((*self)[i]));
+      int state;
+      struct yield_t {
+        const VALUE v;
+        static VALUE run(VALUE v){
+          yield_t *arg(reinterpret_cast<yield_t *>(v));
+          return rb_yield_values(1, arg->v);
+        }
+      } arg = {swig::from((*self)[i])};
+      rb_protect(yield_t::run, reinterpret_cast<VALUE>(&arg), &state);
+      if(state != 0){throw native_exception(state);}
 #endif
     }
   }
