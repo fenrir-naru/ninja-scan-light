@@ -12,10 +12,12 @@ Debug GPS receiver with Ruby via SWIG interface
 }
 require 'GPS.so'
 
-OUTPUT_PVT_ITEMS = [
-  [:week, proc{|pvt| pvt.receiver_time.week}],
-  [:itow_rcv, proc{|pvt| pvt.receiver_time.seconds}],
-] + [[
+OUTPUT_PVT_ITEMS = [[
+  [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec],
+  proc{|pvt|
+    [:week, :seconds, :c_tm].collect{|f| pvt.receiver_time.send(f)}.flatten
+  }
+]] + [[
   [:receiver_clock_error_meter, :longitude, :latitude, :height],
   proc{|pvt|
     next [nil] * 4 unless pvt.position_solved? 
