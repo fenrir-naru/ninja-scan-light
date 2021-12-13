@@ -704,7 +704,7 @@ protected:
       try{
         converged = update_position_solution(geomat, res);
         if((!coarse_estimation) && converged){break;}
-      }catch(std::exception &e){
+      }catch(const std::runtime_error &e){ // expect to detect matrix operation error
         res.error_code = user_pvt_t::ERROR_POSITION_LS;
         return;
       }
@@ -718,7 +718,7 @@ protected:
     try{
       res.dop = typename user_pvt_t::dop_t(geomat.rotate_C(
           geomat.partial(res.used_satellites).C(), res.user_position.ecef2enu()));
-    }catch(std::exception &e){
+    }catch(const std::runtime_error &e){ // expect to detect matrix operation error
       res.error_code = user_pvt_t::ERROR_DOP;
       return;
     }
@@ -764,7 +764,7 @@ protected:
       res.user_velocity_enu = enu_t::relative_rel(
           vel_xyz, res.user_position.llh);
       res.receiver_error_rate = sol(3, 0);
-    }catch(std::exception &e){
+    }catch(const std::runtime_error &e){ // expect to detect matrix operation error
       res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
       return;
     }
