@@ -337,6 +337,12 @@ __RINEX_OBS_TEXT__
         weight = 1
         [weight, range_c, range_r, rate_rel_neg] + los_neg
       }
+      solver.hooks[:update_position_solution] = proc{|*mats|
+        mats.each{|mat|
+          expect(mat).to be_a_kind_of(SylphideMath::MatrixD)
+        }
+        mat_G, mat_W, mat_delta_r = mats
+      }
       pvt = solver.solve(
           input[:measurement].collect{|prn, items|
             items.collect{|k, v| [prn, k, v]}

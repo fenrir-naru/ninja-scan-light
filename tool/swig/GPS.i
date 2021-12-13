@@ -817,6 +817,29 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
 #endif
       return res.prop;
     }
+    template <>
+    bool GPS_Solver<FloatT>::update_position_solution(
+        const typename GPS_Solver<FloatT>::base_t::geometric_matrices_t &geomat,
+        typename GPS_Solver<FloatT>::base_t::user_pvt_t &res) const {
+#ifdef SWIGRUBY
+      do{
+        static const VALUE key(ID2SYM(rb_intern("update_position_solution")));
+        VALUE hook(rb_hash_lookup(hooks, key));
+        if(NIL_P(hook)){break;}
+        typename base_t::geometric_matrices_t &geomat_(
+            %const_cast(geomat, typename base_t::geometric_matrices_t &));
+        VALUE values[] = {
+            SWIG_NewPointerObj(&geomat_.G,
+              $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0),
+            SWIG_NewPointerObj(&geomat_.W,
+              $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0),
+            SWIG_NewPointerObj(&geomat_.delta_r,
+              $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0)};
+        proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values);
+      }while(false);
+#endif
+      return super_t::update_position_solution(geomat, res);
+    }
   }
   %fragment("hook"{GPS_Solver<FloatT>});
 }
@@ -869,10 +892,7 @@ struct GPS_Solver
   }
   virtual bool update_position_solution(
       const typename base_t::geometric_matrices_t &geomat,
-      typename base_t::user_pvt_t &res) const {
-    // TODO
-    return super_t::update_position_solution(geomat, res);
-  }
+      typename base_t::user_pvt_t &res) const;
   GPS_User_PVT<FloatT> solve(
       const GPS_Measurement<FloatT> &measurement,
       const GPS_Time<FloatT> &receiver_time) const {
