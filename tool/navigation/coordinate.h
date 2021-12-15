@@ -349,6 +349,9 @@ class System_ENU : public System_3D<FloatT> {
     FloatT &north(){return non_const_ref(const_ref(this).north());}
     FloatT &up(){return non_const_ref(const_ref(this).up());}
 
+    FloatT horizontal() const {return std::sqrt(std::pow(east(), 2) + std::pow(north(), 2));}
+    FloatT vertical() const {return std::abs(up());}
+
     static self_t relative_rel(const xyz_t &rel_pos, const llh_t &base_llh){
       FloatT s1(std::sin(base_llh.longitude())),
           c1(std::cos(base_llh.longitude())),
