@@ -599,7 +599,7 @@ struct GPS_User_PVT
       template <>
       bool check<GPS_Measurement<FloatT> >(SWIG_Object obj) {
 #ifdef SWIGRUBY
-        return RB_TYPE_P(obj, T_ARRAY);
+        return RB_TYPE_P(obj, T_ARRAY) || RB_TYPE_P(obj, T_HASH);
 #else
         return false;
 #endif
@@ -629,6 +629,48 @@ struct GPS_User_PVT
                 std::string("Unexpected input [").append(std::to_string(i)).append("]: ")
                   .append(inspect_str(values)).c_str());
           }
+          return SWIG_OK;
+        }else if(RB_TYPE_P(obj, T_HASH)){
+          struct arg_t {
+            GPS_Measurement<FloatT> *meas;
+            int prn;
+            static int iter2(VALUE v_k, VALUE v_v, VALUE v_arg){
+              int k;
+              FloatT v;
+              arg_t *arg(reinterpret_cast<arg_t *>(v_arg));
+              if((!SWIG_IsOK(SWIG_AsVal(int)(v_k, &k)))
+                  || (!SWIG_IsOK(swig::asval(v_v, &v)))){
+                SWIG_exception(SWIG_TypeError, 
+                    std::string("Unexpected input @ PRN").append(std::to_string(arg->prn)).append(": [")
+                      .append(inspect_str(v_k)).append(", ")
+                      .append(inspect_str(v_v)).append("]").c_str());
+              }
+              arg->meas->add(arg->prn, k, v);
+              return ST_CONTINUE;
+            }
+            static int iter1(VALUE v_prn, VALUE v_key_value, VALUE v_arg){
+              arg_t *arg(reinterpret_cast<arg_t *>(v_arg));
+              if((!RB_TYPE_P(v_key_value, T_HASH))
+                  || (!SWIG_IsOK(SWIG_AsVal(int)(v_prn, &(arg->prn))))){
+                SWIG_exception(SWIG_TypeError, 
+                    std::string("Unexpected input @ {")
+                      .append(inspect_str(v_prn)).append(" => ")
+                      .append(inspect_str(v_key_value)).append("}").c_str());
+              }
+              rb_hash_foreach(v_key_value,
+#if RUBY_API_VERSION < 20700
+                  // @see https://docs.ruby-lang.org/ja/latest/doc/news=2f2_7_0.html
+                  (int (*)(ANYARGS))
+#endif
+                  arg_t::iter2, v_arg);
+              return ST_CONTINUE;
+            }
+          } arg = {val};
+          rb_hash_foreach(obj,
+#if RUBY_API_VERSION < 20700
+              (int (*)(ANYARGS))
+#endif
+              arg_t::iter1, reinterpret_cast<VALUE>(&arg));
           return SWIG_OK;
         }
 #endif
