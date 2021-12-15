@@ -233,14 +233,15 @@ __RINEX_OBS_TEXT__
           meas.add(prn, k, v)
         }
       }
-      expect(GPS::Measurement::new(meas.to_a).to_a.sort).to eq(meas.to_a.sort) # accept [[prn, k, v], ...]
-      expect(GPS::Measurement::new(proc{|array| # accept {prn => {k => v, ...}, ...}
+      expect(meas.to_hash).to eq(proc{|array|
             res = {}
             array.each{|prn, k, v|
               (res[prn][k] = v) rescue (res[prn] = {k => v})
             }
             res
-          }.call(meas.to_a)).to_a.sort).to eq(meas.to_a.sort)
+          }.call(meas.to_a))
+      expect(GPS::Measurement::new(meas.to_a).to_a.sort).to eq(meas.to_a.sort) # accept [[prn, k, v], ...]
+      expect(GPS::Measurement::new(meas.to_hash).to_a.sort).to eq(meas.to_a.sort) # accept {prn => {k => v, ...}, ...}
       expect{GPS::Measurement::new({:sym => {1 => 2}})}.to raise_error
       expect{GPS::Measurement::new({1 => {:sym => 2}})}.to raise_error
       expect{GPS::Measurement::new({1 => [2, 3]})}.to raise_error

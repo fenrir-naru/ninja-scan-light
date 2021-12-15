@@ -593,6 +593,23 @@ struct GPS_User_PVT
       }
     }
   }
+#ifdef SWIGRUBY
+  VALUE to_hash() const {
+    VALUE res(rb_hash_new());
+    for(typename GPS_Measurement<FloatT>::items_t::const_iterator
+          it(self->items.begin()), it_end(self->items.end());
+        it != it_end; ++it){
+      VALUE per_sat(rb_hash_new());
+      rb_hash_aset(res, SWIG_From(int)(it->first), per_sat);
+      for(typename GPS_Measurement<FloatT>::items_t::mapped_type::const_iterator 
+            it2(it->second.begin()), it2_end(it->second.end());
+          it2 != it2_end; ++it2){
+        rb_hash_aset(per_sat, SWIG_From(int)(it2->first), swig::from(it2->second));
+      }
+    }
+    return res;
+  }
+#endif
   %fragment(SWIG_Traits_frag(GPS_Measurement<FloatT>), "header",
       fragment=SWIG_Traits_frag(FloatT)){
     namespace swig {
