@@ -147,26 +147,13 @@ class GPS_Receiver
     #$stderr.puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %d:%d:%d UTC"%[*t_meas.c_tm]})"
     sn = @solver.gps_space_node
     sn.update_all_ephemeris(t_meas)
+
     meas.to_a.collect{|prn, k, v| prn}.uniq.each{|prn|
       eph = sn.ephemeris(prn)
       $stderr.puts "XYZ(PRN:#{prn}): #{eph.constellation(t_meas)[0].to_a} (iodc: #{eph.iodc}, iode: #{eph.iode})"
     } if false 
-  
+
     pvt = @solver.solve(meas, t_meas)
-    sats, az, el = proc{|g|
-      pvt.used_satellite_list.collect.with_index{|prn, i|
-        # G_enu is measured in the direction from satellite to user positions
-        [prn,
-            Math::atan2(-g[i, 0], -g[i, 1]),
-            Math::asin(-g[i, 2])]
-      }.transpose
-    }.call(pvt.G_enu) rescue [[], [], []]
-    [[:azimuth, az], [:elevation, el]].each{|f, values|
-      pvt.define_singleton_method(f){Hash[*(sats.zip(values).flatten(1))]}
-    }
-    [:slopeH, :slopeV].zip((pvt.slope_HV_enu.to_a.transpose rescue [nil, nil])).each{|f, values|
-      pvt.define_singleton_method(f){Hash[*(values ? sats.zip(values).flatten(1) : [])]}
-    }
     pvt.define_singleton_method(:to_s){
       (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
         task.call(pvt)
@@ -176,6 +163,32 @@ class GPS_Receiver
     }
     pvt
   end
+
+  GPS::PVT.class_eval{
+    define_method(:post_solution){|target|
+      sats, az, el = proc{|g|
+        self.used_satellite_list.collect.with_index{|prn, i|
+          # G_enu is measured in the direction from satellite to user positions
+          [prn,
+              Math::atan2(-g[i, 0], -g[i, 1]),
+              Math::asin(-g[i, 2])]
+        }.transpose
+      }.call(self.G_enu) rescue [[], [], []]
+      [[:@azimuth, az], [:@elevation, el]].each{|k, values|
+        self.instance_variable_set(k, Hash[*(sats.zip(values).flatten(1))])
+      }
+      [:@slopeH, :@slopeV] \
+          .zip((self.slope_HV_enu.to_a.transpose rescue [nil, nil])) \
+          .each{|k, values|
+        self.instance_variable_set(k,
+            Hash[*(values ? sats.zip(values).flatten(1) : [])])
+      }
+      instance_variable_get(target)
+    }
+    [:azimuth, :elevation, :slopeH, :slopeV].each{|k|
+      eval("define_method(:#{k}){@#{k} || self.post_solution(:@#{k})}")
+    }
+  }
   
   proc{
     eph_list = Hash[*(1..32).collect{|prn|
