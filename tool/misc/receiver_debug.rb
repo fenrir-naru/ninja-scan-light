@@ -239,7 +239,7 @@ class GPS_Receiver
             meas.add(prn, GPS::Measurement.const_get(k), loader.call(*prop))
           }
         }
-        after_run.call(run(meas, t_meas))
+        after_run.call(run(meas, t_meas), [meas, t_meas])
       when [0x02, 0x15] # RXM-RAWX
         sec, week = [[0, 8, "E"], [8, 2, "v"]].collect{|offset, len, str|
           packet.slice(6 + offset, len).pack("C*").unpack(str)[0]
@@ -268,7 +268,7 @@ class GPS_Receiver
             meas.add(svid, GPS::Measurement.const_get(k), v)
           }
         }
-        after_run.call(run(meas, t_meas))
+        after_run.call(run(meas, t_meas), [meas, t_meas])
       when [0x02, 0x11] # RXM-SFRB
         register_ephemeris(
             t_meas,
@@ -321,7 +321,7 @@ class GPS_Receiver
           meas.add(prn, type_, v[i][0]) if v[i]
         }
       }
-      after_run.call(run(meas, t_meas))
+      after_run.call(run(meas, t_meas), [meas, t_meas])
     }
     $stderr.puts ", %d epochs."%[count] 
   end
