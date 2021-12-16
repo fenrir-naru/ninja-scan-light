@@ -959,10 +959,13 @@ MAKE_TO_S(Matrix_Frozen)
       MatrixUtil::replace(res, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
-      unsigned int r, c;
+      /* "unsigned" is remove because SWIG_AsVal(unsigned int)
+       * can not detect less than zero in Windows Ruby devkit.
+       */
+      int r, c; 
       VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
-      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r))
-          || !SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c))){
+      if(!SWIG_IsOK(SWIG_AsVal(int)(v_r, &r)) || (r < 0)
+          || !SWIG_IsOK(SWIG_AsVal(int)(v_c, &c)) || (c < 0)){
         throw std::runtime_error(
             std::string("Unexpected length [")
               .append(inspect_str(v_r)).append(", ")
