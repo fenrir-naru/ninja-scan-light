@@ -1,5 +1,5 @@
 SWIG = swig
-SWIGFLAGS = -c++ -ruby
+SWIGFLAGS = -c++ -ruby $(shell if [ -n "$$MSYSTEM" ]; then echo -D__MINGW__; fi)
 INCLUDES = -I../
 BUILD_DIR = build_SWIG
 
@@ -12,8 +12,10 @@ PACKAGES = $(SRCS:.i=.so)
 
 all : $(BUILD_DIR) depend $(PACKAGES)
 
+depend : INCLUDES+=-I$(shell echo $${MSYSTEM_PREFIX:-/usr})/include/
+
 # ヘッダーファイルの依存関係
-depend: $(SRCS)
+depend : $(SRCS)
 	if [ -f $(BUILD_DIR)/depend.inc ]; then rm -f $(BUILD_DIR)/depend.inc; fi
 	for i in $^; do\
 		$(SWIG) $(SWIGFLAGS) $(INCLUDES) -MM -MP $$i  | sed -e 's/[^\.]*\.cxx/$$\(BUILD_DIR\)\/&/g' >> $(BUILD_DIR)/depend.inc;\
@@ -22,6 +24,8 @@ depend: $(SRCS)
 -include $(BUILD_DIR)/depend.inc
 
 $(PACKAGES) : $(patsubst %,$(BUILD_DIR)/%,$(PACKAGES))
+
+$(BUILD_DIR)/BoostDistributions_wrap.cxx : INCLUDES+=-I$(shell echo $${MSYSTEM_PREFIX:-/usr})/include/
 
 $(BUILD_DIR)/%_wrap.cxx : %.i
 	$(SWIG) $(SWIGFLAGS) $(INCLUDES) -o $@ $<
