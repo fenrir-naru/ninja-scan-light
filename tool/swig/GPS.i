@@ -22,6 +22,17 @@
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/GPS_Solver_RAIM.h"
+
+#if defined(__cplusplus) && (__cplusplus < 201103L)
+#include <sstream>
+namespace std {
+template <class T>
+inline std::string to_string(const T &value){
+  // @see https://stackoverflow.com/a/5590404/15992898
+  return static_cast<std::ostringstream &>(std::ostringstream() << value).str();
+}
+}
+#endif
 %}
 
 %include typemaps.i
@@ -246,12 +257,12 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
   MAKE_ACCESSOR(delta_t_LSF, int);
   static GPS_Ionospheric_UTC_Parameters<FloatT> parse(const unsigned int *buf){
     typedef typename GPS_SpaceNode<FloatT>
-        ::template BroadcastedMessage<unsigned int, 30> parser_t;
+        ::BroadcastedMessage<unsigned int, 30> parser_t;
     if((parser_t::subframe_id(buf) != 4) || (parser_t::sv_page_id(buf) != 56)){
       throw std::runtime_error("Not valid data");
     }
     typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters::raw_t raw;
-    raw.template update<2, 0>(buf);
+    raw.update<2, 0>(buf);
     GPS_Ionospheric_UTC_Parameters<FloatT> res;
     (typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters &)res = raw;
     return res;
@@ -330,12 +341,12 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     typename eph_t::raw_t raw;
     eph_t eph;
     *subframe_no = GPS_SpaceNode<FloatT>
-        ::template BroadcastedMessage<unsigned int, 30>
+        ::BroadcastedMessage<unsigned int, 30>
         ::subframe_id(buf);
     *iodc_or_iode = -1; 
     switch(*subframe_no){
       case 1: 
-        *iodc_or_iode = raw.template update_subframe1<2, 0>(buf);
+        *iodc_or_iode = raw.update_subframe1<2, 0>(buf);
         eph = raw;
         self->WN = eph.WN;
         self->URA = eph.URA;
@@ -348,7 +359,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         self->a_f0 = eph.a_f0;
         break;
       case 2: 
-        *iodc_or_iode = raw.template update_subframe2<2, 0>(buf);
+        *iodc_or_iode = raw.update_subframe2<2, 0>(buf);
         eph = raw;
         self->iode = eph.iode;
         self->c_rs = eph.c_rs;
@@ -362,7 +373,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         self->fit_interval = eph_t::raw_t::fit_interval(raw.fit_interval_flag, self->iodc);
         break;
       case 3: 
-        *iodc_or_iode = self->iode_subframe3 = raw.template update_subframe3<2, 0>(buf);
+        *iodc_or_iode = self->iode_subframe3 = raw.update_subframe3<2, 0>(buf);
         eph = raw;
         self->c_ic = eph.c_ic;
         self->Omega0 = eph.Omega0;
@@ -787,10 +798,10 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
   }
   std::vector<int> set_ionospheric_models(const std::vector<int> &models){
     typedef typename base_t::ionospheric_model_t model_t;
-    for(int i(0), j(0), j_max(models.size()); i < model_t::IONOSPHERIC_MODELS; ++i){
-      model_t v(model_t::IONOSPHERIC_SKIP);
+    for(int i(0), j(0), j_max(models.size()); i < base_t::IONOSPHERIC_MODELS; ++i){
+      model_t v(base_t::IONOSPHERIC_SKIP);
       if(j < j_max){
-        if((models[j] >= 0) && (models[j] < model_t::IONOSPHERIC_SKIP)){
+        if((models[j] >= 0) && (models[j] < base_t::IONOSPHERIC_SKIP)){
           v = (model_t)models[j];
         }
         ++j;
