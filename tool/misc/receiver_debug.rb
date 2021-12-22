@@ -144,15 +144,14 @@ class GPS_Receiver
   end
 
   def run(meas, t_meas)
-    #$stderr.puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %d:%d:%d UTC"%[*t_meas.c_tm]})"
-    sn = @solver.gps_space_node
-    sn.update_all_ephemeris(t_meas)
-
+=begin
     meas.to_a.collect{|prn, k, v| prn}.uniq.each{|prn|
-      eph = sn.ephemeris(prn)
+      eph = @solver.gps_space_node.ephemeris(prn)
       $stderr.puts "XYZ(PRN:#{prn}): #{eph.constellation(t_meas)[0].to_a} (iodc: #{eph.iodc}, iode: #{eph.iode})"
-    } if false 
+    }
+=end
 
+    #@solver.gps_space_node.update_all_ephemeris(t_meas) # internally called in the following solver.solve
     pvt = @solver.solve(meas, t_meas)
     pvt.define_singleton_method(:to_s){
       (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
