@@ -143,6 +143,28 @@ class GPS_Receiver
     }.call(@solver.gps_options)
   end
 
+  GPS::Measurement.class_eval{
+    proc{
+      key2sym = []
+      GPS::Measurement.constants.each{|k|
+        i = GPS::Measurement.const_get(k)
+        key2sym[i] = k if i.kind_of?(Integer)
+      }
+      define_method(:to_a2){
+        to_a.collect{|prn, k, v| [prn, key2sym[k] || k, v]}
+      }
+      define_method(:to_hash2){
+        Hash[*(to_hash.collect{|prn, k_v|
+          [prn, Hash[*(k_v.collect{|k, v| [key2sym[k] || k, v]}.flatten(1))]]
+        }.flatten(1))]
+      }
+    }.call
+    alias_method(:add_orig, :add)
+    define_method(:add){|prn, key, value|
+      add_orig(prn, key.kind_of?(Symbol) ? GPS::Measurement.const_get(key) : key, value)
+    }
+  }
+
   def run(meas, t_meas)
 =begin
     meas.to_a.collect{|prn, k, v| prn}.uniq.each{|prn|
@@ -250,11 +272,11 @@ class GPS_Receiver
             :L1_CARRIER_PHASE => [8, 8, "E"],
             :L1_SIGNAL_STRENGTH_dBHz => [30, 1, "c"],
           }.each{|k, prop|
-            meas.add(prn, GPS::Measurement.const_get(k), loader.call(*prop))
+            meas.add(prn, k, loader.call(*prop))
           }
           # bit 0 of RINEX LLI (loss of lock indicator) shows lost lock
           # between previous and current observation, which maps negative lock seconds
-          meas.add(prn, GPS::Measurement::L1_LOCK_SEC,
+          meas.add(prn, :L1_LOCK_SEC,
               (packet[6 + 31 + (i * 24)] & 0x01 == 0x01) ? -1 : 0)
         }
         after_run.call(run(meas, t_meas), [meas, t_meas])
@@ -289,7 +311,7 @@ class GPS_Receiver
             :L1_LOCK_SEC => [40, 2, "v", proc{|v| 1E-3 * v}],
           }.each{|k, prop|
             next unless v = loader.call(*prop)
-            meas.add(svid, GPS::Measurement.const_get(k), v)
+            meas.add(svid, k, v)
           }
         }
         after_run.call(run(meas, t_meas), [meas, t_meas])
@@ -331,13 +353,13 @@ class GPS_Receiver
       types ||= (item[:meas_types]['G'] || item[:meas_types][' ']).collect.with_index{|type_, i|
         case type_
         when "C1", "C1C"
-          [i, GPS::Measurement::L1_PSEUDORANGE]
+          [i, :L1_PSEUDORANGE]
         when "L1", "L1C"
-          [i, GPS::Measurement::L1_CARRIER_PHASE]
+          [i, :L1_CARRIER_PHASE]
         when "D1", "D1C"
-          [i, GPS::Measurement::L1_DOPPLER]
+          [i, :L1_DOPPLER]
         when "S1", "S1C"
-          [i, GPS::Measurement::L1_SIGNAL_STRENGTH_dBHz]
+          [i, :L1_SIGNAL_STRENGTH_dBHz]
         else
           nil 
         end
