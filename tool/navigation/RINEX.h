@@ -478,13 +478,15 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static const typename super_t::convert_item_t eph7_v2[2], eph7_v3[2];
 
   protected:
+    typename super_t::version_type_t::sat_system_t sys_of_msg;
     message_t msg;
     
-    void seek_next_v2() {
+    void seek_next_v2_gps() {
       char buf[256];
 
-      for(int i = 0; (i < 8) && (super_t::src.good()); i++){
-        if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+      for(int i(0); i < 8; i++){
+        if((!super_t::src.good())
+            || super_t::src.getline(buf, sizeof(buf)).fail()){return;}
         std::string line(buf);
 
         switch(i){
@@ -505,25 +507,43 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
         }
       }
       msg.update();
+      sys_of_msg = super_t::version_type_t::SYS_GPS;
       super_t::_has_next = true;
     }
 
-    void seek_next_v3() {
+    void seek_next_v2_glonass() {
       char buf[256];
 
-      for(int i = 0; (i < 8) && (super_t::src.good()); i++){
-        if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+      for(int i(0); i < 4; i++){
+        if((!super_t::src.good())
+            || super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+      }
+      //sys_of_msg = super_t::version_type_t::SYS_GLONASS; // TODO currently not implemented
+      sys_of_msg = super_t::version_type_t::SYS_UNKNOWN;
+      super_t::_has_next = true;
+    }
+
+    void seek_next_v2() {
+      switch(super_t::version_type.sat_system){
+        case super_t::version_type_t::SYS_GPS: seek_next_v2_gps(); return;
+        case super_t::version_type_t::SYS_GLONASS: seek_next_v2_glonass(); return;
+        default: break;
+      }
+    }
+
+    template <std::size_t N>
+    void seek_next_v3_gps(char (&buf)[N]) {
+      super_t::convert(eph0_v3, std::string(buf), &msg);
+      msg.t_oc_tm.tm_year = msg.t_oc_year4 - 1900; // tm_year base is 1900
+      msg.t_oc_tm.tm_mon = msg.t_oc_mon12 - 1; // month [0, 11]
+      msg.t_oc_sec = msg.t_oc_tm.tm_sec;
+
+      for(int i(1); i < 8; i++){
+        if((!super_t::src.good())
+            || super_t::src.getline(buf, sizeof(buf)).fail()){return;}
         std::string line(buf);
 
         switch(i){
-          case 0: {
-            // if(line_data[0] != 'G'){} // TODO check GPS before parsing
-            super_t::convert(eph0_v3, line, &msg);
-            msg.t_oc_tm.tm_year = msg.t_oc_year4 - 1900; // tm_year base is 1900
-            msg.t_oc_tm.tm_mon = msg.t_oc_mon12 - 1; // month [0, 11]
-            msg.t_oc_sec = msg.t_oc_tm.tm_sec;
-            break;
-          }
           case 1: super_t::convert(eph1_v3, line, &msg); break;
           case 2: super_t::convert(eph2_v3, line, &msg); break;
           case 3: super_t::convert(eph3_v3, line, &msg); break;
@@ -534,10 +554,42 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
         }
       }
       msg.update();
+      sys_of_msg = super_t::version_type_t::SYS_GPS;
       super_t::_has_next = true;
     }
 
+    template <std::size_t N>
+    void seek_next_v3_not_implemented(char (&buf)[N], const int &lines) {
+      for(int i(1); i < lines; i++){
+        if((!super_t::src.good())
+            || super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+      }
+      sys_of_msg = super_t::version_type_t::SYS_UNKNOWN;
+      super_t::_has_next = true;
+    }
+
+    void seek_next_v3() {
+      char buf[256];
+
+      while(super_t::src.good()
+          && (!super_t::src.getline(buf, sizeof(buf)).fail())){
+
+        switch(buf[0]){
+          case 'G': seek_next_v3_gps(buf); return; // GPS
+          case 'E': seek_next_v3_not_implemented(buf, 8); return; // Galileo
+          case 'R': seek_next_v3_not_implemented(buf, 4); return; // Glonass
+          case 'J': seek_next_v3_not_implemented(buf, 8); return; // QZSS
+          case 'C': seek_next_v3_not_implemented(buf, 8); return; // Beido
+          case 'S': seek_next_v3_not_implemented(buf, 4); return; // SBAS
+          case 'T': seek_next_v3_not_implemented(buf, 8); return; // IRNSS
+          default: break;
+        }
+      }
+    }
+
     void seek_next() {
+      super_t::_has_next = false;
+      sys_of_msg = super_t::version_type_t::SYS_UNKNOWN;
       super_t::version_type.version >= 300 ? seek_next_v3() : seek_next_v2();
     }
 
@@ -547,11 +599,8 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     }
     ~RINEX_NAV_Reader(){}
     
-    typename space_node_t::Satellite::Ephemeris next() {
-      typename space_node_t::Satellite::Ephemeris current(msg.eph);
-      super_t::_has_next = false;
+    void next() {
       seek_next();
-      return current;
     }
     
     static const typename super_t::convert_item_t iono_alpha_v2[4];
@@ -635,18 +684,37 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       return alpha && beta && utc && leap;
     }
 
-    static int read_all(std::istream &in, space_node_t &space_node){
+    struct space_node_list_t {
+      space_node_t *gps;
+    };
+
+    static int read_all(std::istream &in, space_node_list_t &space_nodes = {0}){
       int res(-1);
       RINEX_NAV_Reader reader(in);
-      (reader.version_type.version >= 300)
-          ? reader.extract_iono_utc_v3(space_node)
-          : reader.extract_iono_utc_v2(space_node);
+      if(space_nodes.gps){
+        (reader.version_type.version >= 300)
+            ? reader.extract_iono_utc_v3(*space_nodes.gps)
+            : reader.extract_iono_utc_v2(*space_nodes.gps);
+      }
       res++;
-      for(; reader.has_next(); ++res){
-        typename space_node_t::Satellite::Ephemeris eph(reader.next());
-        space_node.satellite(eph.svid).register_ephemeris(eph);
+      for(; reader.has_next(); reader.next()){
+        switch(reader.sys_of_msg){
+          case super_t::version_type_t::SYS_GPS:
+            if(!space_nodes.gps){break;}
+            space_nodes.gps->satellite(reader.msg.eph.svid).register_ephemeris(reader.msg.eph);
+            res++;
+            break;
+          default: break;
+        }
       }
       return res;
+    }
+
+    static int read_all(std::istream &in, space_node_t &space_node){
+      space_node_list_t list = {
+        &space_node,
+      };
+      return read_all(in, list);
     }
 };
 
