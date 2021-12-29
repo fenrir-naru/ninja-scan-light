@@ -50,6 +50,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <limits>
 
 #include "GPS.h"
 
@@ -180,7 +181,7 @@ class RINEX_Reader {
     const header_t &header() const {return const_cast<self_t *>(this)->header();}
     bool has_next() const {return _has_next;}
 
-    template <class T>
+    template <class T, bool is_integer = std::numeric_limits<T>::is_integer>
     struct conv_t {
       static void d(
           std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
@@ -248,6 +249,25 @@ class RINEX_Reader {
           ss << std::setfill(' ') << std::right << std::setw(w) << s;
           buf.replace(offset, length, ss.str());
         }
+      }
+    };
+    template <class T>
+    struct conv_t<T, true> {
+      static void d(
+          std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
+        conv_t<T, false>::d(buf, offset, length, value, opt, str2val);
+      }
+      static void f(
+          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
+        double v(*(T *)value);
+        conv_t<double, false>::f(buf, offset, length, &v, precision, str2val);
+        *(T *)value = static_cast<T>(v);
+      }
+      static void e(
+          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
+        double v(*(T *)value);
+        conv_t<double, false>::e(buf, offset, length, &v, precision, str2val);
+        *(T *)value = static_cast<T>(v);
       }
     };
 
@@ -404,7 +424,6 @@ struct RINEX_NAV {
     std::tm t_oc_tm;
     int t_oc_year4, t_oc_year2, t_oc_mon12;
     FloatT t_oc_sec;
-    FloatT iodc_f, iode_f; // originally int type
     FloatT t_oe_WN;
     FloatT ura_meter;
     FloatT SV_health_f;
@@ -420,7 +439,6 @@ struct RINEX_NAV {
         t_oc_year2(t_oc_tm.tm_year % 100),
         t_oc_mon12(t_oc_tm.tm_mon + 1),
         t_oc_sec(std::fmod(eph.t_oc, 60)),
-        iodc_f(eph.iodc), iode_f(eph.iode),
         t_oe_WN(eph.WN),
         ura_meter(ephemeris_t::URA_meter(eph.URA)),
         SV_health_f(((eph.SV_health & 0x20) && (eph.SV_health & 0x1F == 0)) ? 1 : eph.SV_health),
@@ -433,9 +451,6 @@ struct RINEX_NAV {
       t_oc += (t_oc_sec - t_oc_tm.tm_sec);
       eph.WN = t_oc.week;
       eph.t_oc = t_oc.seconds;
-
-      eph.iodc = iodc_f;
-      eph.iode = iode_f;
 
       eph.URA = ephemeris_t::URA_index(ura_meter); // meter to index
 
@@ -1032,12 +1047,16 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
 #define GEN_I(offset, length, container_type, container_member, value_type) \
     {super_t::template conv_t<value_type>::d, offset, length, \
       offsetof(container_type, container_member), 1}
+#define GEN_F2(offset, length, precision, container_type, container_member, value_type) \
+    {super_t::template conv_t<value_type>::f, offset, length, \
+      offsetof(container_type, container_member), precision}
+#define GEN_E2(offset, length, precision, container_type, container_member, value_type) \
+    {super_t::template conv_t<value_type>::e, offset, length, \
+      offsetof(container_type, container_member), precision}
 #define GEN_F(offset, length, precision, container_type, container_member) \
-    {super_t::template conv_t<FloatT>::f, offset, length, \
-      offsetof(container_type, container_member), precision}
+    GEN_F2(offset, length, precision, container_type, container_member, FloatT)
 #define GEN_E(offset, length, precision, container_type, container_member) \
-    {super_t::template conv_t<FloatT>::e, offset, length, \
-      offsetof(container_type, container_member), precision}
+    GEN_E2(offset, length, precision, container_type, container_member, FloatT)
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph0_v2[] = {
@@ -1068,17 +1087,17 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_v2[] = {
-  GEN_E( 3, 19, 12, message_t, iode_f),
-  GEN_E(22, 19, 12, message_t, eph.c_rs),
-  GEN_E(41, 19, 12, message_t, eph.delta_n),
-  GEN_E(60, 19, 12, message_t, eph.M0),
+  GEN_E2( 3, 19, 12, message_t, eph.iode, int),
+  GEN_E (22, 19, 12, message_t, eph.c_rs),
+  GEN_E (41, 19, 12, message_t, eph.delta_n),
+  GEN_E (60, 19, 12, message_t, eph.M0),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_v3[] = {
-  GEN_E( 4, 19, 12, message_t, iode_f),
-  GEN_E(23, 19, 12, message_t, eph.c_rs),
-  GEN_E(42, 19, 12, message_t, eph.delta_n),
-  GEN_E(61, 19, 12, message_t, eph.M0),
+  GEN_E2( 4, 19, 12, message_t, eph.iode, int),
+  GEN_E (23, 19, 12, message_t, eph.c_rs),
+  GEN_E (42, 19, 12, message_t, eph.delta_n),
+  GEN_E (61, 19, 12, message_t, eph.M0),
 };
 
 template <class FloatT>
@@ -1143,17 +1162,17 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v2[] = {
-  GEN_E( 3, 19, 12, message_t, ura_meter),
-  GEN_E(22, 19, 12, message_t, SV_health_f),
-  GEN_E(41, 19, 12, message_t, eph.t_GD),
-  GEN_E(60, 19, 12, message_t, iodc_f),
+  GEN_E ( 3, 19, 12, message_t, ura_meter),
+  GEN_E (22, 19, 12, message_t, SV_health_f),
+  GEN_E (41, 19, 12, message_t, eph.t_GD),
+  GEN_E2(60, 19, 12, message_t, eph.iodc, int),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v3[] = {
-  GEN_E( 4, 19, 12, message_t, ura_meter),
-  GEN_E(23, 19, 12, message_t, SV_health_f),
-  GEN_E(42, 19, 12, message_t, eph.t_GD),
-  GEN_E(61, 19, 12, message_t, iodc_f),
+  GEN_E ( 4, 19, 12, message_t, ura_meter),
+  GEN_E (23, 19, 12, message_t, SV_health_f),
+  GEN_E (42, 19, 12, message_t, eph.t_GD),
+  GEN_E2(61, 19, 12, message_t, eph.iodc, int),
 };
 
 template <class FloatT>
