@@ -1311,7 +1311,7 @@ class RINEX_Writer {
           for(typename super_t::reverse_iterator it(header.rbegin()), it_end(header.rend());
               it != it_end; ++it){
             if(it->first != key){continue;}
-            it_tail = it.base() - 1;
+            it_tail = it.base(); // it_tail points to the next element of an element having the smae key
             break;
           }
         }
@@ -1322,14 +1322,16 @@ class RINEX_Writer {
             const typename super_t::value_type::second_type &value){
           if(it_head == header.end()){
             header.push_back(typename super_t::value_type(key, value));
-            it_head = it_tail = header.rbegin().base();
+            it_tail = header.end(); // in case of invalidation
+            it_head = it_tail - 1;
             return *this;
           }
           it_head->second = value;
-          for(; it_tail != it_head; --it_tail){
-            if(it_tail->first == key){continue;}
+          for(--it_tail; it_tail != it_head; --it_tail){
+            if(it_tail->first != key){continue;}
             header.erase(it_tail);
           }
+          it_tail = it_head + 1;
           return *this;
         }
         /**
@@ -1337,13 +1339,23 @@ class RINEX_Writer {
          */
         bracket_accessor_t &operator<<(
             const typename super_t::value_type::second_type &value){
-          if(it_tail == header.end()){
-            header.push_back(typename super_t::value_type(key, value));
-            it_head = it_tail = header.rbegin().base();
-            return *this;
-          }
-          header.insert(++it_tail, typename super_t::value_type(key, value));
+          super_t::size_type i_head(it_head - header.begin()), i_tail(it_tail - header.begin());
+          header.insert(it_tail, typename super_t::value_type(key, value));
+          it_head = header.begin() + i_head;  // in case of invalidation
+          it_tail = header.begin() + i_tail + 1;
           return *this;
+        }
+        unsigned int entries() const {
+          return it_tail - it_head;
+        }
+        typename super_t::iterator find(
+            const typename super_t::value_type::second_type &value) const {
+          for(typename super_t::iterator it(it_head); it != it_tail; ++it){
+            if(it->second.find(value) != super_t::value_type::second_type::npos){
+              return it;
+            }
+          }
+          return header.end();
         }
       };
       bracket_accessor_t operator[]( // mimic of std::map::operator[]=
@@ -1584,10 +1596,20 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       int res(-1);
       set_version(version);
       if(space_node.is_valid_iono_utc()){
-        iono_alpha(space_node);
-        iono_beta(space_node);
-        utc_params(space_node);
-        leap_seconds(space_node);
+        switch(version / 100){
+          case 2:
+            if(_header["ION ALPHA"].entries() == 0){iono_alpha(space_node);}
+            if(_header["ION BETA"].entries() == 0){iono_beta(space_node);}
+            if(_header["DELTA-UTC: A0,A1,T,W"].entries() == 0){utc_params(space_node);}
+            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(space_node);}
+            break;
+          case 3:
+            if(_header["IONOSPHERIC CORR"].find("GPSA") == _header.end()){iono_alpha(space_node);}
+            if(_header["IONOSPHERIC CORR"].find("GPSB") == _header.end()){iono_beta(space_node);}
+            if(_header["TIME SYSTEM CORR"].find("GPUT") == _header.end()){utc_params(space_node);}
+            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(space_node);}
+            break;
+        }
       }
       super_t::dist << header();
       res++;
