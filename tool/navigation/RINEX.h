@@ -1574,16 +1574,6 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       return *this;
     }
 
-  protected:
-    struct WriteAllFunctor {
-      RINEX_NAV_Writer &w;
-      int &counter;
-      void operator()(const typename space_node_t::Satellite::Ephemeris &eph) {
-        w << message_t(eph);
-        counter++;
-      }
-    };
-
   public:
     void set_version(
         const int &version,
@@ -1592,41 +1582,67 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           version, super_t::version_type_t::FTYPE_NAVIGATION, sys));
     }
 
-    int write_all(const space_node_t &space_node, const int &version = 304){
+    int write_all(
+        const typename reader_t::space_node_list_t &space_nodes,
+        const int &version = 304){
       int res(-1);
-      set_version(version);
-      if(space_node.is_valid_iono_utc()){
+      int systems(0);
+      set_version(version, super_t::version_type_t::SYS_UNKNOWN);
+      if(space_nodes.gps && space_nodes.gps->is_valid_iono_utc()){
+        ++systems;
+        set_version(version, super_t::version_type_t::SYS_GPS);
         switch(version / 100){
           case 2:
-            if(_header["ION ALPHA"].entries() == 0){iono_alpha(space_node);}
-            if(_header["ION BETA"].entries() == 0){iono_beta(space_node);}
-            if(_header["DELTA-UTC: A0,A1,T,W"].entries() == 0){utc_params(space_node);}
-            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(space_node);}
+            if(_header["ION ALPHA"].entries() == 0){iono_alpha(*space_nodes.gps);}
+            if(_header["ION BETA"].entries() == 0){iono_beta(*space_nodes.gps);}
+            if(_header["DELTA-UTC: A0,A1,T,W"].entries() == 0){utc_params(*space_nodes.gps);}
+            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(*space_nodes.gps);}
             break;
           case 3:
-            if(_header["IONOSPHERIC CORR"].find("GPSA") == _header.end()){iono_alpha(space_node);}
-            if(_header["IONOSPHERIC CORR"].find("GPSB") == _header.end()){iono_beta(space_node);}
-            if(_header["TIME SYSTEM CORR"].find("GPUT") == _header.end()){utc_params(space_node);}
-            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(space_node);}
+            if(_header["IONOSPHERIC CORR"].find("GPSA") == _header.end()){iono_alpha(*space_nodes.gps);}
+            if(_header["IONOSPHERIC CORR"].find("GPSB") == _header.end()){iono_beta(*space_nodes.gps);}
+            if(_header["TIME SYSTEM CORR"].find("GPUT") == _header.end()){utc_params(*space_nodes.gps);}
+            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(*space_nodes.gps);}
             break;
         }
+      }
+      if(systems > 1){
+        set_version(version, super_t::version_type_t::SYS_MIXED);
       }
       super_t::dist << header();
       res++;
 
-      WriteAllFunctor functor = {*this, res};
-      for(typename space_node_t::satellites_t::const_iterator
-            it(space_node.satellites().begin()), it_end(space_node.satellites().end());
-          it != it_end; ++it){
-        it->second.each_ephemeris(
-            functor,
-            space_node_t::Satellite::eph_list_t::EACH_ALL_INVERTED);
+      struct {
+        RINEX_NAV_Writer &w;
+        int &counter;
+        void operator()(const typename space_node_t::Satellite::Ephemeris &eph) {
+          w << message_t(eph);
+          counter++;
+        }
+      } functor = {*this, res};
+      if(space_nodes.gps){
+        for(typename space_node_t::satellites_t::const_iterator
+              it(space_nodes.gps->satellites().begin()), it_end(space_nodes.gps->satellites().end());
+            it != it_end; ++it){
+          it->second.each_ephemeris(
+              functor,
+              space_node_t::Satellite::eph_list_t::EACH_ALL_INVERTED);
+        }
       }
       return res;
     }
+    static int write_all(
+        std::ostream &out,
+        const typename reader_t::space_node_list_t &space_nodes,
+        const int &version = 304){
+      return RINEX_NAV_Writer(out).write_all(space_nodes, version);
+    }
+    int write_all(const space_node_t &space_node, const int &version = 304){
+      const typename reader_t::space_node_list_t list = {&const_cast<space_node_t &>(space_node)};
+      return write_all(list, version);
+    }
     static int write_all(std::ostream &out, const space_node_t &space_node, const int &version = 304){
-      RINEX_NAV_Writer writer(out);
-      return writer.write_all(space_node, version);
+      return RINEX_NAV_Writer(out).write_all(space_node, version);
     }
 };
 template <class FloatT>
