@@ -52,6 +52,7 @@ struct GNSS_Data {
     unsigned int sv_number;
     unsigned int bytes;
     typename observer_t::v8_t buffer[40];
+    int glonass_freq_ch;
   } subframe;
 
   typedef GPS_Time<FloatT> gps_time_t;
@@ -198,6 +199,7 @@ struct GNSS_Data {
         }
         if(eph.has_string == 0x1F){ // get all ephemeris and time info. in the same super frame
           glonass_ephemeris_t eph_converted(eph);
+          eph_converted.freq_ch = data.subframe.glonass_freq_ch; // frequncy channel
           eph_converted.t_b_gps += gps->is_valid_utc() // leap second correction
               ? gps->iono_utc().delta_t_LS
               : gps_time_t::guess_leap_seconds(eph_converted.t_b_gps);

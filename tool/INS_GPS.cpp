@@ -1968,6 +1968,7 @@ class StreamProcessor
             if(bytes > sizeof(packet.subframe.buffer)){return;}
             observer.inspect(packet.subframe.buffer, (packet.subframe.bytes = bytes), 6 + 8);
             if((G_Observer_t::u8_t)observer[6 + 2] != 0){return;} // TODO reserved1, sigID? (0:L1C/A, 4:L2CM?)
+            packet.subframe.glonass_freq_ch = -7 + (int)(G_Observer_t::u8_t)observer[6 + 3];
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 0],
                 (G_Observer_t::u8_t)observer[6 + 1],

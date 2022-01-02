@@ -52,6 +52,12 @@ class GLONASS_SpaceNode {
   public:
     typedef FloatT float_t;
     
+    static const float_t light_speed;
+    static const float_t L1_frequency;
+    static const float_t L1_frequency_gap;
+    static const float_t L2_frequency;
+    static const float_t L2_frequency_gap;
+
   public:
     typedef GLONASS_SpaceNode<float_t> self_t;
 
@@ -316,6 +322,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     class SatelliteProperties {
       public:
         struct Ephemeris {
+          int_t freq_ch;
           uint_t t_k; ///< time referenced to the beginning of the frame from current day [s]
           uint_t t_b; ///< base time of ephemeris parameters in UTC(SU) + 3hr [s]
           uint_t M; ///< satellite type; 0 - GLONASS, 1 - GLONASS-M
@@ -336,6 +343,14 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           //bool P3; // flag for alnamac; 1 - five, 0 - four
           bool P4; // flag for ephemeris; 1 - uploaded by the control segment
           bool l_n; // health flag; 0 - healthy, 1 - malfunction
+
+          float_t frequncy_L1() const {
+            return L1_frequency + L1_frequency_gap * freq_ch;
+          }
+
+          float_t frequncy_L2() const {
+            return L2_frequency + L2_frequency_gap * freq_ch;
+          }
 
           struct constellation_t { // TODO make it to be a subclass of System_XYZ<float_t, PZ90>
             float_t position[3];
@@ -364,7 +379,6 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               return res;
             }
             // TODO constant definitions should be moved to PZ-90.02
-            static const float_t light_speed;
             static const float_t omega_E;
             constellation_t abs_corrdinate(const float_t &sidereal_time_in_rad){
               // @see Appendix.A PZ-90.02 to O-X0Y0Z0
@@ -826,7 +840,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return Ephemeris::is_equivalent(eph) && TimeProperties::is_equivalent(eph);
           }
           float_t calculate_clock_error(float_t delta_t, const float_t &pseudo_range = 0) const {
-            delta_t -= pseudo_range / constellation_t::light_speed;
+            delta_t -= pseudo_range / light_speed;
             return -Ephemeris::tau_n + Ephemeris::gamma_n * delta_t;
           }
           /**
@@ -839,7 +853,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           }
           constellation_t calculate_constellation(
               float_t delta_t, const float_t &pseudo_range = 0) const {
-            delta_t -= pseudo_range / constellation_t::light_speed;
+            delta_t -= pseudo_range / light_speed;
 
             constellation_t res(xa_t_b);
             { // time integration from t_b to t_arrival
@@ -902,8 +916,24 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 };
 
 template <class FloatT>
-const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::constellation_t::light_speed
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::light_speed
     = 299792458; // [m/s]
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L1_frequency
+    = 1602E6; // [Hz]
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L1_frequency_gap
+    = 562.5E3; // [Hz]
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L2_frequency
+    = 1246E6; // [Hz]
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L2_frequency_gap
+    = 437.5E3; // [Hz]
 
 template <class FloatT>
 const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::constellation_t::omega_E
