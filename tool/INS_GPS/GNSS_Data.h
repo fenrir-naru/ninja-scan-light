@@ -198,6 +198,7 @@ struct GNSS_Data {
           }
         }
         if(eph.has_string == 0x1F){ // get all ephemeris and time info. in the same super frame
+          // Ephemeris_with_Time::raw_t =(cast)=> Ephemeris_with_Time => Ephemeris_with_GPS_Time
           glonass_ephemeris_t eph_converted(eph);
           eph_converted.freq_ch = data.subframe.glonass_freq_ch; // frequncy channel
           eph_converted.t_b_gps += gps->is_valid_utc() // leap second correction

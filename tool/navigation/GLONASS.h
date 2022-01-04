@@ -167,15 +167,13 @@ static s ## bits ## _t name(const InputT *buf){ \
       float_t tau_c; ///< GLONASS time scale correction to UTC(SU) time [s]
       float_t tau_GPS; ///< fractional part of time difference from GLONASS time to GPS time [s], integer part should be derived from another source
       struct date_t {
-        uint_t year; // 20XX
-        uint_t day_of_year; // Jan. 1st = 0
+        int_t year; // 20XX
+        int_t day_of_year; // Jan. 1st = 0
+        static const int_t days_m[12];
         /**
          * @return (std::tm)
          */
         std::tm c_tm() const {
-          static const uint_t days_m[] = {
-            31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
-          };
           std::tm res = {0};
           res.tm_year = year - 1900;
           res.tm_yday = res.tm_mday = day_of_year; // tm_yday ranges [0, 365]
@@ -187,7 +185,7 @@ static s ## bits ## _t name(const InputT *buf){ \
               if((res.tm_mday - 1) < days_m[1]){break;} // Check February
               ++res.tm_mday;
             }
-            for(; res.tm_mon < sizeof(days_m) / sizeof(days_m[0]); ++res.tm_mon){
+            for(; res.tm_mon < (int)(sizeof(days_m) / sizeof(days_m[0])); ++res.tm_mon){
               if(res.tm_mday < days_m[res.tm_mon]){break;}
               res.tm_mday -= days_m[res.tm_mon];
             }
@@ -199,6 +197,23 @@ static s ## bits ## _t name(const InputT *buf){ \
              */
             int_t y(year - 1); // year/1/1
             res.tm_wday = (y + y/4 - y/100 + y/400 + day_of_year + 1) % 7;
+          }
+          return res;
+        }
+        static date_t from_c_tm(const std::tm &date){
+          static const struct days_t {
+            int_t sum_m[sizeof(days_m) / sizeof(days_m[0])];
+            days_t(){
+              sum_m[0] = 0;
+              for(unsigned int i(1); i < sizeof(days_m) / sizeof(days_m[0]); ++i){
+                sum_m[i] = sum_m[i - 1] + days_m[i - 1];
+              }
+            }
+          } days;
+          date_t res = {date.tm_year + 1900, days.sum_m[date.tm_mon] + date.tm_mday - 1};
+          if((date.tm_mon >= 2)
+              && ((res.year % 400 == 0) || ((res.year % 4 == 0) && (res.year % 100 != 0)))){
+            ++res.day_of_year; // leap year
           }
           return res;
         }
@@ -224,7 +239,7 @@ static s ## bits ## _t name(const InputT *buf){ \
           return theta_G0_deg + 360.98564724 * ut_hr / 24; // (5.51)
         }
       } date;
-      bool l_n;
+      bool l_n; // health flag; 0 - healthy, 1 - malfunction
 
       struct raw_t {
         s32_t tau_c;
@@ -807,28 +822,45 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          * 4) t_n = t_GL - tau_n + gamma_n * (t_GL - t_b) (not explicitly defined in ICD, but in RINEX spec.)
          */
         struct Ephemeris_with_Time : public Ephemeris, TimeProperties {
-          std::tm date_tm;
           typedef typename Ephemeris::constellation_t constellation_t;
           constellation_t xa_t_b;
           float_t sidereal_t_b_rad;
           typename Ephemeris::differential_t eq_of_motion;
 
+          void calculate_additional() {
+            sidereal_t_b_rad = TimeProperties::date_t::Greenwich_sidereal_time_deg(
+                TimeProperties::date.c_tm(),
+                (float_t)(this->t_b) / (60 * 60) - 3) / 180 * M_PI;
+            constellation_t x_t_b = {
+              {this->xn, this->yn, this->zn},
+              {this->xn_dot, this->yn_dot, this->zn_dot},
+            };
+            xa_t_b = x_t_b.abs_corrdinate(sidereal_t_b_rad);
+            eq_of_motion = typename Ephemeris::differential_t((*this), sidereal_t_b_rad);
+          }
+          Ephemeris_with_Time(const Ephemeris &eph, const TimeProperties &t_prop)
+              : Ephemeris(eph), TimeProperties(t_prop) {
+            calculate_additional();
+          }
+          Ephemeris_with_Time(const Ephemeris &eph, const std::tm &t_utc)
+              : Ephemeris(eph) {
+            this->tau_c = this->tau_GPS = 0;
+            std::tm t_mt(t_utc); // calculate Moscow time
+            t_mt.tm_hour += 3;
+            std::mktime(&t_mt); // renormalization
+            this->date = TimeProperties::date_t::from_c_tm(t_mt);
+            this->t_b = (t_mt.tm_hour * 60 + t_mt.tm_min) * 60 + t_mt.tm_sec;
+            calculate_additional();
+          }
+          std::tm c_tm_utc() const {
+            std::tm t(TimeProperties::date.c_tm()); // set date on Moscow time
+            (t.tm_sec = (int)(this->t_b)) -= 3 * 60 * 60; // add second on UTC
+            std::mktime(&t); // renormalization
+            return t;
+          }
           struct raw_t : public Ephemeris::raw_t, TimeProperties::raw_t {
             operator Ephemeris_with_Time() const {
-              Ephemeris_with_Time res;
-              (Ephemeris &)(res) = (Ephemeris)(*this);
-              (TimeProperties &)(res) = (TimeProperties)(*this);
-
-              res.date_tm = res.date.c_tm();
-              res.sidereal_t_b_rad = TimeProperties::date_t::Greenwich_sidereal_time_deg(
-                  res.date_tm, (float_t)res.t_b / (24 * 60 * 60) - 3) / 180 * M_PI;
-              constellation_t x_t_b = {
-                {res.xn, res.yn, res.zn},
-                {res.xn_dot, res.yn_dot, res.zn_dot},
-              };
-              res.xa_t_b = x_t_b.abs_corrdinate(res.sidereal_t_b_rad);
-              res.eq_of_motion = typename Ephemeris::differential_t(res, res.sidereal_t_b_rad);
-              return res;
+              return Ephemeris_with_Time((Ephemeris)(*this), (TimeProperties)(*this));
             }
             raw_t &operator=(const Ephemeris_with_Time &eph){
               (typename Ephemeris::raw_t &)(*this) = eph;
@@ -882,20 +914,28 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
         struct Ephemeris_with_GPS_Time : public Ephemeris_with_Time {
           GPS_Time<float_t> t_b_gps;
+          Ephemeris_with_GPS_Time()
+              : Ephemeris_with_Time(Ephemeris(), GPS_Time<float_t>(0, 0).c_tm()),
+              t_b_gps(0, 0) {}
           /**
            *
            * @param deltaT integer part of difference of GPS and GLONASS time scales.
            * This is often identical to the leap seconds because GLONASS time base is UTC
            */
           Ephemeris_with_GPS_Time(
-              const typename Ephemeris_with_Time::raw_t &raw,
+              const typename Ephemeris_with_Time &eph,
               const int_t &deltaT = 0)
-              : Ephemeris_with_Time(raw),
-              t_b_gps(GPS_Time<float_t>(Ephemeris_with_Time::date_tm)
-                + (Ephemeris_with_Time::t_b - 3 * 60 * 60) // in UTC scale
-                - Ephemeris_with_Time::tau_c // in (glonass - 3hr) scale
-                + Ephemeris_with_Time::tau_GPS // in (GPS - delta_T) scale (delta_T is integer)
-                + deltaT) {
+              : Ephemeris_with_Time(eph),
+              t_b_gps((GPS_Time<float_t>(eph.c_tm_utc()) // in UTC scale
+                + (-Ephemeris_with_Time::tau_c // in Moscow Time scale
+                  + Ephemeris_with_Time::tau_GPS // in (GPS - delta_T) scale (delta_T is integer)
+                  + deltaT))) {
+          }
+          GPS_Time<float_t> base_time() const {
+            return t_b_gps;
+          }
+          bool is_valid(const GPS_Time<float_t> &t) const {
+            return std::abs(t_b_gps.interval(t)) <= 60 * 60; // 1 hour
           }
           using Ephemeris_with_Time::clock_error;
           float_t clock_error(
@@ -938,6 +978,11 @@ const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L2_
 template <class FloatT>
 const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::constellation_t::omega_E
     = 0.7292115E-4; // [s^-1]
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::int_t GLONASS_SpaceNode<FloatT>::TimeProperties::date_t::days_m[] = {
+  31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31
+};
 
 #define POWER_2(n) \
 (((n) >= 0) \
