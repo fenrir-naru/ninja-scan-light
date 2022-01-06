@@ -337,6 +337,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     class SatelliteProperties {
       public:
         struct Ephemeris {
+          uint_t svid;
           int_t freq_ch;
           uint_t t_k; ///< time referenced to the beginning of the frame from current day [s]
           uint_t t_b; ///< base time of ephemeris parameters in UTC(SU) + 3hr [s]
@@ -608,6 +609,8 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           u8_t F_T_index() const;
 
           struct raw_t {
+            u8_t svid;
+
             // String1
             u8_t P1;
             u16_t t_k;
@@ -704,6 +707,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               Ephemeris res;
 #define CONVERT(TARGET) \
 {res.TARGET = sf[SF_ ## TARGET] * TARGET;}
+              res.svid = svid;
               res.t_k = (((t_k >> 7) & 0x1F) * 3600) // hour
                   + (((t_k >> 1) & 0x3F) * 60) // min
                   + ((t_k & 0x1) ? 30 : 0); // sec
@@ -743,6 +747,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               // TODO: m?
 #define CONVERT(TARGET) \
 {TARGET = (s32_t)((eph.TARGET + 0.5 * sf[SF_ ## TARGET]) / sf[SF_ ## TARGET]);}
+              svid = eph.svid;
               { // t_k
                 std::div_t minutes(div(eph.t_k, 60));
                 std::div_t hrs(div(minutes.quot, 60));

@@ -86,6 +86,9 @@ struct GNSS_Data {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
         gps_ephemeris[i].svid = i + 1;
       }
+      for(unsigned int i(0); i < sizeof(glonass_ephemeris) / sizeof(glonass_ephemeris[0]); ++i){
+        glonass_ephemeris[i].svid = i + 1;
+      }
     }
 
     /**
