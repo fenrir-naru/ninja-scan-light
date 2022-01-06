@@ -922,9 +922,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
            * @param deltaT integer part of difference of GPS and GLONASS time scales.
            * This is often identical to the leap seconds because GLONASS time base is UTC
            */
-          Ephemeris_with_GPS_Time(
-              const typename Ephemeris_with_Time &eph,
-              const int_t &deltaT = 0)
+          Ephemeris_with_GPS_Time(const Ephemeris_with_Time &eph, const int_t &deltaT = 0)
               : Ephemeris_with_Time(eph),
               t_b_gps((GPS_Time<float_t>(eph.c_tm_utc()) // in UTC scale
                 + (-Ephemeris_with_Time::tau_c // in Moscow Time scale
@@ -951,8 +949,99 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     };
 
     struct Satellite : public SatelliteProperties {
+      public:
+        typedef typename SatelliteProperties::Ephemeris_with_GPS_Time eph_t;
+        typedef typename GPS_SpaceNode<float_t>::template PropertyHistory<eph_t> eph_list_t;
+      protected:
+        eph_list_t eph_history;
+      public:
+        Satellite() : eph_history() {
+          // TODO setup first ephemeris as invalid one
+          // eph_t &eph_current(const_cast<eph_t &>(eph_history.current()));
+        }
 
+        template <class Functor>
+        void each_ephemeris(
+            Functor &functor,
+            const typename eph_list_t::each_mode_t &mode = eph_list_t::EACH_ALL) const {
+          eph_history.each(functor, mode);
+        }
+
+        void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
+          eph_history.add(eph, priority_delta);
+        }
+
+        void merge(const Satellite &another, const bool &keep_original = true){
+          eph_history.merge(another.eph_history, keep_original);
+        }
+
+        const eph_t &ephemeris() const {
+          return eph_history.current();
+        }
+
+        /**
+         * Select appropriate ephemeris within registered ones.
+         *
+         * @param target_time time at measurement
+         * @return if true, appropriate ephemeris is selected, otherwise, not selected.
+         */
+        bool select_ephemeris(const GPS_Time<float_t> &target_time){
+          return eph_history.select(target_time, &eph_t::is_valid);
+        }
+
+        float_t clock_error(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const{
+          return ephemeris().clock_error(t, pseudo_range);
+        }
+
+        typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t constellation(
+            const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
+          typename eph_t::constellation_t constellation_PZ9002(
+              ephemeris().constellation(t, pseudo_range));
+          // @see https://www.gsi.go.jp/common/000070971.pdf
+          // @see (originally) Federal Air Navigation Authority (FANA), Aeronautical Information Circular
+          // of the Russian Federation, 12 February 2009, Russia.
+          float_t (&pos)[3](constellation_PZ9002.position);
+          float_t (&vel)[3](constellation_PZ9002.velocity);
+          typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t res = {
+            typename GPS_SpaceNode<float_t>::xyz_t(pos[0] - 0.36, pos[1] + 0.08, pos[2] + 0.18),
+            typename GPS_SpaceNode<float_t>::xyz_t(vel[0], vel[1], vel[2]),
+          };
+          return res;
+        }
+
+        typename GPS_SpaceNode<float_t>::xyz_t position(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
+          return constellation(t, pseudo_range).position;
+        }
+
+        typename GPS_SpaceNode<float_t>::xyz_t velocity(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
+          return constellation(t, pseudo_range).velocity;
+        }
     };
+  public:
+    typedef std::map<int, Satellite> satellites_t;
+  protected:
+    satellites_t _satellites;
+  public:
+    GLONASS_SpaceNode()
+        : _satellites() {}
+    ~GLONASS_SpaceNode(){
+      _satellites.clear();
+    }
+    const satellites_t &satellites() const {
+      return _satellites;
+    }
+    Satellite &satellite(const int &prn) {
+      return _satellites[prn];
+    }
+    bool has_satellite(const int &prn) const {
+      return _satellites.find(prn) !=  _satellites.end();
+    }
+    void update_all_ephemeris(const GPS_Time<float_t> &target_time) {
+      for(typename satellites_t::iterator it(_satellites.begin()), it_end(_satellites.end());
+          it != it_end; ++it){
+        it->second.select_ephemeris(target_time);
+      }
+    }
 };
 
 template <class FloatT>
