@@ -243,7 +243,7 @@ struct GPS_Time {
   GPS_Time &canonicalize(){
     int quot(std::floor(seconds / seconds_week));
     week += quot;
-    seconds -= (seconds_week * quot);
+    seconds -= (quot * (int)seconds_week);
     return *this;
   }
   GPS_Time(const std::tm &t, const float_t &leap_seconds = 0) {

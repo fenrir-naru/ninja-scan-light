@@ -253,6 +253,13 @@ BOOST_FIXTURE_TEST_CASE(data_parse, Fixture){
 
 BOOST_AUTO_TEST_CASE(gps_time){
   typedef space_node_t::gps_time_t gpst_t;
+  { // roll over check
+    gpst_t t(1000, 5);
+    BOOST_REQUIRE_EQUAL((t - 10).week, t.week - 1);
+    BOOST_REQUIRE_CLOSE((t - 10).seconds, t.seconds - 10 + gpst_t::seconds_week, 1E-8);
+    BOOST_REQUIRE_EQUAL(((t - 10) + 10).week, t.week);
+    BOOST_REQUIRE_CLOSE(((t - 10) + 10).seconds, t.seconds, 1E-8);
+  }
   for(const gpst_t::leap_second_event_t *t(&gpst_t::leap_second_events[0]); t->leap_seconds > 0; ++t){
     gpst_t t_gps(t->uncorrected.week, t->uncorrected.seconds);
     std::tm t_tm(t_gps.c_tm()); // tm => gps_time => tm
@@ -282,7 +289,7 @@ BOOST_AUTO_TEST_CASE(satellite_ephemeris){
     {1, 3}, {2, 3}, {2.9, 3}, {3, 3}, {3.9, 3}, {4, 3},
     {4.1, 5}, {5, 5}, {6, 5}, {7, 5},
   };
-  for(int i(0); i < sizeof(target) / sizeof(target[0]); ++i){
+  for(unsigned int i(0); i < sizeof(target) / sizeof(target[0]); ++i){
     sat.select_ephemeris(space_node_t::gps_time_t(2000, target[i].hr_in * 60 * 60));
     BOOST_TEST_MESSAGE(target[i].hr_in);
     BOOST_REQUIRE_EQUAL(sat.ephemeris().t_oc, target[i].hr_out * 60 * 60);
