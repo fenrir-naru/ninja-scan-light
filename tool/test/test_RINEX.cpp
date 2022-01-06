@@ -24,16 +24,18 @@ typedef GPS_SpaceNode<fnum_t> gps_t;
 BOOST_AUTO_TEST_SUITE(RINEX)
 
 template <class T1, class T2>
-void compare_lines(const T1 &a, const T2 &b){
+void compare_lines(const T1 &a, const T2 &b, const int &skip_lines = 0){
   std::stringstream ss_a(a), ss_b(b);
   char buf_a[0x100], buf_b[0x100];
-  while(true){
+  for(int i(0); true; i++){
     if(ss_a.eof() && ss_b.eof()){break;}
     if(ss_a.eof() ^ ss_b.eof()){
-      break; // error!
+      BOOST_FAIL("Line numbers are different!");
+      break;
     }
     ss_a.getline(buf_a, sizeof(buf_a));
     ss_b.getline(buf_b, sizeof(buf_b));
+    if(i < skip_lines){continue;}
     BOOST_REQUIRE_EQUAL(std::string(buf_a), std::string(buf_b));
   }
 }
