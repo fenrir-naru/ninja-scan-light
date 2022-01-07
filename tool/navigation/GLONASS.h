@@ -182,8 +182,9 @@ static s ## bits ## _t name(const InputT *buf){ \
             res.tm_mday -= days_m[0];
             ++res.tm_mon;
             if((year % 400 == 0) || ((year % 4 == 0) && (year % 100 != 0))){ // is leap year?
-              if((res.tm_mday - 1) < days_m[1]){break;} // Check February
-              ++res.tm_mday;
+              if(res.tm_mday < (days_m[1] + 1)){break;} // Check February in leap year
+              res.tm_mday -= (days_m[1] + 1);
+              ++res.tm_mon;
             }
             for(; res.tm_mon < (int)(sizeof(days_m) / sizeof(days_m[0])); ++res.tm_mon){
               if(res.tm_mday < days_m[res.tm_mon]){break;}
