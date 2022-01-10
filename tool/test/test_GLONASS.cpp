@@ -71,4 +71,47 @@ BOOST_AUTO_TEST_CASE(ICD_CDMA_2016_Appendix_K){
       gmst_deg, std::fmod(29191.442830, M_PI * 2) / M_PI * 180, 1E-3);
 }
 
+BOOST_AUTO_TEST_CASE(ICD_CDMA_2016_Appendix_J){
+  space_node_t::SatelliteProperties::Ephemeris eph;
+  space_node_t::TimeProperties t;
+  {
+    space_node_t::SatelliteProperties::Ephemeris::raw_t eph_raw = {0};
+    space_node_t::TimeProperties::raw_t t_raw = {0};
+
+    eph_raw.N_T = t_raw.NA = 251;
+    t_raw.N_4 = 5;
+
+    eph = (space_node_t::SatelliteProperties::Ephemeris)eph_raw;
+    t = (space_node_t::TimeProperties)t_raw;
+
+    eph.t_b = 11700;
+    eph.xn = 7003.008789E3; eph.yn = -12206.626953E3; eph.zn = 21280.765625E3;
+    eph.xn_dot = 0.7835417E3; eph.yn_dot = 2.8042530E3; eph.zn_dot = 1.3525150E3;
+    eph.xn_ddot = 0; eph.yn_ddot = 1.7E-6; eph.zn_ddot = -5.41E-6;
+  }
+
+  space_node_t::SatelliteProperties::Ephemeris_with_Time eph_t(eph, t);
+
+  space_node_t::SatelliteProperties::Ephemeris::constellation_t pos_vel(
+      eph_t.calculate_constellation(12300 - 11700));
+
+  // precise (J.1)
+  // 7523.174819 km, -10506.961965 km, 21999.239413 km
+  // 0.950126007 km/s, 2.855687825 km/s, 1.040679862 km/s
+  // Jx0m = -5.035590E-10 km/s2, Jy0m = 7.379024E-10 km/s2, Jz0m = -1.648033E-9 km/s2
+  // Jx0s = 4.428827E-10 km/s2, Jy0s = 3.541631E-10 km/s2, Jz0s = -8.911601E-10 km/s2
+
+  // simplified (J.2)
+  // 7523.174853 km, -10506.962176 km, 21999.239866 km
+  // 0.95012609 km/s, 2.85568710 km/s, 1.04068137 km/s
+
+  BOOST_REQUIRE_CLOSE(pos_vel.position[0], 7523.174819E3, 1E0); // 1m
+  BOOST_REQUIRE_CLOSE(pos_vel.position[1], -10506.961965E3, 1E0);
+  BOOST_REQUIRE_CLOSE(pos_vel.position[2], 21999.239413E3, 1E0);
+
+  BOOST_REQUIRE_CLOSE(pos_vel.velocity[0], 0.950126007E3, 1E-1); // 0.1m/s
+  BOOST_REQUIRE_CLOSE(pos_vel.velocity[1], 2.855687825E3, 1E-1);
+  BOOST_REQUIRE_CLOSE(pos_vel.velocity[2], 1.040679862E3, 1E-1);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

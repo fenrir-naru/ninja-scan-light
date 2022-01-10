@@ -395,6 +395,9 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               }
               return res;
             }
+            constellation_t operator/(const float_t &sf) const { // for RK4
+              return operator*(((float_t)1)/sf);
+            }
             // TODO constant definitions should be moved to PZ-90.02
             static const float_t omega_E;
             constellation_t abs_corrdinate(const float_t &sidereal_time_in_rad){
@@ -548,19 +551,26 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               // @see APPENDIX 3 EXAMPLES OF ALGORITHMS FOR CALCULATION OF COORDINATES AND VELOCITY
               float_t r2(x.pos_abs2()), r(std::sqrt(r2));
               static const float_t
-                  a_e(6378.136E3), mu(398600.44E9), C_20(-1082.63E-6); // TODO move to PZ-90
+                  a_e(6378136), mu(398600.44E9), C_20(1082625.75E-9); // values are obtained from ver.5.1; TODO move to PZ-90
               float_t mu_bar(mu / r2),
-                  x_a_bar(x.position[0] / r), y_a_bar(x.position[1] / r),
-                  z_a_bar(x.position[2] / r), sf_z_a_bar(z_a_bar * z_a_bar * -5 + 1),
+                  x_a_bar(x.position[0] / r), y_a_bar(x.position[1] / r), z_a_bar(x.position[2] / r),
+                  sf_z_a_bar(z_a_bar * z_a_bar * -5 + 1),
                   rho2(a_e * a_e / r2);
               constellation_t res = {
-                x.velocity,
-                { // Eq.(1)
-                  ((C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * x_a_bar + J_x_a,
-                  ((C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * y_a_bar + J_y_a,
-                  ((C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * z_a_bar + J_z_a,
+                {x.velocity[0], x.velocity[1], x.velocity[2]},
+                { // @see ver.5.1 Eq.(1)
+                  ((-C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * x_a_bar + J_x_a,
+                  ((-C_20 * rho2 * sf_z_a_bar * 3 / 2) - 1) * mu_bar * y_a_bar + J_y_a,
+                  ((-C_20 * rho2 * (sf_z_a_bar + 2) * 3 / 2) - 1) * mu_bar * z_a_bar + J_z_a,
                 }
               };
+#if 0
+              // If integration is performed in PZ-90, then these additional term is required,
+              // This is derived form simplified algorithm in CDMA ICD, (neither ver 5.1 nor ver.4 ICDs use it)
+              static const float_t omega_E(7.2921151467E-5), omega_E2(omega_E * omega_E);
+              res.velocity[0] += omega_E2 * x.position[0] + omega_E * 2 * x.velocity[1];
+              res.velocity[1] += omega_E2 * x.position[1] - omega_E * 2 * x.velocity[0];
+#endif
               return res;
             }
           };
@@ -841,7 +851,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               {this->xn, this->yn, this->zn},
               {this->xn_dot, this->yn_dot, this->zn_dot},
             };
-            xa_t_b = x_t_b.abs_corrdinate(sidereal_t_b_rad);
+            xa_t_b = x_t_b.abs_corrdinate(sidereal_t_b_rad); // PZ-90 => O-XYZ
             eq_of_motion = typename Ephemeris::differential_t((*this), sidereal_t_b_rad);
           }
           Ephemeris_with_Time(const Ephemeris &eph, const TimeProperties &t_prop)
