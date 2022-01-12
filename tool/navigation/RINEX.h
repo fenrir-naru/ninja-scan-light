@@ -713,6 +713,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       }
 
       if((it = _header.find("LEAP SECONDS")) != _header.end()){
+        iono_utc.delta_t_LSF = iono_utc.WN_LSF = iono_utc.DN = 0;
         if(version_type.version >= 301){
           super_t::convert(utc_leap_v301, it->second.front(), &iono_utc);
         }else{
@@ -1556,6 +1557,9 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       std::string s(60, ' ');
       if(super_t::_version_type.version >= 301){
         super_t::convert(reader_t::utc_leap_v301, s, &space_node.iono_utc());
+        if(space_node.iono_utc().WN_LSF == 0){
+          s.replace(6, 18, 18, ' ');
+        }
       }else{
         super_t::convert(reader_t::utc_leap_v2, s, &space_node.iono_utc());
       }
