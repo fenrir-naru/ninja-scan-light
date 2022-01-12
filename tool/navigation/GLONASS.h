@@ -1058,6 +1058,20 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         it->second.select_ephemeris(target_time);
       }
     }
+    typename Satellite::eph_t latest_ephemeris() const {
+      struct {
+        typename Satellite::eph_t res;
+        void operator()(const typename Satellite::eph_t &eph){
+          if(res.t_b_gps < eph.t_b_gps){res = eph;}
+        }
+      } functor;
+      for(typename satellites_t::const_iterator
+          it(_satellites.begin()), it_end(_satellites.end());
+          it != it_end; ++it){
+        it->second.each_ephemeris(functor, Satellite::eph_list_t::EACH_NO_REDUNDANT);
+      }
+      return functor.res;
+    }
 };
 
 template <class FloatT>
