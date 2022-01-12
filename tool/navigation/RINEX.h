@@ -1798,6 +1798,47 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
             break;
         }
       }while(false);
+      while(space_nodes.glonass){
+        ++systems;
+        set_version(version, super_t::version_type_t::SYS_GLONASS);
+        typename GLONASS_SpaceNode<FloatT>::Satellite::eph_t latest(
+            space_nodes.glonass->latest_ephemeris());
+        if(latest.t_b_gps.week <= 0){break;}
+        typename reader_t::iono_utc_t iono_utc = {0};
+        iono_utc.A0 = -latest.tau_c;
+        iono_utc.t_ot = latest.t_b_gps.seconds;
+        iono_utc.WN_t = latest.t_b_gps.week;
+        iono_utc.delta_t_LS = (int)std::floor(0.5
+            + typename space_node_t::gps_time_t(latest.c_tm_utc()).interval(latest.t_b_gps));
+        switch(version / 100){
+          case 2:
+            if(_header["CORR TO SYSTEM TIME"].entries() == 0){
+              std::tm t_tm(typename space_node_t::gps_time_t(iono_utc.WN_t, iono_utc.t_ot).c_tm());
+              typename reader_t::t_corr_glonass_t t_corr_glonass = {
+                t_tm.tm_year + 1900, t_tm.tm_mon + 1, t_tm.tm_mday, // year, month, day
+                iono_utc.A0, // tau_c_neg
+              };
+              std::string s(60, ' ');
+              super_t::convert(reader_t::t_corr_glonass_v2, s, &t_corr_glonass);
+              _header["CORR TO SYSTEM TIME"] = s;
+            }
+            break;
+          case 3:
+            if(_header["TIME SYSTEM CORR"].find("GLUT") == _header.end()){
+              std::string s(60, ' ');
+              super_t::convert(reader_t::utc_v3, s, &iono_utc);
+              _header["TIME SYSTEM CORR"] << s.replace(0, 4, "GLUT", 4);
+            }
+            break;
+        }
+        if((_header["LEAP SECONDS"].entries() == 0) && (iono_utc.delta_t_LS != 0)){
+          // ver.3 can use ver.2 format with blank fields
+          std::string s(60, ' ');
+          super_t::convert(reader_t::utc_leap_v2, s, &iono_utc);
+          _header["LEAP SECONDS"] = s;
+        }
+        break;
+      }
       if(systems > 1){
         set_version(version, super_t::version_type_t::SYS_MIXED);
       }

@@ -282,12 +282,11 @@ BOOST_AUTO_TEST_CASE(nav_GLONASS_v2){
 
   check_reader_versatility_to_input<reader_t>(src);
 
-  gps_t gps;
   glonass_t glonass;
   {
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
-    reader_t::space_node_list_t space_nodes = {&gps};
+    reader_t::space_node_list_t space_nodes = {NULL};
     space_nodes.glonass = &glonass;
     reader_t::read_all(in, space_nodes);
   }
@@ -325,9 +324,9 @@ BOOST_AUTO_TEST_CASE(nav_GLONASS_v2){
     writer.header()["PGM / RUN BY / DATE"]
         = "ASRINEXG V1.1.0 VM  AIUB                19-FEB-98 10:42";
     writer.header()["COMMENT"] = "STATION ZIMMERWALD";
-    writer.header()["CORR TO SYSTEM TIME"] << "  1998     2    16    0.379979610443D-06";
+    //writer.header()["CORR TO SYSTEM TIME"] << "  1998     2    16    0.379979610443D-06";
 
-    writer_t::space_node_list_t space_nodes = {&gps};
+    writer_t::space_node_list_t space_nodes = {NULL};
     space_nodes.glonass = &glonass;
     writer.write_all(space_nodes, 211);
     dist = ss.str();
@@ -403,10 +402,12 @@ BOOST_AUTO_TEST_CASE(nav_GLONASS_v3){
     std::tm t_header = {23, 1, 0, 2, 10 - 1, 2006 - 1900};
     writer.pgm_runby_date("XXRINEXN V3", "AIUB", t_header, "UTC");
     writer.header()["COMMENT"] << "EXAMPLE OF VERSION 3.04 FORMAT";
+#if 0
     writer.header()["TIME SYSTEM CORR"]
         << "GPUT  0.2793967723E-08 0.000000000E+00 147456 1395    G10 2" //writer.utc_params(gps);
         << "GLUT  0.7823109626E-06 0.000000000E+00      0 1395    R10 0";
     writer.header()["LEAP SECONDS"] = "    14"; // writer.leap_seconds(gps);
+#endif
 
     writer_t::space_node_list_t space_nodes = {&gps};
     space_nodes.glonass = &glonass;
