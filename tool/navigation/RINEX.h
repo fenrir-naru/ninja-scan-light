@@ -183,20 +183,25 @@ class RINEX_Reader {
 
     template <class T, bool is_integer = std::numeric_limits<T>::is_integer>
     struct conv_t {
-      static void d(
+      static bool d(
           std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
         if(str2val){
-          std::stringstream(buf.substr(offset, length)) >> *(T *)value;
+          std::stringstream ss(buf.substr(offset, length));
+          ss >> *(T *)value;
+          return (ss.rdstate() & std::ios_base::failbit) == 0;
         }else{
           std::stringstream ss;
           ss << std::setfill(opt == 1 ? '0' : ' ') << std::right << std::setw(length) << *(T *)value;
           buf.replace(offset, length, ss.str());
+          return true;
         }
       }
-      static void f(
+      static bool f(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         if(str2val){
-          std::stringstream(buf.substr(offset, length)) >> *(T *)value;
+          std::stringstream ss(buf.substr(offset, length));
+          ss >> *(T *)value;
+          return (ss.rdstate() & std::ios_base::failbit) == 0;
         }else{
           std::stringstream ss;
           ss << std::setfill(' ') << std::right << std::setw(length)
@@ -216,9 +221,10 @@ class RINEX_Reader {
             }
           }
           buf.replace(offset, length, s);
+          return true;
         }
       }
-      static void e(
+      static bool e(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         if(str2val){
           std::string s(buf.substr(offset, length));
@@ -226,7 +232,9 @@ class RINEX_Reader {
           if(pos != std::string::npos){
             s.replace(pos, 1, "E");
           }
-          std::stringstream(s) >> *(T *)value;
+          std::stringstream ss(s);
+          ss >> *(T *)value;
+          return (ss.rdstate() & std::ios_base::failbit) == 0;
         }else{
           int w((std::max)(length, precision + 6)); // parentheses of std::max mitigates error C2589 under Windows VC
 
@@ -248,31 +256,36 @@ class RINEX_Reader {
           ss.str("");
           ss << std::setfill(' ') << std::right << std::setw(w) << s;
           buf.replace(offset, length, ss.str());
+          return true;
         }
       }
     };
     template <class T>
     struct conv_t<T, true> {
-      static void d(
+      static bool d(
           std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
-        conv_t<T, false>::d(buf, offset, length, value, opt, str2val);
+        return conv_t<T, false>::d(buf, offset, length, value, opt, str2val);
       }
-      static void f(
+      static bool f(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         double v(*(T *)value);
-        conv_t<double, false>::f(buf, offset, length, &v, precision, str2val);
+        bool res(
+            conv_t<double, false>::f(buf, offset, length, &v, precision, str2val));
         *(T *)value = static_cast<T>(v);
+        return res;
       }
-      static void e(
+      static bool e(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         double v(*(T *)value);
-        conv_t<double, false>::e(buf, offset, length, &v, precision, str2val);
+        bool res(
+            conv_t<double, false>::e(buf, offset, length, &v, precision, str2val));
         *(T *)value = static_cast<T>(v);
+        return res;
       }
     };
 
     struct convert_item_t {
-      void (*func)(
+      bool (*func)(
           std::string &buf, const int &offset, const int &length, void *value,
           const int &opt, const bool &str2val);
       int offset;
@@ -281,17 +294,30 @@ class RINEX_Reader {
       int opt;
     };
 
-    static void convert(const convert_item_t *items, const int &size, const std::string &buf, void *values){
+    /**
+     * @param recovery if conversion fails, then this functor is invoked.
+     * If recovery is successfully performed, this functor should return true.
+     * The return value of this function reflects it.
+     * @return (bool) if all conversion are successfully performed, true is returned; otherwise false.
+     */
+    static bool convert(
+        const convert_item_t *items, const int &size, const std::string &buf, void *values,
+        bool (*recovery)(const int &, const std::string &, void *) = NULL){
       // str => value
+      bool res(true);
       for(int i(0); i < size; ++i){
-        (*items[i].func)(
+        if((*items[i].func)(
             const_cast<std::string &>(buf), items[i].offset, items[i].length, (char *)values + items[i].value_offset,
-            items[i].opt, true);
+            items[i].opt, true)){continue;}
+        res &= (recovery ? (*recovery)(i, buf, values) : false);
       }
+      return res;
     }
     template <int N>
-    static inline void convert(const convert_item_t (&items)[N], const std::string &buf, void *values){
-      convert(items, N, buf, values);
+    static inline bool convert(
+        const convert_item_t (&items)[N], const std::string &buf, void *values,
+        bool (*recovery)(const int &, const std::string &, void *) = NULL){
+      return convert(items, N, buf, values, recovery);
     }
 };
 
@@ -1435,20 +1461,25 @@ class RINEX_Writer {
       return s;
     }
     
-    static void convert(
+    /**
+     * @return If all conversion are successfully performed, then true; otherwise false;
+     */
+    static bool convert(
         const typename RINEX_Reader<U>::convert_item_t *items, const int &size,
         std::string &buf, const void *values){
       // value => string
+      bool res(true);
       for(int i(0); i < size; ++i){
-        (*items[i].func)(
+        res &= (*items[i].func)(
             buf, items[i].offset, items[i].length, (char *)(const_cast<void *>(values)) + items[i].value_offset,
             items[i].opt, false);
       }
+      return res;
     }
     template <int N>
-    static inline void convert(
+    static inline bool convert(
         const typename RINEX_Reader<U>::convert_item_t (&items)[N], std::string &buf, const void *values){
-      convert(items, N, buf, values);
+      return convert(items, N, buf, values);
     }
 
     void pgm_runby_date(
