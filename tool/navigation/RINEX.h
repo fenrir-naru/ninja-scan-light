@@ -695,7 +695,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
 
     struct t_corr_glonass_t {
       int year, month, day;
-      FloatT tau_c_neg;
+      FloatT tau_c_neg, tau_GPS; // TODO check tau_GPS polarity
       int leap_sec;
     };
     static const typename super_t::convert_item_t t_corr_glonass_v2[4];
@@ -727,10 +727,14 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
 
       if((it = _header.find("TIME SYSTEM CORR")) != _header.end()){
         for(it2_t it2(it->second.begin()), it2_end(it->second.end()); it2 != it2_end; ++it2){
-          if(it2->find("GLUT") == it2->npos){continue;}
-          super_t::convert(utc_v3, *it2, &iono_utc);
-          t_corr_glonass.year = t_corr_glonass.month = t_corr_glonass.day = 0;
-          t_corr_glonass.tau_c_neg = iono_utc.A0;
+          if(it2->find("GLUT") != it2->npos){
+            super_t::convert(utc_v3, *it2, &iono_utc);
+            t_corr_glonass.year = t_corr_glonass.month = t_corr_glonass.day = 0;
+            t_corr_glonass.tau_c_neg = iono_utc.A0;
+          }else if(it2->find("GLGP") != it2->npos){
+            super_t::convert(utc_v3, *it2, &iono_utc);
+            t_corr_glonass.tau_GPS = iono_utc.A0;
+          }
           utc = true;
         }
       }
@@ -781,6 +785,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
             if(!space_nodes.glonass){break;}
             typename message_glonass_t::eph_t eph0(reader.msg_glonass);
             eph0.tau_c = -t_corr_glonass.tau_c_neg;
+            eph0.tau_GPS = t_corr_glonass.tau_GPS;
             typename GLONASS_SpaceNode<FloatT>
                 ::SatelliteProperties::Ephemeris_with_GPS_Time eph(eph0, t_corr_glonass.leap_sec);
             space_nodes.glonass->satellite(reader.msg_glonass.svid).register_ephemeris(eph);
@@ -1805,18 +1810,17 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
             space_nodes.glonass->latest_ephemeris());
         if(latest.t_b_gps.week <= 0){break;}
         typename reader_t::iono_utc_t iono_utc = {0};
-        iono_utc.A0 = -latest.tau_c;
         iono_utc.t_ot = latest.t_b_gps.seconds;
         iono_utc.WN_t = latest.t_b_gps.week;
         iono_utc.delta_t_LS = (int)std::floor(0.5
             + typename space_node_t::gps_time_t(latest.c_tm_utc()).interval(latest.t_b_gps));
         switch(version / 100){
           case 2:
-            if(_header["CORR TO SYSTEM TIME"].entries() == 0){
+            if((_header["CORR TO SYSTEM TIME"].entries() == 0) && (latest.tau_c != 0)){
               std::tm t_tm(typename space_node_t::gps_time_t(iono_utc.WN_t, iono_utc.t_ot).c_tm());
               typename reader_t::t_corr_glonass_t t_corr_glonass = {
                 t_tm.tm_year + 1900, t_tm.tm_mon + 1, t_tm.tm_mday, // year, month, day
-                iono_utc.A0, // tau_c_neg
+                -latest.tau_c,
               };
               std::string s(60, ' ');
               super_t::convert(reader_t::t_corr_glonass_v2, s, &t_corr_glonass);
@@ -1824,10 +1828,17 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
             }
             break;
           case 3:
-            if(_header["TIME SYSTEM CORR"].find("GLUT") == _header.end()){
+            if((_header["TIME SYSTEM CORR"].find("GLUT") == _header.end()) && (latest.tau_c != 0)){
               std::string s(60, ' ');
+              iono_utc.A0 = -latest.tau_c;
               super_t::convert(reader_t::utc_v3, s, &iono_utc);
               _header["TIME SYSTEM CORR"] << s.replace(0, 4, "GLUT", 4);
+            }
+            if((_header["TIME SYSTEM CORR"].find("GLGP") == _header.end()) && (latest.tau_GPS != 0)){
+              std::string s(60, ' ');
+              iono_utc.A0 = latest.tau_GPS;
+              super_t::convert(reader_t::utc_v3, s, &iono_utc);
+              _header["TIME SYSTEM CORR"] << s.replace(0, 4, "GLGP", 4);
             }
             break;
         }
