@@ -444,29 +444,105 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                 if(std::abs(E_k2 - E_k) < delta_limit){break;}
                 E_k = E_k2;
               }
-              snu_k = std::sqrt(-e_k * e_k + 1) * std::sin(E_k) / (-e_k * std::cos(E_k) + 1);
-              cnu_k = (std::cos(E_k) - e_k) * std::sin(E_k) / (-e_k * std::cos(E_k) + 1);
+              float_t sE_k(std::sin(E_k)), cE_k(std::cos(E_k)), denom(-e_k * cE_k + 1);
+              snu_k = std::sqrt(-std::pow(e_k, 2) + 1) * sE_k / denom;
+              cnu_k = (cE_k - e_k) / denom;
             }
           };
 
           struct lunar_solar_perturbations_t {
-            struct {
+            struct arg_t {
               float_t xi, eta, zeta, r;
             } m, s;
+            struct constatnt_t {
+              float_t
+                  a_m, a_s, // [m]
+                  e_m, e_s,
+                  i_m;
+            };
+            struct var_t {
+              float_t
+                  epsilon,
+                  g_m, Omega_m, Gamma_m,
+                  g_s, omega_s;
+            };
+
+            static lunar_solar_perturbations_t setup(
+                const constatnt_t &C, const var_t &var){
+
+              lunar_solar_perturbations_t res;
+
+              static const float_t
+                  sf_ci_m(-std::cos(C.i_m) + 1), si_m(std::sin(C.i_m)),
+                  cepsilon(std::cos(var.epsilon)), sepsilon(std::sin(var.epsilon));
+
+              { // ICD ver.4 and 5.1 Eq.(3) lunar (m) corresponding to Appendix.J.1 in CDMA ICD
+                // (ICD4) float_t Omega_m(Omega_om + Omega_1m * T);
+                float_t sOmega_m(std::sin(var.Omega_m)), cOmega_m(std::cos(var.Omega_m));
+
+                float_t xi_ast(-std::pow(cOmega_m, 2) * sf_ci_m + 1);
+                float_t eta_ast(sOmega_m * si_m);
+                float_t zeta_ast(cOmega_m * si_m);
+
+                float_t xi_11(sOmega_m * cOmega_m * sf_ci_m);
+                float_t xi_12(-std::pow(sOmega_m, 2) * sf_ci_m + 1);
+
+                float_t eta_11(xi_ast * cepsilon - zeta_ast * sepsilon);
+                float_t eta_12(xi_11 * cepsilon + eta_ast * sepsilon);
+
+                float_t zeta_11(xi_ast * sepsilon + zeta_ast * cepsilon);
+                float_t zeta_12(zeta_11 * sepsilon - eta_ast * cepsilon);
+
+                // (ICD4) float_t Gamma_m(Gamma_o + Gamma_1 * T);
+                float_t sGamma(std::sin(var.Gamma_m)), cGamma(std::cos(var.Gamma_m));
+
+                // (ICD4) eccentric_anomaly_t E_m(g_om + g_1m * T, C.e_m);
+                eccentric_anomaly_t E_m(var.g_m, C.e_m);
+
+                float_t
+                    srad(E_m.snu_k * cGamma + E_m.cnu_k * sGamma),
+                    crad(E_m.cnu_k * cGamma - E_m.snu_k * sGamma);
+                res.m.xi    = srad * xi_11    + crad * xi_12;
+                res.m.eta   = srad * eta_11   + crad * eta_12;
+                res.m.zeta  = srad * zeta_11  + crad * zeta_12;
+                res.m.r     = C.a_m * (-C.e_m * std::cos(E_m.E_k) + 1);
+              }
+
+              { // ICD ver.4 and 5.1 Eq.(3) solar (s) corresponding to Appendix.S in CDMA ICD
+                // (ICD4) float_t omega_s(dms2rad(281, 13, (15.00 + (6189.03 * T))));
+                float_t co(std::cos(var.omega_s)), so(std::sin(var.omega_s));
+
+                // (ICD4) eccentric_anomaly_t E_s(g_os + g_1s * T, C.e_s);
+                eccentric_anomaly_t E_s(var.g_s, C.e_s);
+
+                float_t
+                    srad(E_s.snu_k * co + E_s.cnu_k * so), // = sin(nu_s + omega_s)
+                    crad(E_s.cnu_k * co - E_s.snu_k * so); // = cos(nu_s + omega_s)
+
+                res.s.xi    = crad;
+                res.s.eta   = srad * cepsilon;
+                res.s.zeta  = srad * sepsilon;
+                res.s.r     = C.a_s * (-C.e_s * std::cos(E_s.E_k) + 1);
+              }
+              return res;
+            }
             /**
              * @param days Sum of days from the epoch at 00 hours Moscow Time (MT) on 1st January 1975
              * to the epoch at 00 hours MT of current date within which the instant t_e is.
              * @param t_e reference time of ephemeris parameters (in Julian centuries of 36525 ephemeris days);
              */
-            lunar_solar_perturbations_t(const float_t &days, const float_t &t_e){
+            static lunar_solar_perturbations_t base1975(
+                const float_t &days, const float_t &t_e) {
 #define dms2rad(deg, min, sec) \
 (M_PI / 180 * ((float_t)sec / 3600 + (float_t)min / 60 + deg))
+              static const constatnt_t C = {
+                  3.84385243E8, // a_m // [m]
+                  1.49598E11, // a_s // [m]
+                  0.054900489, // e_m
+                  0.016719, // e_s
+                  dms2rad(5, 8, 43.4), // i_m // 0.08980398 rad
+              };
               static const float_t
-                  a_m(3.84385243E8), // [m]
-                  a_s(1.49598E11), //[m]
-                  e_m(0.054900489),
-                  e_s(0.016719),
-                  i_m(dms2rad(5, 8, 43.4)),
                   epsilon(dms2rad(23, 26, 33)),
                   g_om(dms2rad(-63, 53, 43.41)),
                   g_1m(dms2rad(477198, 50, 56.79)),
@@ -477,60 +553,44 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                   g_os(dms2rad(358, 28, 33.04)),
                   g_1s(dms2rad(0, 0, 129596579.10));
 
-              static const float_t
-                  sf_ci_m(-std::cos(i_m) + 1), si_m(std::sin(i_m)),
-                  cepsilon(std::cos(epsilon)), sepsilon(std::sin(epsilon));
-
               float_t T((27392.375 + days + t_e / 86400) / 36525);
-
-              { // Eq.(3) lunar (m)
-                float_t Omega_m(Omega_om + Omega_1m * T);
-                float_t sOmega_m(std::sin(Omega_m)), cOmega_m(std::sin(Omega_m));
-
-                float_t xi_ast(-cOmega_m * cOmega_m * sf_ci_m + 1);
-                float_t eta_ast(sOmega_m * si_m);
-                float_t zeta_ast(cOmega_m * si_m);
-
-                float_t xi_11(sOmega_m * cOmega_m * sf_ci_m);
-                float_t xi_12(-sOmega_m * sOmega_m * sf_ci_m + 1);
-
-                float_t eta_11(xi_ast * cepsilon - zeta_ast * sepsilon);
-                float_t eta_12(xi_11 * cepsilon + eta_ast * sepsilon);
-
-                float_t zeta_11(xi_ast * sepsilon + zeta_ast * cepsilon);
-                float_t zeta_12(zeta_11 * sepsilon - eta_ast * cepsilon);
-
-                float_t Gamma(Gamma_o + Gamma_1 * T);
-                float_t sGamma(std::sin(Gamma)), cGamma(std::cos(Gamma));
-
-                eccentric_anomaly_t E_m(g_om + g_1m * T, e_m);
-
-                float_t
-                    srad(E_m.snu_k * cGamma + E_m.cnu_k * sGamma),
-                    crad(E_m.cnu_k * cGamma - E_m.snu_k * sGamma);
-                m.xi    = srad * xi_11    + crad * xi_12;
-                m.eta   = srad * eta_11   + crad * eta_12;
-                m.zeta  = srad * zeta_11  + crad * zeta_12;
-                m.r     = a_m * (-e_m * std::cos(E_m.E_k) + 1);
-              }
-
-              { // Eq.(3) solar (s)
-                float_t omega_s(dms2rad(281, 13, 15.00 + (6189.03 * T)));
-                float_t co(std::cos(omega_s)), so(std::sin(omega_s));
-
-                eccentric_anomaly_t E_s(g_os + g_1s * T, e_s);
-
-                float_t
-                    srad(E_s.snu_k * co + E_s.cnu_k * so), // = sin(nu_s + omega_s)
-                    crad(E_s.cnu_k * co - E_s.snu_k * so); // = cos(nu_s + omega_s)
-
-                s.xi    = crad;
-                s.eta   = srad * cepsilon;
-                s.zeta  = srad * sepsilon;
-                s.r     = a_s * (-e_s * std::cos(E_s.E_k) + 1);
-              }
+              // 27392.375 equals to interval days between 1900/1/1 0:0:0(GMT) to 1975/1/1 0:0:0(MT)
+              var_t var = {
+                  epsilon, // epsilon
+                  g_om + g_1m * T, // g_m
+                  Omega_om + Omega_1m * T, // Omega_m
+                  Gamma_o + Gamma_1 * T, // Gamma_m
+                  g_os + g_1s * T, // g_s
+                  dms2rad(281, 13, (15.00 + (6189.03 * T))), // omega_s
+              };
+              return setup(C, var);
 #undef dms2rad
             }
+            static lunar_solar_perturbations_t base2000(
+                const float_t &jd0, const float_t &t_b) {
+              static const constatnt_t C = {
+                  3.84385243E8, // a_m // [m]
+                  1.49598E11, // a_s // [m]
+                  0.054900489, // e_m
+                  0.016719, // e_s
+                  0.0898041080, // i_m
+              };
+
+              float_t T((jd0 + ((t_b - 10800) / 86400) - 2451545.0) / 36525);
+              // 2451545.0 equals to Julian date for 2000/1/1 0:0:0(UTC)
+              float_t T2(std::pow(T, 2));
+
+              var_t var = {
+                  0.4090926006 - 0.0002270711 * T, // epsilon
+                  2.3555557435 + 8328.6914257190 * T + 0.0001545547 * T2, // g_m (q_m)
+                  2.1824391966 - 33.7570459536 * T + 0.0000362262 * T2, // Omega_m
+                  1.4547885346 + 71.0176852437 * T - 0.0001801481 * T2, // Gamma_m
+                  6.2400601269 + 628.3019551714 * T - 0.0000026820 * T2, // g_s (q_s)
+                  -7.6281824375 + 0.0300101976 * T + 0.0000079741 * T2, // omega_s
+              };
+              return setup(C, var);
+            }
+
           };
 
           struct differential_t {
@@ -577,43 +637,37 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
           struct differential2_t {
             lunar_solar_perturbations_t J_src;
+            static void equation2(
+                const float_t &mu, const typename lunar_solar_perturbations_t::arg_t &arg,
+                const float_t (&position)[3],
+                float_t (&J)[3]){
+              // Eq.(2)
+              float_t
+                  mu_bar(mu / std::pow(arg.r, 2)),
+                  x_a_bar(position[0] / arg.r),
+                  y_a_bar(position[1] / arg.r),
+                  z_a_bar(position[2] / arg.r),
+                  delta_x(arg.xi - x_a_bar),
+                  delta_y(arg.eta  - y_a_bar),
+                  delta_z(arg.zeta - z_a_bar),
+                  Delta3(std::pow(
+                    std::pow(delta_x, 2) + std::pow(delta_y, 2) + std::pow(delta_z, 2), 1.5));
+              J[0] = mu_bar * (delta_x / Delta3 - arg.xi);
+              J[1] = mu_bar * (delta_y / Delta3 - arg.eta);
+              J[2] = mu_bar * (delta_z / Delta3 - arg.zeta);
+            }
+            void calculate_Jm(const float_t (&position)[3], float_t (&J)[3]) const {
+              equation2(4902.835E9, J_src.m, position, J); // for lunar (m); mu in [m/s]
+            }
+            void calculate_Js(const float_t (&position)[3], float_t (&J)[3]) const {
+              equation2(0.1325263E21, J_src.s, position, J); // for solar (s); mu in [m/s]
+            }
             constellation_t operator()(const float_t &t, const constellation_t &x) const {
               // @see APPENDIX 3 EXAMPLES OF ALGORITHMS FOR CALCULATION OF COORDINATES AND VELOCITY
-
-              float_t J_x_am, J_y_am, J_z_am;
-              { // Eq.(2) lunar (m)
-                float_t
-                    mu_bar(4902.835E9 / std::pow(J_src.m.r, 2)), // mu_m in [m/s]
-                    x_a_bar(x.position[0] / J_src.m.r),
-                    y_a_bar(x.position[1] / J_src.m.r),
-                    z_a_bar(x.position[2] / J_src.m.r),
-                    delta_x(J_src.m.xi - x_a_bar),
-                    delta_y(J_src.m.eta  - y_a_bar),
-                    delta_z(J_src.m.zeta - z_a_bar),
-                    Delta3(std::pow(
-                      std::pow(delta_x, 2) + std::pow(delta_y, 2) + std::pow(delta_z, 2), 1.5));
-                J_x_am = mu_bar * (delta_x / Delta3 - J_src.m.xi);
-                J_y_am = mu_bar * (delta_y / Delta3 - J_src.m.eta);
-                J_z_am = mu_bar * (delta_z / Delta3 - J_src.m.zeta);
-              }
-
-              float_t J_x_as, J_y_as, J_z_as;
-              { // Eq.(2) solar (s)
-                float_t
-                    mu_bar(0.1325263E21 / std::pow(J_src.s.r, 2)), // mu_s in [m/s]
-                    x_a_bar(x.position[0] / J_src.s.r),
-                    y_a_bar(x.position[1] / J_src.s.r),
-                    z_a_bar(x.position[2] / J_src.s.r),
-                    delta_x(J_src.s.xi - x_a_bar),
-                    delta_y(J_src.s.eta  - y_a_bar),
-                    delta_z(J_src.s.zeta - z_a_bar),
-                    Delta3(std::pow(
-                      std::pow(delta_x, 2) + std::pow(delta_y, 2) + std::pow(delta_z, 2), 1.5));
-                J_x_as = mu_bar * (delta_x / Delta3 - J_src.s.xi);
-                J_y_as = mu_bar * (delta_y / Delta3 - J_src.s.eta);
-                J_z_as = mu_bar * (delta_z / Delta3 - J_src.s.zeta);
-              }
-              return differential_t(J_x_am + J_x_as, J_y_am + J_y_as, J_z_am + J_z_as)(t, x);
+              float_t J_am[3], J_as[3];
+              calculate_Jm(x.position, J_am);
+              calculate_Js(x.position, J_as);
+              return differential_t(J_am[0] + J_as[0], J_am[1] + J_as[1], J_am[2] + J_as[2])(t, x);
             }
           };
 

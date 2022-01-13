@@ -114,4 +114,37 @@ BOOST_AUTO_TEST_CASE(ICD_CDMA_2016_Appendix_J){
   BOOST_REQUIRE_CLOSE(pos_vel.velocity[2], 1.040679862E3, 1E-1);
 }
 
+BOOST_AUTO_TEST_CASE(ICD_CDMA_2016_Appendix_J_sun_moon){
+  // TODO check precise method, J_m, J_s differences are not negligible.
+
+  double t(11700); // [s]
+
+  space_node_t::SatelliteProperties::Ephemeris::constellation_t pos_vel = {
+    {7523.174819E3, -10506.961965E3, 21999.239413E3},
+    {0.950126007E3, 2.855687825E3, 1.040679862E3},
+  };
+
+  space_node_t::SatelliteProperties::Ephemeris::constellation_t pos_vel_abs(
+      pos_vel.abs_corrdinate(
+        29191.442830 + M_PI * 2 * (t - 10800) / 86400)); // PZ-90 => O-XYZ
+
+  space_node_t::SatelliteProperties::Ephemeris::differential2_t diff2_2000 = {
+    space_node_t::SatelliteProperties::Ephemeris::lunar_solar_perturbations_t::base2000(
+        2456177.5, t),
+  };
+
+  double Jm_2000[3], Js_2000[3];
+  diff2_2000.calculate_Jm(pos_vel_abs.position, Jm_2000);
+  diff2_2000.calculate_Js(pos_vel_abs.position, Js_2000);
+
+  space_node_t::SatelliteProperties::Ephemeris::differential2_t diff2_1975 = {
+    space_node_t::SatelliteProperties::Ephemeris::lunar_solar_perturbations_t::base1975(
+        13704, t), // 13704 equals to interval days between 2012/7/9 and 1975/1/1
+  };
+
+  double Jm_1975[3], Js_1975[3];
+  diff2_1975.calculate_Jm(pos_vel_abs.position, Jm_1975);
+  diff2_1975.calculate_Js(pos_vel_abs.position, Js_1975);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
