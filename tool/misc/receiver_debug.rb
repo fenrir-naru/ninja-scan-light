@@ -339,7 +339,7 @@ class GPS_Receiver
             :L1_CARRIER_PHASE_SIGMA => [44, 1, nil, proc{|v|
               (trk_stat & 0x2 == 0x2) ? (0.004 * (v[0] & 0xF)) : nil
             }],
-            :L1_SIGNAL_STRENGTH_dBHz => [42, 1],
+            :L1_SIGNAL_STRENGTH_dBHz => [42, 1, "C"],
             :L1_LOCK_SEC => [40, 2, "v", proc{|v| 1E-3 * v}],
           }.each{|k, prop|
             next unless v = loader.call(*prop)
