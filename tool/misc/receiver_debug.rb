@@ -19,15 +19,15 @@ class GPS_Receiver
       [:week, :seconds, :c_tm].collect{|f| pvt.receiver_time.send(f)}.flatten
     }
   ]] + [[
-    [:receiver_clock_error_meter, :longitude, :latitude, :height],
+    [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
     proc{|pvt|
-      next [nil] * 4 unless pvt.position_solved? 
+      next [nil] * 7 unless pvt.position_solved?
       [
         pvt.receiver_error,
         pvt.llh.lng / Math::PI * 180,
         pvt.llh.lat / Math::PI * 180,
         pvt.llh.alt,
-      ]
+      ] + (pvt.rel_ENU.to_a rescue [nil] * 3)
     } 
   ]] + [proc{
     labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym}
@@ -109,6 +109,7 @@ class GPS_Receiver
   end
     
   attr_accessor :solver
+  attr_accessor :base_station
 
   def initialize(options = {})
     @solver = GPS::Solver::new
@@ -133,6 +134,34 @@ class GPS_Receiver
         when :identical # same as default
           next true
         end
+      when :base_station
+        crd, sys = v.split(/ *, */).collect.with_index{|item, i|
+          case item
+          when /^([\+-]?\d+\.?\d*)([XYZNEDU]?)$/ # ex) meter[X], degree[N]
+            [$1.to_f, ($2 + "XY?"[i])[0]]
+          when /^([\+-]?\d+)_(?:(\d+)_(\d+\.?\d*)|(\d+\.?\d*))([NE])$/ # ex) deg_min_secN
+            [$1.to_f + ($2 || $4).to_f / 60 + ($3 || 0).to_f / 3600, $5]
+          else
+            raise "Unknown coordinate spec.: #{item}"
+          end
+        }.transpose
+        raise "Unknown base station: #{v}" if crd.size != 3
+        @base_station = case (sys = sys.join.to_sym)
+        when :XYZ, :XY?
+          Coordinate::XYZ::new(*crd)
+        when :NED, :ENU, :NE?, :EN? # :NE? => :NEU, :EN? => :ENU
+          (0..1).each{|i| crd[i] *= (Math::PI / 180)}
+          ([:NED, :NE?].include?(sys) ?
+              Coordinate::LLH::new(crd[0], crd[1], crd[2] * (:NED == sys ? -1 : 1)) :
+              Coordinate::LLH::new(crd[1], crd[0], crd[2])).xyz
+        else
+          raise "Unknown coordinate system: #{sys}"
+        end
+        $stderr.puts "Base station (LLH): #{
+          llh = @base_station.llh.to_a
+          llh[0..1].collect{|rad| rad / Math::PI * 180} + [llh[2]]
+        }"
+        next true
       end
       false
     }
@@ -165,7 +194,7 @@ class GPS_Receiver
     }
   }
 
-  def run(meas, t_meas)
+  def run(meas, t_meas, ref_pos = @base_station)
 =begin
     meas.to_a.collect{|prn, k, v| prn}.uniq.each{|prn|
       eph = @solver.gps_space_node.ephemeris(prn)
@@ -175,6 +204,9 @@ class GPS_Receiver
 
     #@solver.gps_space_node.update_all_ephemeris(t_meas) # internally called in the following solver.solve
     pvt = @solver.solve(meas, t_meas)
+    pvt.define_singleton_method(:rel_ENU){
+      Coordinate::ENU::relative(xyz, ref_pos)
+    } if (ref_pos && pvt.position_solved?)
     pvt.define_singleton_method(:to_s){
       (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
         task.call(pvt)
