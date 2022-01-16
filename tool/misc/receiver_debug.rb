@@ -231,7 +231,7 @@ class GPS_Receiver
         self.instance_variable_set(k, Hash[*(sats.zip(values).flatten(1))])
       }
       [:@slopeH, :@slopeV] \
-          .zip((self.slope_HV_enu.to_a.transpose rescue [nil, nil])) \
+          .zip((self.fd ? self.slope_HV_enu.to_a.transpose : [nil, nil])) \
           .each{|k, values|
         self.instance_variable_set(k,
             Hash[*(values ? sats.zip(values).flatten(1) : [])])
