@@ -452,7 +452,6 @@ struct RINEX_NAV {
     FloatT t_oc_sec;
     FloatT t_oe_WN;
     FloatT ura_meter;
-    FloatT SV_health_f;
     FloatT t_ot;  ///< Transmitting time [s]
     FloatT fit_interval_hr;
     FloatT dummy;
@@ -467,7 +466,6 @@ struct RINEX_NAV {
         t_oc_sec(std::fmod(eph.t_oc, 60)),
         t_oe_WN(eph.WN),
         ura_meter(ephemeris_t::URA_meter(eph.URA)),
-        SV_health_f(((eph.SV_health & 0x20) && (eph.SV_health & 0x1F == 0)) ? 1 : eph.SV_health),
         t_ot(0), // TODO
         fit_interval_hr(eph.fit_interval / (60 * 60)),
         dummy(0) {
@@ -485,13 +483,8 @@ struct RINEX_NAV {
        * RINEX Value:   0    Health OK
        * RINEX Value:   1    Health not OK (bits 18-22 not stored)
        * RINEX Value: >32    Health not OK (bits 18-22 stored)
+       * eph.SV_health may have a value greater than 32
        */
-      eph.SV_health = (unsigned int)SV_health_f;
-      if(eph.SV_health > 32){
-        eph.SV_health &= 0x3F; // 0b111111
-      }else if(eph.SV_health > 0){
-        eph.SV_health = 0x20; // 0b100000
-      }
 
       // At least 4 hour validity, then, hours => seconds;
       eph.fit_interval = ((fit_interval_hr < 4) ? 4 : fit_interval_hr) * 60 * 60;
@@ -1190,14 +1183,14 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v2[] = {
   GEN_E ( 3, 19, 12, message_t, ura_meter),
-  GEN_E (22, 19, 12, message_t, SV_health_f),
+  GEN_E2(22, 19, 12, message_t, eph.SV_health, unsigned int),
   GEN_E (41, 19, 12, message_t, eph.t_GD),
   GEN_E2(60, 19, 12, message_t, eph.iodc, int),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v3[] = {
   GEN_E ( 4, 19, 12, message_t, ura_meter),
-  GEN_E (23, 19, 12, message_t, SV_health_f),
+  GEN_E2(23, 19, 12, message_t, eph.SV_health, unsigned int),
   GEN_E (42, 19, 12, message_t, eph.t_GD),
   GEN_E2(61, 19, 12, message_t, eph.iodc, int),
 };
@@ -1623,9 +1616,11 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       int res(-1);
       int systems(0);
       set_version(version, super_t::version_type_t::SYS_UNKNOWN);
-      if(space_nodes.gps && space_nodes.gps->is_valid_iono_utc()){
+      do{
+        if(!space_nodes.gps){break;}
         ++systems;
         set_version(version, super_t::version_type_t::SYS_GPS);
+        if(!space_nodes.gps->is_valid_iono_utc()){break;}
         switch(version / 100){
           case 2:
             if(_header["ION ALPHA"].entries() == 0){iono_alpha(*space_nodes.gps);}
@@ -1640,7 +1635,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
             if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(*space_nodes.gps);}
             break;
         }
-      }
+      }while(false);
       if(systems > 1){
         set_version(version, super_t::version_type_t::SYS_MIXED);
       }
