@@ -17,6 +17,7 @@
 #include <exception>
 
 #include "navigation/GPS.h"
+#include "navigation/QZSS.h"
 #include "navigation/RINEX.h"
 #include "navigation/RINEX_Clock.h"
 #include "navigation/SP3.h"
@@ -577,11 +578,14 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   }
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
-    return RINEX_NAV_Reader<FloatT>::read_all(fin, *self);
+    typename RINEX_NAV_Reader<FloatT>::space_node_list_t space_nodes = {self};
+    space_nodes.qzss = self;
+    return RINEX_NAV_Reader<FloatT>::read_all(fin, space_nodes);
   }
 }
 
 %include navigation/GPS.h
+%include navigation/QZSS.h
 
 %extend GPS_User_PVT {
   %ignore solver_t;
@@ -1366,6 +1370,7 @@ struct GPS_Solver
   const base_t &select(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
+    if(prn > 192 && prn <= 202){return gps.solver;}
     return *this;
   }
   // proxy of virtual functions
