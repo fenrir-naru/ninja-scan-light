@@ -13,99 +13,113 @@ Debug GPS receiver with Ruby via SWIG interface
 require 'GPS.so'
 
 class GPS_Receiver
-  OUTPUT_PVT_ITEMS = [[
-    [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec],
-    proc{|pvt|
-      [:week, :seconds, :c_tm].collect{|f| pvt.receiver_time.send(f)}.flatten
-    }
-  ]] + [[
-    [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
-    proc{|pvt|
-      next [nil] * 7 unless pvt.position_solved?
-      [
-        pvt.receiver_error,
-        pvt.llh.lng / Math::PI * 180,
-        pvt.llh.lat / Math::PI * 180,
-        pvt.llh.alt,
-      ] + (pvt.rel_ENU.to_a rescue [nil] * 3)
-    } 
-  ]] + [proc{
-    labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym}
-    [
-      labels,
+  def self.pvt_items(opt = {})
+    opt = {
+      :system => [[:GPS, 1..32]],
+      :satellites => (1..32).to_a,
+    }.merge(opt)
+    [[
+      [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec],
       proc{|pvt|
-        next [nil] * 5 unless pvt.position_solved?
-        labels.collect{|k| pvt.send(k)}
+        [:week, :seconds, :c_tm].collect{|f| pvt.receiver_time.send(f)}.flatten
       }
-    ]
-  }.call] + [[
-    [:v_north, :v_east, :v_down, :receiver_clock_error_dot_ms],
-    proc{|pvt|
-      next [nil] * 4 unless pvt.velocity_solved?
-      [:north, :east, :down].collect{|k| pvt.velocity.send(k)} \
-          + [pvt.receiver_error_rate] 
-    }
-  ]] + [
-    [:used_satellites, proc{|pvt| pvt.used_satellites}],
-    [:PRN, proc{|pvt|
-      ("%32s"%[pvt.used_satellite_list.collect{|i|
-        1 << (i - 1)
-      }.inject(0){|res, v| res | v}.to_s(2)]).scan(/.{8}/).collect{|str|
-        str.gsub(' ', '0')
-      }.join('_')
-    }],
-  ] + [[
-    (1..32).collect{|prn|
-      [:range_residual, :weight, :azimuth, :elevation, :slopeH, :slopeV].collect{|str| "#{str}(#{prn})"}
-    }.flatten,
-    proc{|pvt|
-      next ([nil] * 6 * 32) unless pvt.position_solved?
-      sats = pvt.used_satellite_list
-      r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
-      (1..32).collect{|i|
-        next ([nil] * 6) unless i2 = sats.index(i)
-        [r[i2, 0], w[i2, i2]] +
-            [:azimuth, :elevation].collect{|f|
-              pvt.send(f)[i] / Math::PI * 180
-            } + [pvt.slopeH[i], pvt.slopeV[i]]
-      }.flatten
-    },
-  ]] + [[
-    [:wssr, :wssr_sf, :weight_max,
-        :slopeH_max, :slopeH_max_PRN, :slopeH_max_elevation,
-        :slopeV_max, :slopeV_max_PRN, :slopeV_max_elevation],
-    proc{|pvt|
-      next [nil] * 9 unless fd = pvt.fd
-      el_deg = [4, 6].collect{|i| pvt.elevation[fd[i]] / Math::PI * 180}
-      fd[0..4] + [el_deg[0]] + fd[5..6] + [el_deg[1]]
-    }
-  ]] + [[
-    [:wssr_FDE_min, :wssr_FDE_min_PRN, :wssr_FDE_2nd, :wssr_FDE_2nd_PRN],
-    proc{|pvt|
-      [:fde_min, :fde_2nd].collect{|f|
-        info = pvt.send(f)
-        next ([nil] * 2) if (!info) || info.empty?
-        [info[0], info[-3]] 
-      }.flatten
-    }
-  ]]
+    ]] + [[
+      [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
+      proc{|pvt|
+        next [nil] * 7 unless pvt.position_solved?
+        [
+          pvt.receiver_error,
+          pvt.llh.lng / Math::PI * 180,
+          pvt.llh.lat / Math::PI * 180,
+          pvt.llh.alt,
+        ] + (pvt.rel_ENU.to_a rescue [nil] * 3)
+      } 
+    ]] + [proc{
+      labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym}
+      [
+        labels,
+        proc{|pvt|
+          next [nil] * 5 unless pvt.position_solved?
+          labels.collect{|k| pvt.send(k)}
+        }
+      ]
+    }.call] + [[
+      [:v_north, :v_east, :v_down, :receiver_clock_error_dot_ms],
+      proc{|pvt|
+        next [nil] * 4 unless pvt.velocity_solved?
+        [:north, :east, :down].collect{|k| pvt.velocity.send(k)} \
+            + [pvt.receiver_error_rate] 
+      }
+    ]] + [
+      [:used_satellites, proc{|pvt| pvt.used_satellites}],
+    ] + opt[:system].collect{|sys, range|
+      base_prn = range.min
+      ["#{sys}_PRN", proc{|pvt|
+        pvt.used_satellite_list.inject("0" * range.size){|res, i|
+          res[i - base_prn] = "1" if range.include?(i)
+          res
+        }.scan(/.{1,8}/).join('_').reverse
+      }]
+    } + [[
+      opt[:satellites].collect{|prn, label|
+        [:range_residual, :weight, :azimuth, :elevation, :slopeH, :slopeV].collect{|str|
+          "#{str}(#{label || prn})"
+        }
+      }.flatten,
+      proc{|pvt|
+        next ([nil] * 6 * opt[:satellites].size) unless pvt.position_solved?
+        sats = pvt.used_satellite_list
+        r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
+        opt[:satellites].collect{|i|
+          next ([nil] * 6) unless i2 = sats.index(i)
+          [r[i2, 0], w[i2, i2]] +
+              [:azimuth, :elevation].collect{|f|
+                pvt.send(f)[i] / Math::PI * 180
+              } + [pvt.slopeH[i], pvt.slopeV[i]]
+        }.flatten
+      },
+    ]] + [[
+      [:wssr, :wssr_sf, :weight_max,
+          :slopeH_max, :slopeH_max_PRN, :slopeH_max_elevation,
+          :slopeV_max, :slopeV_max_PRN, :slopeV_max_elevation],
+      proc{|pvt|
+        next [nil] * 9 unless fd = pvt.fd
+        el_deg = [4, 6].collect{|i| pvt.elevation[fd[i]] / Math::PI * 180}
+        fd[0..4] + [el_deg[0]] + fd[5..6] + [el_deg[1]]
+      }
+    ]] + [[
+      [:wssr_FDE_min, :wssr_FDE_min_PRN, :wssr_FDE_2nd, :wssr_FDE_2nd_PRN],
+      proc{|pvt|
+        [:fde_min, :fde_2nd].collect{|f|
+          info = pvt.send(f)
+          next ([nil] * 2) if (!info) || info.empty?
+          [info[0], info[-3]] 
+        }.flatten
+      }
+    ]]
+  end
 
-  OUTPUT_MEAS_ITEMS = [[
-    (1..32).collect{|prn|
-      [:L1_range, :L1_rate].collect{|str| "#{str}(#{prn})"}
-    }.flatten,
-    proc{|meas|
-      meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
-      (1..32).collect{|prn|
-        [:L1_PSEUDORANGE, [:L1_DOPPLER, GPS::SpaceNode.L1_WaveLength]].collect{|k, sf|
-          meas_hash[[prn, GPS::Measurement.const_get(k)]] * (sf || 1) rescue nil
+  def self.meas_items(opt = {})
+    opt = {
+      :satellites => (1..32).to_a,
+    }.merge(opt)
+    [[
+      opt[:satellites].collect{|prn, label|
+        [:L1_range, :L1_rate].collect{|str| "#{str}(#{label || prn})"}
+      }.flatten,
+      proc{|meas|
+        meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
+        opt[:satellites].collect{|prn|
+          [:L1_PSEUDORANGE, [:L1_DOPPLER, GPS::SpaceNode.L1_WaveLength]].collect{|k, sf|
+            meas_hash[[prn, GPS::Measurement.const_get(k)]] * (sf || 1) rescue nil
+          }
         }
       }
-    }
-  ]]
-  
-  def self.header
-    (OUTPUT_PVT_ITEMS + OUTPUT_MEAS_ITEMS).transpose[0].flatten.join(',')
+    ]]
+  end
+
+  def header
+    (@output[:pvt] + @output[:meas]).transpose[0].flatten.join(',')
   end
     
   attr_accessor :solver
@@ -116,6 +130,10 @@ class GPS_Receiver
     @solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_pos, usr_vel|
       rel_prop[0] = 1 if rel_prop[0] > 0 # weight = 1
       rel_prop
+    }
+    output_options = {
+      :system => [[:GPS, 1..32]],
+      :satellites => (1..32).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
     }
     options = options.reject{|k, v|
       case k
@@ -170,6 +188,10 @@ class GPS_Receiver
       opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg
       opt.residual_mask = 1E4 # 10 km
     }.call(@solver.gps_options)
+    @output = {
+      :pvt => GPS_Receiver::pvt_items(output_options),
+      :meas => GPS_Receiver::meas_items(output_options),
+    }
   end
 
   GPS::Measurement.class_eval{
@@ -207,10 +229,11 @@ class GPS_Receiver
     pvt.define_singleton_method(:rel_ENU){
       Coordinate::ENU::relative(xyz, ref_pos)
     } if (ref_pos && pvt.position_solved?)
+    output = @output
     pvt.define_singleton_method(:to_s){
-      (OUTPUT_PVT_ITEMS.transpose[1].collect{|task|
+      (output[:pvt].transpose[1].collect{|task|
         task.call(pvt)
-      } + OUTPUT_MEAS_ITEMS.transpose[1].collect{|task|
+      } + output[:meas].transpose[1].collect{|task|
         task.call(meas)
       }).flatten.join(',')
     }
@@ -249,25 +272,28 @@ class GPS_Receiver
       eph.svid = prn
       [prn, eph]
     }.flatten(1)]
-    define_method(:register_ephemeris){|t_meas, prn, bcast_data|
-      next unless eph = eph_list[prn]
-      sn = @solver.gps_space_node
-      subframe, iodc_or_iode = eph.parse(bcast_data)
-      if iodc_or_iode < 0 then
-        begin
-          sn.update_iono_utc(
-              GPS::Ionospheric_UTC_Parameters::parse(bcast_data))
-          [:alpha, :beta].each{|k|
-            $stderr.puts "Iono #{k}: #{sn.iono_utc.send(k)}"
-          } if false
-        rescue
+    define_method(:register_ephemeris){|t_meas, sys, prn, bcast_data|
+      case sys
+      when :GPS
+        next unless eph = eph_list[prn]
+        sn = @solver.gps_space_node
+        subframe, iodc_or_iode = eph.parse(bcast_data)
+        if iodc_or_iode < 0 then
+          begin
+            sn.update_iono_utc(
+                GPS::Ionospheric_UTC_Parameters::parse(bcast_data))
+            [:alpha, :beta].each{|k|
+              $stderr.puts "Iono #{k}: #{sn.iono_utc.send(k)}"
+            } if false
+          rescue
+          end
+          next
         end
-        next
-      end
-      if t_meas and eph.consistent? then
-        eph.WN = ((t_meas.week / 1024).to_i * 1024) + (eph.WN % 1024)
-        sn.register_ephemeris(prn, eph)
-        eph.invalidate
+        if t_meas and eph.consistent? then
+          eph.WN = ((t_meas.week / 1024).to_i * 1024) + (eph.WN % 1024)
+          sn.register_ephemeris(prn, eph)
+          eph.invalidate
+        end
       end
     }
   }.call
@@ -280,6 +306,24 @@ class GPS_Receiver
     ubx_kind = Hash::new(0)
     
     after_run = b || proc{|pvt| puts pvt.to_s}
+    
+    gnss_serial = proc{|svid, sys|
+      if sys then # new numbering
+        sys = [:GPS, :SBAS, :Galileo, :BeiDou, :IMES, :QZSS, :GLONASS][sys] if sys.kind_of?(Integer)
+        case sys
+        when :QZSS; svid += 192
+        end
+      else # old numbering
+        sys = case svid
+        when 1..32; :GPS
+        when 120..158; :SBAS
+        when 193..202; :QZSS
+        when 65..96; svid -= 64; :GLONASS
+        when 255; :GLONASS
+        end
+      end
+      [sys, svid]
+    }
     
     t_meas = nil
     ubx.each_packet.with_index(1){|packet, i|
@@ -325,8 +369,11 @@ class GPS_Receiver
             v = post.call(v) if post
             v
           }
-          next unless (gnss = loader.call(36, 1)[0]) == 0
-          svid = loader.call(37, 1)[0]
+          sys, svid = gnss_serial.call(*loader.call(36, 2).reverse)
+          case sys
+          when :GPS; 
+          else; next
+          end
           trk_stat = loader.call(46, 1)[0]
           {
             :L1_PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
@@ -348,17 +395,18 @@ class GPS_Receiver
         }
         after_run.call(run(meas, t_meas), [meas, t_meas])
       when [0x02, 0x11] # RXM-SFRB
+        sys, svid = gnss_serial.call(packet[6 + 1])
         register_ephemeris(
             t_meas,
-            packet[6 + 1],
+            sys, svid,
             packet.slice(6 + 2, 40).each_slice(4).collect{|v|
               (v.pack("C*").unpack("V")[0] & 0xFFFFFF) << 6
             })
       when [0x02, 0x13] # RXM-SFRBX
-        next unless (gnss = packet[6]) == 0
+        sys, svid = gnss_serial.call(packet[6 + 1], packet[6])
         register_ephemeris(
             t_meas,
-            packet[6 + 1],
+            sys, svid,
             packet.slice(6 + 8, 4 * packet[6 + 4]).each_slice(4).collect{|v|
               v.pack("C*").unpack("V")[0]
             })
@@ -380,26 +428,33 @@ class GPS_Receiver
     GPS::RINEX_Observation::read(fname){|item|
       $stderr.print '.' if (count += 1) % 1000 == 0
       t_meas = item[:time]
-      
+
+      types ||= Hash[*(item[:meas_types].collect{|sys, values|
+        [sys, values.collect.with_index{|type_, i|
+          case type_
+          when "C1", "C1C"
+            [i, :L1_PSEUDORANGE]
+          when "L1", "L1C"
+            [i, :L1_CARRIER_PHASE]
+          when "D1", "D1C"
+            [i, :L1_DOPPLER]
+          when "S1", "S1C"
+            [i, :L1_SIGNAL_STRENGTH_dBHz]
+          else
+            nil 
+          end
+        }.compact]
+      }.flatten(1))]
+
       meas = GPS::Measurement::new
-      types ||= (item[:meas_types]['G'] || item[:meas_types][' ']).collect.with_index{|type_, i|
-        case type_
-        when "C1", "C1C"
-          [i, :L1_PSEUDORANGE]
-        when "L1", "L1C"
-          [i, :L1_CARRIER_PHASE]
-        when "D1", "D1C"
-          [i, :L1_DOPPLER]
-        when "S1", "S1C"
-          [i, :L1_SIGNAL_STRENGTH_dBHz]
-        else
-          nil 
-        end
-      }.compact
       item[:meas].each{|k, v|
         sys, prn = k
-        next unless sys == 'G' # GPS only
-        types.each{|i, type_|
+        case sys
+        when 'G', ' '
+        when 'J'; prn += 192
+        else; next
+        end
+        (types[sys] || []).each{|i, type_|
           meas.add(prn, type_, v[i][0]) if v[i]
         }
       }
@@ -426,7 +481,7 @@ if __FILE__ == $0 then
 
   rcv = GPS_Receiver::new(options)
   
-  puts GPS_Receiver::header
+  puts rcv.header
 
   # parse RINEX NAV
   ARGV.reject!{|arg|
