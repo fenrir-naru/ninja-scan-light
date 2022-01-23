@@ -180,6 +180,34 @@ class GPS_Receiver
           llh[0..1].collect{|rad| rad / Math::PI * 180} + [llh[2]]
         }"
         next true
+      when :with, :without
+        [v].flatten.each{|spec| # array is acceptable
+          sys, svid = case spec
+          when Integer
+            [nil, spec]
+          when /([a-zA-Z]+)(?::(-?\d+))?/
+            [$1.upcase.to_sym, (Integre($2) rescue nil)]
+          when /-?\d+/
+            [nil, $&.to_i]
+          else
+            next false
+          end
+          mode = if svid && (svid < 0) then
+            svid *= -1
+            (k == :with) ? :exclude : :include
+          else
+            (k == :with) ? :include : :exclude
+          end
+          if (sys == :GPS) || (svid && (1..32).include?(svid)) then
+            [svid || (1..32).to_a].flatten.each{
+              @solver.gps_options.send(mode, svid)
+            }
+          else
+            next false  
+          end
+          $stderr.puts "#{mode.capitalize} satellite: #{[sys, svid].compact.join(':')}"
+        }
+        next true
       end
       false
     }
@@ -465,12 +493,12 @@ class GPS_Receiver
 end
 
 if __FILE__ == $0 then
-  options = {}
+  options = []
 
   # check options
   ARGV.reject!{|arg|
     next false unless arg =~ /^--([^=]+)=?/
-    options[$1.to_sym] = $'
+    options << [$1.to_sym, $']
     true
   }
 
