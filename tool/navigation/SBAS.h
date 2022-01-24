@@ -2044,6 +2044,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           eph_current.t_0 = -1;
         }
 
+        template <class Functor>
+        void each_ephemeris(
+            Functor &functor,
+            const typename eph_list_t::each_mode_t &mode = eph_list_t::EACH_ALL) const {
+          eph_history.each(functor, mode);
+        }
+
         void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
           eph_history.add(eph, priority_delta);
         }
