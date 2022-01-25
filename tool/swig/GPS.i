@@ -746,12 +746,23 @@ struct GPS_Measurement {
 };
 }
 
-%extend GPS_SolverOptions {
-  %ignore base_t;
-  MAKE_ACCESSOR(elevation_mask, FloatT);
-  MAKE_ACCESSOR(residual_mask, FloatT);
-  MAKE_ACCESSOR(f_10_7, FloatT);
+%extend GPS_SolverOptions_Common {
+%define MAKE_ACCESSOR2(name, type)
+%rename(%str(name ## =)) set_ ## name;
+type set_ ## name (const type &v) {
+  return self->cast_general()->name = v;
+}
+%rename(%str(name)) get_ ## name;
+const type &get_ ## name () const {
+  return self->cast_general()->name;
+}
+%enddef
+  MAKE_ACCESSOR2(elevation_mask, FloatT);
+  MAKE_ACCESSOR2(residual_mask, FloatT);
+  MAKE_ACCESSOR2(f_10_7, FloatT);
+#undef MAKE_ACCESSOR2
   MAKE_VECTOR2ARRAY(int);
+  %ignore cast_base;
 #ifdef SWIGRUBY
   %rename("ionospheric_models=") set_ionospheric_models;
   %rename("ionospheric_models") get_ionospheric_models;
@@ -775,11 +786,7 @@ struct GPS_Measurement {
 }
 %inline %{
 template <class FloatT>
-struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
-  typedef typename GPS_SinglePositioning<FloatT>::options_t base_t;
-  void exclude(const int &prn){base_t::exclude_prn.set(prn);}
-  void include(const int &prn){base_t::exclude_prn.reset(prn);}
-  std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+struct GPS_SolverOptions_Common {
   enum {
     IONOSPHERIC_KLOBUCHAR,
     IONOSPHERIC_NTCM_GL,
@@ -787,29 +794,54 @@ struct GPS_SolverOptions : public GPS_SinglePositioning<FloatT>::options_t {
     IONOSPHERIC_MODELS,
     IONOSPHERIC_SKIP = IONOSPHERIC_MODELS, // which means delegating the next slot
   };
+  virtual GPS_Solver_GeneralOptions<FloatT> *cast_general() = 0;
+  virtual const GPS_Solver_GeneralOptions<FloatT> *cast_general() const = 0;
   std::vector<int> get_ionospheric_models() const {
+    typedef GPS_Solver_GeneralOptions<FloatT> general_t;
+    const general_t *general(this->cast_general());
     std::vector<int> res;
-    for(int i(0); i < base_t::IONOSPHERIC_MODELS; ++i){
-      int v((int)(base_t::ionospheric_models[i]));
-      if(v == base_t::IONOSPHERIC_SKIP){break;}
+    for(int i(0); i < general_t::IONOSPHERIC_MODELS; ++i){
+      int v((int)(general->ionospheric_models[i]));
+      if(v == general_t::IONOSPHERIC_SKIP){break;}
       res.push_back(v);
     }
     return res;
   }
   std::vector<int> set_ionospheric_models(const std::vector<int> &models){
-    typedef typename base_t::ionospheric_model_t model_t;
-    for(int i(0), j(0), j_max(models.size()); i < base_t::IONOSPHERIC_MODELS; ++i){
-      model_t v(base_t::IONOSPHERIC_SKIP);
+    typedef GPS_Solver_GeneralOptions<FloatT> general_t;
+    general_t *general(this->cast_general());
+    typedef typename general_t::ionospheric_model_t model_t;
+    for(int i(0), j(0), j_max(models.size()); i < general_t::IONOSPHERIC_MODELS; ++i){
+      model_t v(general_t::IONOSPHERIC_SKIP);
       if(j < j_max){
-        if((models[j] >= 0) && (models[j] < base_t::IONOSPHERIC_SKIP)){
+        if((models[j] >= 0) && (models[j] < general_t::IONOSPHERIC_SKIP)){
           v = (model_t)models[j];
         }
         ++j;
       }
-      base_t::ionospheric_models[i] = v;
+      general->ionospheric_models[i] = v;
     }
     return get_ionospheric_models();
   }
+};
+%}
+
+%extend GPS_SolverOptions {
+  %ignore base_t;
+  %ignore cast_general;
+  MAKE_VECTOR2ARRAY(int);
+}
+%inline %{
+template <class FloatT>
+struct GPS_SolverOptions 
+    : public GPS_SinglePositioning<FloatT>::options_t, 
+    GPS_SolverOptions_Common<FloatT> {
+  typedef typename GPS_SinglePositioning<FloatT>::options_t base_t;
+  void exclude(const int &prn){base_t::exclude_prn.set(prn);}
+  void include(const int &prn){base_t::exclude_prn.reset(prn);}
+  std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+  GPS_Solver_GeneralOptions<FloatT> *cast_general(){return this;}
+  const GPS_Solver_GeneralOptions<FloatT> *cast_general() const {return this;}
 };
 %}
 
@@ -1099,6 +1131,7 @@ struct RINEX_Observation {};
 %template(Ephemeris) GPS_Ephemeris<type>;
 %template(PVT) GPS_User_PVT<type>;
 %template(Measurement) GPS_Measurement<type>;
+%template(SolverOptionsCommon) GPS_SolverOptions_Common<type>;
 %template(SolverOptions) GPS_SolverOptions<type>;
 #if defined(SWIGRUBY)
 %markfunc GPS_Solver<type> "GPS_Solver<type>::mark";
