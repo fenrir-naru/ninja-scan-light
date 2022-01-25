@@ -428,7 +428,8 @@ class GPS_Receiver
             t_meas,
             sys, svid,
             packet.slice(6 + 2, 40).each_slice(4).collect{|v|
-              (v.pack("C*").unpack("V")[0] & 0xFFFFFF) << 6
+              res = v.pack("C*").unpack("V")[0]
+              (sys == :GPS) ? ((res & 0xFFFFFF) << 6) : res
             })
       when [0x02, 0x13] # RXM-SFRBX
         sys, svid = gnss_serial.call(packet[6 + 1], packet[6])
