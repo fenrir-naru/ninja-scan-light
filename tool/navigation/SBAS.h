@@ -915,7 +915,13 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             return false;
           }
 
-          PointProperty compute_property(const typename PointProperty::raw_t *(&selected)[4]){
+          PointProperty compute_property(
+#if defined(SWIG) // work around for SWIG parser error
+              const typename PointProperty::raw_t *selected
+#else
+              const typename PointProperty::raw_t *(&selected)[4]
+#endif
+              ){
             float_t delay_raw(0), sigma2(0);
             bool use_sigma(true);
             for(int i(0); i <= 3; i++){
@@ -1016,7 +1022,13 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         /**
          * @return available IGP(s)
          */
-        int_t check_availability(trapezoid_t &target, const typename PointProperty::raw_t *(&cache)[4]) const {
+        int_t check_availability(trapezoid_t &target,
+#if defined(SWIG) // work around for SWIG parser error
+            const typename PointProperty::raw_t *cache
+#else
+            const typename PointProperty::raw_t *(&cache)[4]
+#endif
+            ) const {
           int_t res(0);
           for(int i(0); i < 4; ++i){
             if(target.checked[i]){res++; continue;}
