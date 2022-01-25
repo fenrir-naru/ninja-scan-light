@@ -17,11 +17,13 @@
 #include <exception>
 
 #include "navigation/GPS.h"
+#include "navigation/SBAS.h"
 #include "navigation/RINEX.h"
 
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/GPS_Solver_RAIM.h"
+#include "navigation/SBAS_Solver.h"
 
 #if defined(__cplusplus) && (__cplusplus < 201103L)
 #include <sstream>
@@ -420,6 +422,68 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
 
 %include navigation/GPS.h
 
+%inline %{
+template <class FloatT>
+struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris {
+  SBAS_Ephemeris() : SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris() {}
+  SBAS_Ephemeris(const typename SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris &eph) 
+      : SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris(eph) {}
+};
+%}
+%extend SBAS_Ephemeris {
+  MAKE_ACCESSOR(svid, unsigned int);
+          
+  MAKE_ACCESSOR(WN, unsigned int);
+  MAKE_ACCESSOR(t_0, FloatT);
+  MAKE_ACCESSOR(URA, int);
+  MAKE_ACCESSOR(  x, FloatT); MAKE_ACCESSOR(  y, FloatT); MAKE_ACCESSOR(  z, FloatT);
+  MAKE_ACCESSOR( dx, FloatT); MAKE_ACCESSOR( dy, FloatT); MAKE_ACCESSOR( dz, FloatT);
+  MAKE_ACCESSOR(ddx, FloatT); MAKE_ACCESSOR(ddy, FloatT); MAKE_ACCESSOR(ddz, FloatT);
+  MAKE_ACCESSOR(a_Gf0, FloatT);
+  MAKE_ACCESSOR(a_Gf1, FloatT);
+  %apply GPS_Ephemeris::System_XYZ<FloatT, WGS84> & { System_XYZ<FloatT, WGS84> & }; // TODO ineffective?
+  void constellation(
+      System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
+      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0,
+      const bool &with_velocity = true) const {
+    typename SBAS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
+        self->constellation(t, pseudo_range, with_velocity));
+    position = res.position;
+    velocity = res.velocity;
+  }
+}
+
+%extend SBAS_SpaceNode {
+  %fragment(SWIG_Traits_frag(FloatT));
+  %ignore satellites() const;
+  %ignore satellite(const int &);
+  %ignore available_satellites(const FloatT &lng_deg) const;
+  void register_ephemeris(
+      const int &prn, const SBAS_Ephemeris<FloatT> &eph,
+      const int &priority_delta = 1){
+    self->satellite(prn).register_ephemeris(eph, priority_delta);
+  }
+  SBAS_Ephemeris<FloatT> ephemeris(const int &prn) const {
+    return SBAS_Ephemeris<FloatT>(
+        %const_cast(self, SBAS_SpaceNode<FloatT> *)->satellite(prn).ephemeris());
+  }
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    RINEX_NAV_Reader<FloatT>::space_node_list_t space_nodes = {NULL};
+    space_nodes.sbas = self;
+    return RINEX_NAV_Reader<FloatT>::read_all(fin, space_nodes);
+  }
+  MAKE_ARRAY_INPUT(const unsigned int, buf, SWIG_AsVal(unsigned int));
+  int decode_message(const unsigned int buf[8],
+      const int &prn, const GPS_Time<FloatT> &t_reception,
+      const bool &LNAV_VNAV_LP_LPV_approach = false){
+    return static_cast<int>(
+        self->decode_message(buf, prn, t_reception, LNAV_VNAV_LP_LPV_approach));
+  }
+}
+
+%include navigation/SBAS.h
+
 %extend GPS_User_PVT {
   %ignore solver_t;
   %ignore base_t;
@@ -777,6 +841,7 @@ template <class FloatT>
 struct GPS_SolverOptions_Common {
   enum {
     IONOSPHERIC_KLOBUCHAR,
+    IONOSPHERIC_SBAS,
     IONOSPHERIC_NTCM_GL,
     IONOSPHERIC_NONE, // which allows no correction
     IONOSPHERIC_MODELS,
@@ -833,11 +898,32 @@ struct GPS_SolverOptions
 };
 %}
 
+%extend SBAS_SolverOptions {
+  %ignore base_t;
+  %ignore cast_general;
+  MAKE_VECTOR2ARRAY(int);
+}
+%inline %{
+template <class FloatT>
+struct SBAS_SolverOptions 
+    : public SBAS_SinglePositioning<FloatT>::options_t,
+    GPS_SolverOptions_Common<FloatT> {
+  typedef typename SBAS_SinglePositioning<FloatT>::options_t base_t;
+  void exclude(const int &prn){base_t::exclude_prn.set(prn);}
+  void include(const int &prn){base_t::exclude_prn.reset(prn);}
+  std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+  GPS_Solver_GeneralOptions<FloatT> *cast_general(){return this;}
+  const GPS_Solver_GeneralOptions<FloatT> *cast_general() const {return this;}
+};
+%}
+
 %extend GPS_Solver {
   %ignore super_t;
   %ignore base_t;
   %ignore gps_t;
   %ignore gps;
+  %ignore sbas_t;
+  %ignore sbas;
   %ignore select_solver;
   %ignore relative_property;
   %ignore satellite_position;
@@ -994,6 +1080,12 @@ struct GPS_Solver
     GPS_SinglePositioning<FloatT> solver;
     gps_t() : space_node(), options(), solver(space_node) {}
   } gps;
+  struct sbas_t {
+    SBAS_SpaceNode<FloatT> space_node;
+    SBAS_SolverOptions<FloatT> options;
+    SBAS_SinglePositioning<FloatT> solver;
+    sbas_t() : space_node(), options(), solver(space_node) {}
+  } sbas;
   SWIG_Object hooks;
 #ifdef SWIGRUBY
   static void mark(void *ptr){
@@ -1002,16 +1094,21 @@ struct GPS_Solver
     rb_gc_mark(solver->hooks);
   }
 #endif
-  GPS_Solver() : super_t(), gps(), hooks() {
+  GPS_Solver() : super_t(), gps(), sbas(), hooks() {
+    gps.solver.space_node_sbas = &sbas.space_node;
+    sbas.solver.space_node_gps = &gps.space_node;
 #ifdef SWIGRUBY
     hooks = rb_hash_new();
 #endif
   }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
+  SBAS_SpaceNode<FloatT> &sbas_space_node() {return sbas.space_node;}
+  SBAS_SolverOptions<FloatT> &sbas_options() {return sbas.options;}
   const base_t &select_solver(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
+    if(prn >= 120 && prn <= 158){return sbas.solver;}
     // call order: base_t::solve => this returned by select() 
     //     => relative_property() => select_solver()
     // For not supported satellite, call loop prevention is required.
@@ -1037,6 +1134,8 @@ struct GPS_Solver
       const GPS_Time<FloatT> &receiver_time) const {
     const_cast<gps_t &>(gps).space_node.update_all_ephemeris(receiver_time);
     const_cast<gps_t &>(gps).solver.update_options(gps.options);
+    const_cast<sbas_t &>(sbas).space_node.update_all_ephemeris(receiver_time);
+    const_cast<sbas_t &>(sbas).solver.update_options(sbas.options);
     return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
 };
@@ -1175,6 +1274,10 @@ struct RINEX_Observation {};
 %markfunc GPS_Solver<type> "GPS_Solver<type>::mark";
 #endif
 %template(Solver) GPS_Solver<type>;
+
+%template(Ephemeris_SBAS) SBAS_Ephemeris<type>;
+%template(SpaceNode_SBAS) SBAS_SpaceNode<type>;
+%template(SolverOptions_SBAS) SBAS_SolverOptions<type>;
 
 %template(RINEX_Observation) RINEX_Observation<type>;
 %enddef
