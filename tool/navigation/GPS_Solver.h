@@ -43,6 +43,7 @@
 #include <exception>
 
 #include <cmath>
+#include <cstddef>
 
 #include "param/bit_array.h"
 
@@ -66,7 +67,7 @@ struct GPS_Solver_GeneralOptions {
 
   int count_ionospheric_models() const {
     int res(0);
-    for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
+    for(std::size_t i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
       if(ionospheric_models[i] != IONOSPHERIC_SKIP){res++;}
     }
     return res;
@@ -78,7 +79,7 @@ struct GPS_Solver_GeneralOptions {
       : elevation_mask(0), // elevation mask default is 0 [deg]
       residual_mask(30), // range residual mask is 30 [m]
       f_10_7(-1) {
-    for(int i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
+    for(std::size_t i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
       ionospheric_models[i] = IONOSPHERIC_SKIP;
     }
     // default: broadcasted Klobuchar parameters are at least required for solution.
@@ -172,22 +173,25 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       int available_models(0);
 
-      for(int i(0); i < sizeof(opt.ionospheric_models) / sizeof(opt.ionospheric_models[0]); ++i){
+      for(std::size_t i(0);
+          i < sizeof(opt.ionospheric_models) / sizeof(opt.ionospheric_models[0]); ++i){
+        bool usable(false);
         switch(opt.ionospheric_models[i]){
           case options_t::IONOSPHERIC_KLOBUCHAR:
             // check whether Klobuchar parameters alpha and beta have been already received
-            if(_space_node.is_valid_iono()){break;}
-            opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
-            continue;
+            if(_space_node.is_valid_iono()){usable = true;}
+            break;
           case options_t::IONOSPHERIC_NTCM_GL:
-            if(opt.f_10_7 >= 0){break;}
+            if(opt.f_10_7 >= 0){usable = true;}
             // check F10.7 has been already configured
-            opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
-            continue;
-          case options_t::IONOSPHERIC_SKIP:
-            continue;
+            break;
+          default: break;
         }
-        available_models++;
+        if(usable){
+          available_models++;
+        }else{
+          opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
+        }
       }
 
       return available_models;
@@ -266,7 +270,9 @@ class GPS_SinglePositioning : public SolverBaseT {
       if(error.unknown_flag & range_error_t::MASK_IONOSPHERIC){
         // Ionospheric model selection, the fall back is no correction
         bool iono_model_hit(false);
-        for(int i(0); i < sizeof(_options.ionospheric_models) / sizeof(_options.ionospheric_models[0]); ++i){
+        for(std::size_t i(0);
+            i < sizeof(_options.ionospheric_models) / sizeof(_options.ionospheric_models[0]);
+            ++i){
           switch(_options.ionospheric_models[i]){
             case options_t::IONOSPHERIC_KLOBUCHAR:
               residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);

@@ -652,19 +652,19 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       bool alpha, beta, utc, leap;
       super_t::header_t::const_iterator it;
 
-      if(alpha = ((it = _header.find("ION ALPHA")) != _header.end())){
+      if((alpha = ((it = _header.find("ION ALPHA")) != _header.end()))){
         super_t::convert(iono_alpha_v2, it->second.front(), &iono_utc);
       }
       
-      if(beta = ((it = _header.find("ION BETA")) != _header.end())){
+      if((beta = ((it = _header.find("ION BETA")) != _header.end()))){
         super_t::convert(iono_beta_v2, it->second.front(), &iono_utc);
       }
 
-      if(utc = ((it = _header.find("DELTA-UTC: A0,A1,T,W")) != _header.end())){
+      if((utc = ((it = _header.find("DELTA-UTC: A0,A1,T,W")) != _header.end()))){
         super_t::convert(utc_v2, it->second.front(), &iono_utc);
       }
 
-      if(leap = ((it = _header.find("LEAP SECONDS")) != _header.end())){
+      if((leap = ((it = _header.find("LEAP SECONDS")) != _header.end()))){
         super_t::convert(utc_leap_v2, it->second.front(), &iono_utc);
       }
 

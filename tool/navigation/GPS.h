@@ -405,11 +405,12 @@ struct GPS_Time {
     }
 
     // process remaining 4 years
-    int doy_i(0), doy[] = {
+    int doy[] = {
       leap_year ? 366 : 365,
       365, 365, 365,
       is_leap_year(year + 4) ? 366 : 365,
     };
+    std::size_t doy_i(0);
     for(; doy_i < sizeof(doy) / sizeof(doy[0]); ++doy_i){
       if(days <= doy[doy_i]){break;}
       days -= doy[doy_i];
@@ -2089,8 +2090,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       // Elevation and azimuth
       float_t el(relative_pos.elevation()),
              az(relative_pos.azimuth());
-      float_t sc_el(rad2sc(el)),
-             sc_az(rad2sc(az));
+      float_t sc_el(rad2sc(el));
              
       // Pierce point (PP stands for the earth projection of the Pierce point)
       // (the following equation is based on GPS ICD)

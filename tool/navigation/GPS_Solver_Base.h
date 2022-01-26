@@ -202,9 +202,9 @@ struct GPS_Solver_Base {
   virtual const float_t *rate(
       const typename measurement_t::mapped_type &values, float_t &buf) const {
     const float_t *res;
-    if(res = find_value(values, measurement_items_t::L1_RANGE_RATE, buf)){
+    if((res = find_value(values, measurement_items_t::L1_RANGE_RATE, buf))){
 
-    }else if(res = find_value(values, measurement_items_t::L1_DOPPLER, buf)){
+    }else if((res = find_value(values, measurement_items_t::L1_DOPPLER, buf))){
       // Fall back to doppler
       buf *= -space_node_t::L1_WaveLength();
     }
@@ -214,9 +214,9 @@ struct GPS_Solver_Base {
   virtual const float_t *rate_sigma(
       const typename measurement_t::mapped_type &values, float_t &buf) const {
     const float_t *res;
-    if(res = find_value(values, measurement_items_t::L1_RANGE_RATE_SIGMA, buf)){
+    if((res = find_value(values, measurement_items_t::L1_RANGE_RATE_SIGMA, buf))){
 
-    }else if(res = find_value(values, measurement_items_t::L1_DOPPLER_SIGMA, buf)){
+    }else if((res = find_value(values, measurement_items_t::L1_DOPPLER_SIGMA, buf))){
       // Fall back to doppler
       buf *= space_node_t::L1_WaveLength();
     }
@@ -308,8 +308,9 @@ struct GPS_Solver_Base {
         case ERROR_VELOCITY_INSUFFICIENT_SATELLITES:
         case ERROR_VELOCITY_LS:
           return true;
+        default:
+          return false;
       }
-      return false;
     }
     bool velocity_solved() const {
       return error_code == ERROR_NO;
