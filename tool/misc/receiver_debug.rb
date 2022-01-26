@@ -53,12 +53,21 @@ class GPS_Receiver
     ]] + [
       [:used_satellites, proc{|pvt| pvt.used_satellites}],
     ] + opt[:system].collect{|sys, range|
-      base_prn = range.min
-      ["#{sys}_PRN", proc{|pvt|
-        pvt.used_satellite_list.inject("0" * range.size){|res, i|
+      bit_flip = if range.kind_of?(Array) then
+        proc{|res, i|
+          res[i] = "1" if i = range.index(i)
+          res
+        }
+      else # expect Range
+        base_prn = range.min
+        proc{|res, i|
           res[i - base_prn] = "1" if range.include?(i)
           res
-        }.scan(/.{1,8}/).join('_').reverse
+        }
+      end
+      ["#{sys}_PRN", proc{|pvt|
+        pvt.used_satellite_list.inject("0" * range.size, &bit_flip) \
+            .scan(/.{1,8}/).join('_').reverse
       }]
     } + [[
       opt[:satellites].collect{|prn, label|
