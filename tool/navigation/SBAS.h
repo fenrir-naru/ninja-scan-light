@@ -40,6 +40,7 @@
 #include <iostream>
 #include <cmath>
 #include <cstring>
+#include <cstddef>
 #include <map>
 #include <algorithm>
 
@@ -1577,7 +1578,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
         float_t
             weight_b(preset_idx_f - preset_idx),
             weight_a(1. - weight_b);
-        for(int j(0); j < sizeof(average.v) / sizeof(average.v[0]); ++j){
+        for(std::size_t j(0); j < sizeof(average.v) / sizeof(average.v[0]); ++j){
           average.v[j]
               = preset[preset_idx].average.v[j] * weight_a
                 + preset[preset_idx + 1].average.v[j] * weight_b; // (A-4)
@@ -1595,7 +1596,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           float_t Dmin_year(((usrllh.latitude() < 0) ? 211 : 28) / 365.25);
           float_t year_int;
           float_t k(std::cos(M_PI * 2 * (std::modf(year_utc, &year_int) - Dmin_year)));
-          for(int j(0); j < sizeof(param.v) / sizeof(param.v[0]); ++j){
+          for(std::size_t j(0); j < sizeof(param.v) / sizeof(param.v[0]); ++j){
             param.v[j] = average.v[j] - seasonal_variation.v[j] * k;
           }
         }
