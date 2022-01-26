@@ -351,7 +351,13 @@ class GPS_Receiver
           eph.invalidate
         end
       when :SBAS
-        msg_type = @solver.sbas_space_node.decode_message(bcast_data[0..7], prn, t_meas)
+        case @solver.sbas_space_node.decode_message(bcast_data[0..7], prn, t_meas)
+        when 26
+          ['', "IGP broadcasted by PRN#{prn} @ #{Time::utc(*t_meas.c_tm)}",
+              @solver.sbas_space_node.ionospheric_grid_points(prn)].each{|str|
+            $stderr.puts str
+          } if @debug[:SBAS_IGP] 
+        end
       end
     }
   }.call

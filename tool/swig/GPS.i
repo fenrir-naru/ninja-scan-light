@@ -15,6 +15,7 @@
 #include <iostream>
 #include <fstream>
 #include <exception>
+#include <sstream>
 
 #include "navigation/GPS.h"
 #include "navigation/SBAS.h"
@@ -26,7 +27,6 @@
 #include "navigation/SBAS_Solver.h"
 
 #if defined(__cplusplus) && (__cplusplus < 201103L)
-#include <sstream>
 namespace std {
 template <class T>
 inline std::string to_string(const T &value){
@@ -479,6 +479,12 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
       const bool &LNAV_VNAV_LP_LPV_approach = false){
     return static_cast<int>(
         self->decode_message(buf, prn, t_reception, LNAV_VNAV_LP_LPV_approach));
+  }
+  std::string ionospheric_grid_points(const int &prn) const {
+    std::ostringstream ss;
+    ss << %const_cast(self, SBAS_SpaceNode<FloatT> *)->satellite(prn)
+      .ionospheric_grid_points();
+    return ss.str();
   }
 }
 
