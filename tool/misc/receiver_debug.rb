@@ -140,12 +140,17 @@ class GPS_Receiver
       rel_prop[0] = 1 if rel_prop[0] > 0 # weight = 1
       rel_prop
     }
+    @debug = {}
     output_options = {
       :system => [[:GPS, 1..32]],
       :satellites => (1..32).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
     }
     options = options.reject{|k, v|
       case k
+      when :debug
+        v = v.split(/,/)
+        @debug[v[0].upcase.to_sym] = v[1..-1]
+        next true
       when :weight
         case v.to_sym
         when :elevation # (same as underneath C++ library)
