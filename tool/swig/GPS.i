@@ -180,6 +180,26 @@ const type &get_ ## name () const {
   }
 }
 %enddef
+#if defined(SWIGRUBY)
+%define MAKE_ARRAY_INPUT(type, arg_name, f_conv)
+%typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) type arg_name[ANY] {
+  $1 = RB_TYPE_P($input, T_ARRAY) ? 1 : 0;
+}
+%typemap(in) type arg_name[ANY] ($*1_ltype temp[$1_dim0]) {
+  if(!(RB_TYPE_P($input, T_ARRAY) && (RARRAY_LEN($input) == $1_dim0))){
+    SWIG_exception(SWIG_TypeError, "array[$1_dim0] is expected");
+  }
+  for(int i(0); i < $1_dim0; ++i){
+    if(!SWIG_IsOK(f_conv(RARRAY_AREF($input, i), &temp[i]))){
+      SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
+    }
+  }
+  $1 = temp;
+}
+%enddef
+#else
+#define MAKE_ARRAY_INPUT(type, arg_name, f_conv)
+#endif
 
 %inline %{
 template <class FloatT>
@@ -195,34 +215,8 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
       %append_output(swig::from($1[i]));
     }
   }
-  %typemap(in) const FloatT values[4] (FloatT temp[4]) {
-#ifdef SWIGRUBY
-    if(!(RB_TYPE_P($input, T_ARRAY) && (RARRAY_LEN($input) == 4))){
-      SWIG_exception(SWIG_TypeError, "array[4] is expected");
-    }
-    for(int i(0); i < 4; ++i){
-      SWIG_Object obj(RARRAY_AREF($input, i));
-      if(!SWIG_IsOK(swig::asval(obj, &temp[i]))){
-        SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
-      }
-    }
-#endif
-    $1 = temp;
-  }
-  %typemap(in) const unsigned int *buf (unsigned int temp[10]) {
-#ifdef SWIGRUBY
-    if((!RB_TYPE_P($input, T_ARRAY))
-        || (RARRAY_LEN($input) < sizeof(temp) / sizeof(temp[0]))){
-      SWIG_exception(SWIG_TypeError, "array is expected, or too short array");
-    }
-    $1 = temp;
-    for(int i(0); i < sizeof(temp) / sizeof(temp[0]); ++i){
-      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(RARRAY_AREF($input, i), &($1[i])))){
-        SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
-      }
-    }
-#endif
-  }
+  MAKE_ARRAY_INPUT(const FloatT, values, swig::asval);
+  MAKE_ARRAY_INPUT(const unsigned int, buf, SWIG_AsVal(unsigned int));
   %rename("alpha=") set_alpha;
   void set_alpha(const FloatT values[4]){
     for(int i(0); i < 4; ++i){
@@ -255,7 +249,7 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
   MAKE_ACCESSOR(WN_LSF, unsigned int);
   MAKE_ACCESSOR(DN, unsigned int);
   MAKE_ACCESSOR(delta_t_LSF, int);
-  static GPS_Ionospheric_UTC_Parameters<FloatT> parse(const unsigned int *buf){
+  static GPS_Ionospheric_UTC_Parameters<FloatT> parse(const unsigned int buf[10]){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> parser_t;
     if((parser_t::subframe_id(buf) != 4) || (parser_t::sv_page_id(buf) != 56)){
@@ -321,22 +315,10 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   MAKE_ACCESSOR(omega, FloatT);
   MAKE_ACCESSOR(dot_Omega0, FloatT);
   MAKE_ACCESSOR(dot_i0, FloatT);
-  %typemap(in) const unsigned int *buf (unsigned int temp[10]) {
-#ifdef SWIGRUBY
-    if((!RB_TYPE_P($input, T_ARRAY))
-        || (RARRAY_LEN($input) < sizeof(temp) / sizeof(temp[0]))){
-      SWIG_exception(SWIG_TypeError, "array is expected, or too short array");
-    }
-    $1 = temp;
-    for(int i(0); i < sizeof(temp) / sizeof(temp[0]); ++i){
-      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(RARRAY_AREF($input, i), &($1[i])))){
-        SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
-      }
-    }
-#endif
-  }
+  
+  MAKE_ARRAY_INPUT(const unsigned int, buf, SWIG_AsVal(unsigned int));
   %apply int *OUTPUT { int *subframe_no, int *iodc_or_iode };
-  void parse(const unsigned int *buf, int *subframe_no, int *iodc_or_iode){
+  void parse(const unsigned int buf[10], int *subframe_no, int *iodc_or_iode){
     typedef typename GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris eph_t;
     typename eph_t::raw_t raw;
     eph_t eph;
@@ -1123,6 +1105,7 @@ struct RINEX_Observation {};
 
 #undef MAKE_ACCESSOR
 #undef MAKE_VECTOR2ARRAY
+#undef MAKE_ARRAY_INPUT
 
 %define CONCRETIZE(type)
 %template(Time) GPS_Time<type>;
