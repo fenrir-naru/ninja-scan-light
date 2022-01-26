@@ -216,6 +216,20 @@ class GPS_Receiver
             [svid || (1..32).to_a].flatten.each{
               @solver.gps_options.send(mode, svid)
             }
+          elsif (sys == :SBAS) || (svid && (120..158).include?(svid)) then
+            prns = [svid || (120..158).to_a].flatten
+            unless (i = output_options[:system].index{|sys, range| sys == :SBAS}) then
+              i = -1
+              output_options[:system] << [:SBAS, []]
+            else
+              output_options[:system][i].reject!{|prn| prns.include?(prn)}
+            end
+            output_options[:satellites].reject!{|prn, label| prns.include?(prn)}
+            if mode == :include then
+              output_options[:system][i][1] += prns
+              output_options[:satellites] += prns
+            end
+            prns.each{|prn| @solver.sbas_options.send(mode, prn)}
           else
             next false  
           end
@@ -336,6 +350,8 @@ class GPS_Receiver
           sn.register_ephemeris(prn, eph)
           eph.invalidate
         end
+      when :SBAS
+        msg_type = @solver.sbas_space_node.decode_message(bcast_data[0..7], prn, t_meas)
       end
     }
   }.call
@@ -461,6 +477,7 @@ class GPS_Receiver
   def parse_rinex_nav(fname)
     items = [
       @solver.gps_space_node,
+      @solver.sbas_space_node,
     ].inject(0){|res, sn|
       loaded_items = sn.send(:read, fname)
       raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
@@ -530,7 +547,7 @@ if __FILE__ == $0 then
   files.collect!{|fname, ftype|
     raise "File not found: #{fname}" unless File::exist?(fname)
     ftype ||= case fname
-    when /\.\d{2}n$/; :rinex_nav
+    when /\.\d{2}[nh]$/; :rinex_nav
     when /\.\d{2}o$/; :rinex_obs
     when /\.ubx$/; :ubx
     else
