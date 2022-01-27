@@ -107,7 +107,9 @@ struct GNSS_Receiver {
     data_t() : gps(), out_rinex_nav(NULL) {}
     ~data_t(){
       if(out_rinex_nav){
-        RINEX_NAV_Writer<FloatT>::write_all(*out_rinex_nav, gps.space_node);
+        typename RINEX_NAV_Writer<FloatT>::space_node_list_t list = {&gps.space_node};
+        list.qzss = &gps.space_node;
+        RINEX_NAV_Writer<FloatT>::write_all(*out_rinex_nav, list);
       }
     }
   } data;
@@ -350,8 +352,9 @@ struct GNSS_Receiver {
       if(dry_run){return true;}
       std::cerr << "RINEX Navigation file (" << value << ") reading..." << std::endl;
       std::istream &in(options.spec2istream(value));
-      int ephemeris(RINEX_NAV_Reader<FloatT>::read_all(
-          in, data.gps.space_node));
+      typename RINEX_NAV_Reader<FloatT>::space_node_list_t list = {&data.gps.space_node};
+      list.qzss = &data.gps.space_node;
+      int ephemeris(RINEX_NAV_Reader<FloatT>::read_all(in, list));
       if(ephemeris < 0){
         std::cerr << "(error!) Invalid format!" << std::endl;
         return false;
