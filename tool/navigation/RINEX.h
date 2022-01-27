@@ -1610,8 +1610,11 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           version, super_t::version_type_t::FTYPE_NAVIGATION, sys));
     }
 
+    struct space_node_list_t {
+      const space_node_t *gps;
+    };
     int write_all(
-        const typename reader_t::space_node_list_t &space_nodes,
+        const space_node_list_t &space_nodes,
         const int &version = 304){
       int res(-1);
       int systems(0);
@@ -1663,12 +1666,12 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     }
     static int write_all(
         std::ostream &out,
-        const typename reader_t::space_node_list_t &space_nodes,
+        const space_node_list_t &space_nodes,
         const int &version = 304){
       return RINEX_NAV_Writer(out).write_all(space_nodes, version);
     }
     int write_all(const space_node_t &space_node, const int &version = 304){
-      const typename reader_t::space_node_list_t list = {&const_cast<space_node_t &>(space_node)};
+      space_node_list_t list = {&space_node};
       return write_all(list, version);
     }
     static int write_all(std::ostream &out, const space_node_t &space_node, const int &version = 304){
