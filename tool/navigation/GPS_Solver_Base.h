@@ -395,10 +395,11 @@ protected:
      * @return transformed design matrix G'
      */
     static matrix_t rotate_G(const MatrixT &G_, const matrix_t &rotation_matrix){
-      matrix_t res(G_.rows(), 4);
-      res.partial(G_.rows(), 3).replace(
-          G_.partial(G_.rows(), 3) * rotation_matrix.transpose());
-      res.partial(G_.rows(), 1, 0, 3).replace(G_.partial(G_.rows(), 1, 0, 3));
+      unsigned int r(G_.rows()), c(G_.columns()); // Normally c=4
+      matrix_t res(r, c);
+      res.partial(r, 3).replace(
+          G_.partial(r, 3) * rotation_matrix.transpose());
+      res.partial(r, c - 3, 0, 3).replace(G_.partial(r, c - 3, 0, 3));
       return res;
     }
 
@@ -425,14 +426,16 @@ protected:
      * @see rotate_G
      */
     static matrix_t rotate_C(const matrix_t &C, const matrix_t &rotation_matrix){
-      matrix_t res(4, 4);
+      unsigned int n(C.rows()); // Normally n=4
+      matrix_t res(n, n);
       res.partial(3, 3).replace( // upper left
           rotation_matrix * C.partial(3, 3) * rotation_matrix.transpose());
-      res.partial(3, 1, 0, 3).replace( // upper right
-          rotation_matrix * C.partial(3, 1, 0, 3));
-      res.partial(1, 3, 3, 0).replace( // lower left
-          C.partial(1, 3, 3, 0) * rotation_matrix.transpose());
-      res(3, 3) = C(3, 3); // lower right
+      res.partial(3, n - 3, 0, 3).replace( // upper right
+          rotation_matrix * C.partial(3, n - 3, 0, 3));
+      res.partial(n - 3, 3, 3, 0).replace( // lower left
+          C.partial(n - 3, 3, 3, 0) * rotation_matrix.transpose());
+      res.partial(n - 3, n - 3, 3, 3).replace( // lower right
+          C.partial(n - 3, n - 3, 3, 3));
       return res;
     }
     /**
@@ -470,11 +473,10 @@ protected:
      * @see rotate_G
      */
     static matrix_t rotate_S(const matrix_t &S, const matrix_t &rotation_matrix){
-      matrix_t res(4, S.columns());
-      res.partial(3, S.columns()).replace(rotation_matrix * S.partial(3, S.columns()));
-      for(unsigned int j(0), j_end(S.columns()); j < j_end; ++j){
-        res(3, j) = S(3, j);
-      }
+      unsigned int r(S.rows()), c(S.columns()); // Normally r=4
+      matrix_t res(r, c);
+      res.partial(3, c).replace(rotation_matrix * S.partial(3, c));
+      res.partial(r - 3, c, 3, 0).replace(S.partial(r - 3, c, 3, 0));
       return res;
     }
     /**
@@ -537,7 +539,7 @@ protected:
     partial_t partial(unsigned int size) const {
       if(size >= G.rows()){size = G.rows();}
       return partial_t(
-          G.partial(size, 4), W.partial(size, size), delta_r.partial(size, 1));
+          G.partial(size, G.columns()), W.partial(size, size), delta_r.partial(size, 1));
     }
     typedef linear_solver_t<typename MatrixT::circular_t> exclude_t;
     exclude_t exclude(const unsigned int &row) const {
@@ -545,14 +547,16 @@ protected:
       if(size >= 1){size--;}
       // generate matrices having circular view
       return exclude_t(
-          G.circular(offset, 0, size, 4),
+          G.circular(offset, 0, size, G.columns()),
           W.circular(offset, offset, size, size),
           delta_r.circular(offset, 0, size, 1));
     }
     template <class MatrixT2>
     void copy_G_W_row(const linear_solver_t<MatrixT2> &src,
         const unsigned int &i_src, const unsigned int &i_dst){
-      for(unsigned int j(0); j < 4; ++j){
+      unsigned int c_dst(G.columns()), c_src(src.G.columns()),
+          c(c_dst > c_src ? c_src : c_dst); // Normally c=4
+      for(unsigned int j(0); j < c; ++j){
         G(i_dst, j) = src.G(i_src, j);
       }
       W(i_dst, i_dst) = src.W(i_src, i_src);
@@ -561,9 +565,12 @@ protected:
 
   struct geometric_matrices_t : public linear_solver_t<matrix_t> {
     typedef linear_solver_t<matrix_t> super_t;
-    geometric_matrices_t(const unsigned int &capacity)
+    geometric_matrices_t(
+        const unsigned int &capacity,
+        const unsigned int &estimate_system_differences = 0)
         : super_t(
-          matrix_t(capacity, 4), matrix_t(capacity, capacity), matrix_t(capacity, 1)) {
+          matrix_t(capacity, 4 + estimate_system_differences),
+          matrix_t(capacity, capacity), matrix_t(capacity, 1)) {
       for(unsigned int i(0); i < capacity; ++i){
         super_t::G(i, 3) = 1;
       }
