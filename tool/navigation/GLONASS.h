@@ -432,6 +432,20 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               };
               return res;
             }
+            operator typename GPS_SpaceNode<float_t>::SatelliteProperties
+                ::constellation_t() const {
+              // @see https://www.gsi.go.jp/common/000070971.pdf
+              // @see (originally) Federal Air Navigation Authority (FANA), Aeronautical Information Circular
+              // of the Russian Federation, 12 February 2009, Russia.
+              // PZ90.02 -> WGS84
+              typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t res = {
+                typename GPS_SpaceNode<float_t>::xyz_t(
+                    position[0] - 0.36, position[1] + 0.08, position[2] + 0.18),
+                typename GPS_SpaceNode<float_t>::xyz_t(
+                    velocity[0], velocity[1], velocity[2]),
+              };
+              return res;
+            }
           };
 
           struct eccentric_anomaly_t {
@@ -1013,7 +1027,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           using Ephemeris_with_Time::constellation;
           typename Ephemeris_with_Time::constellation_t constellation(
               const GPS_Time<float_t> &t_arrival, const float_t &pseudo_range = 0) const {
-            return calculate_constellation(t_arrival - t_b_gps, pseudo_range);
+            return this->calculate_constellation(t_arrival - t_b_gps, pseudo_range);
           }
         };
     };
@@ -1065,18 +1079,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
         typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t constellation(
             const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
-          typename eph_t::constellation_t constellation_PZ9002(
+          return (typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t)(
               ephemeris().constellation(t, pseudo_range));
-          // @see https://www.gsi.go.jp/common/000070971.pdf
-          // @see (originally) Federal Air Navigation Authority (FANA), Aeronautical Information Circular
-          // of the Russian Federation, 12 February 2009, Russia.
-          float_t (&pos)[3](constellation_PZ9002.position);
-          float_t (&vel)[3](constellation_PZ9002.velocity);
-          typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t res = {
-            typename GPS_SpaceNode<float_t>::xyz_t(pos[0] - 0.36, pos[1] + 0.08, pos[2] + 0.18),
-            typename GPS_SpaceNode<float_t>::xyz_t(vel[0], vel[1], vel[2]),
-          };
-          return res;
         }
 
         typename GPS_SpaceNode<float_t>::xyz_t position(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
