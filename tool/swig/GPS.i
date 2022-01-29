@@ -959,7 +959,11 @@ struct GPS_Solver
   const base_t &select_solver(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
-    return *this;
+    // call order: base_t::solve => this returned by select() 
+    //     => relative_property() => select_solver()
+    // For not supported satellite, call loop prevention is required.
+    static const base_t dummy; 
+    return dummy;
   }
   virtual typename base_t::relative_property_t relative_property(
       const typename base_t::prn_t &prn,
