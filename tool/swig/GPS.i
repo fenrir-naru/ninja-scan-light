@@ -842,16 +842,16 @@ struct GPS_SolverOptions
       fragment=SWIG_From_frag(int),
       fragment=SWIG_Traits_frag(FloatT)){
     template <>
-    typename GPS_Solver<FloatT>::base_t::relative_property_t
+    GPS_Solver<FloatT>::base_t::relative_property_t
         GPS_Solver<FloatT>::relative_property(
-          const typename GPS_Solver<FloatT>::base_t::prn_t &prn,
-          const typename GPS_Solver<FloatT>::base_t::measurement_t::mapped_type &measurement,
-          const typename GPS_Solver<FloatT>::base_t::float_t &receiver_error,
-          const typename GPS_Solver<FloatT>::base_t::gps_time_t &time_arrival,
-          const typename GPS_Solver<FloatT>::base_t::pos_t &usr_pos,
-          const typename GPS_Solver<FloatT>::base_t::xyz_t &usr_vel) const {
+          const GPS_Solver<FloatT>::base_t::prn_t &prn,
+          const GPS_Solver<FloatT>::base_t::measurement_t::mapped_type &measurement,
+          const GPS_Solver<FloatT>::base_t::float_t &receiver_error,
+          const GPS_Solver<FloatT>::base_t::gps_time_t &time_arrival,
+          const GPS_Solver<FloatT>::base_t::pos_t &usr_pos,
+          const GPS_Solver<FloatT>::base_t::xyz_t &usr_vel) const {
       union {
-        typename base_t::relative_property_t prop;
+        base_t::relative_property_t prop;
         FloatT values[7];
       } res = {
           select_solver(prn).relative_property(
@@ -903,15 +903,15 @@ struct GPS_SolverOptions
     }
     template <>
     bool GPS_Solver<FloatT>::update_position_solution(
-        const typename GPS_Solver<FloatT>::base_t::geometric_matrices_t &geomat,
-        typename GPS_Solver<FloatT>::base_t::user_pvt_t &res) const {
+        const GPS_Solver<FloatT>::base_t::geometric_matrices_t &geomat,
+        GPS_Solver<FloatT>::base_t::user_pvt_t &res) const {
 #ifdef SWIGRUBY
       do{
         static const VALUE key(ID2SYM(rb_intern("update_position_solution")));
         VALUE hook(rb_hash_lookup(hooks, key));
         if(NIL_P(hook)){break;}
-        typename base_t::geometric_matrices_t &geomat_(
-            %const_cast(geomat, typename base_t::geometric_matrices_t &));
+        base_t::geometric_matrices_t &geomat_(
+            %const_cast(geomat, base_t::geometric_matrices_t &));
         VALUE values[] = {
             SWIG_NewPointerObj(&geomat_.G,
               $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0),
