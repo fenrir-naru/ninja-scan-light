@@ -17,6 +17,7 @@
 #include <exception>
 
 #include "navigation/GPS.h"
+#include "navigation/GLONASS.h"
 #include "navigation/RINEX.h"
 #include "navigation/SP3.h"
 #include "navigation/ANTEX.h"
@@ -434,6 +435,160 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
 
 %include navigation/GPS.h
 
+%inline %{
+template <class FloatT>
+struct GLONASS_Ephemeris 
+    : public GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris_with_GPS_Time {
+  typedef typename GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris_with_GPS_Time eph_t;
+  unsigned int super_frame, has_string;
+  typename eph_t::raw_t raw;
+  void invalidate() {
+    super_frame = 0;
+    has_string = 0;
+  }
+  bool is_consistent() const {
+    return has_string == 0x1F;
+  }
+  GLONASS_Ephemeris() : eph_t() {
+    invalidate();
+  }
+  GLONASS_Ephemeris(const eph_t &eph) 
+      : eph_t(eph),
+      super_frame(0), has_string(0), raw() {
+    raw = *this;
+    has_string = 0x1F;
+  }
+};
+%}
+%extend GLONASS_Ephemeris {
+  MAKE_ACCESSOR(svid, unsigned int);
+  
+  MAKE_ACCESSOR(freq_ch, int); // frequency channel to be configured
+  MAKE_ACCESSOR(t_k, unsigned int);
+  MAKE_ACCESSOR(t_b, unsigned int);
+  MAKE_ACCESSOR(M, unsigned int);
+  MAKE_ACCESSOR(gamma_n, FloatT);
+  MAKE_ACCESSOR(tau_n, FloatT);
+
+  MAKE_ACCESSOR(xn, FloatT); MAKE_ACCESSOR(xn_dot, FloatT); MAKE_ACCESSOR(xn_ddot, FloatT);
+  MAKE_ACCESSOR(yn, FloatT); MAKE_ACCESSOR(yn_dot, FloatT); MAKE_ACCESSOR(yn_ddot, FloatT);
+  MAKE_ACCESSOR(zn, FloatT); MAKE_ACCESSOR(zn_dot, FloatT); MAKE_ACCESSOR(zn_ddot, FloatT);
+
+  MAKE_ACCESSOR(B_n, unsigned int);
+  MAKE_ACCESSOR(p, unsigned int);
+  MAKE_ACCESSOR(N_T, unsigned int);
+  MAKE_ACCESSOR(F_T, FloatT);
+  MAKE_ACCESSOR(n, unsigned int);
+  MAKE_ACCESSOR(delta_tau_n, FloatT);
+  MAKE_ACCESSOR(E_n, unsigned int);
+  MAKE_ACCESSOR(P1, unsigned int);
+  MAKE_ACCESSOR(P2, bool);
+  MAKE_ACCESSOR(P4, bool);
+
+  MAKE_ACCESSOR(tau_c, FloatT);
+  MAKE_ACCESSOR(tau_GPS, FloatT);
+  
+  FloatT frequency_L1() const {
+    return self->frequncy_L1();
+  };
+  FloatT frequency_L2() const {
+    return self->frequncy_L1();
+  };
+  GPS_Time<FloatT> base_time() const {
+    return self->base_time();
+  }
+
+  //MAKE_ACCESSOR(l_n, bool); // exists in both Ephemeris and Time_Properties
+
+  MAKE_ARRAY_INPUT(const unsigned int, buf, SWIG_AsVal(unsigned int));
+  bool parse(const unsigned int buf[4], const unsigned int &leap_seconds = 0){
+    typedef typename GLONASS_SpaceNode<FloatT>
+        ::template BroadcastedMessage<unsigned int> parser_t;
+    unsigned int super_frame(buf[3] >> 16), frame(buf[3] & 0xF), string_no(parser_t::m(buf));
+    unsigned int has_string(self->has_string);
+    if((has_string > 0) && (self->super_frame != super_frame)){
+      has_string = 0; // clean up
+    }
+    self->super_frame = super_frame;
+    has_string |= (0x1 << (string_no - 1));
+    switch(string_no){
+      case 1: self->raw.template update_string1<0, 0>(buf); break;
+      case 2: self->raw.template update_string2<0, 0>(buf); break;
+      case 3: self->raw.template update_string3<0, 0>(buf); break;
+      case 4: self->raw.template update_string4<0, 0>(buf); break;
+      case 5: {
+        self->raw.template update_string5<0, 0>(buf);
+        if(frame == 4){
+          // TODO: require special care for 50th frame? @see Table 4.9 note (4)
+        }
+        break;
+      }
+    }
+    bool updated(false);
+    if((has_string == 0x1F) && (has_string != self->has_string)){
+      updated = true;
+      // All ephemeris and time info. in the same super frame has been acquired, 
+      // and this block is called once per one same super frame.
+      // Ephemeris_with_Time::raw_t =(cast)=> Ephemeris_with_Time => Ephemeris_with_GPS_Time
+      static_cast<GLONASS_Ephemeris<FloatT>::eph_t &>(*self) 
+          = GLONASS_Ephemeris<FloatT>::eph_t(self->raw);
+      self->t_b_gps += leap_seconds;
+    }
+    self->has_string = has_string;
+    return updated;
+  }
+  FloatT clock_error(
+      const GPS_Time<FloatT> &t_arrival, const FloatT &pseudo_range = 0) const {
+    return self->clock_error(t_arrival, pseudo_range);
+  }
+  %typemap(in,numinputs=0) System_XYZ<FloatT, WGS84> & (System_XYZ<FloatT, WGS84> temp) %{
+    $1 = &temp;
+  %}
+  %typemap(argout) System_XYZ<FloatT, WGS84> & {
+    %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
+  }
+  void constellation(
+      System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
+      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0) const {
+    typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
+        self->constellation(t, pseudo_range));
+    position = res.position;
+    velocity = res.velocity;
+  }
+#if defined(SWIGRUBY)
+  %rename("consistent?") is_consistent;
+  %rename("in_range?") is_in_range;
+#endif
+  bool is_in_range(const GPS_Time<FloatT> &t) const {
+    // "invalidate()" is used to make raw and converted data inconsistent.
+    return self->is_valid(t);
+  }
+}
+
+%extend GLONASS_SpaceNode {
+  %fragment(SWIG_Traits_frag(FloatT));
+  %ignore satellites() const;
+  %ignore satellite(const int &);
+  %ignore latest_ephemeris() const;
+  void register_ephemeris(
+      const int &prn, const GLONASS_Ephemeris<FloatT> &eph,
+      const int &priority_delta = 1){
+    self->satellite(prn).register_ephemeris(eph, priority_delta);
+  }
+  GLONASS_Ephemeris<FloatT> ephemeris(const int &prn) const {
+    return GLONASS_Ephemeris<FloatT>(
+        %const_cast(self, GLONASS_SpaceNode<FloatT> *)->satellite(prn).ephemeris());
+  }
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    typename RINEX_NAV_Reader<FloatT>::space_node_list_t list = {NULL};
+    list.glonass = self;
+    return RINEX_NAV_Reader<FloatT>::read_all(fin, list);
+  }
+}
+
+%include navigation/GLONASS.h
+
 %extend GPS_User_PVT {
   %ignore solver_t;
   %ignore base_t;
@@ -832,6 +987,8 @@ struct GPS_RangeCorrector
   %ignore base_t;
   %ignore gps_t;
   %ignore gps;
+  %ignore glonass_t;
+  %ignore glonass;
   %ignore select_solver;
   %ignore relative_property;
   %ignore select_satellite;
@@ -1104,6 +1261,10 @@ struct GPS_Solver
     GPS_SinglePositioning<FloatT> solver;
     gps_t() : space_node(), options(), solver(space_node) {}
   } gps;
+  struct glonass_t {
+    GLONASS_SpaceNode<FloatT> space_node;
+    glonass_t() : space_node() {}
+  } glonass;
   SWIG_Object hooks;
   typedef std::vector<GPS_RangeCorrector<FloatT> > user_correctors_t;
   user_correctors_t user_correctors;
@@ -1119,7 +1280,7 @@ struct GPS_Solver
   }
 #endif
   GPS_Solver() : super_t(),
-      gps(),
+      gps(), glonass(),
       hooks(), user_correctors() {
 #ifdef SWIGRUBY
     hooks = rb_hash_new();
@@ -1127,6 +1288,7 @@ struct GPS_Solver
   }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
+  GLONASS_SpaceNode<FloatT> &glonass_space_node() {return glonass.space_node;}
   const base_t &select_solver(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
@@ -1154,6 +1316,7 @@ struct GPS_Solver
       const GPS_Time<FloatT> &receiver_time) const {
     const_cast<gps_t &>(gps).space_node.update_all_ephemeris(receiver_time);
     const_cast<gps_t &>(gps).solver.update_options(gps.options);
+    const_cast<glonass_t &>(glonass).space_node.update_all_ephemeris(receiver_time);
     return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
   typedef 
@@ -1426,6 +1589,9 @@ struct SP3 : public SP3_Product<FloatT> {
 %markfunc GPS_Solver<type> "GPS_Solver<type>::mark";
 #endif
 %template(Solver) GPS_Solver<type>;
+
+%template(SpaceNode_GLONASS) GLONASS_SpaceNode<type>;
+%template(Ephemeris_GLONASS) GLONASS_Ephemeris<type>;
 
 %template(RINEX_Observation) RINEX_Observation<type>;
 %template(SP3) SP3<type>;

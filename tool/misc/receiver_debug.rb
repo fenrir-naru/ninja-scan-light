@@ -368,7 +368,13 @@ class GPS_Receiver
       eph.svid = prn
       [prn, eph]
     }.flatten(1)]
-    define_method(:register_ephemeris){|t_meas, sys, prn, bcast_data|
+    eph_glonass_list = Hash[*(1..24).collect{|num|
+      eph = GPS::Ephemeris_GLONASS::new
+      eph.svid = num
+      [num, eph]
+    }.flatten(1)]
+    define_method(:register_ephemeris){|t_meas, sys, prn, bcast_data, *options|
+      opt = options[0] || {}
       case sys
       when :GPS
         next unless eph = eph_list[prn]
@@ -390,6 +396,15 @@ class GPS_Receiver
           sn.register_ephemeris(prn, eph)
           eph.invalidate
         end
+      when :GLONASS
+        next unless eph = eph_glonass_list[prn]
+        leap_sec = @solver.gps_space_node.is_valid_utc ? 
+            @solver.gps_space_node.iono_utc.delta_t_LS :
+            GPS::Time::guess_leap_seconds(t_meas)
+        next unless eph.parse(bcast_data[0..3], leap_sec)
+        eph.freq_ch = opt[:freq_ch] || 0
+        @solver.glonass_space_node.register_ephemeris(prn, eph)
+        eph.invalidate
       end
     }
   }.call
@@ -467,7 +482,9 @@ class GPS_Receiver
           }
           sys, svid = gnss_serial.call(*loader.call(36, 2).reverse)
           case sys
-          when :GPS; 
+          when :GPS;
+          when :GLONASS
+            svid += 0x100
           else; next
           end
           trk_stat = loader.call(46, 1)[0]
@@ -501,12 +518,14 @@ class GPS_Receiver
             })
       when [0x02, 0x13] # RXM-SFRBX
         sys, svid = gnss_serial.call(packet[6 + 1], packet[6])
+        opt = {}
+        opt[:freq_ch] = packet[6 + 3] - 7 if sys == :GLONASS
         register_ephemeris(
             t_meas,
             sys, svid,
             packet.slice(6 + 8, 4 * packet[6 + 4]).each_slice(4).collect{|v|
               v.pack("C*").unpack("V")[0]
-            })
+            }, opt)
       end
     }
     $stderr.puts ", found packets are %s"%[ubx_kind.inspect]
@@ -515,6 +534,7 @@ class GPS_Receiver
   def parse_rinex_nav(fname)
     items = [
       @solver.gps_space_node,
+      @solver.glonass_space_node,
     ].inject(0){|res, sn|
       loaded_items = sn.send(:read, fname)
       raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
@@ -555,6 +575,7 @@ class GPS_Receiver
         case sys
         when 'G', ' '
         when 'J'; prn += 192
+        when 'R'; prn += 0x100
         else; next
         end
         types[sys] = (types[' '] || []) unless types[sys]
@@ -641,7 +662,7 @@ if __FILE__ == $0 then
   files.collect!{|fname, ftype|
     raise "File not found: #{fname}" unless File::exist?(fname)
     ftype ||= case fname
-    when /\.\d{2}n$/; :rinex_nav
+    when /\.\d{2}[ng]$/; :rinex_nav
     when /\.\d{2}o$/; :rinex_obs
     when /\.ubx$/; :ubx
     when /\.sp3$/; :sp3
@@ -682,6 +703,57 @@ if __FILE__ == $0 then
     }
   }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
 
+  rcv.solver.hooks[:satellite_position] = proc{|prn, time, pos|
+    next pos if pos
+    if prn & 0x100 == 0x100 then # GLONASS
+      eph = rcv.solver.glonass_space_node.ephemeris(prn - 0x100)
+      next nil if (eph.base_time - time).abs > 60 * 60 * 2
+      next eph.constellation(time)[0]
+    end
+    nil
+  }
+
+  glonass_residuals = {} # => {time => {svid => [residual, other_props]}, ...}
+
+  proc{
+    orig_hook = rcv.solver.hooks[:relative_property]
+    rcv.solver.hooks[:relative_property] = proc{|prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel|
+      rel_prop = orig_hook.call(prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel) if orig_hook
+      weight, range_c, range_r, rate_rel_neg, *los_neg = rel_prop # relative property
+
+      while (prn & 0x100) == 0x100 # GLONASS
+        svid = prn - 0x100
+        eph = rcv.solver.glonass_space_node.ephemeris(svid)
+        break if (eph.base_time - t_arv).abs >= 60 * 60 * 2
+        break unless range = meas[GPS::Measurement::L1_PSEUDORANGE]
+        range -= rcv_e
+        clk_error = eph.clock_error(t_arv, range) * GPS::SpaceNode::light_speed
+        range += clk_error
+        sat_pos = eph.constellation(t_arv, range)[0]
+        rel_pos = sat_pos - usr_pos
+        rel_pos_enu = Coordinate::ENU::relative_rel(rel_pos, usr_pos)
+        range -= rel_pos.dist
+        sn = rcv.solver.gps_space_node
+        # GPS ICD 20.3.3.3.3.2 L1 - L2 Correction.
+        gamma = GPS::SpaceNode.gamma_per_L1(eph.frequency_L1)
+        iono = gamma * sn.iono_correction(rel_pos_enu, usr_pos.llh, t_arv)
+        tropo = GPS::SpaceNode::tropo_correction(sat_pos, usr_pos)
+        residual = range + iono + tropo
+        el, az = [:elevation, :azimuth].collect{|f| rel_pos_enu.send(f) / Math::PI * 180}
+
+        t_arv = [t_arv.week, t_arv.seconds.round(1)] # week, ms
+        glonass_residuals[t_arv] ||= {}
+        if (!glonass_residuals[t_arv][svid]) \
+            || (glonass_residuals[t_arv][svid][0].abs > residual.abs) then
+          glonass_residuals[t_arv][svid] = [residual, el, az, clk_error, iono, tropo]
+        end
+        break
+      end
+
+      [weight, range_c, range_r, rate_rel_neg] + los_neg # must return relative property
+    }
+  }.call
+
   puts rcv.header
 
   # parse RINEX NAV, SP3, or ANTEX
@@ -699,5 +771,20 @@ if __FILE__ == $0 then
     when :ubx; rcv.parse_ubx(fname)
     when :rinex_obs; rcv.parse_rinex_obs(fname)
     end
+  }
+  
+  open("glonass.csv", 'w'){|io|
+    io.puts(([:week, :seconds_in_week, 
+        :year, :month, :day, :hour, :min, :seconds] + (1..24).collect{|svid|
+      [:residual, :el, :az, :clk_error, :iono, :tropo].collect{|k|
+        "#{k}(%d)"%[svid]
+      }
+    }).flatten.join(','))
+    glonass_residuals.to_a.sort{|a, b| a[0] <=> b[0]}.each{|t, sv_props|
+      t = GPS::Time::new(*t[0..1])
+      io.puts(([t.week, "%.3f"%[t.seconds]] + t.c_tm.to_a + (1..24).collect{|svid|
+        sv_props[svid] || ([nil] * 6) 
+      }).flatten.join(','))
+    }
   }
 end
