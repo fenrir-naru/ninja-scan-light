@@ -354,6 +354,22 @@ __RINEX_OBS_TEXT__
         }
         mat_G, mat_W, mat_delta_r = mats
       }
+      solver.hooks[:satellite_position] = proc{
+        i = 0
+        proc{|prn, time, pos|
+          expect(input[:measurement]).to include(prn)
+          expect(pos).to be_a_kind_of(Coordinate::XYZ).or eq(nil)
+          # System_XYZ or [x,y,z] or nil(= unknown position) are acceptable
+          case (i += 1) % 5
+          when 0
+            nil
+          when 1
+            pos.to_a
+          else
+            pos
+          end
+        }
+      }.call
       pvt = solver.solve(
           input[:measurement].collect{|prn, items|
             items.collect{|k, v| [prn, k, v]}

@@ -924,6 +924,51 @@ struct GPS_SolverOptions
 #endif
       return super_t::update_position_solution(geomat, res);
     }
+    template <>
+    GPS_Solver<FloatT>::base_t::xyz_t *GPS_Solver<FloatT>::satellite_position(
+        const GPS_Solver<FloatT>::base_t::prn_t &prn,
+        const GPS_Solver<FloatT>::base_t::gps_time_t &time,
+        GPS_Solver<FloatT>::base_t::xyz_t &buf) const {
+      GPS_Solver<FloatT>::base_t::xyz_t *res(
+          select_solver(prn).satellite_position(prn, time, buf));
+#ifdef SWIGRUBY
+      do{
+        static const VALUE key(ID2SYM(rb_intern("satellite_position")));
+        VALUE hook(rb_hash_lookup(hooks, key));
+        if(NIL_P(hook)){break;}
+        VALUE values[] = {
+            SWIG_From(int)(prn), // prn
+            SWIG_NewPointerObj( // time
+              new base_t::gps_time_t(time), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN),
+            (res // position (internally calculated)
+              ? SWIG_NewPointerObj(res, $descriptor(System_XYZ<FloatT, WGS84> *), 0) 
+              : Qnil)};
+        VALUE res_hook(proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values));
+        if(NIL_P(res_hook)){ // unknown position
+          res = NULL;
+          break;
+        }else if(RB_TYPE_P(res_hook, T_ARRAY) && (RARRAY_LEN(res_hook) == 3)){
+          int i(0);
+          for(; i < 3; ++i){
+            VALUE v(RARRAY_AREF(res_hook, i));
+            if(!SWIG_IsOK(swig::asval(v, &buf[i]))){break;}
+          }
+          if(i == 3){
+            res = &buf;
+            break;
+          }
+        }else if(SWIG_IsOK(SWIG_ConvertPtr(
+            res_hook, (void **)&res, $descriptor(System_XYZ<FloatT, WGS84> *), 0))){
+          res = &(buf = *res);
+          break;
+        }
+        throw std::runtime_error(
+            std::string("System_XYZ or [d * 3] is expected (d: " %str(FloatT) "), however ")
+              .append(inspect_str(res_hook)));
+      }while(false);
+#endif
+      return res;
+    }
   }
   %fragment("hook"{GPS_Solver<FloatT>});
 }
@@ -975,9 +1020,7 @@ struct GPS_Solver
   virtual typename base_t::xyz_t *satellite_position(
       const typename base_t::prn_t &prn,
       const typename base_t::gps_time_t &time,
-      typename base_t::xyz_t &res) const {
-    return select_solver(prn).satellite_position(prn, time, res);
-  }
+      typename base_t::xyz_t &res) const;
   virtual bool update_position_solution(
       const typename base_t::geometric_matrices_t &geomat,
       typename base_t::user_pvt_t &res) const;
