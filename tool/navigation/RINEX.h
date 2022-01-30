@@ -724,14 +724,16 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     };
 
     static int read_all(std::istream &in, space_node_list_t &space_nodes = {0}){
-      int res(-1);
       RINEX_NAV_Reader reader(in);
+      if(reader.version_type.file_type != version_type_t::FTYPE_NAVIGATION){
+        return -1;
+      }
       if(space_nodes.gps){
         (reader.version_type.version >= 300)
             ? reader.extract_iono_utc_v3(*space_nodes.gps)
             : reader.extract_iono_utc_v2(*space_nodes.gps);
       }
-      res++;
+      int res(0);
       for(; reader.has_next(); reader.next()){
         switch(reader.sys_of_msg){
           case super_t::version_type_t::SYS_GPS:
@@ -1000,6 +1002,9 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
     RINEX_OBS_Reader(std::istream &in)
         : super_t(in, self_t::modify_header),
           obs_types() {
+      if(super_t::version_type.file_type != version_type_t::FTYPE_OBSERVATION){
+        return;
+      }
       typedef super_t::header_t::const_iterator it_t;
       typedef super_t::header_t::mapped_type::const_iterator it2_t;
       it_t it;
