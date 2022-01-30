@@ -459,8 +459,14 @@ class GPS_Receiver
   end
   
   def parse_rinex_nav(fname)
-    $stderr.puts "Read RINEX NAV file (%s): %d items."%[
-        fname, @solver.gps_space_node.read(fname)]
+    items = [
+      @solver.gps_space_node,
+    ].inject(0){|res, sn|
+      loaded_items = sn.send(:read, fname)
+      raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
+      res + loaded_items
+    }
+    $stderr.puts "Read RINEX NAV file (%s): %d items."%[fname, items]
   end
   
   def parse_rinex_obs(fname, &b)
