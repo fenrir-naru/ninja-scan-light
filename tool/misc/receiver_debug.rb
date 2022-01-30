@@ -517,16 +517,26 @@ end
 if __FILE__ == $0 then
   options = []
 
-  # check options
-  ARGV.reject!{|arg|
-    next false unless arg =~ /^--([^=]+)=?/
+  # check options and file format
+  files = ARGV.collect{|arg|
+    next [arg, nil] unless arg =~ /^--([^=]+)=?/
+    k, v = [$1.downcase.to_sym, $']
+    next [v, k] if [:rinex_nav, :rinex_obs, :ubx].include?(k) # file type
     options << [$1.to_sym, $']
-    true
-  }
+    nil
+  }.compact
 
-  # Check file existence
-  ARGV.each{|arg|
-    raise "File not found: #{arg}" unless File::exist?(arg)
+  # Check file existence and extension
+  files.collect!{|fname, ftype|
+    raise "File not found: #{fname}" unless File::exist?(fname)
+    ftype ||= case fname
+    when /\.\d{2}n$/; :rinex_nav
+    when /\.\d{2}o$/; :rinex_obs
+    when /\.ubx$/; :ubx
+    else
+      raise "Format cannot be guessed, use --(format, ex. rinex_nav)=#{fname}"
+    end
+    [fname, ftype]
   }
 
   rcv = GPS_Receiver::new(options)
@@ -534,18 +544,15 @@ if __FILE__ == $0 then
   puts rcv.header
 
   # parse RINEX NAV
-  ARGV.reject!{|arg|
-    next false unless arg =~ /\.\d{2}n$/
-    rcv.parse_rinex_nav(arg)
+  files.each{|fname, ftype|
+    rcv.parse_rinex_nav(fname) if ftype == :rinex_nav
   }
   
   # other files
-  ARGV.each{|arg|
-    case arg
-    when /\.ubx$/
-      rcv.parse_ubx(arg)
-    when /\.\d{2}o$/
-      rcv.parse_rinex_obs(arg)
+  files.each{|fname, ftype|
+    case ftype
+    when :ubx; rcv.parse_ubx(fname)
+    when :rinex_obs; rcv.parse_rinex_obs(fname)
     end
   }
 end
