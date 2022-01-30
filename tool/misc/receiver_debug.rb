@@ -503,7 +503,8 @@ class GPS_Receiver
         when 'J'; prn += 192
         else; next
         end
-        (types[sys] || []).each{|i, type_|
+        types[sys] = (types[' '] || []) unless types[sys]
+        types[sys].each{|i, type_|
           meas.add(prn, type_, v[i][0]) if v[i]
         }
       }
