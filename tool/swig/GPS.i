@@ -586,23 +586,6 @@ struct GPS_User_PVT
       }
     }
   }
-#ifdef SWIGRUBY
-  VALUE to_hash() const {
-    VALUE res(rb_hash_new());
-    for(typename GPS_Measurement<FloatT>::items_t::const_iterator
-          it(self->items.begin()), it_end(self->items.end());
-        it != it_end; ++it){
-      VALUE per_sat(rb_hash_new());
-      rb_hash_aset(res, SWIG_From(int)(it->first), per_sat);
-      for(typename GPS_Measurement<FloatT>::items_t::mapped_type::const_iterator 
-            it2(it->second.begin()), it2_end(it->second.end());
-          it2 != it2_end; ++it2){
-        rb_hash_aset(per_sat, SWIG_From(int)(it2->first), swig::from(it2->second));
-      }
-    }
-    return res;
-  }
-#endif
   %fragment(SWIG_Traits_frag(GPS_Measurement<FloatT>), "header",
       fragment=SWIG_Traits_frag(FloatT)){
     namespace swig {
@@ -686,9 +669,32 @@ struct GPS_User_PVT
 #endif
         return SWIG_ERROR;
       }
+#ifdef SWIGRUBY
+      template <>
+      VALUE from(const GPS_Measurement<FloatT>::items_t::mapped_type &val) {
+        VALUE per_sat(rb_hash_new());
+        for(typename GPS_Measurement<FloatT>::items_t::mapped_type::const_iterator 
+              it(val.begin()), it_end(val.end());
+            it != it_end; ++it){
+          rb_hash_aset(per_sat, SWIG_From(int)(it->first), swig::from(it->second));
+        }
+        return per_sat;
+      }
+#endif
     }
   }
   %fragment(SWIG_Traits_frag(GPS_Measurement<FloatT>));
+#ifdef SWIGRUBY
+  VALUE to_hash() const {
+    VALUE res(rb_hash_new());
+    for(typename GPS_Measurement<FloatT>::items_t::const_iterator
+          it(self->items.begin()), it_end(self->items.end());
+        it != it_end; ++it){
+      rb_hash_aset(res, SWIG_From(int)(it->first), swig::from(it->second));
+    }
+    return res;
+  }
+#endif
   %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const GPS_Measurement<FloatT> & {
     $1 = SWIG_CheckState(SWIG_ConvertPtr($input, (void **)0, $1_descriptor, 0))
         || swig::check<GPS_Measurement<FloatT> >($input);
@@ -840,7 +846,8 @@ struct GPS_SolverOptions
   %ignore mark;
   %fragment("hook"{GPS_Solver<FloatT>}, "header",
       fragment=SWIG_From_frag(int),
-      fragment=SWIG_Traits_frag(FloatT)){
+      fragment=SWIG_Traits_frag(FloatT),
+      fragment=SWIG_Traits_frag(GPS_Measurement<FloatT>)){
     template <>
     GPS_Solver<FloatT>::base_t::relative_property_t
         GPS_Solver<FloatT>::relative_property(
@@ -873,6 +880,7 @@ struct GPS_SolverOptions
               swig::from(res.prop.los_neg[0]),
               swig::from(res.prop.los_neg[1]),
               swig::from(res.prop.los_neg[2])),
+            swig::from(measurement), // measurement => Hash
             swig::from(receiver_error), // receiver_error
             SWIG_NewPointerObj( // time_arrival
               new base_t::gps_time_t(time_arrival), $descriptor(GPS_Time<FloatT> *), SWIG_POINTER_OWN),

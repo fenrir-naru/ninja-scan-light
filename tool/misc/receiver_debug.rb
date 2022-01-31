@@ -136,7 +136,7 @@ class GPS_Receiver
 
   def initialize(options = {})
     @solver = GPS::Solver::new
-    @solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_pos, usr_vel|
+    @solver.hooks[:relative_property] = proc{|prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel|
       rel_prop[0] = 1 if rel_prop[0] > 0 # weight = 1
       rel_prop
     }
@@ -154,7 +154,7 @@ class GPS_Receiver
       when :weight
         case v.to_sym
         when :elevation # (same as underneath C++ library)
-          @solver.hooks[:relative_property] = proc{|prn, rel_prop, rcv_e, t_arv, usr_pos, usr_vel|
+          @solver.hooks[:relative_property] = proc{|prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel|
             if rel_prop[0] > 0 then
               elv = Coordinate::ENU::relative_rel(
                   Coordinate::XYZ::new(*rel_prop[4..6]), usr_pos).elevation
