@@ -156,6 +156,14 @@ static std::string inspect_str(const VALUE &v){
     *week = self->week;
     *seconds = self->seconds;
   }
+#if defined(SWIG)  
+  int __cmp__(const GPS_Time<FloatT> &t) const {
+    return ((self->week < t.week) ? -1 
+        : ((self->week > t.week) ? 1 
+          : (self->seconds < t.seconds ? -1 
+            : (self->seconds > t.seconds ? 1 : 0))));
+  }
+#endif
 }
 
 %define MAKE_ACCESSOR(name, type)
