@@ -967,11 +967,23 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return calculate_clock_error(
                 t_arrival_glonass + TimeProperties::tau_c - Ephemeris::t_b, pseudo_range); // measure in UTC + 3hr scale
           }
+          /**
+           * Calculate constellation(t) based on constellation(t_0).
+           * t_0 is a time around t_b, and is used to calculate
+           * an intermediate result specified with the 3rd argument.
+           * This method is useful to calculate constellation effectively
+           * by using a cache.
+           * @param delta_t time interval from t_0 to t
+           * @param pseudo_range measured pusedo_range to correct delta_t
+           * @param xa_t_0 constellation(t_0)
+           * @param t_0_from_t_b time interval from t_b to t_0
+           */
           constellation_t calculate_constellation(
-              float_t delta_t, const float_t &pseudo_range = 0) const {
+              float_t delta_t, const float_t &pseudo_range,
+              const constellation_t &xa_t_0, const float_t &t_0_from_t_b) const {
             delta_t -= pseudo_range / light_speed;
 
-            constellation_t res(xa_t_b);
+            constellation_t res(xa_t_0);
             { // time integration from t_b to t_arrival
               float_t t_step_max(delta_t >= 0 ? 60 : -60);
               int i(std::floor(delta_t / t_step_max));
@@ -984,7 +996,17 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             }
 
             static const float_t omega_E(0.7292115E-4); // Earth's rotation rate, TODO move to PZ-90.02
-            return res.rel_corrdinate(sidereal_t_b_rad + (omega_E * delta_t)); // transform from abs to PZ-90.02
+            return res.rel_corrdinate(
+                sidereal_t_b_rad + (omega_E * (delta_t + t_0_from_t_b))); // transform from abs to PZ-90.02
+          }
+          /**
+           * Calculate constellation(t) based on constellation(t_b).
+           * @param delta_t time interval from t_0 to t
+           * @param pseudo_range measured pusedo_range to correct delta_t, default is 0.
+           */
+          constellation_t calculate_constellation(
+              float_t delta_t, const float_t &pseudo_range = 0) const {
+            return calculate_constellation(delta_t, pseudo_range, xa_t_b, float_t(0));
           }
           /**
            * @param t_arrival_glonass signal arrival time in GLONASS time scale (t_GL = t_UTC + 3 hr + tau_c).
