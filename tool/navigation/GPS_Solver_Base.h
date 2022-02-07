@@ -223,6 +223,53 @@ struct GPS_Solver_Base {
     return res;
   }
 
+  struct range_correction_t {
+    range_correction_t *next_chain; // linked list structure
+    range_correction_t() : next_chain(NULL) {}
+    virtual bool is_available(const gps_time_t &t) const {
+      return false;
+    }
+    const range_correction_t *select(const gps_time_t &t) const {
+      return is_available(t)
+          ? this
+          : (next_chain ? next_chain->select(t) : NULL);
+    }
+    int count_all() const {
+      int res(0);
+      for(range_correction_t *i(next_chain); i; i = i->next_chain, ++res);
+      return res;
+    }
+    bool insert(range_correction_t &item, int offset = 0) {
+      range_correction_t *i(this);
+      // if offset is negative, it is treated as an index from the last
+      if(offset < 0){offset += count_all();}
+      do{
+        if(offset == 0){ // insert front; before A -> B, after A -> item -> B.
+          item.next_chain = i->next_chain;
+          i->next_chain = &item;
+          return true;
+        }
+        if(!(i = i->next_chain)){break;}
+        --offset;
+      }while(true);
+      return false;
+    }
+    virtual float_t calculate(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+      return 0;
+    }
+    float_t operator()(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+      const range_correction_t *selected(select(t));
+      return selected ? selected->calculate(t, usr_pos, sat_rel_pos) : 0;
+    }
+  };
+  static const struct no_correction_t : public range_correction_t {
+    bool is_available(const gps_time_t &t) const {
+      return true;
+    }
+  } no_correction;
+
   /**
    * Select appropriate solver, this is provision for GNSS extension
    * @param prn satellite number
@@ -1042,6 +1089,10 @@ const typename GPS_Solver_Base<FloatT>::range_error_t
       MASK_RECEIVER_CLOCK | MASK_SATELLITE_CLOCK | MASK_IONOSPHERIC | MASK_TROPOSPHERIC,
       {0},
     };
+
+template <class FloatT>
+const typename GPS_Solver_Base<FloatT>::no_correction_t
+    GPS_Solver_Base<FloatT>::no_correction;
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
 struct GPS_PVT_Debug : public PVT_BaseT {
