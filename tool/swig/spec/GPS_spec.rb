@@ -255,7 +255,6 @@ __RINEX_OBS_TEXT__
       [:alpha, :beta].each{|k|
         puts "Iono #{k}: #{sn.iono_utc.send(k)}"
       }
-      puts solver.gps_options.ionospheric_models
       
       meas.each{|prn, k, v|
         eph = sn.ephemeris(prn)
