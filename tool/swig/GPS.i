@@ -418,8 +418,6 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     %append_output(swig::from($1.latitude));
     %append_output(swig::from($1.longitude));
   }
-  %ignore iono_correction() const;
-  %ignore tropo_correction() const;
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     return RINEX_NAV_Reader<FloatT>::read_all(fin, *self);

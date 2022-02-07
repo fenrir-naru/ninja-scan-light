@@ -2150,26 +2150,6 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           usr.llh(), 
           t);
     }
-    
-    struct IonospericCorrection {
-      const GPS_SpaceNode<float_t> &space_node;
-      float_t operator()(
-          const enu_t &relative_pos,
-          const llh_t &usrllh,
-          const gps_time_t &t) const {
-        return space_node.iono_correction(relative_pos, usrllh, t);
-      }
-      float_t operator()(
-          const xyz_t &sat,
-          const xyz_t &usr,
-          const gps_time_t &t) const {
-        return space_node.iono_correction(sat, usr, t);
-      }
-    };
-    IonospericCorrection iono_correction() const {
-      IonospericCorrection res = {*this};
-      return res;
-    }
 
     /**
      * Calculate correction value in accordance with tropospheric model
@@ -2296,24 +2276,6 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
       return tropo_correction(
           enu_t::relative(sat, usr),
           usr.llh());
-    }
-
-    struct TropospericCorrection {
-      const GPS_SpaceNode<float_t> &space_node;
-      float_t operator()(
-          const enu_t &relative_pos,
-          const llh_t &usrllh) const {
-        return space_node.tropo_correction(relative_pos, usrllh);
-      }
-      float_t operator()(
-          const xyz_t &sat,
-          const xyz_t &usr) const {
-        return space_node.tropo_correction(sat, usr);
-      }
-    };
-    TropospericCorrection tropo_correction() const {
-      TropospericCorrection res = {*this};
-      return res;
     }
 };
 
