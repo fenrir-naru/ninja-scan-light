@@ -2152,15 +2152,15 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     }
 
     /**
-     * Calculate correction value in accordance with tropospheric model
+     * Calculate correction value in accordance with tropospheric Hopfield model
      * 
      * @param relative_pos satellite position (relative position, NEU)
      * @param usrllh user position (absolute position, LLH)
      * @return correction in meters
      */
-    float_t tropo_correction(
+    static float_t tropo_correction(
         const enu_t &relative_pos,
-        const llh_t &usrllh) const {
+        const llh_t &usrllh){
       
       // Elevation (rad)
       float_t el(relative_pos.elevation());
@@ -2270,9 +2270,9 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
      * @param usr user position (absolute position, XYZ)
      * @return correction in meters
      */
-    float_t tropo_correction(
+    static float_t tropo_correction(
         const xyz_t &sat,
-        const xyz_t &usr) const {
+        const xyz_t &usr) {
       return tropo_correction(
           enu_t::relative(sat, usr),
           usr.llh());

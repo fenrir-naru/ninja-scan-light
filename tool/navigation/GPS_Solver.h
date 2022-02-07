@@ -56,49 +56,10 @@ struct GPS_Solver_GeneralOptions {
   FloatT elevation_mask;
   FloatT residual_mask;
 
-  enum ionospheric_model_t {
-    IONOSPHERIC_KLOBUCHAR,
-    IONOSPHERIC_NTCM_GL,
-    IONOSPHERIC_NONE, // which allows no correction
-    IONOSPHERIC_MODELS,
-    IONOSPHERIC_SKIP = IONOSPHERIC_MODELS, // which means delegating the next slot
-  };
-  ionospheric_model_t ionospheric_models[IONOSPHERIC_MODELS]; // lower index means having higher priority
-
-  int count_ionospheric_models() const {
-    int res(0);
-    for(std::size_t i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
-      if(ionospheric_models[i] != IONOSPHERIC_SKIP){res++;}
-    }
-    return res;
-  }
-
-  FloatT f_10_7;
-
   GPS_Solver_GeneralOptions()
       : elevation_mask(0), // elevation mask default is 0 [deg]
-      residual_mask(30), // range residual mask is 30 [m]
-      f_10_7(-1) {
-    for(std::size_t i(0); i < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i){
-      ionospheric_models[i] = IONOSPHERIC_SKIP;
-    }
-    // default: broadcasted Klobuchar parameters are at least required for solution.
-    ionospheric_models[0] = IONOSPHERIC_KLOBUCHAR;
-  }
+      residual_mask(30) { // range residual mask is 30 [m]
 
-  bool insert_ionospheric_model(const ionospheric_model_t &model, const int &index = 0) {
-    if((index < 0)
-        || (index >= sizeof(ionospheric_models) / sizeof(ionospheric_models[0]))){
-      return false;
-    }
-
-    // shift, then replace
-    for(int i(index), j(i + 1); j < sizeof(ionospheric_models) / sizeof(ionospheric_models[0]); ++i, ++j){
-      ionospheric_models[j] = ionospheric_models[i];
-    }
-    ionospheric_models[index] = model;
-
-    return true;
   }
 };
 
@@ -146,6 +107,7 @@ class GPS_SinglePositioning : public SolverBaseT {
     typedef typename base_t::measurement_t measurement_t;
     inheritate_type(measurement_items_t);
     typedef typename base_t::range_error_t range_error_t;
+    typedef typename base_t::range_correction_t range_correction_t;
 
     inheritate_type(relative_property_t);
     inheritate_type(geometric_matrices_t);
@@ -162,40 +124,45 @@ class GPS_SinglePositioning : public SolverBaseT {
   public:
     const space_node_t &space_node() const {return _space_node;}
 
-    /**
-     * Check availability of ionospheric models
-     * If a model is completely unavailable, it will be replaced to IONOSPHERIC_SKIP.
-     * It implies that when a model has conditional applicability (such as SBAS), it will be retained.
-     *
-     * @return (int) number of (possibly) available models
-     */
-    int filter_ionospheric_models(GPS_SinglePositioning_Options<float_t> &opt) const {
-
-      int available_models(0);
-
-      for(std::size_t i(0);
-          i < sizeof(opt.ionospheric_models) / sizeof(opt.ionospheric_models[0]); ++i){
-        bool usable(false);
-        switch(opt.ionospheric_models[i]){
-          case options_t::IONOSPHERIC_KLOBUCHAR:
-            // check whether Klobuchar parameters alpha and beta have been already received
-            if(_space_node.is_valid_iono()){usable = true;}
-            break;
-          case options_t::IONOSPHERIC_NTCM_GL:
-            if(opt.f_10_7 >= 0){usable = true;}
-            // check F10.7 has been already configured
-            break;
-          default: break;
-        }
-        if(usable){
-          available_models++;
-        }else{
-          opt.ionospheric_models[i] = options_t::IONOSPHERIC_SKIP;
-        }
+    struct klobuchar_t : public range_correction_t {
+      const space_node_t &space_node;
+      klobuchar_t(const space_node_t &sn) : range_correction_t(), space_node(sn) {}
+      bool is_available(const gps_time_t &t) const {
+        return space_node.is_valid_iono();
       }
+      float_t calculate(
+          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+        return space_node.iono_correction(sat_rel_pos, usr_pos.llh, t);
+      }
+    } ionospheric_klobuchar;
 
-      return available_models;
-    }
+    struct ntcm_gl_t : public range_correction_t {
+      float_t f_10_7;
+      ntcm_gl_t() : range_correction_t(), f_10_7(-1) {}
+      bool is_available(const gps_time_t &t) const {
+        return f_10_7 >= 0;
+      }
+      float_t calculate(const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+        typename space_node_t::pierce_point_res_t pp(
+            space_node_t::pierce_point(sat_rel_pos, usr_pos.llh));
+        return -space_node_t::tec2delay(space_node_t::slant_factor(sat_rel_pos)
+            * NTCM_GL_Generic<float_t>::tec_vert(
+              pp.latitude, pp.longitude, t.year(), f_10_7));
+      }
+    } ionospheric_ntcm_gl;
+
+    struct tropospheric_simplified_t : public range_correction_t {
+      tropospheric_simplified_t() : range_correction_t() {}
+      bool is_available(const gps_time_t &t) const {
+        return true;
+      }
+      float_t calculate(
+          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+        return space_node_t::tropo_correction(sat_rel_pos, usr_pos.llh);
+      }
+    } tropospheric_simplified;
+
+    range_correction_t ionospheric_correction, tropospheric_correction;
 
     options_t available_options() const {
       return options_t(base_t::available_options(), _options);
@@ -203,18 +170,25 @@ class GPS_SinglePositioning : public SolverBaseT {
 
     options_t available_options(const options_t &opt_wish) const {
       GPS_SinglePositioning_Options<float_t> opt(opt_wish);
-      filter_ionospheric_models(opt);
       return options_t(base_t::available_options(opt_wish), opt);
     }
 
     options_t update_options(const options_t &opt_wish){
-      filter_ionospheric_models(_options = opt_wish);
       return options_t(base_t::update_options(opt_wish), _options);
     }
 
     GPS_SinglePositioning(const space_node_t &sn)
-        : base_t(), _space_node(sn), _options() {
-      filter_ionospheric_models(_options);
+        : base_t(), _space_node(sn), _options(available_options(options_t())),
+        ionospheric_klobuchar(sn), ionospheric_ntcm_gl(),
+        tropospheric_simplified(),
+        ionospheric_correction(), tropospheric_correction() {
+
+      // default ionospheric correction:
+      // Broadcasted Klobuchar parameters are at least required for solution.
+      ionospheric_correction.insert(ionospheric_klobuchar);
+
+      // default troposheric correction: simplified
+      tropospheric_correction.insert(tropospheric_simplified);
     }
 
     ~GPS_SinglePositioning(){}
@@ -268,40 +242,14 @@ class GPS_SinglePositioning : public SolverBaseT {
       enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
       if(error.unknown_flag & range_error_t::MASK_IONOSPHERIC){
-        // Ionospheric model selection, the fall back is no correction
-        bool iono_model_hit(false);
-        for(std::size_t i(0);
-            i < sizeof(_options.ionospheric_models) / sizeof(_options.ionospheric_models[0]);
-            ++i){
-          switch(_options.ionospheric_models[i]){
-            case options_t::IONOSPHERIC_KLOBUCHAR:
-              residual.residual += _space_node.iono_correction(relative_pos, usr_pos.llh, time_arrival);
-              break;
-            case options_t::IONOSPHERIC_NTCM_GL: {
-              // TODO f_10_7 setup, optimization (mag_model etc.)
-              typename space_node_t::pierce_point_res_t pp(_space_node.pierce_point(relative_pos, usr_pos.llh));
-              residual.residual -= space_node_t::tec2delay(
-                  _space_node.slant_factor(relative_pos)
-                  * NTCM_GL_Generic<float_t>::tec_vert(
-                      pp.latitude, pp.longitude,
-                      time_arrival.year(), _options.f_10_7));
-              break;
-            }
-            case options_t::IONOSPHERIC_NONE:
-              break;
-            default:
-              continue;
-          }
-          iono_model_hit = true;
-          break;
-        }
+        residual.residual += ionospheric_correction(time_arrival, usr_pos, relative_pos);
       }else{
         residual.residual += error.value[range_error_t::IONOSPHERIC];
       }
 
       // Tropospheric
       residual.residual += (error.unknown_flag & range_error_t::MASK_TROPOSPHERIC)
-          ? _space_node.tropo_correction(relative_pos, usr_pos.llh)
+          ? tropospheric_correction(time_arrival, usr_pos, relative_pos)
           : error.value[range_error_t::TROPOSPHERIC];
 
       // Setup weight
@@ -447,7 +395,7 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       res.receiver_time = receiver_time;
 
-      if(_options.count_ionospheric_models() == 0){
+      if(!ionospheric_correction.select(receiver_time)){
         res.error_code = user_pvt_t::ERROR_INVALID_IONO_MODEL;
         return;
       }
