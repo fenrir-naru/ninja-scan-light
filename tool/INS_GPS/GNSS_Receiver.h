@@ -113,13 +113,50 @@ struct GNSS_Receiver {
       }
       return *this;
     }
+
+    void copy_range_correction(const solver_t &another){
+#define MAKE_ENTRY(target) {&(another.target), &(target)}
+      struct {
+        const typename base_t::range_corrector_t *src;
+        typename base_t::range_corrector_t *dst;
+      } item[] = {
+        {&base_t::no_correction,
+            const_cast<typename base_t::no_correction_t *>(&base_t::no_correction)},
+        MAKE_ENTRY(gps.ionospheric_klobuchar),
+        MAKE_ENTRY(gps.ionospheric_ntcm_gl),
+        MAKE_ENTRY(gps.tropospheric_simplified),
+      };
+      struct {
+        const typename base_t::range_correction_t *src;
+        typename base_t::range_correction_t *dst;
+      } root[] = {
+        MAKE_ENTRY(gps.ionospheric_correction),
+        MAKE_ENTRY(gps.tropospheric_correction),
+      };
+#undef MAKE_ENTRY
+      for(std::size_t i(0); i < sizeof(root) / sizeof(root[0]); ++i){
+        root[i].dst->clear();
+        for(typename base_t::range_correction_t::const_iterator
+              it(root[i].src->begin()), it_end(root[i].src->end());
+            it != it_end; ++it){
+          for(std::size_t j(0); j < sizeof(item) / sizeof(item[0]); ++j){
+            if(*it != item[j].src){continue;}
+            root[i].dst->push_back(item[j].dst);
+            break;
+          }
+        }
+      }
+    }
   } solver_GNSS;
 
   GNSS_Receiver() : data(), solver_GNSS(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
-      : data(another.data), solver_GNSS(*this) {}
+      : data(another.data), solver_GNSS(*this) {
+    solver_GNSS.copy_range_correction(another.solver_GNSS);
+  }
   GNSS_Receiver &operator=(const GNSS_Receiver &another){
     data = another.data;
+    solver_GNSS.copy_range_correction(another.solver_GNSS);
     return *this;
   }
 
