@@ -107,6 +107,7 @@ class GPS_SinglePositioning : public SolverBaseT {
     typedef typename base_t::measurement_t measurement_t;
     inheritate_type(measurement_items_t);
     typedef typename base_t::range_error_t range_error_t;
+    typedef typename base_t::range_corrector_t range_corrector_t;
     typedef typename base_t::range_correction_t range_correction_t;
 
     inheritate_type(relative_property_t);
@@ -124,9 +125,9 @@ class GPS_SinglePositioning : public SolverBaseT {
   public:
     const space_node_t &space_node() const {return _space_node;}
 
-    struct klobuchar_t : public range_correction_t {
+    struct klobuchar_t : public range_corrector_t {
       const space_node_t &space_node;
-      klobuchar_t(const space_node_t &sn) : range_correction_t(), space_node(sn) {}
+      klobuchar_t(const space_node_t &sn) : range_corrector_t(), space_node(sn) {}
       bool is_available(const gps_time_t &t) const {
         return space_node.is_valid_iono();
       }
@@ -136,9 +137,9 @@ class GPS_SinglePositioning : public SolverBaseT {
       }
     } ionospheric_klobuchar;
 
-    struct ntcm_gl_t : public range_correction_t {
+    struct ntcm_gl_t : public range_corrector_t {
       float_t f_10_7;
-      ntcm_gl_t() : range_correction_t(), f_10_7(-1) {}
+      ntcm_gl_t() : range_corrector_t(), f_10_7(-1) {}
       bool is_available(const gps_time_t &t) const {
         return f_10_7 >= 0;
       }
@@ -151,8 +152,8 @@ class GPS_SinglePositioning : public SolverBaseT {
       }
     } ionospheric_ntcm_gl;
 
-    struct tropospheric_simplified_t : public range_correction_t {
-      tropospheric_simplified_t() : range_correction_t() {}
+    struct tropospheric_simplified_t : public range_corrector_t {
+      tropospheric_simplified_t() : range_corrector_t() {}
       bool is_available(const gps_time_t &t) const {
         return true;
       }
@@ -185,10 +186,10 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       // default ionospheric correction:
       // Broadcasted Klobuchar parameters are at least required for solution.
-      ionospheric_correction.insert(ionospheric_klobuchar);
+      ionospheric_correction.push_front(&ionospheric_klobuchar);
 
       // default troposheric correction: simplified
-      tropospheric_correction.insert(tropospheric_simplified);
+      tropospheric_correction.push_front(&tropospheric_simplified);
     }
 
     ~GPS_SinglePositioning(){}

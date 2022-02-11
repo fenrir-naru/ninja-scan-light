@@ -38,6 +38,7 @@
 #include <vector>
 #include <map>
 #include <utility>
+#include <deque>
 
 #include <cmath>
 #include <cstring>
@@ -223,52 +224,37 @@ struct GPS_Solver_Base {
     return res;
   }
 
-  struct range_correction_t {
-    range_correction_t *next_chain; // linked list structure
-    range_correction_t() : next_chain(NULL) {}
+  struct range_corrector_t {
+    virtual ~range_corrector_t() {}
     virtual bool is_available(const gps_time_t &t) const {
-      return false;
-    }
-    const range_correction_t *select(const gps_time_t &t) const {
-      return is_available(t)
-          ? this
-          : (next_chain ? next_chain->select(t) : NULL);
-    }
-    int count_all() const {
-      int res(0);
-      for(range_correction_t *i(next_chain); i; i = i->next_chain, ++res);
-      return res;
-    }
-    bool insert(range_correction_t &item, int offset = 0) {
-      range_correction_t *i(this);
-      // if offset is negative, it is treated as an index from the last
-      if(offset < 0){offset += count_all();}
-      do{
-        if(offset == 0){ // insert front; before A -> B, after A -> item -> B.
-          item.next_chain = i->next_chain;
-          i->next_chain = &item;
-          return true;
-        }
-        if(!(i = i->next_chain)){break;}
-        --offset;
-      }while(true);
       return false;
     }
     virtual float_t calculate(
         const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
       return 0;
     }
-    float_t operator()(
-        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
-      const range_correction_t *selected(select(t));
-      return selected ? selected->calculate(t, usr_pos, sat_rel_pos) : 0;
-    }
   };
-  static const struct no_correction_t : public range_correction_t {
+  static const struct no_correction_t : public range_corrector_t {
     bool is_available(const gps_time_t &t) const {
       return true;
     }
   } no_correction;
+  struct range_correction_t : public std::deque<const range_corrector_t *> {
+    typedef std::deque<const range_corrector_t *> super_t;
+    range_correction_t() : super_t() {}
+    const range_corrector_t *select(const gps_time_t &t) const {
+      for(typename super_t::const_iterator it(super_t::begin()), it_end(super_t::end());
+          it != it_end; ++it){
+        if((*it)->is_available(t)){return *it;}
+      }
+      return NULL;
+    }
+    float_t operator()(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+      const range_corrector_t *selected(select(t));
+      return selected ? selected->calculate(t, usr_pos, sat_rel_pos) : 0;
+    }
+  };
 
   /**
    * Select appropriate solver, this is provision for GNSS extension

@@ -324,7 +324,7 @@ data.gps.solver_options. expr
       }
       std::cerr << "F10.7: " << f_10_7 << std::endl;
       solver_GNSS.gps.ionospheric_ntcm_gl.f_10_7 = f_10_7;
-      solver_GNSS.gps.ionospheric_correction.insert(solver_GNSS.gps.ionospheric_ntcm_gl);
+      solver_GNSS.gps.ionospheric_correction.push_front(&solver_GNSS.gps.ionospheric_ntcm_gl);
       return true;
     }
 #undef option_apply
