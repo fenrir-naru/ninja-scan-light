@@ -955,6 +955,35 @@ struct GPS_SolverOptions
         {ID2SYM(rb_intern("hopfield")), &this->gps.solver.tropospheric_simplified},
       };
       list_t input;
+      if(update){
+        if(!RB_TYPE_P(hash, T_HASH)){
+          throw std::runtime_error(
+              std::string("Hash is expected, however ").append(inspect_str(hash)));
+        }
+        for(std::size_t i(0); i < sizeof(k_root) / sizeof(k_root[0]); ++i){
+          VALUE ary = rb_hash_lookup(hash, k_root[i]);
+          if(NIL_P(ary)){continue;}
+          if(!RB_TYPE_P(ary, T_ARRAY)){
+            ary = rb_ary_new_from_values(1, &ary);
+          }
+          for(int j(0); j < RARRAY_LEN(ary); ++j){
+            std::size_t k(0);
+            VALUE v(rb_ary_entry(ary, j));
+            for(; k < sizeof(item) / sizeof(item[0]); ++k){
+              if(v == item[k].sym){break;}
+            }
+            if(k >= sizeof(item) / sizeof(item[0])){
+              continue; // TODO other than symbol
+            }
+            input[i].push_back(item[k].obj);
+          }
+        }
+        VALUE opt(rb_hash_lookup(hash, k_opt));
+        if(RB_TYPE_P(opt, T_HASH)){
+          swig::asval(rb_hash_lookup(opt, k_f_10_7), // ntcm_gl
+              &this->gps.solver.ionospheric_ntcm_gl.f_10_7);
+        }
+      }
       list_t output(update_correction(update, input));
       VALUE res = rb_hash_new();
       for(list_t::const_iterator it(output.begin()), it_end(output.end());
@@ -974,7 +1003,7 @@ struct GPS_SolverOptions
             if(*it2 == item[i].obj){break;}
           }
           if(i >= sizeof(item) / sizeof(item[0])){
-            continue;
+            continue; // TODO other than built-in corrector
           }
           rb_ary_push(v, item[i].sym);
         }
