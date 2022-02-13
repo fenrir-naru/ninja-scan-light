@@ -930,6 +930,75 @@ struct GPS_SolverOptions
     }
   }
   %fragment("hook"{GPS_Solver<FloatT>});
+  %ignore update_correction;
+#ifdef SWIGRUBY
+  %fragment("correction"{GPS_Solver<FloatT>}, "header",
+      fragment=SWIG_From_frag(int),
+      fragment=SWIG_Traits_frag(FloatT)){
+    template<>
+    VALUE GPS_Solver<FloatT>::update_correction(
+        const bool &update, const VALUE &hash){
+      typedef range_correction_list_t list_t;
+      static const VALUE k_root[] = {
+        ID2SYM(rb_intern("gps_ionospheric")),
+        ID2SYM(rb_intern("gps_tropospheric")),
+      };
+      static const VALUE k_opt(ID2SYM(rb_intern("options")));
+      static const VALUE k_f_10_7(ID2SYM(rb_intern("f_10_7")));
+      struct {
+        VALUE sym;
+        list_t::mapped_type::value_type obj;
+      } item[] = {
+        {ID2SYM(rb_intern("no_correction")), &base_t::no_correction},
+        {ID2SYM(rb_intern("klobuchar")), &this->gps.solver.ionospheric_klobuchar},
+        {ID2SYM(rb_intern("ntcm_gl")), &this->gps.solver.ionospheric_ntcm_gl},
+        {ID2SYM(rb_intern("hopfield")), &this->gps.solver.tropospheric_simplified},
+      };
+      list_t input;
+      list_t output(update_correction(update, input));
+      VALUE res = rb_hash_new();
+      for(list_t::const_iterator it(output.begin()), it_end(output.end());
+          it != it_end; ++it){
+        VALUE k;
+        if((it->first < 0) || (it->first >= (int)(sizeof(k_root) / sizeof(k_root[0])))){
+          k = SWIG_From(int)(it->first);
+        }else{
+          k = k_root[it->first];
+        }
+        VALUE v = rb_ary_new();
+        for(list_t::mapped_type::const_iterator
+              it2(it->second.begin()), it2_end(it->second.end());
+            it2 != it2_end; ++it2){
+          std::size_t i(0);
+          for(; i < sizeof(item) / sizeof(item[0]); ++i){
+            if(*it2 == item[i].obj){break;}
+          }
+          if(i >= sizeof(item) / sizeof(item[0])){
+            continue;
+          }
+          rb_ary_push(v, item[i].sym);
+        }
+        rb_hash_aset(res, k, v);
+      }
+      { // common options
+        VALUE opt = rb_hash_new();
+        rb_hash_aset(res, k_opt, opt);
+        rb_hash_aset(opt, k_f_10_7, // ntcm_gl 
+            swig::from(this->gps.solver.ionospheric_ntcm_gl.f_10_7));
+      }
+      return res;
+    }
+  }
+  %fragment("correction"{GPS_Solver<FloatT>});
+  %rename("correction") get_correction;
+  %rename("correction=") set_correction;
+  VALUE get_correction() const {
+    return const_cast<GPS_Solver<FloatT> *>(self)->update_correction(false, Qnil);
+  }
+  VALUE set_correction(VALUE hash){
+    return self->update_correction(true, hash);
+  }
+#endif
 }
 %inline {
 template <class FloatT>
@@ -990,6 +1059,38 @@ struct GPS_Solver
     const_cast<gps_t &>(gps).solver.update_options(gps.options);
     return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
+  typedef 
+      std::map<int, std::vector<const typename base_t::range_corrector_t *> >
+      range_correction_list_t;
+  range_correction_list_t update_correction(
+      const bool &update,
+      const range_correction_list_t &list = range_correction_list_t()){
+    range_correction_list_t res;
+    typename base_t::range_correction_t *root[] = {
+      &gps.solver.ionospheric_correction,
+      &gps.solver.tropospheric_correction,
+    };
+    for(std::size_t i(0); i < sizeof(root) / sizeof(root[0]); ++i){
+      do{
+        if(!update){break;}
+        typename range_correction_list_t::const_iterator it(list.find(i));
+        if(it == list.end()){break;}
+        root[i]->clear();
+        for(typename range_correction_list_t::mapped_type::const_iterator
+              it2(it->second.begin()), it2_end(it->second.end());
+            it2 != it2_end; ++it2){
+          root[i]->push_back(*it2);
+        }
+      }while(false);
+      for(typename base_t::range_correction_t::const_iterator
+            it(root[i]->begin()), it_end(root[i]->end());
+          it != it_end; ++it){
+        res[i].push_back(*it);
+      }
+    }
+    return res;
+  }
+  SWIG_Object update_correction(const bool &update, const SWIG_Object &hash);
 };
 }
 
