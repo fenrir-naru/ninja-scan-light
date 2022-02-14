@@ -39,6 +39,7 @@
 #include <map>
 #include <utility>
 #include <deque>
+#include <algorithm>
 
 #include <cmath>
 #include <cstring>
@@ -261,6 +262,13 @@ struct GPS_Solver_Base {
         if((*it)->calculate(t, usr_pos, sat_rel_pos, res)){return res;}
       }
       return 0;
+    }
+    void remove(const typename super_t::value_type &v){
+      std::remove(super_t::begin(), super_t::end(), v);
+    }
+    void add(const typename super_t::value_type &v){
+      remove(v);
+      super_t::push_front(v);
     }
   };
 

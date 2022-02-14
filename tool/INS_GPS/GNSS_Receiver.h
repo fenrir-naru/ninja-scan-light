@@ -351,6 +351,7 @@ data.gps.solver_options. expr
       option_apply(residual_mask = mask_meter);
       return true;
     }
+#undef option_apply
 
     if(value = runtime_opt_t::get_value(spec, "F10.7", false)){
       if(dry_run){return true;}
@@ -361,10 +362,9 @@ data.gps.solver_options. expr
       }
       std::cerr << "F10.7: " << f_10_7 << std::endl;
       solver_GNSS.gps.ionospheric_ntcm_gl.f_10_7 = f_10_7;
-      solver_GNSS.gps.ionospheric_correction.push_front(&solver_GNSS.gps.ionospheric_ntcm_gl);
+      solver_GNSS.gps.ionospheric_correction.add(&solver_GNSS.gps.ionospheric_ntcm_gl);
       return true;
     }
-#undef option_apply
 
     /* --GNSS_with[out]=(system|[system:][+-]sat_id)
      *    --GNSS_without=GPS excludes all GPS satellites
