@@ -945,6 +945,7 @@ struct GPS_SolverOptions
       };
       static const VALUE k_opt(ID2SYM(rb_intern("options")));
       static const VALUE k_f_10_7(ID2SYM(rb_intern("f_10_7")));
+      static const VALUE k_known(ID2SYM(rb_intern("known")));
       struct {
         VALUE sym;
         list_t::mapped_type::value_type obj;
@@ -1014,6 +1015,13 @@ struct GPS_SolverOptions
         rb_hash_aset(res, k_opt, opt);
         rb_hash_aset(opt, k_f_10_7, // ntcm_gl 
             swig::from(this->gps.solver.ionospheric_ntcm_gl.f_10_7));
+      }
+      { // known models
+        VALUE ary = rb_ary_new_capa((int)(sizeof(item) / sizeof(item[0])));
+        for(std::size_t i(0); i < sizeof(item) / sizeof(item[0]); ++i){
+          rb_ary_push(ary, item[i].sym);
+        }
+        rb_hash_aset(res, k_known, ary);
       }
       return res;
     }
