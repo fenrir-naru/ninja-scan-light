@@ -131,9 +131,10 @@ class GPS_SinglePositioning : public SolverBaseT {
       bool is_available(const gps_time_t &t) const {
         return space_node.is_valid_iono();
       }
-      float_t calculate(
-          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
-        return space_node.iono_correction(sat_rel_pos, usr_pos.llh, t);
+      float_t *calculate(
+          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+          float_t &buf) const {
+        return &(buf = space_node.iono_correction(sat_rel_pos, usr_pos.llh, t));
       }
     } ionospheric_klobuchar;
 
@@ -143,12 +144,15 @@ class GPS_SinglePositioning : public SolverBaseT {
       bool is_available(const gps_time_t &t) const {
         return f_10_7 >= 0;
       }
-      float_t calculate(const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+      float_t *calculate(
+          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+          float_t &buf) const {
+        if(!is_available(t)){return NULL;}
         typename space_node_t::pierce_point_res_t pp(
             space_node_t::pierce_point(sat_rel_pos, usr_pos.llh));
-        return -space_node_t::tec2delay(space_node_t::slant_factor(sat_rel_pos)
+        return &(buf = -space_node_t::tec2delay(space_node_t::slant_factor(sat_rel_pos)
             * NTCM_GL_Generic<float_t>::tec_vert(
-              pp.latitude, pp.longitude, t.year(), f_10_7));
+              pp.latitude, pp.longitude, t.year(), f_10_7)));
       }
     } ionospheric_ntcm_gl;
 
@@ -157,9 +161,10 @@ class GPS_SinglePositioning : public SolverBaseT {
       bool is_available(const gps_time_t &t) const {
         return true;
       }
-      float_t calculate(
-          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
-        return space_node_t::tropo_correction(sat_rel_pos, usr_pos.llh);
+      float_t *calculate(
+          const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+          float_t &buf) const {
+        return &(buf = space_node_t::tropo_correction(sat_rel_pos, usr_pos.llh));
       }
     } tropospheric_simplified;
 

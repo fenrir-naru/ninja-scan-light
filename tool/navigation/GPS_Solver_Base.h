@@ -229,14 +229,18 @@ struct GPS_Solver_Base {
     virtual bool is_available(const gps_time_t &t) const {
       return false;
     }
-    virtual float_t calculate(
-        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
-      return 0;
-    }
+    virtual float_t *calculate(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+        float_t &buf) const = 0;
   };
   static const struct no_correction_t : public range_corrector_t {
     bool is_available(const gps_time_t &t) const {
       return true;
+    }
+    float_t *calculate(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+        float_t &buf) const {
+      return &(buf = 0);
     }
   } no_correction;
   struct range_correction_t : public std::deque<const range_corrector_t *> {
@@ -251,8 +255,12 @@ struct GPS_Solver_Base {
     }
     float_t operator()(
         const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
-      const range_corrector_t *selected(select(t));
-      return selected ? selected->calculate(t, usr_pos, sat_rel_pos) : 0;
+      float_t res;
+      for(typename super_t::const_iterator it(super_t::begin()), it_end(super_t::end());
+          it != it_end; ++it){
+        if((*it)->calculate(t, usr_pos, sat_rel_pos, res)){return res;}
+      }
+      return 0;
     }
   };
 
