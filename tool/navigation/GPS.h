@@ -2150,37 +2150,17 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           usr.llh(), 
           t);
     }
-    
-    struct IonospericCorrection {
-      const GPS_SpaceNode<float_t> &space_node;
-      float_t operator()(
-          const enu_t &relative_pos,
-          const llh_t &usrllh,
-          const gps_time_t &t) const {
-        return space_node.iono_correction(relative_pos, usrllh, t);
-      }
-      float_t operator()(
-          const xyz_t &sat,
-          const xyz_t &usr,
-          const gps_time_t &t) const {
-        return space_node.iono_correction(sat, usr, t);
-      }
-    };
-    IonospericCorrection iono_correction() const {
-      IonospericCorrection res = {*this};
-      return res;
-    }
 
     /**
-     * Calculate correction value in accordance with tropospheric model
+     * Calculate correction value in accordance with tropospheric Hopfield model
      * 
      * @param relative_pos satellite position (relative position, NEU)
      * @param usrllh user position (absolute position, LLH)
      * @return correction in meters
      */
-    float_t tropo_correction(
+    static float_t tropo_correction(
         const enu_t &relative_pos,
-        const llh_t &usrllh) const {
+        const llh_t &usrllh){
       
       // Elevation (rad)
       float_t el(relative_pos.elevation());
@@ -2290,30 +2270,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
      * @param usr user position (absolute position, XYZ)
      * @return correction in meters
      */
-    float_t tropo_correction(
+    static float_t tropo_correction(
         const xyz_t &sat,
-        const xyz_t &usr) const {
+        const xyz_t &usr) {
       return tropo_correction(
           enu_t::relative(sat, usr),
           usr.llh());
-    }
-
-    struct TropospericCorrection {
-      const GPS_SpaceNode<float_t> &space_node;
-      float_t operator()(
-          const enu_t &relative_pos,
-          const llh_t &usrllh) const {
-        return space_node.tropo_correction(relative_pos, usrllh);
-      }
-      float_t operator()(
-          const xyz_t &sat,
-          const xyz_t &usr) const {
-        return space_node.tropo_correction(sat, usr);
-      }
-    };
-    TropospericCorrection tropo_correction() const {
-      TropospericCorrection res = {*this};
-      return res;
     }
 };
 
