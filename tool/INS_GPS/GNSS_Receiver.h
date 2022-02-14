@@ -116,10 +116,21 @@ struct GNSS_Receiver {
     solver_t(const GNSS_Receiver &rcv)
         : base_t(),
         gps(rcv.data.gps.space_node),
-        sbas(rcv.data.sbas.space_node)
-        {
-      gps.space_node_sbas = &rcv.data.sbas.space_node;
-      sbas.space_node_gps = &rcv.data.gps.space_node;
+        sbas(rcv.data.sbas.space_node) {
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+      // ionospheric and tropospheric correction methods
+      typename base_t::range_correction_t ionospheric, tropospheric;
+      ionospheric.push_back(&sbas.ionospheric_sbas);
+      ionospheric.push_back(&gps.ionospheric_klobuchar);
+      tropospheric.push_back(&sbas.tropospheric_sbas);
+      tropospheric.push_back(&gps.tropospheric_simplified);
+      gps.ionospheric_correction
+          = sbas.ionospheric_correction
+          = ionospheric;
+      gps.tropospheric_correction
+          = sbas.tropospheric_correction
+          = tropospheric;
+#endif
     }
 
     // Proxy functions
@@ -130,13 +141,54 @@ struct GNSS_Receiver {
       }
       return *this;
     }
+
+    void copy_range_correction(const solver_t &another){
+#define MAKE_ENTRY(target) {&(another.target), &(target)}
+      struct {
+        const typename base_t::range_corrector_t *src;
+        typename base_t::range_corrector_t *dst;
+      } item[] = {
+        {&base_t::no_correction,
+            const_cast<typename base_t::no_correction_t *>(&base_t::no_correction)},
+        MAKE_ENTRY(gps.ionospheric_klobuchar),
+        MAKE_ENTRY(gps.ionospheric_ntcm_gl),
+        MAKE_ENTRY(gps.tropospheric_simplified),
+        MAKE_ENTRY(sbas.ionospheric_sbas),
+        MAKE_ENTRY(sbas.tropospheric_sbas),
+      };
+      struct {
+        const typename base_t::range_correction_t *src;
+        typename base_t::range_correction_t *dst;
+      } root[] = {
+        MAKE_ENTRY(gps.ionospheric_correction),
+        MAKE_ENTRY(gps.tropospheric_correction),
+        MAKE_ENTRY(sbas.ionospheric_correction),
+        MAKE_ENTRY(sbas.tropospheric_correction),
+      };
+#undef MAKE_ENTRY
+      for(std::size_t i(0); i < sizeof(root) / sizeof(root[0]); ++i){
+        root[i].dst->clear();
+        for(typename base_t::range_correction_t::const_iterator
+              it(root[i].src->begin()), it_end(root[i].src->end());
+            it != it_end; ++it){
+          for(std::size_t j(0); j < sizeof(item) / sizeof(item[0]); ++j){
+            if(*it != item[j].src){continue;}
+            root[i].dst->push_back(item[j].dst);
+            break;
+          }
+        }
+      }
+    }
   } solver_GNSS;
 
   GNSS_Receiver() : data(), solver_GNSS(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
-      : data(another.data), solver_GNSS(*this) {}
+      : data(another.data), solver_GNSS(*this) {
+    solver_GNSS.copy_range_correction(another.solver_GNSS);
+  }
   GNSS_Receiver &operator=(const GNSS_Receiver &another){
     data = another.data;
+    solver_GNSS.copy_range_correction(another.solver_GNSS);
     return *this;
   }
 
@@ -336,6 +388,7 @@ data.sbas.solver_options. expr
       option_apply(residual_mask = mask_meter);
       return true;
     }
+#undef option_apply
 
     if(value = runtime_opt_t::get_value(spec, "F10.7", false)){
       if(dry_run){return true;}
@@ -345,9 +398,9 @@ data.sbas.solver_options. expr
         return false;
       }
       std::cerr << "F10.7: " << f_10_7 << std::endl;
-      option_apply(f_10_7 = f_10_7);
-      option_apply(insert_ionospheric_model(
-          gps_solver_t::options_t::IONOSPHERIC_NTCM_GL));
+      solver_GNSS.gps.ionospheric_ntcm_gl.f_10_7 = f_10_7;
+      solver_GNSS.gps.ionospheric_correction.add(&solver_GNSS.gps.ionospheric_ntcm_gl);
+      solver_GNSS.sbas.ionospheric_correction.add(&solver_GNSS.gps.ionospheric_ntcm_gl);
       return true;
     }
 
@@ -355,16 +408,15 @@ data.sbas.solver_options. expr
       if(dry_run){return true;}
       if(runtime_opt_t::is_true(value)){
         std::cerr << "SBAS_IGP: on" << std::endl;
-        option_apply(insert_ionospheric_model(
-            gps_solver_t::options_t::IONOSPHERIC_SBAS));
+        solver_GNSS.gps.ionospheric_correction.add(&solver_GNSS.sbas.ionospheric_sbas);
+        solver_GNSS.sbas.ionospheric_correction.add(&solver_GNSS.sbas.ionospheric_sbas);
       }else{
         std::cerr << "SBAS_IGP: off" << std::endl;
-        option_apply(remove_ionospheric_model(
-            gps_solver_t::options_t::IONOSPHERIC_SBAS));
+        solver_GNSS.gps.ionospheric_correction.remove(&solver_GNSS.sbas.ionospheric_sbas);
+        solver_GNSS.sbas.ionospheric_correction.remove(&solver_GNSS.sbas.ionospheric_sbas);
       }
       return true;
     }
-#undef option_apply
 
     /* --GNSS_with[out]=(system|[system:][+-]sat_id)
      *    --GNSS_without=GPS excludes all GPS satellites

@@ -255,7 +255,6 @@ __RINEX_OBS_TEXT__
       [:alpha, :beta].each{|k|
         puts "Iono #{k}: #{sn.iono_utc.send(k)}"
       }
-      puts solver.gps_options.ionospheric_models
       
       meas.each{|prn, k, v|
         eph = sn.ephemeris(prn)
@@ -336,6 +335,15 @@ __RINEX_OBS_TEXT__
     
     it 'can be modified through hooks' do
       sn = solver.gps_space_node
+      expect(solver.correction[:gps_ionospheric]).to include(:klobuchar)
+      expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
+      expect{solver.correction = nil}.to raise_error
+      expect{solver.correction = {
+        :gps_ionospheric => [:klobuchar, :no_correction],
+        :options => {:f_10_7 => 10},
+      }}.not_to raise_error
+      expect(solver.correction[:gps_ionospheric]).to include(:no_correction)
+      expect(solver.correction[:options][:f_10_7]).to eq(10)
       sn.read(input[:rinex_nav])
       t_meas = GPS::Time::new(1849, 172413)
       sn.update_all_ephemeris(t_meas)

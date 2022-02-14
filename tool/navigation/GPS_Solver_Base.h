@@ -38,6 +38,8 @@
 #include <vector>
 #include <map>
 #include <utility>
+#include <deque>
+#include <algorithm>
 
 #include <cmath>
 #include <cstring>
@@ -222,6 +224,53 @@ struct GPS_Solver_Base {
     }
     return res;
   }
+
+  struct range_corrector_t {
+    virtual ~range_corrector_t() {}
+    virtual bool is_available(const gps_time_t &t) const {
+      return false;
+    }
+    virtual float_t *calculate(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+        float_t &buf) const = 0;
+  };
+  static const struct no_correction_t : public range_corrector_t {
+    bool is_available(const gps_time_t &t) const {
+      return true;
+    }
+    float_t *calculate(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
+        float_t &buf) const {
+      return &(buf = 0);
+    }
+  } no_correction;
+  struct range_correction_t : public std::deque<const range_corrector_t *> {
+    typedef std::deque<const range_corrector_t *> super_t;
+    range_correction_t() : super_t() {}
+    const range_corrector_t *select(const gps_time_t &t) const {
+      for(typename super_t::const_iterator it(super_t::begin()), it_end(super_t::end());
+          it != it_end; ++it){
+        if((*it)->is_available(t)){return *it;}
+      }
+      return NULL;
+    }
+    float_t operator()(
+        const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos) const {
+      float_t res;
+      for(typename super_t::const_iterator it(super_t::begin()), it_end(super_t::end());
+          it != it_end; ++it){
+        if((*it)->calculate(t, usr_pos, sat_rel_pos, res)){return res;}
+      }
+      return 0;
+    }
+    void remove(const typename super_t::value_type &v){
+      std::remove(super_t::begin(), super_t::end(), v);
+    }
+    void add(const typename super_t::value_type &v){
+      remove(v);
+      super_t::push_front(v);
+    }
+  };
 
   /**
    * Select appropriate solver, this is provision for GNSS extension
@@ -1042,6 +1091,10 @@ const typename GPS_Solver_Base<FloatT>::range_error_t
       MASK_RECEIVER_CLOCK | MASK_SATELLITE_CLOCK | MASK_IONOSPHERIC | MASK_TROPOSPHERIC,
       {0},
     };
+
+template <class FloatT>
+const typename GPS_Solver_Base<FloatT>::no_correction_t
+    GPS_Solver_Base<FloatT>::no_correction;
 
 template <class FloatT, class PVT_BaseT = typename GPS_Solver_Base<FloatT>::user_pvt_t>
 struct GPS_PVT_Debug : public PVT_BaseT {

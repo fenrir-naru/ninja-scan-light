@@ -158,6 +158,14 @@ static std::string inspect_str(const VALUE &v){
     *week = self->week;
     *seconds = self->seconds;
   }
+#if defined(SWIG)  
+  int __cmp__(const GPS_Time<FloatT> &t) const {
+    return ((self->week < t.week) ? -1 
+        : ((self->week > t.week) ? 1 
+          : (self->seconds < t.seconds ? -1 
+            : (self->seconds > t.seconds ? 1 : 0))));
+  }
+#endif
 }
 
 %define MAKE_ACCESSOR(name, type)
@@ -412,8 +420,6 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     %append_output(swig::from($1.latitude));
     %append_output(swig::from($1.longitude));
   }
-  %ignore iono_correction() const;
-  %ignore tropo_correction() const;
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     return RINEX_NAV_Reader<FloatT>::read_all(fin, *self);
@@ -817,71 +823,15 @@ const type &get_ ## name () const {
 %enddef
   MAKE_ACCESSOR2(elevation_mask, FloatT);
   MAKE_ACCESSOR2(residual_mask, FloatT);
-  MAKE_ACCESSOR2(f_10_7, FloatT);
 #undef MAKE_ACCESSOR2
   MAKE_VECTOR2ARRAY(int);
   %ignore cast_base;
-#ifdef SWIGRUBY
-  %rename("ionospheric_models=") set_ionospheric_models;
-  %rename("ionospheric_models") get_ionospheric_models;
-#endif
-  %typemap(in) const std::vector<int> &models (std::vector<int> temp) {
-    $1 = &temp;
-#ifdef SWIGRUBY
-    if(RB_TYPE_P($input, T_ARRAY)){
-      for(int i(0), i_max(RARRAY_LEN($input)); i < i_max; ++i){
-        SWIG_Object obj(RARRAY_AREF($input, i));
-        int v;
-        if(SWIG_IsOK(SWIG_AsVal(int)(obj, &v))){
-          temp.push_back(v);
-        }else{
-          SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");
-        }
-      }
-    }
-#endif
-  }
 }
 %inline %{
 template <class FloatT>
 struct GPS_SolverOptions_Common {
-  enum {
-    IONOSPHERIC_KLOBUCHAR,
-    IONOSPHERIC_SBAS,
-    IONOSPHERIC_NTCM_GL,
-    IONOSPHERIC_NONE, // which allows no correction
-    IONOSPHERIC_MODELS,
-    IONOSPHERIC_SKIP = IONOSPHERIC_MODELS, // which means delegating the next slot
-  };
   virtual GPS_Solver_GeneralOptions<FloatT> *cast_general() = 0;
   virtual const GPS_Solver_GeneralOptions<FloatT> *cast_general() const = 0;
-  std::vector<int> get_ionospheric_models() const {
-    typedef GPS_Solver_GeneralOptions<FloatT> general_t;
-    const general_t *general(this->cast_general());
-    std::vector<int> res;
-    for(int i(0); i < general_t::IONOSPHERIC_MODELS; ++i){
-      int v((int)(general->ionospheric_models[i]));
-      if(v == general_t::IONOSPHERIC_SKIP){break;}
-      res.push_back(v);
-    }
-    return res;
-  }
-  std::vector<int> set_ionospheric_models(const std::vector<int> &models){
-    typedef GPS_Solver_GeneralOptions<FloatT> general_t;
-    general_t *general(this->cast_general());
-    typedef typename general_t::ionospheric_model_t model_t;
-    for(int i(0), j(0), j_max(models.size()); i < general_t::IONOSPHERIC_MODELS; ++i){
-      model_t v(general_t::IONOSPHERIC_SKIP);
-      if(j < j_max){
-        if((models[j] >= 0) && (models[j] < general_t::IONOSPHERIC_SKIP)){
-          v = (model_t)models[j];
-        }
-        ++j;
-      }
-      general->ionospheric_models[i] = v;
-    }
-    return get_ionospheric_models();
-  }
 };
 %}
 
@@ -1071,6 +1021,116 @@ struct SBAS_SolverOptions
     }
   }
   %fragment("hook"{GPS_Solver<FloatT>});
+  %ignore update_correction;
+#ifdef SWIGRUBY
+  %fragment("correction"{GPS_Solver<FloatT>}, "header",
+      fragment=SWIG_From_frag(int),
+      fragment=SWIG_Traits_frag(FloatT)){
+    template<>
+    VALUE GPS_Solver<FloatT>::update_correction(
+        const bool &update, const VALUE &hash){
+      typedef range_correction_list_t list_t;
+      static const VALUE k_root[] = {
+        ID2SYM(rb_intern("gps_ionospheric")),
+        ID2SYM(rb_intern("gps_tropospheric")),
+        ID2SYM(rb_intern("sbas_ionospheric")),
+        ID2SYM(rb_intern("sbas_tropospheric")),
+      };
+      static const VALUE k_opt(ID2SYM(rb_intern("options")));
+      static const VALUE k_f_10_7(ID2SYM(rb_intern("f_10_7")));
+      static const VALUE k_known(ID2SYM(rb_intern("known")));
+      struct {
+        VALUE sym;
+        list_t::mapped_type::value_type obj;
+      } item[] = {
+        {ID2SYM(rb_intern("no_correction")), &base_t::no_correction},
+        {ID2SYM(rb_intern("klobuchar")), &this->gps.solver.ionospheric_klobuchar},
+        {ID2SYM(rb_intern("ntcm_gl")), &this->gps.solver.ionospheric_ntcm_gl},
+        {ID2SYM(rb_intern("hopfield")), &this->gps.solver.tropospheric_simplified},
+        {ID2SYM(rb_intern("sbas_igp")), &this->sbas.solver.ionospheric_sbas},
+        {ID2SYM(rb_intern("sbas_tropo")), &this->sbas.solver.tropospheric_sbas},
+      };
+      list_t input;
+      if(update){
+        if(!RB_TYPE_P(hash, T_HASH)){
+          throw std::runtime_error(
+              std::string("Hash is expected, however ").append(inspect_str(hash)));
+        }
+        for(std::size_t i(0); i < sizeof(k_root) / sizeof(k_root[0]); ++i){
+          VALUE ary = rb_hash_lookup(hash, k_root[i]);
+          if(NIL_P(ary)){continue;}
+          if(!RB_TYPE_P(ary, T_ARRAY)){
+            ary = rb_ary_new_from_values(1, &ary);
+          }
+          for(int j(0); j < RARRAY_LEN(ary); ++j){
+            std::size_t k(0);
+            VALUE v(rb_ary_entry(ary, j));
+            for(; k < sizeof(item) / sizeof(item[0]); ++k){
+              if(v == item[k].sym){break;}
+            }
+            if(k >= sizeof(item) / sizeof(item[0])){
+              continue; // TODO other than symbol
+            }
+            input[i].push_back(item[k].obj);
+          }
+        }
+        VALUE opt(rb_hash_lookup(hash, k_opt));
+        if(RB_TYPE_P(opt, T_HASH)){
+          swig::asval(rb_hash_lookup(opt, k_f_10_7), // ntcm_gl
+              &this->gps.solver.ionospheric_ntcm_gl.f_10_7);
+        }
+      }
+      list_t output(update_correction(update, input));
+      VALUE res = rb_hash_new();
+      for(list_t::const_iterator it(output.begin()), it_end(output.end());
+          it != it_end; ++it){
+        VALUE k;
+        if((it->first < 0) || (it->first >= (int)(sizeof(k_root) / sizeof(k_root[0])))){
+          k = SWIG_From(int)(it->first);
+        }else{
+          k = k_root[it->first];
+        }
+        VALUE v = rb_ary_new();
+        for(list_t::mapped_type::const_iterator
+              it2(it->second.begin()), it2_end(it->second.end());
+            it2 != it2_end; ++it2){
+          std::size_t i(0);
+          for(; i < sizeof(item) / sizeof(item[0]); ++i){
+            if(*it2 == item[i].obj){break;}
+          }
+          if(i >= sizeof(item) / sizeof(item[0])){
+            continue; // TODO other than built-in corrector
+          }
+          rb_ary_push(v, item[i].sym);
+        }
+        rb_hash_aset(res, k, v);
+      }
+      { // common options
+        VALUE opt = rb_hash_new();
+        rb_hash_aset(res, k_opt, opt);
+        rb_hash_aset(opt, k_f_10_7, // ntcm_gl 
+            swig::from(this->gps.solver.ionospheric_ntcm_gl.f_10_7));
+      }
+      { // known models
+        VALUE ary = rb_ary_new_capa((int)(sizeof(item) / sizeof(item[0])));
+        for(std::size_t i(0); i < sizeof(item) / sizeof(item[0]); ++i){
+          rb_ary_push(ary, item[i].sym);
+        }
+        rb_hash_aset(res, k_known, ary);
+      }
+      return res;
+    }
+  }
+  %fragment("correction"{GPS_Solver<FloatT>});
+  %rename("correction") get_correction;
+  %rename("correction=") set_correction;
+  VALUE get_correction() const {
+    return const_cast<GPS_Solver<FloatT> *>(self)->update_correction(false, Qnil);
+  }
+  VALUE set_correction(VALUE hash){
+    return self->update_correction(true, hash);
+  }
+#endif
 }
 %inline {
 template <class FloatT>
@@ -1101,11 +1161,20 @@ struct GPS_Solver
   }
 #endif
   GPS_Solver() : super_t(), gps(), sbas(), hooks() {
-    gps.solver.space_node_sbas = &sbas.space_node;
-    sbas.solver.space_node_gps = &gps.space_node;
 #ifdef SWIGRUBY
     hooks = rb_hash_new();
 #endif
+    typename base_t::range_correction_t ionospheric, tropospheric;
+    ionospheric.push_back(&sbas.solver.ionospheric_sbas);
+    ionospheric.push_back(&gps.solver.ionospheric_klobuchar);
+    tropospheric.push_back(&sbas.solver.tropospheric_sbas);
+    tropospheric.push_back(&gps.solver.tropospheric_simplified);
+    gps.solver.ionospheric_correction
+        = sbas.solver.ionospheric_correction
+        = ionospheric;
+    gps.solver.tropospheric_correction
+        = sbas.solver.tropospheric_correction
+        = tropospheric;
   }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
@@ -1144,6 +1213,40 @@ struct GPS_Solver
     const_cast<sbas_t &>(sbas).solver.update_options(sbas.options);
     return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
+  typedef 
+      std::map<int, std::vector<const typename base_t::range_corrector_t *> >
+      range_correction_list_t;
+  range_correction_list_t update_correction(
+      const bool &update,
+      const range_correction_list_t &list = range_correction_list_t()){
+    range_correction_list_t res;
+    typename base_t::range_correction_t *root[] = {
+      &gps.solver.ionospheric_correction,
+      &gps.solver.tropospheric_correction,
+      &sbas.solver.ionospheric_correction,
+      &sbas.solver.tropospheric_correction,
+    };
+    for(std::size_t i(0); i < sizeof(root) / sizeof(root[0]); ++i){
+      do{
+        if(!update){break;}
+        typename range_correction_list_t::const_iterator it(list.find(i));
+        if(it == list.end()){break;}
+        root[i]->clear();
+        for(typename range_correction_list_t::mapped_type::const_iterator
+              it2(it->second.begin()), it2_end(it->second.end());
+            it2 != it2_end; ++it2){
+          root[i]->push_back(*it2);
+        }
+      }while(false);
+      for(typename base_t::range_correction_t::const_iterator
+            it(root[i]->begin()), it_end(root[i]->end());
+          it != it_end; ++it){
+        res[i].push_back(*it);
+      }
+    }
+    return res;
+  }
+  SWIG_Object update_correction(const bool &update, const SWIG_Object &hash);
 };
 }
 
