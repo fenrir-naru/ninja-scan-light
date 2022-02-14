@@ -126,15 +126,14 @@ class SBAS_SinglePositioning : public SolverBaseT {
     } ionospheric_sbas;
 
     struct tropospheric_sbas_t : public range_corrector_t {
-      const space_node_t &space_node;
-      tropospheric_sbas_t(const space_node_t &sn) : range_corrector_t(), space_node(sn) {}
+      tropospheric_sbas_t() : range_corrector_t() {}
       bool is_available(const gps_time_t &t) const {
         return true;
       }
       float_t *calculate(
           const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
           float_t &buf) const {
-        return &(buf = space_node.tropo_correction(
+        return &(buf = space_node_t::tropo_correction(
             t.year(), sat_rel_pos, usr_pos.llh));
       }
     } tropospheric_sbas;
@@ -157,7 +156,7 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
     SBAS_SinglePositioning(const space_node_t &sn)
         : base_t(), _space_node(sn), _options(available_options(options_t())),
-        ionospheric_sbas(sn), tropospheric_sbas(sn) {
+        ionospheric_sbas(sn), tropospheric_sbas() {
 
       // default ionospheric correction: Broadcasted IGP.
       ionospheric_correction.push_front(&ionospheric_sbas);

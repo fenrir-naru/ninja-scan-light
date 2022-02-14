@@ -1536,10 +1536,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
      * @see A.4.2.4
      * @return correction in meters
      */
-    float_t tropo_correction(
+    static float_t tropo_correction(
         const float_t &year_utc,
         const enu_t &relative_pos,
-        const llh_t &usrllh) const {
+        const llh_t &usrllh){
 
       if(usrllh.height() > 10E3){ // same as RTKlib; troposphere ranges from 0 to approximately 11km
         return 0;
