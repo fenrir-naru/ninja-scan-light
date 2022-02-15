@@ -221,7 +221,11 @@ __RINEX_OBS_TEXT__
       f.path
     },
   }}
-  let(:solver){GPS::Solver::new}
+  let(:solver){
+    res = GPS::Solver::new
+    res.correction = {:gps_ionospheric => :klobuchar, :gps_tropospheric => :hopfield}
+    res
+  }
   
   describe 'demo' do
     it 'calculates position without any error' do
