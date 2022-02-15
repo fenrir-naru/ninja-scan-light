@@ -61,6 +61,8 @@ struct GNSS_Data {
   struct Loader {
     typedef GPS_SpaceNode<FloatT> gps_t;
     gps_t *gps;
+    typedef GLONASS_SpaceNode<FloatT> glonass_t;
+    glonass_t *glonass;
 
     typedef typename gps_t::Satellite::Ephemeris gps_ephemeris_t;
     struct gps_ephemeris_raw_t : public gps_ephemeris_t::raw_t {
@@ -73,7 +75,6 @@ struct GNSS_Data {
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
 
-    typedef GLONASS_SpaceNode<FloatT> glonass_t;
     typedef typename glonass_t::Satellite::Ephemeris_with_GPS_Time glonass_ephemeris_t;
     struct glonass_ephemeris_raw_t : public glonass_ephemeris_t::raw_t {
       unsigned int super_frame;
@@ -82,7 +83,7 @@ struct GNSS_Data {
     } glonass_ephemeris[24];
 
 
-    Loader() : gps(NULL) {
+    Loader() : gps(NULL), glonass(NULL) {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
         gps_ephemeris[i].svid = i + 1;
       }
@@ -170,6 +171,12 @@ struct GNSS_Data {
       return false;
     }
 
+    bool load(const glonass_ephemeris_t &eph){
+      if(!glonass){return false;}
+      glonass->satellite(eph.svid).register_ephemeris(eph);
+      return true;
+    }
+
     bool load_glonass(const GNSS_Data &data){
       if(data.subframe.bytes != 16){return false;}
       if((data.subframe.sv_number == 0)
@@ -203,11 +210,11 @@ struct GNSS_Data {
         if(eph.has_string == 0x1F){ // get all ephemeris and time info. in the same super frame
           // Ephemeris_with_Time::raw_t =(cast)=> Ephemeris_with_Time => Ephemeris_with_GPS_Time
           glonass_ephemeris_t eph_converted(eph);
-          eph_converted.freq_ch = data.subframe.glonass_freq_ch; // frequncy channel
+          eph_converted.freq_ch = data.subframe.glonass_freq_ch; // frequency channel
           eph_converted.t_b_gps += gps->is_valid_utc() // leap second correction
               ? gps->iono_utc().delta_t_LS
               : gps_time_t::guess_leap_seconds(eph_converted.t_b_gps);
-          // TODO register ephemeris
+          load(eph_converted); // register ephemeris
           eph.has_string = 0;
         }
         return true;
