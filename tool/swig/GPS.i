@@ -489,10 +489,10 @@ struct GLONASS_Ephemeris
   MAKE_ACCESSOR(tau_GPS, FloatT);
   
   FloatT frequency_L1() const {
-    return self->frequncy_L1();
+    return self->L1_frequency();
   };
   FloatT frequency_L2() const {
-    return self->frequncy_L1();
+    return self->L2_frequency();
   };
   GPS_Time<FloatT> base_time() const {
     return self->base_time();

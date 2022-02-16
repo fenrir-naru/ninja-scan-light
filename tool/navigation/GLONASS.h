@@ -53,9 +53,9 @@ class GLONASS_SpaceNode {
     typedef FloatT float_t;
     
     static const float_t light_speed;
-    static const float_t L1_frequency;
+    static const float_t L1_frequency_base;
     static const float_t L1_frequency_gap;
-    static const float_t L2_frequency;
+    static const float_t L2_frequency_base;
     static const float_t L2_frequency_gap;
 
   public:
@@ -70,6 +70,13 @@ class GLONASS_SpaceNode {
     
     typedef int int_t;
     typedef unsigned int uint_t;
+
+    static float_t L1_frequency(const int_t &freq_ch) {
+      return L1_frequency_base + L1_frequency_gap * freq_ch;
+    }
+    static float_t L2_frequency(const int_t &freq_ch) {
+      return L2_frequency_base + L2_frequency_gap * freq_ch;
+    }
 
     typedef typename GPS_SpaceNode<float_t>::DataParser DataParser;
 
@@ -361,12 +368,12 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           bool P4; // flag for ephemeris; 1 - uploaded by the control segment
           bool l_n; // health flag; 0 - healthy, 1 - malfunction
 
-          float_t frequncy_L1() const {
-            return L1_frequency + L1_frequency_gap * freq_ch;
+          float_t L1_frequency() const {
+            return GLONASS_SpaceNode::L1_frequency(freq_ch);
           }
 
-          float_t frequncy_L2() const {
-            return L2_frequency + L2_frequency_gap * freq_ch;
+          float_t L2_frequency() const {
+            return GLONASS_SpaceNode::L2_frequency(freq_ch);
           }
 
           struct constellation_t { // TODO make it to be a subclass of System_XYZ<float_t, PZ90>
@@ -1159,7 +1166,7 @@ const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::lig
     = 299792458; // [m/s]
 
 template <class FloatT>
-const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L1_frequency
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L1_frequency_base
     = 1602E6; // [Hz]
 
 template <class FloatT>
@@ -1167,7 +1174,7 @@ const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L1_
     = 562.5E3; // [Hz]
 
 template <class FloatT>
-const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L2_frequency
+const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::L2_frequency_base
     = 1246E6; // [Hz]
 
 template <class FloatT>
