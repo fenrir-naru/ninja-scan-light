@@ -25,6 +25,7 @@
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/GPS_Solver_RAIM.h"
+#include "navigation/GLONASS_Solver.h"
 
 #if defined(__cplusplus) && (__cplusplus < 201103L)
 #include <sstream>
@@ -961,6 +962,25 @@ struct GPS_SolverOptions
 };
 %}
 
+%extend GLONASS_SolverOptions {
+  %ignore base_t;
+  %ignore cast_general;
+  MAKE_VECTOR2ARRAY(int);
+}
+%inline %{
+template <class FloatT>
+struct GLONASS_SolverOptions 
+    : public GLONASS_SinglePositioning<FloatT>::options_t, 
+    GPS_SolverOptions_Common<FloatT> {
+  typedef typename GLONASS_SinglePositioning<FloatT>::options_t base_t;
+  void exclude(const int &prn){base_t::exclude_prn.set(prn);}
+  void include(const int &prn){base_t::exclude_prn.reset(prn);}
+  std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+  GPS_Solver_GeneralOptions<FloatT> *cast_general(){return this;}
+  const GPS_Solver_GeneralOptions<FloatT> *cast_general() const {return this;}
+};
+%}
+
 %header {
 template <class FloatT>
 struct GPS_RangeCorrector
@@ -1148,6 +1168,8 @@ struct GPS_RangeCorrector
       static const VALUE k_root[] = {
         ID2SYM(rb_intern("gps_ionospheric")),
         ID2SYM(rb_intern("gps_tropospheric")),
+        ID2SYM(rb_intern("glonass_ionospheric")),
+        ID2SYM(rb_intern("glonass_tropospheric")),
       };
       static const VALUE k_opt(ID2SYM(rb_intern("options")));
       static const VALUE k_f_10_7(ID2SYM(rb_intern("f_10_7")));
@@ -1263,7 +1285,9 @@ struct GPS_Solver
   } gps;
   struct glonass_t {
     GLONASS_SpaceNode<FloatT> space_node;
-    glonass_t() : space_node() {}
+    GLONASS_SolverOptions<FloatT> options;
+    GLONASS_SinglePositioning<FloatT> solver;
+    glonass_t() : space_node(), options(), solver(space_node) {}
   } glonass;
   SWIG_Object hooks;
   typedef std::vector<GPS_RangeCorrector<FloatT> > user_correctors_t;
@@ -1289,9 +1313,11 @@ struct GPS_Solver
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
   GLONASS_SpaceNode<FloatT> &glonass_space_node() {return glonass.space_node;}
+  GLONASS_SolverOptions<FloatT> &glonass_options() {return glonass.options;}
   const base_t &select_solver(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
+    if(prn > 0x100 && prn <= (0x100 + 24)){return glonass.solver;}
     // call order: base_t::solve => this returned by select() 
     //     => relative_property() => select_solver()
     // For not supported satellite, call loop prevention is required.
@@ -1317,6 +1343,7 @@ struct GPS_Solver
     const_cast<gps_t &>(gps).space_node.update_all_ephemeris(receiver_time);
     const_cast<gps_t &>(gps).solver.update_options(gps.options);
     const_cast<glonass_t &>(glonass).space_node.update_all_ephemeris(receiver_time);
+    const_cast<glonass_t &>(glonass).solver.update_options(glonass.options);
     return super_t::solve().user_pvt(measurement.items, receiver_time);
   }
   typedef 
@@ -1329,6 +1356,8 @@ struct GPS_Solver
     typename base_t::range_correction_t *root[] = {
       &gps.solver.ionospheric_correction,
       &gps.solver.tropospheric_correction,
+      &glonass.solver.ionospheric_correction,
+      &glonass.solver.tropospheric_correction,
     };
     for(std::size_t i(0); i < sizeof(root) / sizeof(root[0]); ++i){
       do{
@@ -1592,6 +1621,7 @@ struct SP3 : public SP3_Product<FloatT> {
 
 %template(SpaceNode_GLONASS) GLONASS_SpaceNode<type>;
 %template(Ephemeris_GLONASS) GLONASS_Ephemeris<type>;
+%template(SolverOptions_GLONASS) GLONASS_SolverOptions<type>;
 
 %template(RINEX_Observation) RINEX_Observation<type>;
 %template(SP3) SP3<type>;

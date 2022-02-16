@@ -159,7 +159,7 @@ class GPS_Receiver
       rel_prop
     }
     @debug = {}
-    solver_opts = [:gps_options].collect{|target|
+    solver_opts = [:gps_options, :glonass_options].collect{|target|
       @solver.send(target)
     }
     solver_opts.each{|opt|
@@ -268,6 +268,12 @@ class GPS_Receiver
           }
           if check_sys_svid.call(:GPS, 1..32) then
             [svid || (1..32).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
+          elsif check_sys_svid.call(:GLONASS, 1..24, 0x100) then
+            prns = [svid || (1..24).to_a].flatten.collect{|i| (i & 0xFF) + 0x100}
+            labels = prns.collect{|prn| "GLONASS:#{prn & 0xFF}"}
+            update_output.call(:GLONASS, prns, labels)
+            prns.each{|prn| @solver.glonass_options.send(mode, prn & 0xFF)}
+            #$stderr.puts @solver.glonass_options.excluded.inspect
           else
             raise "Unknown satellite: #{spec}"
           end
@@ -485,6 +491,8 @@ class GPS_Receiver
           when :GPS;
           when :GLONASS
             svid += 0x100
+            meas.add(svid, :L1_FREQUENCY, 
+                GPS::SpaceNode_GLONASS::L1_frequency(loader.call(39, 1, "C") - 7))
           else; next
           end
           trk_stat = loader.call(46, 1)[0]
@@ -547,6 +555,7 @@ class GPS_Receiver
     after_run = b || proc{|pvt| puts pvt.to_s if pvt}
     $stderr.print "Reading RINEX observation file (%s)"%[fname]
     types = nil
+    glonass_freq = nil
     count = 0
     GPS::RINEX_Observation::read(fname){|item|
       $stderr.print '.' if (count += 1) % 1000 == 0
@@ -569,13 +578,31 @@ class GPS_Receiver
         }.compact]
       }.flatten(1))]
 
+      glonass_freq ||= proc{|spec|
+        # frequency channels described in observation file
+        next {} unless spec
+        Hash[*(spec.collect{|line|
+          line[4..-1].scan(/R(\d{2}).([\s+-]\d)./).collect{|prn, ch|
+            [prn.to_i, GPS::SpaceNode_GLONASS::L1_frequency(ch.to_i)]
+          }
+        }.flatten(2))]
+      }.call(item[:header]["GLONASS SLOT / FRQ #"])
+
       meas = GPS::Measurement::new
       item[:meas].each{|k, v|
         sys, prn = k
         case sys
         when 'G', ' '
         when 'J'; prn += 192
-        when 'R'; prn += 0x100
+        when 'R'
+          freq = (glonass_freq[prn] ||= proc{|sn|
+            # frequency channels saved with ephemeris
+            sn.update_all_ephemeris(t_meas)
+            next nil unless sn.ephemeris(prn).in_range?(t_meas)
+            sn.ephemeris(prn).frequency_L1
+          }.call(@solver.glonass_space_node))
+          prn += 0x100
+          meas.add(prn, :L1_FREQUENCY, freq) if freq
         else; next
         end
         types[sys] = (types[' '] || []) unless types[sys]
@@ -703,18 +730,7 @@ if __FILE__ == $0 then
     }
   }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
 
-  rcv.solver.hooks[:satellite_position] = proc{|prn, time, pos|
-    next pos if pos
-    if prn & 0x100 == 0x100 then # GLONASS
-      eph = rcv.solver.glonass_space_node.ephemeris(prn - 0x100)
-      next nil if (eph.base_time - time).abs > 60 * 60 * 2
-      next eph.constellation(time)[0]
-    end
-    nil
-  }
-
   glonass_residuals = {} # => {time => {svid => [residual, other_props]}, ...}
-
   proc{
     orig_hook = rcv.solver.hooks[:relative_property]
     rcv.solver.hooks[:relative_property] = proc{|prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel|
@@ -744,8 +760,8 @@ if __FILE__ == $0 then
         t_arv = [t_arv.week, t_arv.seconds.round(1)] # week, ms
         glonass_residuals[t_arv] ||= {}
         if (!glonass_residuals[t_arv][svid]) \
-            || (glonass_residuals[t_arv][svid][0].abs > residual.abs) then
-          glonass_residuals[t_arv][svid] = [residual, el, az, clk_error, iono, tropo]
+            || (glonass_residuals[t_arv][svid][2].abs > residual.abs) then
+          glonass_residuals[t_arv][svid] = [weight, range_r, residual, el, az, clk_error, iono, tropo]
         end
         break
       end
@@ -776,14 +792,14 @@ if __FILE__ == $0 then
   open("glonass.csv", 'w'){|io|
     io.puts(([:week, :seconds_in_week, 
         :year, :month, :day, :hour, :min, :seconds] + (1..24).collect{|svid|
-      [:residual, :el, :az, :clk_error, :iono, :tropo].collect{|k|
+      [:weight_orig, :residual_orig, :residual, :el, :az, :clk_error, :iono, :tropo].collect{|k|
         "#{k}(%d)"%[svid]
       }
     }).flatten.join(','))
     glonass_residuals.to_a.sort{|a, b| a[0] <=> b[0]}.each{|t, sv_props|
       t = GPS::Time::new(*t[0..1])
       io.puts(([t.week, "%.3f"%[t.seconds]] + t.c_tm.to_a + (1..24).collect{|svid|
-        sv_props[svid] || ([nil] * 6) 
+        sv_props[svid] || ([nil] * 8)
       }).flatten.join(','))
     }
   }
