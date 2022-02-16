@@ -61,6 +61,7 @@ class GLONASS_SinglePositioning : public SolverBaseT {
   public:
     typedef GLONASS_SinglePositioning<FloatT> self_t;
     typedef SolverBaseT base_t;
+    typedef SolverBaseT super_t;
 
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename base_t::x x;
@@ -86,7 +87,10 @@ class GLONASS_SinglePositioning : public SolverBaseT {
     typedef typename base_t::range_correction_t range_correction_t;
 
     inheritate_type(relative_property_t);
+    typedef typename super_t::measurement_items_t measurement_items_t;
 #undef inheritate_type
+
+    static const typename base_t::measurement_item_set_t L1OF;
 
     typedef typename GPS_Solver_Base<float_t>::options_t::template merge_t<
         GLONASS_SinglePositioning_Options<float_t>, base_t> options_t;
@@ -167,6 +171,36 @@ class GLONASS_SinglePositioning : public SolverBaseT {
     }
 
     ~GLONASS_SinglePositioning(){}
+
+    virtual const float_t *rate(
+        const typename measurement_t::mapped_type &values, float_t &buf) const {
+      const float_t *res;
+      if((res = super_t::find_value(values, measurement_items_t::L1_RANGE_RATE, buf))){
+        return res;
+      }
+      // Fall back to doppler * frequency
+      float_t doppler, freq;
+      if(super_t::find_value(values, measurement_items_t::L1_DOPPLER, doppler)
+          && super_t::find_value(values, measurement_items_t::L1_FREQUENCY, freq)){
+        return &(buf = -doppler * (space_node_t::light_speed / freq));
+      }
+      return NULL;
+    }
+
+    virtual const float_t *rate_sigma(
+        const typename measurement_t::mapped_type &values, float_t &buf) const {
+      const float_t *res;
+      if((res = super_t::find_value(values, measurement_items_t::L1_RANGE_RATE_SIGMA, buf))){
+        return res;
+      }
+      // Fall back to doppler * frequency
+      float_t doppler, freq;
+      if(super_t::find_value(values, measurement_items_t::L1_DOPPLER_SIGMA, doppler)
+          && super_t::find_value(values, measurement_items_t::L1_FREQUENCY, freq)){
+        return &(buf = doppler * (space_node_t::light_speed / freq));
+      }
+      return NULL;
+    }
 
     /**
      * Select satellite by using PRN and time
@@ -278,5 +312,10 @@ class GLONASS_SinglePositioning : public SolverBaseT {
       return res;
     }
 };
+
+template <class FloatT, class SolverBaseT>
+const typename SolverBaseT::measurement_item_set_t
+    GLONASS_SinglePositioning<FloatT, SolverBaseT>::L1OF
+      = SolverBaseT::L1CA;
 
 #endif /* __GLONASS_SOLVER_H__ */

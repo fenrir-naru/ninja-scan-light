@@ -341,6 +341,8 @@ struct GNSS_Receiver {
         return &(gps_solver_t::L2CM);
       case decorder_t::gnss_signal_t::GPS_L2CL:
         return &(gps_solver_t::L2CL);
+      case decorder_t::gnss_signal_t::GLONASS_L1_OF:
+        return &(glonass_solver_t::L1OF);
 #endif
     }
     return NULL; // TODO support other GNSS, signals
