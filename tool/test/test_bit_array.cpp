@@ -54,7 +54,7 @@ void check_bit_array(const bitset<N> &b, const BitArrayT &bit_array){
 }
 
 BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
-  for(int loop(0); loop < 0x1000; loop++){
+  for(int loop(0); loop < 0x400; loop++){
     bitset<64> b;
     std::vector<int> ones;
     for(unsigned int i(0); i < b.size(); ++i){
@@ -106,6 +106,32 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
 
       std::vector<int> ones2(bit_array.indices_one());
       BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
+    }
+
+    {
+      BOOST_TEST_MESSAGE("container(u32_t) bigger than required capacity(24)");
+      typedef BitArray<24, boost::uint32_t> bit_array_t;
+      bit_array_t bit_array;
+      for(unsigned int i(0); i < bit_array_t::max_size; ++i){
+        bit_array.set(i, b[i]);
+      }
+
+      std::vector<int> ones2(bit_array.indices_one());
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+      BOOST_REQUIRE(std::equal(
+          ones.begin(),
+          std::remove_if(ones.begin(), ones.end(),
+              [](const int &i)->bool{return i >= bit_array_t::max_size;}),
+          ones2.begin()));
+#else
+      struct {
+        bool operator()(const int &i) const {return i >= bit_array_t::max_size;}
+      } predicate;
+      BOOST_REQUIRE(std::equal(
+          ones.begin(),
+          std::remove_if(ones.begin(), ones.end(), predicate),
+          ones2.begin()));
+#endif
     }
   }
 }

@@ -60,6 +60,7 @@ struct const_div_t<denom, denom, log2, 0> {
 template <int MAX_SIZE, class ContainerT = unsigned char>
 struct BitArray {
   static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
+  static const int max_size = MAX_SIZE;
   ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
   void set(const bool &new_bit = false) {
     std::memset(buf, (new_bit ? (~0) : 0), sizeof(buf));
@@ -128,14 +129,14 @@ struct BitArray {
     std::vector<int> res;
     int idx(0);
     static const const_div_t<bits_per_addr> qr(MAX_SIZE);
-    int rem(qr.rem);
-    for(int i(0); i < qr.quot; ++i, idx += bits_per_addr){
+    int rem(qr.rem), i(0);
+    for(; i < qr.quot; ++i, idx += bits_per_addr){
       int idx2(idx);
       for(ContainerT temp(buf[i]); temp > 0; temp >>= 1, ++idx2){
         if(temp & 0x1){res.push_back(idx2);}
       }
     }
-    for(ContainerT temp(buf[qr.quot + 1]); (temp > 0) && (rem > 0); --rem, ++idx, temp >>= 1){
+    for(ContainerT temp(buf[i]); (temp > 0) && (rem > 0); --rem, ++idx, temp >>= 1){
       if(temp & 0x1){res.push_back(idx);}
     }
     return res;
