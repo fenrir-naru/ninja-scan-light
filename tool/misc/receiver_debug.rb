@@ -79,12 +79,12 @@ class GPS_Receiver
         next ([nil] * 6 * opt[:satellites].size) unless pvt.position_solved?
         sats = pvt.used_satellite_list
         r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
-        opt[:satellites].collect{|i|
-          next ([nil] * 6) unless i2 = sats.index(i)
+        opt[:satellites].collect{|prn, label|
+          next ([nil] * 6) unless i2 = sats.index(prn)
           [r[i2, 0], w[i2, i2]] +
               [:azimuth, :elevation].collect{|f|
-                pvt.send(f)[i] / Math::PI * 180
-              } + [pvt.slopeH[i], pvt.slopeV[i]]
+                pvt.send(f)[prn] / Math::PI * 180
+              } + [pvt.slopeH[prn], pvt.slopeV[prn]]
         }.flatten
       },
     ]] + [[
@@ -118,7 +118,7 @@ class GPS_Receiver
       }.flatten,
       proc{|meas|
         meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
-        opt[:satellites].collect{|prn|
+        opt[:satellites].collect{|prn, label|
           [:L1_PSEUDORANGE, [:L1_DOPPLER, GPS::SpaceNode.L1_WaveLength]].collect{|k, sf|
             meas_hash[[prn, GPS::Measurement.const_get(k)]] * (sf || 1) rescue nil
           }
