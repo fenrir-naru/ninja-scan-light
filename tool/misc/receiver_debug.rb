@@ -159,7 +159,7 @@ class GPS_Receiver
       rel_prop
     }
     @debug = {}
-    solver_opts = [:gps_options].collect{|target|
+    solver_opts = [:gps_options, :sbas_options].collect{|target|
       @solver.send(target)
     }
     solver_opts.each{|opt|
