@@ -205,7 +205,7 @@ class GPS_Receiver
           when Integer
             [nil, spec]
           when /([a-zA-Z]+)(?::(-?\d+))?/
-            [$1.upcase.to_sym, (Integre($2) rescue nil)]
+            [$1.upcase.to_sym, (Integer($2) rescue nil)]
           when /-?\d+/
             [nil, $&.to_i]
           else
@@ -217,9 +217,9 @@ class GPS_Receiver
           else
             (k == :with) ? :include : :exclude
           end
-          if (sys == :GPS) || (svid && (1..32).include?(svid)) then
-            [svid || (1..32).to_a].flatten.each{
-              @solver.gps_options.send(mode, svid)
+          if (sys == :GPS) || (!sys && svid && (1..32).include?(svid)) then
+            [svid || (1..32).to_a].flatten.each{|prn|
+              @solver.gps_options.send(mode, prn)
             }
           else
             next false  
