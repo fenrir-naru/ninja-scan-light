@@ -141,6 +141,11 @@ class GPS_Receiver
       rel_prop
     }
     @debug = {}
+    [:gps_options].each{|target|
+      opt = @solver.send(target) # default solver options
+      opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg (use satellite over horizon)
+      opt.residual_mask = 1E4 # 10 km (without residual filter, practically)
+    }
     output_options = {
       :system => [[:GPS, 1..32]],
       :satellites => (1..32).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
@@ -226,10 +231,6 @@ class GPS_Receiver
       false
     }
     raise "Unknown receiver options: #{options.inspect}" unless options.empty?
-    proc{|opt|
-      opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg
-      opt.residual_mask = 1E4 # 10 km
-    }.call(@solver.gps_options)
     @output = {
       :pvt => GPS_Receiver::pvt_items(output_options),
       :meas => GPS_Receiver::meas_items(output_options),
