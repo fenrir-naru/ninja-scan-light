@@ -217,6 +217,19 @@ class GPS_Receiver
           else
             (k == :with) ? :include : :exclude
           end
+          update_output = proc{|sys_target, prns, labels|
+            unless (i = output_options[:system].index{|sys, range| sys == sys_target}) then
+              i = -1
+              output_options[:system] << [sys_target, []]
+            else
+              output_options[:system][i][1].reject!{|prn| prns.include?(prn)}
+            end
+            output_options[:satellites].reject!{|prn, label| prns.include?(prn)}
+            if mode == :include then
+              output_options[:system][i][1] += prns
+              output_options[:satellites] += (labels ? prns.zip(labels) : prns)
+            end
+          }
           if (sys == :GPS) || (!sys && svid && (1..32).include?(svid)) then
             [svid || (1..32).to_a].flatten.each{|prn|
               @solver.gps_options.send(mode, prn)
