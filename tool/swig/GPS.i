@@ -732,6 +732,7 @@ struct GPS_Measurement {
     L1_RANGE_RATE_SIGMA,
     L1_SIGNAL_STRENGTH_dBHz,
     L1_LOCK_SEC,
+    L1_FREQUENCY,
     ITEMS_PREDEFINED,
   };
   void add(const int &prn, const int &key, const FloatT &value){

@@ -103,6 +103,7 @@ struct GPS_Solver_Base {
       L1_RANGE_RATE_SIGMA,
       L1_SIGNAL_STRENGTH_dBHz,
       L1_LOCK_SEC,
+      L1_FREQUENCY,
       MEASUREMENT_ITEMS_PREDEFINED,
     };
   };
