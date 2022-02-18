@@ -549,15 +549,23 @@ data.gps.solver_options. expr
       std::vector<int> used_sats(src.used_satellite_mask.indices_one());
       typename std::vector<int>::const_iterator it(used_sats.begin()), it_end(used_sats.end());
       if(!src.position_solved()){it = it_end;}
-      for(int i(1), i2(0); i <= 32; ++i){
-        if((it == it_end) || (i != *it)){
-          out << ",,";
-          continue;
+      static const struct {
+        int prn_first, prn_last;
+      } range[] = {
+        {1, 32},
+      };
+      unsigned int i_row(0);
+      for(std::size_t i(0); i < sizeof(range) / sizeof(range[0]); ++i){
+        for(int prn(range[i].prn_first); prn <= range[i].prn_last; ++prn){
+          if((it == it_end) || (prn != *it)){
+            out << ",,";
+            continue;
+          }
+          out << ',' << src.delta_r(i_row, 0)
+              << ',' << src.W(i_row, i_row);
+          ++it;
+          ++i_row;
         }
-        out << ',' << src.delta_r(i2, 0)
-            << ',' << src.W(i2, i2);
-        ++it;
-        ++i2;
       }
       return out;
     }
