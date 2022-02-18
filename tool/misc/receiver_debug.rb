@@ -204,9 +204,9 @@ class GPS_Receiver
           sys, svid = case spec
           when Integer
             [nil, spec]
-          when /([a-zA-Z]+)(?::(-?\d+))?/
+          when /^([a-zA-Z]+)(?::(-?\d+))?$/
             [$1.upcase.to_sym, (Integer($2) rescue nil)]
-          when /-?\d+/
+          when /^-?\d+$/
             [nil, $&.to_i]
           else
             next false
@@ -230,12 +230,16 @@ class GPS_Receiver
               output_options[:satellites] += (labels ? prns.zip(labels) : prns)
             end
           }
-          if (sys == :GPS) || (!sys && svid && (1..32).include?(svid)) then
-            [svid || (1..32).to_a].flatten.each{|prn|
-              @solver.gps_options.send(mode, prn)
-            }
+          check_sys_svid = proc{|sys_target, range_in_sys, offset|
+            next range_in_sys.include?(svid - (offset || 0)) unless sys # svid is specified without system
+            next false unless sys == sys_target
+            next true unless svid # All satellites in a target system (svid == nil)
+            range_in_sys.include?(svid)
+          }
+          if check_sys_svid.call(:GPS, 1..32) then
+            [svid || (1..32).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
           else
-            next false  
+            raise "Unknown satellite: #{spec}"
           end
           $stderr.puts "#{mode.capitalize} satellite: #{[sys, svid].compact.join(':')}"
         }
