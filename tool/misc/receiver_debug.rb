@@ -268,7 +268,7 @@ class GPS_Receiver
           }
           if check_sys_svid.call(:GPS, 1..32) then
             [svid || (1..32).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
-          elsif (sys == :SBAS) || (svid && (120..158).include?(svid)) then
+          elsif check_sys_svid.call(:SBAS, 120..158) then
             prns = [svid || (120..158).to_a].flatten
             update_output.call(:SBAS, prns)
             prns.each{|prn| @solver.sbas_options.send(mode, prn)}
