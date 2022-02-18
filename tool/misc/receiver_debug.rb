@@ -270,17 +270,7 @@ class GPS_Receiver
             [svid || (1..32).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
           elsif (sys == :SBAS) || (svid && (120..158).include?(svid)) then
             prns = [svid || (120..158).to_a].flatten
-            unless (i = output_options[:system].index{|sys, range| sys == :SBAS}) then
-              i = -1
-              output_options[:system] << [:SBAS, []]
-            else
-              output_options[:system][i].reject!{|prn| prns.include?(prn)}
-            end
-            output_options[:satellites].reject!{|prn, label| prns.include?(prn)}
-            if mode == :include then
-              output_options[:system][i][1] += prns
-              output_options[:satellites] += prns
-            end
+            update_output.call(:SBAS, prns)
             prns.each{|prn| @solver.sbas_options.send(mode, prn)}
           else
             raise "Unknown satellite: #{spec}"
