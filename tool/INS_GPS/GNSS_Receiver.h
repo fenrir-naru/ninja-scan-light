@@ -792,9 +792,9 @@ data.sbas.solver_options. expr
       }
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
       static const cmd_t cmd_sbas[] = {
-        {items_t::L1_PSEUDORANGE, true,  1}, // range
-        {items_t::L1_RANGE_RATE,  false, 1}, // rate
-        {items_t::L1_DOPPLER,     false, -gps_space_node_t::L1_WaveLength()}, // fallback to using doppler
+        {items_t::L1_PSEUDORANGE, true}, // range
+        {items_t::L1_RANGE_RATE,  false}, // rate
+        {items_t::L1_DOPPLER,     false, print_t::l1_doppler2rate}, // fallback to using doppler
       };
       for(typename sbas_space_node_t::KnownSatellites::list_t::const_iterator
             it(sbas_space_node_t::KnownSatellites::name_ordered.begin()),
