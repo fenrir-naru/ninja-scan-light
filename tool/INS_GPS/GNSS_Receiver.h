@@ -525,9 +525,15 @@ data.sbas.solver_options. expr
       static std::ostream &print(std::ostream &out, const GPS_PVT_Debug<FloatT, PVT_BaseT> *){
         print(out, static_cast<const PVT_BaseT *>(0));
         for(int i(1); i <= 32; ++i){
-          out << ',' << "range_residual(" << i << ')'
-              << ',' << "weight(" << i << ')';
+          out << ',' << "range_residual(GPS:" << i << ')'
+              << ',' << "weight(GPS:" << i << ')';
         }
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+        for(int i(120); i <= 158; ++i){
+          out << ',' << "range_residual(SBAS:" << i << ')'
+              << ',' << "weight(SBAS:" << i << ')';
+        }
+#endif
         return out;
       }
 #if !defined(BUILD_WITHOUT_GNSS_RAIM)
@@ -621,7 +627,10 @@ data.sbas.solver_options. expr
       static const struct {
         int prn_first, prn_last;
       } range[] = {
-        {1, 32},
+        {1, 32}, // GPS
+#if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
+        {120, 158}, // SBAS
+#endif
       };
       unsigned int i_row(0);
       for(std::size_t i(0); i < sizeof(range) / sizeof(range[0]); ++i){
