@@ -238,6 +238,23 @@ INSTANTIATE_COMPLEX(double, D);
 
 #undef INSTANTIATE_COMPLEX
 
+#if defined(SWIGRUBY)
+/* Work around of miss detection of negative value on Windows Ruby (devkit). 
+ * This results from SWIG_AsVal(unsigned int) depends on SWIG_AsVal(unsigned long), 
+ * and sizeof(long) == sizeof(int).
+ */
+%fragment("check_value"{unsigned int}, "header"){
+  inline bool is_lt_zero_after_asval(const unsigned int &i){
+    return ((sizeof(unsigned int) == sizeof(unsigned long)) && ((UINT_MAX >> 1) <= i));
+  }
+  void raise_if_lt_zero_after_asval(const unsigned int &i){
+    if(is_lt_zero_after_asval(i)){
+      SWIG_exception(SWIG_ValueError, "Expected positive value.");
+    }
+  } 
+}
+#endif
+
 #define DO_NOT_INSTANTIATE_SCALAR_MATRIX
 #define USE_MATRIX_VIEW_FILTER
 
@@ -420,8 +437,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
 #endif
 
     typedef Matrix<T, Array2D_Type, ViewType> self_t;
-    self_t &swapRows(const unsigned int &row1, const unsigned int &row2);
-    self_t &swapColumns(const unsigned int &column1, const unsigned int &column2);
 };
 
 %inline {
@@ -949,6 +964,7 @@ MAKE_TO_S(Matrix_Frozen)
   }
 #if defined(SWIGRUBY)
   %fragment(SWIG_AsVal_frag(unsigned int));
+  %fragment("check_value"{unsigned int});
   Matrix(const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
@@ -959,13 +975,10 @@ MAKE_TO_S(Matrix_Frozen)
       MatrixUtil::replace(res, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
-      /* "unsigned" is remove because SWIG_AsVal(unsigned int)
-       * can not detect less than zero in Windows Ruby devkit.
-       */
-      int r, c; 
+      unsigned int r, c; 
       VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
-      if(!SWIG_IsOK(SWIG_AsVal(int)(v_r, &r)) || (r < 0)
-          || !SWIG_IsOK(SWIG_AsVal(int)(v_c, &c)) || (c < 0)){
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r)) || is_lt_zero_after_asval(r)
+          || !SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c)) || is_lt_zero_after_asval(c)){
         throw std::runtime_error(
             std::string("Unexpected length [")
               .append(inspect_str(v_r)).append(", ")
@@ -980,7 +993,23 @@ MAKE_TO_S(Matrix_Frozen)
   }
 #endif
 
-  %typemap(out) self_t & "$result = self;"
+  /*
+   * Returning (*this) requires special care;
+   * "self_t &func(){return (*this);}" in a C++ file may generate
+   * a new wrapped object deleted by GC in the target language
+   * unless the care.
+   * 
+   * Work around 1)
+   *   %typemap(in, numinputs=0) self_t *self_p "";
+   *   %typemap(argout) self_t *self_p "$result = self;";
+   *   void func(self_t *self_p){...}
+   *
+   * Work around 2) (useful without overwrite of the original source, but may overfit)
+   *   %typemap(out) self_t & "$result = self;"
+   *   self_t &func(){...; return *$self;}
+   */
+  %typemap(in, numinputs=0) self_t *self_p "";
+  %typemap(argout) self_t *self_p "$result = self;";
 
   T &__setitem__(const unsigned int &row, const unsigned int &column, const T &value) {
     return (($self)->operator()(row, column) = value);
@@ -997,41 +1026,50 @@ MAKE_TO_S(Matrix_Frozen)
 #endif
   %rename("scalar") getScalar;
   %rename("I") getI;
-  %rename("swap_rows") swapRows;
-  %rename("swap_columns") swapColumns;
+
+  void swap_rows(
+      self_t *self_p,
+      const unsigned int &r1, const unsigned int &r2){
+    $self->swapRows(r1, r2);
+  }
+  void swap_columns(
+      self_t *self_p,
+      const unsigned int &c1, const unsigned int &c2){
+    $self->swapColumns(c1, c2);
+  }
 
   template <class T2, class Array2D_Type2, class ViewType2>
-  self_t &replace(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
-    return $self->replace(matrix);
+  void replace(
+      self_t *self_p,
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+    $self->replace(matrix);
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
-  self_t &replace(const void *replacer = NULL){
+  void replace(self_t *self_p, const void *replacer = NULL){
     if(!MatrixUtil::replace(*$self, replacer)){
       throw std::runtime_error("Unsupported replacement");
     }
-    return *$self;
   }
 
-  self_t &replace(const T *serialized){
+  void replace(self_t *self_p, const T *serialized){
     if(!MatrixUtil::replace(*$self, serialized)){
       throw std::runtime_error("Unsupported replacement");
     }
-    return *$self;
   }
   
 #ifdef SWIGRUBY
-  %bang swapRows(const unsigned int &, const unsigned int &);
-  %bang swapColumns(const unsigned int &, const unsigned int &);
+  %bang swap_rows;
+  %bang swap_columns;
   %rename("replace!") replace;
   
-  self_t &map_bang(
+  void map_bang(
+      self_t *self_p,
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
       const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL){
     MatrixUtil::each(*$self, each_func, each_which, $self);
-    return *$self;
   }
   %rename("map!") map_bang;
   %alias map_bang "collect!,map_with_index!,collect_with_index!";
@@ -1147,6 +1185,8 @@ INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_pt);
 #endif
 
 %define INSTANTIATE_MATRIX(type, suffix)
+%typemap(check, fragment="check_value"{unsigned int})
+    const unsigned int & "raise_if_lt_zero_after_asval(*$1);"
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
@@ -1200,6 +1240,35 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
 #endif
 
+%extend Matrix<type, Array2D_Dense<type > > {
+#if defined(SWIGRUBY)
+  %bang resize;
+#endif
+  %typemap(in, fragment="check_value"{unsigned int}) 
+      unsigned int *r_p (unsigned int temp), unsigned int *c_p (unsigned int temp) {
+    if(SWIG_IsOK(SWIG_AsVal(unsigned int)($input, &temp))){
+#if defined(SWIGRUBY)
+      raise_if_lt_zero_after_asval(temp);
+#endif
+      $1 = &temp;
+    }
+#if defined(SWIGRUBY)
+    else if(NIL_P($input)){$1 = NULL;}
+#endif
+    else{SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");}
+  }
+  Matrix<type, Array2D_Dense<type > > &resize(
+      const unsigned int *r_p, const unsigned int *c_p){
+    unsigned int r(r_p ? *r_p : $self->rows()), c(c_p ? *c_p : self->columns());
+    Matrix<type, Array2D_Dense<type > > mat_new(r, c);
+    unsigned int r_min(r), c_min(c);
+    if(r_min > $self->rows()){r_min = $self->rows();}
+    if(c_min > $self->columns()){c_min = $self->columns();}
+    mat_new.partial(r_min, c_min).replace($self->partial(r_min, c_min), false);
+    return (*($self) = mat_new);
+  }
+};
+
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
 #if defined(SWIGRUBY)
 %fragment("init"{Matrix<type, Array2D_Dense<type > >}, "init") {
@@ -1212,6 +1281,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 }
 %fragment("init"{Matrix<type, Array2D_Dense<type > >});
 #endif
+%typemap(check) const unsigned int &;
 %enddef
 
 INSTANTIATE_MATRIX(double, D);

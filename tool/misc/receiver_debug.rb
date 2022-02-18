@@ -13,15 +13,22 @@ Debug GPS receiver with Ruby via SWIG interface
 require 'GPS.so'
 
 class GPS_Receiver
+
+  GPS::Time.send(:define_method, :utc){ # send as work around of old Ruby
+    res = c_tm(GPS::Time::guess_leap_seconds(self))
+    res[-1] += (seconds % 1)
+    res
+  }
+
   def self.pvt_items(opt = {})
     opt = {
       :system => [[:GPS, 1..32]],
       :satellites => (1..32).to_a,
     }.merge(opt)
     [[
-      [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec],
+      [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec_rcv_UTC],
       proc{|pvt|
-        [:week, :seconds, :c_tm].collect{|f| pvt.receiver_time.send(f)}.flatten
+        [:week, :seconds, :utc].collect{|f| pvt.receiver_time.send(f)}.flatten
       }
     ]] + [[
       [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
@@ -53,23 +60,31 @@ class GPS_Receiver
     ]] + [
       [:used_satellites, proc{|pvt| pvt.used_satellites}],
     ] + opt[:system].collect{|sys, range|
-      bit_flip = if range.kind_of?(Array) then
-        proc{|res, i|
+      range = range.kind_of?(Array) ? proc{
+        # check whether inputs can be converted to Range
+        next nil if range.empty?
+        a, b = range.minmax
+        ((b - a) == (range.length - 1)) ? (a..b) : range
+      }.call : range
+      next nil unless range
+      bit_flip, label = case range
+      when Array
+        [proc{|res, i|
           res[i] = "1" if i = range.index(i)
           res
-        }
-      else # expect Range
+        }, range.collect{|pen| pen & 0xFF}.reverse.join('+')]
+      when Range
         base_prn = range.min
-        proc{|res, i|
+        [proc{|res, i|
           res[i - base_prn] = "1" if range.include?(i)
           res
-        }
+        }, [:max, :min].collect{|f| range.send(f) & 0xFF}.join('..')]
       end
-      ["#{sys}_PRN", proc{|pvt|
+      ["#{sys}_PRN(#{label})", proc{|pvt|
         pvt.used_satellite_list.inject("0" * range.size, &bit_flip) \
             .scan(/.{1,8}/).join('_').reverse
       }]
-    } + [[
+    }.compact + [[
       opt[:satellites].collect{|prn, label|
         [:range_residual, :weight, :azimuth, :elevation, :slopeH, :slopeV].collect{|str|
           "#{str}(#{label || prn})"
@@ -79,12 +94,12 @@ class GPS_Receiver
         next ([nil] * 6 * opt[:satellites].size) unless pvt.position_solved?
         sats = pvt.used_satellite_list
         r, w = [:delta_r, :W].collect{|f| pvt.send(f)}
-        opt[:satellites].collect{|i|
-          next ([nil] * 6) unless i2 = sats.index(i)
+        opt[:satellites].collect{|prn, label|
+          next ([nil] * 6) unless i2 = sats.index(prn)
           [r[i2, 0], w[i2, i2]] +
               [:azimuth, :elevation].collect{|f|
-                pvt.send(f)[i] / Math::PI * 180
-              } + [pvt.slopeH[i], pvt.slopeV[i]]
+                pvt.send(f)[prn] / Math::PI * 180
+              } + [pvt.slopeH[prn], pvt.slopeV[prn]]
         }.flatten
       },
     ]] + [[
@@ -112,16 +127,19 @@ class GPS_Receiver
     opt = {
       :satellites => (1..32).to_a,
     }.merge(opt)
+    keys = [:PSEUDORANGE, :RANGE_RATE, :DOPPLER, :FREQUENCY].collect{|k|
+      GPS::Measurement.const_get("L1_#{k}".to_sym)
+    }
     [[
       opt[:satellites].collect{|prn, label|
         [:L1_range, :L1_rate].collect{|str| "#{str}(#{label || prn})"}
       }.flatten,
       proc{|meas|
-        meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
-        opt[:satellites].collect{|prn|
-          [:L1_PSEUDORANGE, [:L1_DOPPLER, GPS::SpaceNode.L1_WaveLength]].collect{|k, sf|
-            meas_hash[[prn, GPS::Measurement.const_get(k)]] * (sf || 1) rescue nil
-          }
+        meas_hash = meas.to_hash
+        opt[:satellites].collect{|prn, label|
+          pr, rate, doppler, freq = keys.collect{|k| meas_hash[prn][k] rescue nil}
+          freq ||= GPS::SpaceNode.L1_Frequency
+          [pr, rate || ((doppler * GPS::SpaceNode::light_speed / freq) rescue nil)]
         }
       }
     ]]
@@ -141,6 +159,14 @@ class GPS_Receiver
       rel_prop
     }
     @debug = {}
+    solver_opts = [:gps_options].collect{|target|
+      @solver.send(target)
+    }
+    solver_opts.each{|opt|
+      # default solver options
+      opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg (use satellite over horizon)
+      opt.residual_mask = 1E4 # 10 km (without residual filter, practically)
+    }
     output_options = {
       :system => [[:GPS, 1..32]],
       :satellites => (1..32).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
@@ -166,6 +192,13 @@ class GPS_Receiver
         when :identical # same as default
           next true
         end
+      when :elevation_mask_deg
+        raise "Unknown elevation mask angle: #{v}" unless elv_deg = (Float(v) rescue nil)
+        $stderr.puts "Elevation mask: #{elv_deg} deg"
+        solver_opts.each{|opt|
+          opt.elevation_mask = elv_deg / 180 * Math::PI # 0 deg (use satellite over horizon)
+        }
+        next true
       when :base_station
         crd, sys = v.split(/ *, */).collect.with_index{|item, i|
           case item
@@ -199,9 +232,9 @@ class GPS_Receiver
           sys, svid = case spec
           when Integer
             [nil, spec]
-          when /([a-zA-Z]+)(?::(-?\d+))?/
-            [$1.upcase.to_sym, (Integre($2) rescue nil)]
-          when /-?\d+/
+          when /^([a-zA-Z]+)(?::(-?\d+))?$/
+            [$1.upcase.to_sym, (Integer($2) rescue nil)]
+          when /^-?\d+$/
             [nil, $&.to_i]
           else
             next false
@@ -212,10 +245,29 @@ class GPS_Receiver
           else
             (k == :with) ? :include : :exclude
           end
-          if (sys == :GPS) || (svid && (1..32).include?(svid)) then
-            [svid || (1..32).to_a].flatten.each{
-              @solver.gps_options.send(mode, svid)
-            }
+          update_output = proc{|sys_target, prns, labels|
+            unless (i = output_options[:system].index{|sys, range| sys == sys_target}) then
+              i = -1
+              output_options[:system] << [sys_target, []]
+            else
+              output_options[:system][i][1].reject!{|prn| prns.include?(prn)}
+            end
+            output_options[:satellites].reject!{|prn, label| prns.include?(prn)}
+            if mode == :include then
+              output_options[:system][i][1] += prns
+              output_options[:system][i][1].sort!
+              output_options[:satellites] += (labels ? prns.zip(labels) : prns)
+              output_options[:satellites].sort!{|a, b| [a].flatten[0] <=> [b].flatten[0]}
+            end
+          }
+          check_sys_svid = proc{|sys_target, range_in_sys, offset|
+            next range_in_sys.include?(svid - (offset || 0)) unless sys # svid is specified without system
+            next false unless sys == sys_target
+            next true unless svid # All satellites in a target system (svid == nil)
+            range_in_sys.include?(svid)
+          }
+          if check_sys_svid.call(:GPS, 1..32) then
+            [svid || (1..32).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
           elsif (sys == :SBAS) || (svid && (120..158).include?(svid)) then
             prns = [svid || (120..158).to_a].flatten
             unless (i = output_options[:system].index{|sys, range| sys == :SBAS}) then
@@ -231,7 +283,7 @@ class GPS_Receiver
             end
             prns.each{|prn| @solver.sbas_options.send(mode, prn)}
           else
-            next false  
+            raise "Unknown satellite: #{spec}"
           end
           $stderr.puts "#{mode.capitalize} satellite: #{[sys, svid].compact.join(':')}"
         }
@@ -240,10 +292,6 @@ class GPS_Receiver
       false
     }
     raise "Unknown receiver options: #{options.inspect}" unless options.empty?
-    proc{|opt|
-      opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg
-      opt.residual_mask = 1E4 # 10 km
-    }.call(@solver.gps_options)
     @output = {
       :pvt => GPS_Receiver::pvt_items(output_options),
       :meas => GPS_Receiver::meas_items(output_options),
@@ -309,15 +357,21 @@ class GPS_Receiver
       [[:@azimuth, az], [:@elevation, el]].each{|k, values|
         self.instance_variable_set(k, Hash[*(sats.zip(values).flatten(1))])
       }
+      mat_S = self.S
       [:@slopeH, :@slopeV] \
-          .zip((self.fd ? self.slope_HV_enu.to_a.transpose : [nil, nil])) \
+          .zip((self.fd ? self.slope_HV_enu(mat_S).to_a.transpose : [nil, nil])) \
           .each{|k, values|
         self.instance_variable_set(k,
             Hash[*(values ? sats.zip(values).flatten(1) : [])])
       }
+      # If a design matrix G has columns larger than 4, 
+      # other states excluding position and time are estimated.
+      @other_state = self.position_solved? \
+          ? (mat_S * self.delta_r.partial(self.used_satellites, 1, 0, 0)).transpose.to_a[0][4..-1] \
+          : []
       instance_variable_get(target)
     }
-    [:azimuth, :elevation, :slopeH, :slopeV].each{|k|
+    [:azimuth, :elevation, :slopeH, :slopeV, :other_state].each{|k|
       eval("define_method(:#{k}){@#{k} || self.post_solution(:@#{k})}")
     }
   }
@@ -369,7 +423,7 @@ class GPS_Receiver
     ubx = UBX::new(open(ubx_fname))  
     ubx_kind = Hash::new(0)
     
-    after_run = b || proc{|pvt| puts pvt.to_s}
+    after_run = b || proc{|pvt| puts pvt.to_s if pvt}
     
     gnss_serial = proc{|svid, sys|
       if sys then # new numbering
@@ -493,7 +547,7 @@ class GPS_Receiver
   end
   
   def parse_rinex_obs(fname, &b)
-    after_run = b || proc{|pvt| puts pvt.to_s}
+    after_run = b || proc{|pvt| puts pvt.to_s if pvt}
     $stderr.print "Reading RINEX observation file (%s)"%[fname]
     types = nil
     count = 0
@@ -539,6 +593,7 @@ end
 
 if __FILE__ == $0 then
   options = []
+  misc_options = {}
 
   # check options and file format
   files = ARGV.collect{|arg|
@@ -548,6 +603,40 @@ if __FILE__ == $0 then
     options << [$1.to_sym, $']
     nil
   }.compact
+
+  options.reject!{|opt|
+    case opt[0]
+    when :start_time, :end_time
+      require 'time'
+      gpst_type = GPS::Time
+      t = nil
+      if opt[1] =~ /^(?:(\d+):)??(\d+(?:\.\d*)?)$/ then
+        t = [$1 && $1.to_i, $2.to_f]
+        t = gpst_type::new(*t) if t[0]
+      elsif t = (Time::parse(opt[1]) rescue nil) then
+        # leap second handling in Ruby Time is system dependent, thus 
+        #t = gpst_type::new(0, t - Time::parse("1980-01-06 00:00:00 +0000"))
+        # is inappropriate.
+        subsec = t.subsec.to_f
+        t = gpst_type::new(t.to_a[0..5].reverse)
+        t += (subsec + gpst_type::guess_leap_seconds(t))
+      else
+        raise "Unknown time format: #{opt[1]}"
+      end
+      case t
+      when gpst_type
+        $stderr.puts(
+            "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02.1f)" \
+              %(t.to_a + t.utc))
+      when Array
+        $stderr.puts("#{opt[0]}: #{t[0] || '(current)'} week #{t[1]}")
+      end
+      misc_options[opt[0]] = t
+      true
+    else
+      false
+    end
+  }
 
   # Check file existence and extension
   files.collect!{|fname, ftype|
@@ -563,7 +652,35 @@ if __FILE__ == $0 then
   }
 
   rcv = GPS_Receiver::new(options)
-  
+
+  proc{
+    run_orig = rcv.method(:run)
+    t_start, t_end = [nil, nil]
+    tasks = []
+    task = proc{|meas, t_meas, *args|
+      t_start, t_end = [:start_time, :end_time].collect{|k|
+        res = misc_options[k]
+        res.kind_of?(Array) \
+            ? GPS::Time::new(t_meas.week, res[1]) \
+            : res
+      }
+      task = tasks.shift
+      task.call(*([meas, t_meas] + args))
+    }
+    tasks << proc{|meas, t_meas, *args|
+      next nil if t_start && (t_start > t_meas)
+      task = tasks.shift
+      task.call(*([meas, t_meas] + args))
+    }
+    tasks << proc{|meas, t_meas, *args|
+      next nil if t_end && (t_end < t_meas)
+      run_orig.call(*([meas, t_meas] + args))
+    }
+    rcv.define_singleton_method(:run){|*args|
+      task.call(*args)
+    }
+  }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
+
   puts rcv.header
 
   # parse RINEX NAV

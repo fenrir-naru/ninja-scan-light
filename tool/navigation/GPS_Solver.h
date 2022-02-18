@@ -180,6 +180,7 @@ class GPS_SinglePositioning : public SolverBaseT {
     }
 
     options_t update_options(const options_t &opt_wish){
+      _options = opt_wish;
       return options_t(base_t::update_options(opt_wish), _options);
     }
 

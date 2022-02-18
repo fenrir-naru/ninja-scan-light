@@ -19,6 +19,12 @@ shared_examples 'Matrix' do
       expect( mat_type::new(*params[:rc]).rows ).to equal(params[:rc][0])
       expect( mat_type::new(*params[:rc]).columns ).to equal(params[:rc][1])
     end
+    it 'declines negative number argument' do
+      [[-1, 1], [1, -1]].each{|sf|
+        r, c = params[:rc].zip(sf).collect{|v1, v2| v1 * v2}
+        expect{ mat_type::new(r, c) }.to raise_error(ArgumentError)
+      }
+    end
     it 'accepts ([[]])' do
       expect{ mat_type::new(compare_with) }.not_to raise_error
       expect( mat_type::new(compare_with).rows ).to equal(params[:rc][0])
@@ -44,9 +50,11 @@ shared_examples 'Matrix' do
       a.define_singleton_method(:[]){|i, j| raise(IndexError) if i != j; 0}
       expect{ mat_type::new(a) }.to raise_error(IndexError)
 
-      a = a_gen.call
-      a.define_singleton_method(:row_size){-1}
-      expect{ mat_type::new(a) }.to raise_error(RuntimeError)
+      [:row_size, :column_size].each{|f|
+        a = a_gen.call
+        a.define_singleton_method(f){-1}
+        expect{ mat_type::new(a) }.to raise_error(RuntimeError)
+      }
     end
     it 'is invoked with I, identity, unit' do
       [:I, :identity, :unit].each{|f|
@@ -132,7 +140,7 @@ shared_examples 'Matrix' do
         expect(mat[:square].sum).to eq(Matrix[*mat[:square].to_a].sum)
         expect(mat[:not_square].sum).to eq(Matrix[*mat[:not_square].to_a].sum)
       end
-      it 'determinat, det' do
+      it 'determinant, det' do
         [:determinant, :det].each{|f|
           #expect(mat[:square].send(f)).to eq(Matrix[*mat[:square].to_a].det)
           expect{mat[:not_square].send(f)}.to raise_error(RuntimeError)
@@ -160,6 +168,15 @@ shared_examples 'Matrix' do
         params[:rc][1].times{|j|
           mat[0][i, j] = compare_with[1][i][j]
           expect(mat[0][i, j]).to eq(compare_with[1][i][j])
+        }
+      }
+    end
+    it 'is inaccessible and unchangeable with negative number arguments' do
+      [[-1, 0], [0, -1]].each{|i, j|
+        [[:[], i, j], [:[]=, i, j, 0]].each{|args|
+          expect{ mat[0].send(*args) }.to raise_error{|err|
+            expect(err).to be_a(RangeError).or be_a(ArgumentError)
+          }
         }
       }
     end
@@ -197,9 +214,19 @@ shared_examples 'Matrix' do
     it 'is swappable with swap_rows! or swap_cloumns!' do
       mat_builtin = Matrix[*compare_with[0]]
       [:swap_rows!, :swap_columns!].each.with_index{|func, i|
-        params[:rc][i].times.to_a.combination(2).to_a{|a, b|
-          mat[0].send(func, a, b)
-          mat_builtin.send(func, a, b)
+        params[:rc][i].times.to_a.combination(2).to_a.each{|a, b|
+          mat_mod = mat[0].send(func, a, b)
+          case func
+          when :swap_rows!
+            idxs = mat_builtin.row_count.times.to_a
+            idxs[a], idxs[b] = [b, a]
+            mat_builtin = Matrix::rows(mat_builtin.row_vectors.values_at(*idxs))
+          when :swap_columns!
+            idxs = mat_builtin.column_count.times.to_a
+            idxs[a], idxs[b] = [b, a]
+            mat_builtin = Matrix::columns(mat_builtin.column_vectors.values_at(*idxs))
+          end
+          expect(mat_mod).to equal(mat[0])
           expect(mat[0].to_a).to eq(mat_builtin.to_a)
         }
       }
@@ -393,6 +420,23 @@ shared_examples 'Matrix' do
         expect(v.abs).to be < params[:acceptable_delta]
       }
       expect{mat[2] / mat[3]}.to raise_error(RuntimeError)
+    end
+    it 'have resize!' do
+      [-1, :sym].each{|arg|
+        [[arg, nil], [nil, arg]].each{|args|
+          expect{mat[0].resize!(*args)}.to raise_error{|err|
+            expect(err).to be_a(TypeError).or be_a(ArgumentError)
+          }
+        }
+      }
+      mat_orig = mat[0].to_a
+      r, c = [:rows, :columns].collect{|f| mat[0].send(f)}
+      expect(mat[0].resize!(r, c).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(r, nil).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(nil, c).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(nil, nil).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(r * 2, c * 2).to_a).to \
+          eq(Matrix::build(r * 2, c * 2){|i, j| (i < r && j < c) ? mat_orig[i][j] : 0}.to_a)
     end
   end
   

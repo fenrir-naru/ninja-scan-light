@@ -221,7 +221,11 @@ __RINEX_OBS_TEXT__
       f.path
     },
   }}
-  let(:solver){GPS::Solver::new}
+  let(:solver){
+    res = GPS::Solver::new
+    res.correction = {:gps_ionospheric => :klobuchar, :gps_tropospheric => :hopfield}
+    res
+  }
   
   describe 'demo' do
     it 'calculates position without any error' do
@@ -249,6 +253,7 @@ __RINEX_OBS_TEXT__
       t_meas = GPS::Time::new(1849, 172413)
       puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %02d:%02d:%02d UTC"%[*t_meas.c_tm]})"
       expect(t_meas.c_tm).to eq([2015, 6, 15, 23, 53, 33])
+      expect(GPS::Time::new(0, t_meas.serialize)).to eq(t_meas)
       
       sn.update_all_ephemeris(t_meas)
       
@@ -337,9 +342,14 @@ __RINEX_OBS_TEXT__
       sn = solver.gps_space_node
       expect(solver.correction[:gps_ionospheric]).to include(:klobuchar)
       expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
-      expect{solver.correction = nil}.to raise_error
+      expect{solver.correction = nil}.to raise_error(RuntimeError)
       expect{solver.correction = {
-        :gps_ionospheric => [:klobuchar, :no_correction],
+        :gps_ionospheric => [proc{|t, usr_pos, sat_pos|
+              expect(t).to be_a_kind_of(GPS::Time)
+              expect(usr_pos).to be_a_kind_of(Coordinate::XYZ) unless usr_pos
+              expect(sat_pos).to be_a_kind_of(Coordinate::ENU) unless sat_pos
+              false
+            }, :klobuchar, :no_correction],
         :options => {:f_10_7 => 10},
       }}.not_to raise_error
       expect(solver.correction[:gps_ionospheric]).to include(:no_correction)
@@ -357,11 +367,13 @@ __RINEX_OBS_TEXT__
         weight = 1
         [weight, range_c, range_r, rate_rel_neg] + los_neg
       }
-      solver.hooks[:update_position_solution] = proc{|*mats|
-        mats.each{|mat|
+      solver.hooks[:update_position_solution] = proc{|mat_G, mat_W, mat_delta_r, temp_pvt|
+        expect(temp_pvt).to be_a_kind_of(GPS::PVT)
+        [mat_G, mat_W, mat_delta_r].each{|mat|
           expect(mat).to be_a_kind_of(SylphideMath::MatrixD)
+          expect(mat.rows).to be >= temp_pvt.used_satellites
+          expect(mat).to respond_to(:resize!)
         }
-        mat_G, mat_W, mat_delta_r = mats
       }
       solver.hooks[:satellite_position] = proc{
         i = 0

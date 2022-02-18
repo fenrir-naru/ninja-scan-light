@@ -103,6 +103,7 @@ struct GPS_Solver_Base {
       L1_RANGE_RATE_SIGMA,
       L1_SIGNAL_STRENGTH_dBHz,
       L1_LOCK_SEC,
+      L1_FREQUENCY,
       MEASUREMENT_ITEMS_PREDEFINED,
     };
   };
@@ -269,6 +270,13 @@ struct GPS_Solver_Base {
     void add(const typename super_t::value_type &v){
       remove(v);
       super_t::push_front(v);
+    }
+    void add(const super_t &values){
+      for(typename super_t::const_reverse_iterator
+            it(values.rbegin()), it_end(values.rend());
+          it != it_end; ++it){
+        add(*it);
+      }
     }
   };
 
@@ -651,14 +659,14 @@ protected:
     // Least square
     matrix_t delta_x(geomat.partial(res.used_satellites).least_square());
 
-    xyz_t delta_user_position(delta_x.partial(3, 1, 0, 0));
+    xyz_t delta_user_position(delta_x.partial(3, 1));
     res.user_position.xyz += delta_user_position;
     res.user_position.llh = res.user_position.xyz.llh();
 
     const float_t &delta_receiver_error(delta_x(3, 0));
     res.receiver_error += delta_receiver_error;
 
-    return ((delta_x.transpose() * delta_x)(0, 0) <= 1E-6); // equivalent to abs(x) <= 1E-3 [m]
+    return (delta_x.partial(4, 1).norm2F() <= 1E-6); // equivalent to abs(x) <= 1E-3 [m]
   }
 
   struct user_pvt_opt_t {
