@@ -112,16 +112,19 @@ class GPS_Receiver
     opt = {
       :satellites => (1..32).to_a,
     }.merge(opt)
+    keys = [:PSEUDORANGE, :RANGE_RATE, :DOPPLER, :FREQUENCY].collect{|k|
+      GPS::Measurement.const_get("L1_#{k}".to_sym)
+    }
     [[
       opt[:satellites].collect{|prn, label|
         [:L1_range, :L1_rate].collect{|str| "#{str}(#{label || prn})"}
       }.flatten,
       proc{|meas|
-        meas_hash = Hash[*(meas.collect{|prn, k, v| [[prn, k], v]}.flatten(1))]
+        meas_hash = meas.to_hash
         opt[:satellites].collect{|prn, label|
-          [:L1_PSEUDORANGE, [:L1_DOPPLER, GPS::SpaceNode.L1_WaveLength]].collect{|k, sf|
-            meas_hash[[prn, GPS::Measurement.const_get(k)]] * (sf || 1) rescue nil
-          }
+          pr, rate, doppler, freq = keys.collect{|k| meas_hash[prn][k] rescue nil}
+          freq ||= GPS::SpaceNode.L1_Frequency
+          [pr, rate || ((doppler * GPS::SpaceNode::light_speed / freq) rescue nil)]
         }
       }
     ]]
