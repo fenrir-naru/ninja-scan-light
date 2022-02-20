@@ -526,6 +526,9 @@ class GPS_SpaceNode {
       return res;
     }
     static const float_t gamma_L1_L2;
+    static const float_t gamma_per_L1(const float_t &freq){
+      return std::pow(L1_Frequency / freq, 2);
+    }
 
   protected:
     static float_t rad2sc(const float_t &rad) {return rad / M_PI;}
