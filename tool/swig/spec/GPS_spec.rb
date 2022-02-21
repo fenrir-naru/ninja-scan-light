@@ -341,7 +341,7 @@ __RINEX_OBS_TEXT__
       sn = solver.gps_space_node
       expect(solver.correction[:gps_ionospheric]).to include(:klobuchar)
       expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
-      expect{solver.correction = nil}.to raise_error
+      expect{solver.correction = nil}.to raise_error(RuntimeError)
       expect{solver.correction = {
         :gps_ionospheric => [:klobuchar, :no_correction],
         :options => {:f_10_7 => 10},
