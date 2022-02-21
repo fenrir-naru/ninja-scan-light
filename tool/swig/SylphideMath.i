@@ -1200,6 +1200,29 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %template(Matrix_Frozen ## suffix ## _pt) Matrix_Frozen<type, Array2D_Dense<type >, MatView_pt>;
 #endif
 
+%extend Matrix<type, Array2D_Dense<type > > {
+#if defined(SWIGRUBY)
+  %bang resize;
+#endif
+  %typemap(in) unsigned int *r_p (unsigned int temp), unsigned int *c_p (unsigned int temp) {
+    if(SWIG_IsOK(SWIG_AsVal(unsigned int)($input, &temp))){$1 = &temp;}
+#if defined(SWIGRUBY)
+    else if(NIL_P($input)){$1 = NULL;}
+#endif
+    else{SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");}
+  }
+  Matrix<type, Array2D_Dense<type > > &resize(
+      const unsigned int *r_p, const unsigned int *c_p){
+    unsigned int r(r_p ? *r_p : $self->rows()), c(c_p ? *c_p : self->columns());
+    Matrix<type, Array2D_Dense<type > > mat_new(r, c);
+    unsigned int r_min(r), c_min(c);
+    if(r_min > $self->rows()){r_min = $self->rows();}
+    if(c_min > $self->columns()){c_min = $self->columns();}
+    mat_new.partial(r_min, c_min).replace($self->partial(r_min, c_min), false);
+    return (*($self) = mat_new);
+  }
+};
+
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
 #if defined(SWIGRUBY)
 %fragment("init"{Matrix<type, Array2D_Dense<type > >}, "init") {

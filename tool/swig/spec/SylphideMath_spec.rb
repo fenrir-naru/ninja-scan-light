@@ -394,6 +394,20 @@ shared_examples 'Matrix' do
       }
       expect{mat[2] / mat[3]}.to raise_error(RuntimeError)
     end
+    it 'have resize!' do
+      [-1, :sym].each{|arg|
+        expect{mat[0].resize!(arg, nil)}.to raise_error(TypeError)
+        expect{mat[0].resize!(nil, arg)}.to raise_error(TypeError)
+      }
+      mat_orig = mat[0].to_a
+      r, c = [:rows, :columns].collect{|f| mat[0].send(f)}
+      expect(mat[0].resize!(r, c).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(r, nil).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(nil, c).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(nil, nil).to_a).to eq(mat_orig)
+      expect(mat[0].resize!(r * 2, c * 2).to_a).to \
+          eq(Matrix::build(r * 2, c * 2){|i, j| (i < r && j < c) ? mat_orig[i][j] : 0}.to_a)
+    end
   end
   
   describe 'decomposition' do
