@@ -881,6 +881,32 @@ struct GPS_SolverOptions
               $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0),
             SWIG_NewPointerObj(&res,
               $descriptor(GPS_User_PVT<FloatT> *), 0)};
+        struct resize_t {
+          static VALUE func(VALUE self, VALUE v_r, VALUE v_c){
+            Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *mat;
+            if(!SWIG_IsOK(SWIG_ConvertPtr(
+                self, (void **)&mat,
+                $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0))){
+              SWIG_exception(SWIG_RuntimeError, "Unexpected callee");
+            }
+            unsigned int r(mat->rows()), c(mat->columns());
+            if(!((NIL_P(v_r) || SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r)))
+                && (NIL_P(v_c) || SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c))) ) ){
+              SWIG_exception(SWIG_TypeError, "expecting type is nil or positive integer");
+            }
+            Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > mat_new(r, c);
+            unsigned int r_min(r), c_min(c);
+            if(r_min > mat->rows()){r_min = mat->rows();}
+            if(c_min > mat->columns()){c_min = mat->columns();}
+            mat_new.partial(r_min, c_min).replace(mat->partial(r_min, c_min), false);
+            *mat = mat_new;
+            return self;
+          }
+        };
+        for(int i(0); i < 3; ++i){
+          rb_define_singleton_method(
+              values[i], "resize!", (VALUE(*)(ANYARGS))resize_t::func, 2);
+        }
         proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values);
       }while(false);
 #endif

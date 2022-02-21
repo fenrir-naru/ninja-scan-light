@@ -366,6 +366,15 @@ __RINEX_OBS_TEXT__
         [mat_G, mat_W, mat_delta_r].each{|mat|
           expect(mat).to be_a_kind_of(SylphideMath::MatrixD)
           expect(mat.rows).to be >= temp_pvt.used_satellites
+          expect(mat).to respond_to(:resize!)
+        }
+        [-1, :sym].each{|arg|
+          expect{mat_G.resize!(arg, nil)}.to raise_error(TypeError)
+        }
+        mat_G_orig = mat_G.to_a
+        [nil, mat_G.rows].each{|arg|
+          expect{mat_G.resize!(arg, nil)}.not_to raise_error
+          expect(mat_G.to_a).to eq(mat_G_orig)
         }
       }
       solver.hooks[:satellite_position] = proc{
