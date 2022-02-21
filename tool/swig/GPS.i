@@ -878,7 +878,9 @@ struct GPS_SolverOptions
             SWIG_NewPointerObj(&geomat_.W,
               $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0),
             SWIG_NewPointerObj(&geomat_.delta_r,
-              $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0)};
+              $descriptor(Matrix<FloatT, Array2D_Dense<FloatT>, MatrixViewBase<> > *), 0),
+            SWIG_NewPointerObj(&res,
+              $descriptor(GPS_User_PVT<FloatT> *), 0)};
         proc_call_throw_if_error(hook, sizeof(values) / sizeof(values[0]), values);
       }while(false);
 #endif

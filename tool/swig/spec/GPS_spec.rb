@@ -361,11 +361,12 @@ __RINEX_OBS_TEXT__
         weight = 1
         [weight, range_c, range_r, rate_rel_neg] + los_neg
       }
-      solver.hooks[:update_position_solution] = proc{|*mats|
-        mats.each{|mat|
+      solver.hooks[:update_position_solution] = proc{|mat_G, mat_W, mat_delta_r, temp_pvt|
+        expect(temp_pvt).to be_a_kind_of(GPS::PVT)
+        [mat_G, mat_W, mat_delta_r].each{|mat|
           expect(mat).to be_a_kind_of(SylphideMath::MatrixD)
+          expect(mat.rows).to be >= temp_pvt.used_satellites
         }
-        mat_G, mat_W, mat_delta_r = mats
       }
       solver.hooks[:satellite_position] = proc{
         i = 0
