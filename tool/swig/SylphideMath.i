@@ -238,6 +238,23 @@ INSTANTIATE_COMPLEX(double, D);
 
 #undef INSTANTIATE_COMPLEX
 
+#if defined(SWIGRUBY)
+/* Work around of miss detection of negative value on Windows Ruby (devkit). 
+ * This results from SWIG_AsVal(unsigned int) depends on SWIG_AsVal(unsigned long), 
+ * and sizeof(long) == sizeof(int).
+ */
+%fragment("check_value"{unsigned int}, "header"){
+  inline bool is_lt_zero_after_asval(const unsigned int &i){
+    return ((sizeof(unsigned int) == sizeof(unsigned long)) && ((UINT_MAX >> 1) <= i));
+  }
+  void raise_if_lt_zero_after_asval(const unsigned int &i){
+    if(is_lt_zero_after_asval(i)){
+      SWIG_exception(SWIG_ValueError, "Expected positive value.");
+    }
+  } 
+}
+#endif
+
 #define DO_NOT_INSTANTIATE_SCALAR_MATRIX
 #define USE_MATRIX_VIEW_FILTER
 
@@ -949,6 +966,7 @@ MAKE_TO_S(Matrix_Frozen)
   }
 #if defined(SWIGRUBY)
   %fragment(SWIG_AsVal_frag(unsigned int));
+  %fragment("check_value"{unsigned int});
   Matrix(const void *replacer){
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
@@ -959,13 +977,10 @@ MAKE_TO_S(Matrix_Frozen)
       MatrixUtil::replace(res, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else if(value && rb_respond_to(*value, id_r) && rb_respond_to(*value, id_c)){
-      /* "unsigned" is remove because SWIG_AsVal(unsigned int)
-       * can not detect less than zero in Windows Ruby devkit.
-       */
-      int r, c; 
+      unsigned int r, c; 
       VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
-      if(!SWIG_IsOK(SWIG_AsVal(int)(v_r, &r)) || (r < 0)
-          || !SWIG_IsOK(SWIG_AsVal(int)(v_c, &c)) || (c < 0)){
+      if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r)) || is_lt_zero_after_asval(r)
+          || !SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c)) || is_lt_zero_after_asval(c)){
         throw std::runtime_error(
             std::string("Unexpected length [")
               .append(inspect_str(v_r)).append(", ")
@@ -1147,6 +1162,8 @@ INSTANTIATE_MATRIX_EIGEN2(type, ctype, Array2D_Dense<type >, MatView_pt);
 #endif
 
 %define INSTANTIATE_MATRIX(type, suffix)
+%typemap(check, fragment="check_value"{unsigned int})
+    const unsigned int & "raise_if_lt_zero_after_asval(*$1);"
 #if !defined(DO_NOT_INSTANTIATE_SCALAR_MATRIX)
 %extend Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> {
   const Matrix_Frozen<type, Array2D_ScaledUnit<type >, MatViewBase> &transpose() const {
@@ -1204,8 +1221,14 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 #if defined(SWIGRUBY)
   %bang resize;
 #endif
-  %typemap(in) unsigned int *r_p (unsigned int temp), unsigned int *c_p (unsigned int temp) {
-    if(SWIG_IsOK(SWIG_AsVal(unsigned int)($input, &temp))){$1 = &temp;}
+  %typemap(in, fragment="check_value"{unsigned int}) 
+      unsigned int *r_p (unsigned int temp), unsigned int *c_p (unsigned int temp) {
+    if(SWIG_IsOK(SWIG_AsVal(unsigned int)($input, &temp))){
+#if defined(SWIGRUBY)
+      raise_if_lt_zero_after_asval(temp);
+#endif
+      $1 = &temp;
+    }
 #if defined(SWIGRUBY)
     else if(NIL_P($input)){$1 = NULL;}
 #endif
@@ -1235,6 +1258,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 }
 %fragment("init"{Matrix<type, Array2D_Dense<type > >});
 #endif
+%typemap(check) const unsigned int &;
 %enddef
 
 INSTANTIATE_MATRIX(double, D);
