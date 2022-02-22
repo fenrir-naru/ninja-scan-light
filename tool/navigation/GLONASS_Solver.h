@@ -38,6 +38,7 @@
 #define __GLONASS_SOLVER_H__
 
 #include "GLONASS.h"
+#include "GPS.h"
 #include "GPS_Solver_Base.h"
 #include "GPS_Solver.h"
 
@@ -279,7 +280,12 @@ class GLONASS_SinglePositioning : public SolverBaseT {
 
       // Ionospheric
       if(range_error.unknown_flag & range_error_t::MASK_IONOSPHERIC){
-        res.range_residual += ionospheric_correction(time_arrival, usr_pos, relative_pos);
+        float_t freq(space_node_t::L1_frequency_base); // ch.0 is fallback
+        super_t::find_value(measurement, measurement_items_t::L1_FREQUENCY, freq);
+        // ionospheric models are assumed to work with GPS L1
+        res.range_residual +=
+            (ionospheric_correction(time_arrival, usr_pos, relative_pos)
+              * GPS_SpaceNode<float_t>::gamma_per_L1(freq));
       }else{
         res.range_residual += range_error.value[range_error_t::IONOSPHERIC];
       }
