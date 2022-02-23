@@ -31,11 +31,12 @@ class GPS_Receiver
         [:week, :seconds, :utc].collect{|f| pvt.receiver_time.send(f)}.flatten
       }
     ]] + [[
-      [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
+      [:receiver_clock_error_meter, :delta_system, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
       proc{|pvt|
-        next [nil] * 7 unless pvt.position_solved?
+        next [nil] * 8 unless pvt.position_solved?
         [
           pvt.receiver_error,
+          pvt.other_state[0],
           pvt.llh.lng / Math::PI * 180,
           pvt.llh.lat / Math::PI * 180,
           pvt.llh.alt,
@@ -729,6 +730,17 @@ if __FILE__ == $0 then
       task.call(*args)
     }
   }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
+
+  rcv.solver.hooks[:update_position_solution] = proc{|mat_G, mat_W, mat_r, tmp_pvt|
+    i_glonass = []
+    i_other = []
+    tmp_pvt.used_satellite_list.each.with_index{|prn, i|
+      ((prn & 0x100 == 0x100) ? i_glonass : i_other) << i
+    }
+    next if (i_glonass.empty? || i_other.empty?)
+    mat_G.resize!(nil, 5)
+    i_glonass.each{|i| mat_G[i, 4] = 1}
+  }
 
   glonass_residuals = {} # => {time => {svid => [residual, other_props]}, ...}
   proc{
