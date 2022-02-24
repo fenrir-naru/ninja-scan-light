@@ -988,13 +988,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           constellation_t calculate_constellation(
               float_t delta_t, const float_t &pseudo_range,
               const constellation_t &xa_t_0, const float_t &t_0_from_t_b) const {
-            delta_t -= pseudo_range / light_speed;
 
             constellation_t res(xa_t_0);
-            { // time integration from t_b to t_arrival
-              float_t t_step_max(delta_t >= 0 ? 60 : -60);
-              int i(std::floor(delta_t / t_step_max));
-              float_t t_step_remain(delta_t - t_step_max * i);
+            { // time integration from t_b to t_transmit
+              float_t delta_t_to_transmit(delta_t - pseudo_range / light_speed);
+              float_t t_step_max(delta_t_to_transmit >= 0 ? 60 : -60);
+              int i(std::floor(delta_t_to_transmit / t_step_max));
+              float_t t_step_remain(delta_t_to_transmit - t_step_max * i);
               float_t delta_t_itg(0); // accumulative time of integration
               for(; i > 0; --i, delta_t_itg += t_step_max){
                 res = nextByRK4(eq_of_motion, delta_t_itg, res, t_step_max);
