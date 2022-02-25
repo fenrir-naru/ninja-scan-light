@@ -144,8 +144,11 @@ class GPS_Receiver
       rel_prop
     }
     @debug = {}
-    [:gps_options].each{|target|
-      opt = @solver.send(target) # default solver options
+    solver_opts = [:gps_options].collect{|target|
+      @solver.send(target)
+    }
+    solver_opts.each{|opt|
+      # default solver options
       opt.elevation_mask = 0.0 / 180 * Math::PI # 0 deg (use satellite over horizon)
       opt.residual_mask = 1E4 # 10 km (without residual filter, practically)
     }
@@ -174,6 +177,13 @@ class GPS_Receiver
         when :identical # same as default
           next true
         end
+      when :elevation_mask_deg
+        raise "Unknown elevation mask angle: #{v}" unless elv_deg = (Float(v) rescue nil)
+        $stderr.puts "Elevation mask: #{elv_deg} deg"
+        solver_opts.each{|opt|
+          opt.elevation_mask = elv_deg / 180 * Math::PI # 0 deg (use satellite over horizon)
+        }
+        next true
       when :base_station
         crd, sys = v.split(/ *, */).collect.with_index{|item, i|
           case item
