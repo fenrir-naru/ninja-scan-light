@@ -230,7 +230,9 @@ class GPS_Receiver
             output_options[:satellites].reject!{|prn, label| prns.include?(prn)}
             if mode == :include then
               output_options[:system][i][1] += prns
+              output_options[:system][i][1].sort!
               output_options[:satellites] += (labels ? prns.zip(labels) : prns)
+              output_options[:satellites].sort!{|a, b| [a].flatten[0] <=> [b].flatten[0]}
             end
           }
           check_sys_svid = proc{|sys_target, range_in_sys, offset|
