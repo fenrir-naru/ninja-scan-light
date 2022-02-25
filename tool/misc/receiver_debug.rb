@@ -327,6 +327,11 @@ class GPS_Receiver
     [:azimuth, :elevation, :slopeH, :slopeV].each{|k|
       eval("define_method(:#{k}){@#{k} || self.post_solution(:@#{k})}")
     }
+    define_method(:other_state){
+      # If a design matrix G has columns larger than 4, 
+      # other states excluding position and time are estimated.
+      (self.G.rows <= 4) ? [] : (self.S * self.delta_r).transpose.to_a[0][4..-1]
+    }
   }
   
   proc{
