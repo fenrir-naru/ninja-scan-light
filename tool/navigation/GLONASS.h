@@ -694,6 +694,18 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
           u8_t F_T_index() const;
 
+          u8_t P1_index() const {
+            if(P1 > 45 * 60){
+              return 3;
+            }else if(P1 > 30 * 60){
+              return 2;
+            }else if(P1 > 0){
+              return 1;
+            }else{
+              return 0;
+            }
+          }
+
           struct raw_t {
             u8_t svid;
 
@@ -789,6 +801,23 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
             static const float_t F_T_table[15]; ///< @see Table 4.4
 
+            static const float_t F_T_value(const u8_t &F_T_){
+              if(F_T_ >= (sizeof(F_T_table) / sizeof(F_T_table[0]))){
+                return -1; // not used
+              }else{
+                return F_T_table[F_T_];
+              }
+            }
+
+            static const uint_t P1_value(const u8_t &P1_){
+              switch(P1_){
+                case 1: return 30 * 60;
+                case 2: return 45 * 60;
+                case 3: return 60 * 60;
+                case 0: default: return 0;
+              }
+            }
+
             operator Ephemeris() const {
               Ephemeris res;
 #define CONVERT(TARGET) \
@@ -808,20 +837,11 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               res.p = p;
               res.N_T = N_T;
 
-              if(F_T >= (sizeof(F_T_table) / sizeof(F_T_table[0]))){
-                res.F_T = -1; // not used
-              }else{
-                res.F_T = F_T_table[F_T];
-              }
+              res.F_T = F_T_value(F_T);
               res.n = n;
               CONVERT(delta_tau_n);
               res.E_n = E_n;
-              switch(P1){
-                case 1: res.P1 = 30 * 60; break;
-                case 2: res.P1 = 45 * 60; break;
-                case 3: res.P1 = 60 * 60; break;
-                case 0: default: res.P1 = 0; break;
-              }
+              res.P1 = P1_value(P1);
               res.P2 = (P2 > 0);
               //res.P3 = (P3 > 0);
               res.P4 = (P4 > 0);
