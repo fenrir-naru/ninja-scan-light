@@ -53,12 +53,13 @@ class GPS_Receiver
     ]] + [
       [:used_satellites, proc{|pvt| pvt.used_satellites}],
     ] + opt[:system].collect{|sys, range|
-      range = proc{
+      range = range.kind_of?(Array) ? proc{
         # check whether inputs can be converted to Range
-        next range unless range.kind_of?(Array)
+        next nil if range.empty?
         a, b = range.minmax
         ((b - a) == (range.length - 1)) ? (a..b) : range
-      }.call
+      }.call : range
+      next nil unless range
       bit_flip, label = case range
       when Array
         [proc{|res, i|
@@ -76,7 +77,7 @@ class GPS_Receiver
         pvt.used_satellite_list.inject("0" * range.size, &bit_flip) \
             .scan(/.{1,8}/).join('_').reverse
       }]
-    } + [[
+    }.compact + [[
       opt[:satellites].collect{|prn, label|
         [:range_residual, :weight, :azimuth, :elevation, :slopeH, :slopeV].collect{|str|
           "#{str}(#{label || prn})"
