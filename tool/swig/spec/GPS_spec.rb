@@ -343,7 +343,12 @@ __RINEX_OBS_TEXT__
       expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
       expect{solver.correction = nil}.to raise_error(RuntimeError)
       expect{solver.correction = {
-        :gps_ionospheric => [:klobuchar, :no_correction],
+        :gps_ionospheric => [proc{|t, usr_pos, sat_pos|
+              expect(t).to be_a_kind_of(GPS::Time)
+              expect(usr_pos).to be_a_kind_of(Coordinate::XYZ) unless usr_pos
+              expect(sat_pos).to be_a_kind_of(Coordinate::ENU) unless sat_pos
+              false
+            }, :klobuchar, :no_correction],
         :options => {:f_10_7 => 10},
       }}.not_to raise_error
       expect(solver.correction[:gps_ionospheric]).to include(:no_correction)
