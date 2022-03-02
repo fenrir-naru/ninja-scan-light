@@ -253,6 +253,7 @@ __RINEX_OBS_TEXT__
       t_meas = GPS::Time::new(1849, 172413)
       puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %02d:%02d:%02d UTC"%[*t_meas.c_tm]})"
       expect(t_meas.c_tm).to eq([2015, 6, 15, 23, 53, 33])
+      expect(t_meas).to equal(t_meas.canonicalize!)
       
       sn.update_all_ephemeris(t_meas)
       
