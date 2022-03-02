@@ -339,10 +339,16 @@ struct GPS_Time {
     return t.operator<=(*this);
   }
   
+  /**
+   * Convert to std::tm struct
+   * @param leap_seconds If offset of GPS time relative to UTC is known,
+   * specify it by using this parameter.
+   * As of Jan. 1st, 2022, +18 seconds are specified.
+   */
   std::tm c_tm(const float_t &leap_seconds = 0) const {
     std::tm t;
     
-    GPS_Time mod_t((*this) + leap_seconds);
+    GPS_Time mod_t((*this) - leap_seconds);
     
     std::div_t min_sec(std::div((int)mod_t.seconds, 60));
     t.tm_sec = min_sec.rem;
