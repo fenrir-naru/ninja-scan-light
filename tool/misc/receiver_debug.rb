@@ -393,7 +393,7 @@ class GPS_Receiver
     ubx = UBX::new(open(ubx_fname))  
     ubx_kind = Hash::new(0)
     
-    after_run = b || proc{|pvt| puts pvt.to_s}
+    after_run = b || proc{|pvt| puts pvt.to_s if pvt}
     
     gnss_serial = proc{|svid, sys|
       if sys then # new numbering
@@ -516,7 +516,7 @@ class GPS_Receiver
   end
   
   def parse_rinex_obs(fname, &b)
-    after_run = b || proc{|pvt| puts pvt.to_s}
+    after_run = b || proc{|pvt| puts pvt.to_s if pvt}
     $stderr.print "Reading RINEX observation file (%s)"%[fname]
     types = nil
     count = 0
@@ -562,6 +562,7 @@ end
 
 if __FILE__ == $0 then
   options = []
+  misc_options = {}
 
   # check options and file format
   files = ARGV.collect{|arg|
@@ -571,6 +572,33 @@ if __FILE__ == $0 then
     options << [$1.to_sym, $']
     nil
   }.compact
+
+  options.reject!{|opt|
+    case opt[0]
+    when :start_time, :end_time
+      require 'time'
+      t = nil
+      if opt[1] =~ /^(?:(\d+):)??(\d+(?:\.\d*)?)$/ then
+        t = [$1 && $1.to_i, $2.to_f]
+      elsif t = (Time::parse(opt[1]) rescue nil) then
+        t = [0, t - Time::parse("1980-01-06 00:00:00 +0000")]
+      else
+        raise "Unknown time format: #{opt[1]}"
+      end
+      if t[0] then
+        t = GPS::Time::new(*t).canonicalize!
+        $stderr.puts(
+            "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02d)" \
+              %(t.to_a + t.c_tm))
+      else
+        $stderr.puts("#{opt[0]}: (current) week %f"%[t[1]])
+      end
+      misc_options[opt[0]] = t
+      true
+    else
+      false
+    end
+  }
 
   # Check file existence and extension
   files.collect!{|fname, ftype|
@@ -586,7 +614,35 @@ if __FILE__ == $0 then
   }
 
   rcv = GPS_Receiver::new(options)
-  
+
+  proc{
+    run_orig = rcv.method(:run)
+    t_start, t_end = [nil, nil]
+    tasks = []
+    tasks << proc{|meas, t_meas, *args|
+      t_start, t_end = [:start_time, :end_time].collect{|k|
+        res = misc_options[k]
+        res.kind_of?(Array) \
+            ? GPS::Time::new(t_meas.week, res[1]).canonicalize! \
+            : res
+      }
+      tasks.shift
+      tasks.first.call(*([meas, t_meas] + args))
+    }
+    tasks << proc{|meas, t_meas, *args|
+      next nil if t_start && (t_start > t_meas)
+      tasks.shift
+      tasks.first.call(*([meas, t_meas] + args))
+    }
+    tasks << proc{|meas, t_meas, *args|
+      next nil if t_end && (t_end < t_meas)
+      run_orig.call(*([meas, t_meas] + args))
+    }
+    rcv.define_singleton_method(:run){|*args|
+      tasks.first.call(*args)
+    }
+  }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
+
   puts rcv.header
 
   # parse RINEX NAV
