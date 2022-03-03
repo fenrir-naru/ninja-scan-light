@@ -214,9 +214,19 @@ shared_examples 'Matrix' do
     it 'is swappable with swap_rows! or swap_cloumns!' do
       mat_builtin = Matrix[*compare_with[0]]
       [:swap_rows!, :swap_columns!].each.with_index{|func, i|
-        params[:rc][i].times.to_a.combination(2).to_a{|a, b|
-          mat[0].send(func, a, b)
-          mat_builtin.send(func, a, b)
+        params[:rc][i].times.to_a.combination(2).to_a.each{|a, b|
+          mat_mod = mat[0].send(func, a, b)
+          case func
+          when :swap_rows!
+            idxs = mat_builtin.row_count.times.to_a
+            idxs[a], idxs[b] = [b, a]
+            mat_builtin = Matrix::rows(mat_builtin.row_vectors.values_at(*idxs))
+          when :swap_columns!
+            idxs = mat_builtin.column_count.times.to_a
+            idxs[a], idxs[b] = [b, a]
+            mat_builtin = Matrix::columns(mat_builtin.column_vectors.values_at(*idxs))
+          end
+          expect(mat_mod).to equal(mat[0])
           expect(mat[0].to_a).to eq(mat_builtin.to_a)
         }
       }
