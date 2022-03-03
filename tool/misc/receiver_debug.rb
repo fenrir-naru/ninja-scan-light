@@ -13,6 +13,13 @@ Debug GPS receiver with Ruby via SWIG interface
 require 'GPS.so'
 
 class GPS_Receiver
+
+  GPS::Time.define_method(:utc){
+    res = c_tm(GPS::Time::guess_leap_seconds(self))
+    res[-1] += (seconds % 1)
+    res
+  }
+
   def self.pvt_items(opt = {})
     opt = {
       :system => [[:GPS, 1..32]],
@@ -21,7 +28,7 @@ class GPS_Receiver
     [[
       [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec],
       proc{|pvt|
-        [:week, :seconds, :c_tm].collect{|f| pvt.receiver_time.send(f)}.flatten
+        [:week, :seconds, :utc].collect{|f| pvt.receiver_time.send(f)}.flatten
       }
     ]] + [[
       [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
@@ -588,8 +595,8 @@ if __FILE__ == $0 then
       if t[0] then
         t = GPS::Time::new(*t)
         $stderr.puts(
-            "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02d)" \
-              %(t.to_a + t.c_tm))
+            "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02.1f)" \
+              %(t.to_a + t.utc))
       else
         $stderr.puts("#{opt[0]}: (current) week %f"%[t[1]])
       end
