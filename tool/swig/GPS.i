@@ -149,14 +149,13 @@ static std::string inspect_str(const VALUE &v){
   %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const std::tm & {
     $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
   }
-  %bang canonicalize;
 #endif
-  %typemap(in, numinputs=0) GPS_Time<FloatT> *self_p "";
-  %typemap(argout) GPS_Time<FloatT> *self_p "$result = self;";
-  void canonicalize(GPS_Time<FloatT> *self_p) {
-    self->canonicalize();
-  }
   %ignore canonicalize();
+  %ignore GPS_Time(const int &_week, const float_t &_seconds);
+  %typemap(in, numinputs=0) void *dummy "";
+  GPS_Time(const int &week_, const float_t &seconds_, void *dummy){
+    return &((new GPS_Time<FloatT>(week_, seconds_))->canonicalize());
+  }
   %apply int *OUTPUT { int *week };
   %apply FloatT *OUTPUT { FloatT *seconds };
   void to_a(int *week, FloatT *seconds) const {

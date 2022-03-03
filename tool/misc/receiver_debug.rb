@@ -586,7 +586,7 @@ if __FILE__ == $0 then
         raise "Unknown time format: #{opt[1]}"
       end
       if t[0] then
-        t = GPS::Time::new(*t).canonicalize!
+        t = GPS::Time::new(*t)
         $stderr.puts(
             "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02d)" \
               %(t.to_a + t.c_tm))
@@ -623,7 +623,7 @@ if __FILE__ == $0 then
       t_start, t_end = [:start_time, :end_time].collect{|k|
         res = misc_options[k]
         res.kind_of?(Array) \
-            ? GPS::Time::new(t_meas.week, res[1]).canonicalize! \
+            ? GPS::Time::new(t_meas.week, res[1]) \
             : res
       }
       tasks.shift
