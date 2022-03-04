@@ -26,7 +26,7 @@ class GPS_Receiver
       :satellites => (1..32).to_a,
     }.merge(opt)
     [[
-      [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec],
+      [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec_rcv_UTC],
       proc{|pvt|
         [:week, :seconds, :utc].collect{|f| pvt.receiver_time.send(f)}.flatten
       }
@@ -587,18 +587,24 @@ if __FILE__ == $0 then
       t = nil
       if opt[1] =~ /^(?:(\d+):)??(\d+(?:\.\d*)?)$/ then
         t = [$1 && $1.to_i, $2.to_f]
+        t = GPS::Time::new(*t) if t[0]
       elsif t = (Time::parse(opt[1]) rescue nil) then
-        t = [0, t - Time::parse("1980-01-06 00:00:00 +0000")]
+        # leap second handling in Ruby Time is system dependent, thus 
+        #t = GPS::Time::new(0, t - Time::parse("1980-01-06 00:00:00 +0000"))
+        # is inappropriate.
+        subsec = t.subsec.to_f
+        t = GPS::Time::new(t.to_a[0..5].reverse)
+        t += (subsec + GPS::Time::guess_leap_seconds(t))
       else
         raise "Unknown time format: #{opt[1]}"
       end
-      if t[0] then
-        t = GPS::Time::new(*t)
+      case t
+      when GPS::Time
         $stderr.puts(
             "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02.1f)" \
               %(t.to_a + t.utc))
-      else
-        $stderr.puts("#{opt[0]}: (current) week %f"%[t[1]])
+      when Array
+        $stderr.puts("#{opt[0]}: #{t[0] || '(current)'} week #{t[1]}")
       end
       misc_options[opt[0]] = t
       true
@@ -626,27 +632,27 @@ if __FILE__ == $0 then
     run_orig = rcv.method(:run)
     t_start, t_end = [nil, nil]
     tasks = []
-    tasks << proc{|meas, t_meas, *args|
+    task = proc{|meas, t_meas, *args|
       t_start, t_end = [:start_time, :end_time].collect{|k|
         res = misc_options[k]
         res.kind_of?(Array) \
             ? GPS::Time::new(t_meas.week, res[1]) \
             : res
       }
-      tasks.shift
-      tasks.first.call(*([meas, t_meas] + args))
+      task = tasks.shift
+      task.call(*([meas, t_meas] + args))
     }
     tasks << proc{|meas, t_meas, *args|
       next nil if t_start && (t_start > t_meas)
-      tasks.shift
-      tasks.first.call(*([meas, t_meas] + args))
+      task = tasks.shift
+      task.call(*([meas, t_meas] + args))
     }
     tasks << proc{|meas, t_meas, *args|
       next nil if t_end && (t_end < t_meas)
       run_orig.call(*([meas, t_meas] + args))
     }
     rcv.define_singleton_method(:run){|*args|
-      tasks.first.call(*args)
+      task.call(*args)
     }
   }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
 
