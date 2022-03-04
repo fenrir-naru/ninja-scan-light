@@ -14,7 +14,7 @@ require 'GPS.so'
 
 class GPS_Receiver
 
-  GPS::Time.define_method(:utc){
+  GPS::Time.send(:define_method, :utc){ # send as work around of old Ruby
     res = c_tm(GPS::Time::guess_leap_seconds(self))
     res[-1] += (seconds % 1)
     res
@@ -584,22 +584,23 @@ if __FILE__ == $0 then
     case opt[0]
     when :start_time, :end_time
       require 'time'
+      gpst_type = GPS::Time
       t = nil
       if opt[1] =~ /^(?:(\d+):)??(\d+(?:\.\d*)?)$/ then
         t = [$1 && $1.to_i, $2.to_f]
-        t = GPS::Time::new(*t) if t[0]
+        t = gpst_type::new(*t) if t[0]
       elsif t = (Time::parse(opt[1]) rescue nil) then
         # leap second handling in Ruby Time is system dependent, thus 
-        #t = GPS::Time::new(0, t - Time::parse("1980-01-06 00:00:00 +0000"))
+        #t = gpst_type::new(0, t - Time::parse("1980-01-06 00:00:00 +0000"))
         # is inappropriate.
         subsec = t.subsec.to_f
-        t = GPS::Time::new(t.to_a[0..5].reverse)
-        t += (subsec + GPS::Time::guess_leap_seconds(t))
+        t = gpst_type::new(t.to_a[0..5].reverse)
+        t += (subsec + gpst_type::guess_leap_seconds(t))
       else
         raise "Unknown time format: #{opt[1]}"
       end
       case t
-      when GPS::Time
+      when gpst_type
         $stderr.puts(
             "#{opt[0]}: %d week %f (a.k.a %04d/%02d/%02d %02d:%02d:%02.1f)" \
               %(t.to_a + t.utc))
