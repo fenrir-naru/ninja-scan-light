@@ -523,8 +523,9 @@ struct GPS_User_PVT
   Matrix<FloatT, Array2D_Dense<FloatT> > G_enu() const {
     return proxy_t::linear_solver_t::rotate_G(base_t::G, base_t::user_position.ecef2enu());
   }
-  typename proxy_t::linear_solver_t linear_solver() const {
-    return typename proxy_t::linear_solver_t(base_t::G, base_t::W, base_t::delta_r);
+  typename proxy_t::linear_solver_t::partial_t linear_solver() const {
+    return typename proxy_t::linear_solver_t(base_t::G, base_t::W, base_t::delta_r)
+        .partial(used_satellites());
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > C() const {
     return linear_solver().C();

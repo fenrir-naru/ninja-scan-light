@@ -357,7 +357,8 @@ class GPS_Receiver
     define_method(:other_state){
       # If a design matrix G has columns larger than 4, 
       # other states excluding position and time are estimated.
-      (self.G.rows <= 4) ? [] : (self.S * self.delta_r).transpose.to_a[0][4..-1]
+      next [] unless self.position_solved?
+      (self.S * self.delta_r.partial(self.used_satellites, 1, 0, 0)).transpose.to_a[0][4..-1]
     }
   }
   
