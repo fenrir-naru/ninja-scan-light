@@ -538,14 +538,26 @@ struct GPS_User_PVT
     linear_solver().least_square(res);
     return res;
   }
+  Matrix<FloatT, Array2D_Dense<FloatT> > S_enu(
+      const Matrix<FloatT, Array2D_Dense<FloatT> > &s) const {
+    return proxy_t::linear_solver_t::rotate_S(s, base_t::user_position.ecef2enu());
+  }
   Matrix<FloatT, Array2D_Dense<FloatT> > S_enu() const {
-    return proxy_t::linear_solver_t::rotate_S(S(), base_t::user_position.ecef2enu());
+    return S_enu(S());
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > slope_HV(
+      const Matrix<FloatT, Array2D_Dense<FloatT> > &s) const {
+    return linear_solver().slope_HV(s);
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > slope_HV() const {
-    return linear_solver().slope_HV(S());
+    return slope_HV(S());
+  }
+  Matrix<FloatT, Array2D_Dense<FloatT> > slope_HV_enu(
+      const Matrix<FloatT, Array2D_Dense<FloatT> > &s) const {
+    return linear_solver().slope_HV(s, base_t::user_position.ecef2enu());
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > slope_HV_enu() const {
-    return linear_solver().slope_HV(S(), base_t::user_position.ecef2enu());
+    return slope_HV_enu(S());
   }
   
   void fd(const typename base_t::detection_t **out) const {*out = &(base_t::FD);}

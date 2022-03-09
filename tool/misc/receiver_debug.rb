@@ -343,22 +343,22 @@ class GPS_Receiver
       [[:@azimuth, az], [:@elevation, el]].each{|k, values|
         self.instance_variable_set(k, Hash[*(sats.zip(values).flatten(1))])
       }
+      mat_S = self.S
       [:@slopeH, :@slopeV] \
-          .zip((self.fd ? self.slope_HV_enu.to_a.transpose : [nil, nil])) \
+          .zip((self.fd ? self.slope_HV_enu(mat_S).to_a.transpose : [nil, nil])) \
           .each{|k, values|
         self.instance_variable_set(k,
             Hash[*(values ? sats.zip(values).flatten(1) : [])])
       }
-      instance_variable_get(target)
-    }
-    [:azimuth, :elevation, :slopeH, :slopeV].each{|k|
-      eval("define_method(:#{k}){@#{k} || self.post_solution(:@#{k})}")
-    }
-    define_method(:other_state){
       # If a design matrix G has columns larger than 4, 
       # other states excluding position and time are estimated.
-      next [] unless self.position_solved?
-      (self.S * self.delta_r.partial(self.used_satellites, 1, 0, 0)).transpose.to_a[0][4..-1]
+      @other_state = self.position_solved? \
+          ? (mat_S * self.delta_r.partial(self.used_satellites, 1, 0, 0)).transpose.to_a[0][4..-1] \
+          : []
+      instance_variable_get(target)
+    }
+    [:azimuth, :elevation, :slopeH, :slopeV, :other_state].each{|k|
+      eval("define_method(:#{k}){@#{k} || self.post_solution(:@#{k})}")
     }
   }
   
