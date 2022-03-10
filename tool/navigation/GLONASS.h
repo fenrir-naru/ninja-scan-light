@@ -1219,7 +1219,7 @@ const typename GLONASS_SpaceNode<FloatT>::int_t GLONASS_SpaceNode<FloatT>::TimeP
 template <class FloatT>
 const typename GLONASS_SpaceNode<FloatT>::float_t GLONASS_SpaceNode<FloatT>::TimeProperties::raw_t::sf[] = {
   POWER_2(-31), // tau_c [s]
-  POWER_2(-30) * 60 * 60 * 24, // tau_GPS [day] => [s]
+  POWER_2(-30) /* * 60 * 60 * 24*/, // tau_GPS [s], unit is described as [day] in ICD, however, it may be wrong.
 };
 
 template <class FloatT>
