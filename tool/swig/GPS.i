@@ -1309,6 +1309,8 @@ struct GPS_Solver
 #ifdef SWIGRUBY
     hooks = rb_hash_new();
 #endif
+    glonass.solver.ionospheric_correction.add(gps.solver.ionospheric_correction);
+    glonass.solver.tropospheric_correction.add(gps.solver.tropospheric_correction);
   }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
