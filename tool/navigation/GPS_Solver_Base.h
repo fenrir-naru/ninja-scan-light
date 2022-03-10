@@ -271,6 +271,13 @@ struct GPS_Solver_Base {
       remove(v);
       super_t::push_front(v);
     }
+    void add(const super_t &values){
+      for(typename super_t::const_reverse_iterator
+            it(values.rbegin()), it_end(values.rend());
+          it != it_end; ++it){
+        add(*it);
+      }
+    }
   };
 
   /**
