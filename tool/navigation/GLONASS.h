@@ -441,6 +441,17 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             }
             operator typename GPS_SpaceNode<float_t>::SatelliteProperties
                 ::constellation_t() const {
+#if 1
+              // @see https://gssc.esa.int/navipedia/index.php/Reference_Frames_in_GNSS
+              // PZ90.11 -> WGS84 (starting from 3:00 pm on December 31, 2013)
+              typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t res = {
+                typename GPS_SpaceNode<float_t>::xyz_t(
+                    position[0] + 0.003, position[1] + 0.001, position[2] + 0.001),
+                typename GPS_SpaceNode<float_t>::xyz_t(
+                    velocity[0], velocity[1], velocity[2]),
+              };
+              return res;
+#else
               // @see https://www.gsi.go.jp/common/000070971.pdf
               // @see (originally) Federal Air Navigation Authority (FANA), Aeronautical Information Circular
               // of the Russian Federation, 12 February 2009, Russia.
@@ -452,6 +463,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                     velocity[0], velocity[1], velocity[2]),
               };
               return res;
+#endif
             }
           };
 
