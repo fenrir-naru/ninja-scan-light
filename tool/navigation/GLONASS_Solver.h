@@ -248,11 +248,10 @@ class GLONASS_SinglePositioning : public SolverBaseT {
       satellite_t sat(select_satellite(prn, time_arrival));
       if(!sat.is_available()){return res;} // If satellite is unavailable, return with weight = 0
 
-      ///< The following procedure is based on Appendix.S with modification
-
       range -= receiver_error;
 
-      // Clock correction will be performed in the following constellation()
+      // Clock correction, which will be considered in the next constellation()
+      // as extra transmission time by using extra psuedo range.
       if(range_error.unknown_flag & range_error_t::SATELLITE_CLOCK){
         range += (sat.clock_error(time_arrival, range) * space_node_t::light_speed);
       }else{

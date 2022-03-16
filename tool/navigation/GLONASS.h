@@ -405,10 +405,10 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             constellation_t operator/(const float_t &sf) const { // for RK4
               return operator*(((float_t)1)/sf);
             }
-            // TODO constant definitions should be moved to PZ-90.02
+            // TODO constant definitions should be moved to PZ-90(.02, .11)
             static const float_t omega_E;
             constellation_t abs_corrdinate(const float_t &sidereal_time_in_rad){
-              // @see Appendix.A PZ-90.02 to O-X0Y0Z0
+              // @see Appendix.A PZ-90 to O-X0Y0Z0
               float_t crad(std::cos(sidereal_time_in_rad)), srad(std::sin(sidereal_time_in_rad));
               float_t
                   x0(position[0] * crad - position[1] * srad),
@@ -424,7 +424,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               return res;
             }
             constellation_t rel_corrdinate(const float_t &sidereal_time_in_rad){
-              // @see Appendix.A O-X0Y0Z0 to PZ-90.02
+              // @see Appendix.A O-X0Y0Z0 to PZ-90
               float_t crad(std::cos(sidereal_time_in_rad)), srad(std::sin(sidereal_time_in_rad));
               float_t
                   x( position[0] * crad + position[1] * srad),
@@ -927,10 +927,12 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         /**
          *
          * Relationship of time systems
-         * 1) t_UTC = t_GL + tau_c - 3hr (polarity of tau_c is not defined in ICD!)
-         * 2) t_GPS = t_GL + delta_T + tau_GPS (defined in ICD)
-         * 3) t_n(t_b) = t_GL(t_b) - tau_n (@(t_UTC + 3hr) = t_b, defined in ICD)
-         * 4) t_n = t_GL - tau_n + gamma_n * (t_GL - t_b) (not explicitly defined in ICD, but in RINEX spec.)
+         * 1) t_GL = t_UTC + 3hr (defined in ICD 3.3.3 GLONASS Time)
+         * 2) t_UTC + 3hr = t_rcv + tau_c + tau_n - gamma_n * (t_rcv - t_b) (defined in ICD 3.3.3 GLONASS Time, also in RINEX spec.)
+         *   where tau_c: system wise, (-tau_c = GLUT in RINEX)
+         *     ta_n, gamm_n: per satellite
+         *     t_b along to UTC + 3hr (a.k.a, t_GL)
+         * 3) t_GPS - t_GL = delta_T + tau_GPS (defined in ICD 4.5 Non-immediate info.)
          */
         struct Ephemeris_with_Time : public Ephemeris, TimeProperties {
           typedef typename Ephemeris::constellation_t constellation_t;
@@ -984,15 +986,15 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           }
           float_t calculate_clock_error(float_t delta_t, const float_t &pseudo_range = 0) const {
             delta_t -= pseudo_range / light_speed;
-            return -Ephemeris::tau_n + Ephemeris::gamma_n * delta_t;
+            return -TimeProperties::tau_c - Ephemeris::tau_n + Ephemeris::gamma_n * delta_t;
           }
           /**
-           * @param t_arrival_glonass signal arrival time in GLONASS time scale (t_GL = t_UTC + 3 hr + tau_c).
+           * @param t_arrival_onboard signal arrival time in onboard time scale,
+           * which is along to glonass time scale (UTC + 3 hr) but is shifted in gradually changing length.
            */
           float_t clock_error(
-              const float_t &t_arrival_glonass, const float_t &pseudo_range = 0) const {
-            return calculate_clock_error(
-                t_arrival_glonass + TimeProperties::tau_c - Ephemeris::t_b, pseudo_range); // measure in UTC + 3hr scale
+              const float_t &t_arrival_onboard, const float_t &pseudo_range = 0) const {
+            return calculate_clock_error(t_arrival_onboard - Ephemeris::t_b, pseudo_range);
           }
           /**
            * Calculate constellation(t) based on constellation(t_0).
@@ -1036,12 +1038,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return calculate_constellation(delta_t, pseudo_range, xa_t_b, float_t(0));
           }
           /**
-           * @param t_arrival_glonass signal arrival time in GLONASS time scale (t_GL = t_UTC + 3 hr + tau_c).
+           * @param t_arrival_glonass signal arrival time in glonass time scale,
+           * which is the corrected onboard time by removing clock error.
            */
           constellation_t constellation(
               const float_t &t_arrival_glonass, const float_t &pseudo_range = 0) const {
             return calculate_constellation(
-                t_arrival_glonass + TimeProperties::tau_c - Ephemeris::t_b, pseudo_range); // measure in UTC + 3hr scale
+                t_arrival_glonass - Ephemeris::t_b, pseudo_range); // measure in UTC + 3hr scale
           }
         };
 
@@ -1057,10 +1060,9 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
            */
           Ephemeris_with_GPS_Time(const Ephemeris_with_Time &eph, const int_t &deltaT = 0)
               : Ephemeris_with_Time(eph),
-              t_b_gps((GPS_Time<float_t>(eph.c_tm_utc()) // in UTC scale
-                + (-Ephemeris_with_Time::tau_c // in Moscow Time scale
-                  + Ephemeris_with_Time::tau_GPS // in (GPS - delta_T) scale (delta_T is integer)
-                  + deltaT))) {
+              t_b_gps(GPS_Time<float_t>(eph.c_tm_utc()) // in UTC scale
+                  + Ephemeris_with_Time::tau_GPS // in (GPS - delta_T) scale (delta_T is integer), -tau_GPS = GLGP in RINEX
+                  + deltaT) {
           }
           GPS_Time<float_t> base_time() const {
             return t_b_gps;
@@ -1070,13 +1072,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           }
           using Ephemeris_with_Time::clock_error;
           float_t clock_error(
-              const GPS_Time<float_t> &t_arrival, const float_t &pseudo_range = 0) const {
-            return Ephemeris_with_Time::calculate_clock_error(t_arrival - t_b_gps, pseudo_range);
+              const GPS_Time<float_t> &t_arrival_onboard, const float_t &pseudo_range = 0) const {
+            return Ephemeris_with_Time::calculate_clock_error(t_arrival_onboard - t_b_gps, pseudo_range);
           }
           using Ephemeris_with_Time::constellation;
           typename Ephemeris_with_Time::constellation_t constellation(
-              const GPS_Time<float_t> &t_arrival, const float_t &pseudo_range = 0) const {
-            return this->calculate_constellation(t_arrival - t_b_gps, pseudo_range);
+              const GPS_Time<float_t> &t_arrival_gps, const float_t &pseudo_range = 0) const {
+            return this->calculate_constellation(t_arrival_gps - t_b_gps, pseudo_range);
           }
         };
     };
