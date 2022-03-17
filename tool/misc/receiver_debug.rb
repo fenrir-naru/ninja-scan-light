@@ -567,6 +567,7 @@ class GPS_Receiver
         sys, prn = k
         case sys
         when 'G', ' '
+        when 'S'; prn += 100
         when 'J'; prn += 192
         else; next
         end
