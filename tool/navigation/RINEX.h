@@ -1815,7 +1815,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
 
     struct space_node_list_t {
       const space_node_t *gps;
-      GLONASS_SpaceNode<FloatT> *glonass;
+      const GLONASS_SpaceNode<FloatT> *glonass;
     };
     int write_all(
         const space_node_list_t &space_nodes,
