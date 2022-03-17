@@ -31,12 +31,11 @@ class GPS_Receiver
         [:week, :seconds, :utc].collect{|f| pvt.receiver_time.send(f)}.flatten
       }
     ]] + [[
-      [:receiver_clock_error_meter, :delta_system, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
+      [:receiver_clock_error_meter, :longitude, :latitude, :height, :rel_E, :rel_N, :rel_U],
       proc{|pvt|
-        next [nil] * 8 unless pvt.position_solved?
+        next [nil] * 7 unless pvt.position_solved?
         [
           pvt.receiver_error,
-          pvt.other_state[0],
           pvt.llh.lng / Math::PI * 180,
           pvt.llh.lat / Math::PI * 180,
           pvt.llh.alt,
@@ -274,7 +273,6 @@ class GPS_Receiver
             labels = prns.collect{|prn| "GLONASS:#{prn & 0xFF}"}
             update_output.call(:GLONASS, prns, labels)
             prns.each{|prn| @solver.glonass_options.send(mode, prn & 0xFF)}
-            #$stderr.puts @solver.glonass_options.excluded.inspect
           else
             raise "Unknown satellite: #{spec}"
           end
@@ -731,57 +729,6 @@ if __FILE__ == $0 then
     }
   }.call if [:start_time, :end_time].any?{|k| misc_options[k]}
 
-  rcv.solver.hooks[:update_position_solution] = proc{|mat_G, mat_W, mat_r, tmp_pvt|
-    i_glonass = []
-    i_other = []
-    tmp_pvt.used_satellite_list.each.with_index{|prn, i|
-      ((prn & 0x100 == 0x100) ? i_glonass : i_other) << i
-    }
-    next if (i_glonass.empty? || i_other.empty?)
-    mat_G.resize!(nil, 5)
-    i_glonass.each{|i| mat_G[i, 4] = 1}
-  }
-
-  glonass_residuals = {} # => {time => {svid => [residual, other_props]}, ...}
-  proc{
-    orig_hook = rcv.solver.hooks[:relative_property]
-    rcv.solver.hooks[:relative_property] = proc{|prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel|
-      rel_prop = orig_hook.call(prn, rel_prop, meas, rcv_e, t_arv, usr_pos, usr_vel) if orig_hook
-      weight, range_c, range_r, rate_rel_neg, *los_neg = rel_prop # relative property
-
-      while (prn & 0x100) == 0x100 # GLONASS
-        svid = prn - 0x100
-        eph = rcv.solver.glonass_space_node.ephemeris(svid)
-        break if (eph.base_time - t_arv).abs >= 60 * 60 * 2
-        break unless range = meas[GPS::Measurement::L1_PSEUDORANGE]
-        range -= rcv_e
-        clk_error = eph.clock_error(t_arv, range) * GPS::SpaceNode::light_speed
-        range += clk_error
-        sat_pos = eph.constellation(t_arv, range)[0]
-        rel_pos = sat_pos - usr_pos
-        rel_pos_enu = Coordinate::ENU::relative_rel(rel_pos, usr_pos)
-        range -= rel_pos.dist
-        sn = rcv.solver.gps_space_node
-        # GPS ICD 20.3.3.3.3.2 L1 - L2 Correction.
-        gamma = GPS::SpaceNode.gamma_per_L1(eph.frequency_L1)
-        iono = gamma * sn.iono_correction(rel_pos_enu, usr_pos.llh, t_arv)
-        tropo = GPS::SpaceNode::tropo_correction(sat_pos, usr_pos)
-        residual = range + iono + tropo
-        el, az = [:elevation, :azimuth].collect{|f| rel_pos_enu.send(f) / Math::PI * 180}
-
-        t_arv = [t_arv.week, t_arv.seconds.round(1)] # week, ms
-        glonass_residuals[t_arv] ||= {}
-        if (!glonass_residuals[t_arv][svid]) \
-            || (glonass_residuals[t_arv][svid][2].abs > residual.abs) then
-          glonass_residuals[t_arv][svid] = [weight, range_r, residual, el, az, clk_error, iono, tropo]
-        end
-        break
-      end
-
-      [weight, range_c, range_r, rate_rel_neg] + los_neg # must return relative property
-    }
-  }.call
-
   puts rcv.header
 
   # parse RINEX NAV, SP3, or ANTEX
@@ -799,20 +746,5 @@ if __FILE__ == $0 then
     when :ubx; rcv.parse_ubx(fname)
     when :rinex_obs; rcv.parse_rinex_obs(fname)
     end
-  }
-  
-  open("glonass.csv", 'w'){|io|
-    io.puts(([:week, :seconds_in_week, 
-        :year, :month, :day, :hour, :min, :seconds] + (1..24).collect{|svid|
-      [:weight_orig, :residual_orig, :residual, :el, :az, :clk_error, :iono, :tropo].collect{|k|
-        "#{k}(%d)"%[svid]
-      }
-    }).flatten.join(','))
-    glonass_residuals.to_a.sort{|a, b| a[0] <=> b[0]}.each{|t, sv_props|
-      t = GPS::Time::new(*t[0..1])
-      io.puts(([t.week, "%.3f"%[t.seconds]] + t.c_tm.to_a + (1..24).collect{|svid|
-        sv_props[svid] || ([nil] * 8)
-      }).flatten.join(','))
-    }
   }
 end
