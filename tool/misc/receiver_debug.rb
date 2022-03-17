@@ -479,7 +479,7 @@ class GPS_Receiver
           }
           sys, svid = gnss_serial.call(*loader.call(36, 2).reverse)
           case sys
-          when :GPS; 
+          when :GPS, :SBAS;
           else; next
           end
           trk_stat = loader.call(46, 1)[0]
