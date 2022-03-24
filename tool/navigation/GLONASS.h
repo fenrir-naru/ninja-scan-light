@@ -1009,36 +1009,31 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return calculate_clock_error(t_arrival_onboard - Ephemeris::t_b, pseudo_range);
           }
           /**
-           * Calculate constellation(t) based on constellation(t_0).
+           * Calculate absolute constellation(t) based on constellation(t_0).
            * t_0 is a time around t_b, and is used to calculate
-           * an intermediate result specified with the 3rd argument.
+           * an intermediate result specified with the 2nd argument.
            * This method is useful to calculate constellation effectively
            * by using a cache.
            * @param delta_t time interval from t_0 to t
-           * @param pseudo_range measured pusedo_range to correct delta_t
            * @param xa_t_0 constellation(t_0)
-           * @param t_0_from_t_b time interval from t_b to t_0
+           * @param t_0_from_t_b time interval from t_b to t_0 (= t_0 - t_b)
            */
-          constellation_t calculate_constellation(
-              float_t delta_t, const float_t &pseudo_range,
+          constellation_t constellation_abs(
+              const float_t &delta_t,
               const constellation_t &xa_t_0, const float_t &t_0_from_t_b) const {
 
             constellation_t res(xa_t_0);
-            { // time integration from t_b to t_transmit
-              float_t delta_t_to_transmit(delta_t - pseudo_range / light_speed);
-              float_t t_step_max(delta_t_to_transmit >= 0 ? 60 : -60);
-              int i(std::floor(delta_t_to_transmit / t_step_max));
-              float_t t_step_remain(delta_t_to_transmit - t_step_max * i);
+            { // time integration from t_0 to (t_0 + delta_t)
+              float_t t_step_max(delta_t >= 0 ? 60 : -60);
+              int i(std::floor(delta_t / t_step_max));
+              float_t t_step_remain(delta_t - t_step_max * i);
               float_t delta_t_itg(0); // accumulative time of integration
               for(; i > 0; --i, delta_t_itg += t_step_max){
                 res = nextByRK4(eq_of_motion, delta_t_itg, res, t_step_max);
               }
               res = nextByRK4(eq_of_motion, delta_t_itg, res, t_step_remain);
             }
-
-            static const float_t omega_E(0.7292115E-4); // Earth's rotation rate, TODO move to PZ-90.02
-            return res.rel_corrdinate(
-                sidereal_t_b_rad + (omega_E * (delta_t + t_0_from_t_b))); // transform from abs to PZ-90.02
+            return res;
           }
           /**
            * Calculate constellation(t) based on constellation(t_b).
@@ -1046,8 +1041,14 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
            * @param pseudo_range measured pusedo_range to correct delta_t, default is 0.
            */
           constellation_t calculate_constellation(
-              float_t delta_t, const float_t &pseudo_range = 0) const {
-            return calculate_constellation(delta_t, pseudo_range, xa_t_b, float_t(0));
+              const float_t &delta_t, const float_t &pseudo_range = 0) const {
+
+            float_t delta_t_to_transmit(delta_t - pseudo_range / light_speed);
+            constellation_t res(
+                constellation_abs(delta_t_to_transmit, xa_t_b, float_t(0)));
+
+            return res.rel_corrdinate(
+                sidereal_t_b_rad + (constellation_t::omega_E * delta_t)); // transform from abs to PZ-90.02
           }
           /**
            * @param t_arrival_glonass signal arrival time in glonass time scale,
@@ -1098,7 +1099,28 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
     struct Satellite : public SatelliteProperties {
       public:
         typedef typename SatelliteProperties::Ephemeris_with_GPS_Time eph_t;
-        typedef typename GPS_SpaceNode<float_t>::template PropertyHistory<eph_t> eph_list_t;
+
+        struct eph_cached_t : public eph_t {
+          mutable typename eph_t::constellation_t xa_t_0;
+          mutable float_t t_0_from_t_b;
+          eph_cached_t() : eph_t(), xa_t_0(eph_t::xa_t_b), t_0_from_t_b(0) {}
+          eph_cached_t(const eph_t &eph) : eph_t(eph), xa_t_0(eph.xa_t_b), t_0_from_t_b(0) {}
+          using eph_t::constellation;
+          typename eph_t::constellation_t constellation(
+              const GPS_Time<float_t> &t_arrival_gps, const float_t &pseudo_range = 0) const {
+            float_t delta_t(t_arrival_gps - eph_t::t_b_gps);
+            float_t delta_t_transmit_from_t_0(delta_t - pseudo_range / light_speed - t_0_from_t_b);
+
+            // perform integration and update cache
+            xa_t_0 = eph_t::constellation_abs(delta_t_transmit_from_t_0, xa_t_0, t_0_from_t_b);
+            t_0_from_t_b += delta_t_transmit_from_t_0;
+
+            return xa_t_0.rel_corrdinate(
+                eph_t::sidereal_t_b_rad + (eph_t::constellation_t::omega_E * delta_t)); // transform from abs to PZ-90.02
+          }
+        };
+
+        typedef typename GPS_SpaceNode<float_t>::template PropertyHistory<eph_cached_t> eph_list_t;
       protected:
         eph_list_t eph_history;
       public:
@@ -1115,7 +1137,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         }
 
         void register_ephemeris(const eph_t &eph, const int &priority_delta = 1){
-          eph_history.add(eph, priority_delta);
+          eph_history.add(eph_cached_t(eph), priority_delta);
         }
 
         void merge(const Satellite &another, const bool &keep_original = true){
@@ -1143,7 +1165,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
         typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t constellation(
             const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
           return (typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t)(
-              ephemeris().constellation(t, pseudo_range));
+              eph_history.current().constellation(t, pseudo_range));
         }
 
         typename GPS_SpaceNode<float_t>::xyz_t position(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
