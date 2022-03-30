@@ -952,6 +952,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           float_t sidereal_t_b_rad;
           typename Ephemeris::differential_t eq_of_motion;
 
+          static const float_t time_step_max_per_one_integration;
+
           void calculate_additional() {
             sidereal_t_b_rad = TimeProperties::date_t::Greenwich_sidereal_time_deg(
                 TimeProperties::date.c_tm(),
@@ -1011,6 +1013,26 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           /**
            * Calculate absolute constellation(t) based on constellation(t_0).
            * t_0 is a time around t_b, and is used to calculate
+           * @param t_step time interval from t_0 to t
+           * @param times number of integration steps (assume times >=0)
+           * @param xa_t_0 constellation(t_0)
+           * @param t_0_from_t_b time interval from t_b to t_0 (= t_0 - t_b)
+           */
+          constellation_t constellation_abs(
+              const float_t &t_step,
+              int times,
+              const constellation_t &xa_t_0, const float_t &t_0_from_t_b) const {
+
+            constellation_t res(xa_t_0);
+            float_t delta_t_itg(t_0_from_t_b); // accumulative time of integration
+            for(; times > 0; --times, delta_t_itg += t_step){
+              res = nextByRK4(eq_of_motion, delta_t_itg, res, t_step);
+            }
+            return res;
+          }
+          /**
+           * Calculate absolute constellation(t) based on constellation(t_0).
+           * t_0 is a time around t_b, and is used to calculate
            * an intermediate result specified with the 2nd argument.
            * This method is useful to calculate constellation effectively
            * by using a cache.
@@ -1022,18 +1044,19 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               const float_t &delta_t,
               const constellation_t &xa_t_0, const float_t &t_0_from_t_b) const {
 
-            constellation_t res(xa_t_0);
-            { // time integration from t_0 to (t_0 + delta_t)
-              float_t t_step_max(delta_t >= 0 ? 60 : -60);
-              int i(std::floor(delta_t / t_step_max));
-              float_t t_step_remain(delta_t - t_step_max * i);
-              float_t delta_t_itg(0); // accumulative time of integration
-              for(; i > 0; --i, delta_t_itg += t_step_max){
-                res = nextByRK4(eq_of_motion, delta_t_itg, res, t_step_max);
-              }
-              res = nextByRK4(eq_of_motion, delta_t_itg, res, t_step_remain);
-            }
-            return res;
+            float_t t_step_max(delta_t >= 0
+                ? time_step_max_per_one_integration
+                : -time_step_max_per_one_integration);
+            int n(std::floor(delta_t / t_step_max));
+            float_t delta_t_steps(t_step_max * n), delta_t_remain(delta_t - delta_t_steps);
+
+            // To perform time integration from t_0 to (t_0 + delta_t),
+            // n-times integration with t_step_max,
+            // then, one-time integration with delta_t_remain are conducted.
+            return constellation_abs(
+                delta_t_remain, 1,
+                constellation_abs(t_step_max, n, xa_t_0, t_0_from_t_b),
+                t_0_from_t_b + delta_t_steps);
           }
           /**
            * Calculate constellation(t) based on constellation(t_b).
@@ -1111,12 +1134,21 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             float_t delta_t(t_arrival_gps - eph_t::t_b_gps);
             float_t delta_t_transmit_from_t_0(delta_t - pseudo_range / light_speed - t_0_from_t_b);
 
-            // perform integration and update cache
-            xa_t_0 = eph_t::constellation_abs(delta_t_transmit_from_t_0, xa_t_0, t_0_from_t_b);
-            t_0_from_t_b += delta_t_transmit_from_t_0;
+            float_t t_step_max(delta_t_transmit_from_t_0 >= 0
+                ? eph_t::time_step_max_per_one_integration
+                : -eph_t::time_step_max_per_one_integration);
 
-            return xa_t_0.rel_corrdinate(
-                eph_t::sidereal_t_b_rad + (eph_t::constellation_t::omega_E * delta_t)); // transform from abs to PZ-90.02
+            int big_steps(std::floor(delta_t_transmit_from_t_0 / t_step_max));
+            if(big_steps > 0){ // perform integration and update cache
+              xa_t_0 = eph_t::constellation_abs(t_step_max, big_steps, xa_t_0, t_0_from_t_b);
+              float_t delta_t_updated(t_step_max * big_steps);
+              t_0_from_t_b += delta_t_updated;
+              delta_t_transmit_from_t_0 -= delta_t_updated;
+            }
+
+            return eph_t::constellation_abs(delta_t_transmit_from_t_0, 1, xa_t_0, t_0_from_t_b)
+                .rel_corrdinate(
+                  eph_t::sidereal_t_b_rad + (eph_t::constellation_t::omega_E * delta_t)); // transform from abs to PZ-90.02
           }
         };
 
@@ -1288,5 +1320,10 @@ typename GLONASS_SpaceNode<FloatT>::u8_t GLONASS_SpaceNode<FloatT>::SatellitePro
   }
   return res;
 }
+
+template <class FloatT>
+const typename GLONASS_SpaceNode<FloatT>::float_t
+    GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris_with_Time
+      ::time_step_max_per_one_integration = 60;
 
 #endif /* __GLONASS_H__ */
