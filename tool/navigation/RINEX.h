@@ -60,8 +60,6 @@ class RINEX_Reader {
     typedef RINEX_Reader<U> self_t;
     typedef std::map<std::string, std::vector<std::string> > header_t;
     
-  protected:
-    header_t _header;
     struct src_stream_t : public std::istream {
       src_stream_t(std::istream &is) : std::istream(is.rdbuf()) {}
       /**
@@ -104,7 +102,11 @@ class RINEX_Reader {
         }
         return *this;
       }
-    } src;
+    };
+
+  protected:
+    header_t _header;
+    src_stream_t src;
     bool _has_next;
     
   public:
