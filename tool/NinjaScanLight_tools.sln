@@ -25,6 +25,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_RINEX", "test\test_RIN
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_algorithm", "test\test_algorithm.vcxproj", "{5942F38E-CBE3-4BAB-8C59-22526B1AD137}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test_SP3", "test\test_SP3.vcxproj", "{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		AppVeyor|Win32 = AppVeyor|Win32
@@ -98,6 +100,12 @@ Global
 		{5942F38E-CBE3-4BAB-8C59-22526B1AD137}.Debug|Win32.Build.0 = Debug|Win32
 		{5942F38E-CBE3-4BAB-8C59-22526B1AD137}.Release|Win32.ActiveCfg = Release|Win32
 		{5942F38E-CBE3-4BAB-8C59-22526B1AD137}.Release|Win32.Build.0 = Release|Win32
+		{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}.AppVeyor|Win32.ActiveCfg = AppVeyor|Win32
+		{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}.AppVeyor|Win32.Build.0 = AppVeyor|Win32
+		{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}.Debug|Win32.Build.0 = Debug|Win32
+		{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}.Release|Win32.ActiveCfg = Release|Win32
+		{7B2FF02C-ABCC-4F03-A4CC-A00316025D20}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
