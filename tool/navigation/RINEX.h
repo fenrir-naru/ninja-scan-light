@@ -198,7 +198,7 @@ class RINEX_Reader {
           return true;
         }
       }
-      static bool f(
+      static bool f_pure(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         if(str2val){
           std::stringstream ss(buf.substr(offset, length));
@@ -209,22 +209,30 @@ class RINEX_Reader {
           ss << std::setfill(' ') << std::right << std::setw(length)
               << std::setprecision(precision) << std::fixed
               << *(T *)value;
-          std::string s(ss.str());
+          buf.replace(offset, length, ss.str());
+          return true;
+        }
+      }
+      static bool f(
+          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
+        bool res(f_pure(buf, offset, length, value, precision, str2val));
+        if((!str2val) && res){
           if((*(T *)value) >= 0){
             if((*(T *)value) < 1){
               int i(length - precision - 2);
-              if(i >= 0){s[i] = ' ';}
+              // 0.12345 => .12345
+              if(i >= 0){buf[i + offset] = ' ';}
             }
           }else{
             if((*(T *)value) > -1){
               int i(length - precision - 2);
-              if(i >= 0){s[i] = '-';}
-              if(--i >= 0){s[i] = ' ';}
+              // -0.12345 => -.12345
+              if(i >= 0){buf[i + offset] = '-';}
+              if(--i >= 0){buf[i + offset] = ' ';}
             }
           }
-          buf.replace(offset, length, s);
-          return true;
         }
+        return res;
       }
       static bool e(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
@@ -267,6 +275,14 @@ class RINEX_Reader {
       static bool d(
           std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
         return conv_t<T, false>::d(buf, offset, length, value, opt, str2val);
+      }
+      static bool f_pure(
+          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
+        double v(*(T *)value);
+        bool res(
+            conv_t<double, false>::f_pure(buf, offset, length, &v, precision, str2val));
+        *(T *)value = static_cast<T>(v);
+        return res;
       }
       static bool f(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
