@@ -102,7 +102,6 @@ BOOST_AUTO_TEST_CASE(SP3_d){
         char buf[0x100] = {0};
         in2.getline(buf, sizeof(buf));
         switch(parsed.type){
-          case reader_t::parsed_t::L3_11:
           case reader_t::parsed_t::COMMENT:
             break; // TODO
           default:

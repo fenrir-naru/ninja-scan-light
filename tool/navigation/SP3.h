@@ -325,18 +325,22 @@ class SP3_Reader {
             case 'E': // Galileo
             case 'C': // BeiDou
             case 'I': // IRNSS
+              *static_cast<int *>(value) += ((int)buf[offset] << 8); break;
             case ' ':
               *static_cast<int *>(value) = 0; break; // TODO
             default:
-              return false; // TODO
+              return false; // unsupported
           }
           return true;
         }else{
           int digit2(*static_cast<int *>(value));
-          char prefix = ' ';
           if(digit2 < 0){return false;}
+          char prefix((char)((digit2 >> 8) & 0xFF));
           do{
-            if(digit2 == 0){break;}
+            if(digit2 == 0){
+              prefix = ' ';
+              break;
+            }
             if(digit2 <= 32){ // GPS
               prefix = 'G';
               break;
@@ -353,7 +357,17 @@ class SP3_Reader {
               digit2 -= 192;
               break;
             }
-            return false; // TODO
+            switch(prefix){
+              case 'R': // GLONASS
+              case 'L': // Low-Earth Orbiting (LEO) satellites
+              case 'E': // Galileo
+              case 'C': // BeiDou
+              case 'I': // IRNSS
+                digit2 &= 0xFF;
+                break;
+              default:
+                return false; // unsupported
+            }
           }while(false);
           buf[offset] = prefix;
           return TextHelper<>::template format_t<int>::d(
