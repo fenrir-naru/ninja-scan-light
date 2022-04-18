@@ -111,6 +111,13 @@ BOOST_AUTO_TEST_CASE(SP3_d){
       }
     }
   }
+
+  {
+    SP3_Product<fnum_t> product;
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    BOOST_CHECK_EQUAL(reader_t::read_all(in, product), 6);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
@@ -210,6 +217,13 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
         }
       }
     }
+  }
+
+  {
+    SP3_Product<fnum_t> product;
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    BOOST_CHECK_EQUAL(reader_t::read_all(in, product), 2);
   }
 }
 

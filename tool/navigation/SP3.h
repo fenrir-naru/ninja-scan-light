@@ -38,9 +38,24 @@
 #define __SP3_H__
 
 #include <ctime>
+#include <map>
 
 #include "util/text_helper.h"
 #include "GPS.h"
+
+#include "param/vector3.h"
+
+template <class FloatT>
+struct SP3_Product {
+  struct prop_t {
+    int sat_id;
+    GPS_Time<FloatT> epoch;
+    Vector3<FloatT> pos, vel;
+    FloatT clk, rate;
+    bool valid_vel_rate;
+  };
+  std::map<int, std::vector<prop_t> > per_satellite;
+};
 
 template <class FloatT>
 class SP3_Reader {
@@ -393,6 +408,64 @@ class SP3_Reader {
         }
       }
     };
+
+    static int read_all(std::istream &in, SP3_Product<FloatT> &dst) {
+      SP3_Reader<FloatT> src(in);
+      typedef SP3_Product<FloatT> dst_t;
+      int res(0);
+      struct buf_t {
+        dst_t &dst;
+        int &res;
+        epoch_t epoch;
+        struct pv_t {
+          position_clock_t pos;
+          velocity_rate_t vel;
+          pv_t(){pos.symbol[0] = vel.symbol[0] = 0;}
+        };
+        typedef std::map<int, pv_t> entries_t;
+        entries_t entries;
+        buf_t(dst_t &dst_, int &res_) : dst(dst_), res(res_), entries(){
+          epoch.symbols[0] = 0;
+        }
+        void flush(){
+          if(!epoch.symbols[0]){return;}
+          for(typename entries_t::const_iterator it(entries.begin()), it_end(entries.end());
+              it != it_end; ++it){
+            if(!it->second.pos.symbol[0]){continue;}
+            typename dst_t::prop_t prop = {
+              it->first, // sat_id
+              (GPS_Time<FloatT>)epoch,
+              Vector3<FloatT>(it->second.pos.coordinate_km) * 1E3,
+              Vector3<FloatT>(it->second.vel.velocity_dm_s) * 1E-1,
+              it->second.pos.clock_us * 1E-6,
+              it->second.vel.clock_rate_chg_100ps_s * 1E-10,
+            };
+            if(!it->second.vel.symbol[0]){prop.valid_vel_rate = false;}
+            dst.per_satellite[it->first].push_back(prop);
+            ++res;
+          }
+          entries.clear();
+        }
+      } buf(dst, res);
+      while(src.has_next()){
+        parsed_t parsed(src.parse_line());
+        switch(parsed.type){
+          case parsed_t::EPOCH:
+            buf.flush();
+            buf.epoch = parsed.item.epoch;
+            break;
+          case parsed_t::POSITION_CLOCK:
+            buf.entries[parsed.item.position_clock.vehicle_id].pos = parsed.item.position_clock;
+            break;
+          case parsed_t::VELOCITY_RATE:
+            buf.entries[parsed.item.velocity_rate.vehicle_id].vel = parsed.item.velocity_rate;
+            break;
+          default: break;
+        }
+      }
+      buf.flush();
+      return res;
+    }
 };
 
 #define GEN_C(offset, length, container_type, container_member) \
