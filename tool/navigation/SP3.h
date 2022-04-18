@@ -37,7 +37,10 @@
 #ifndef __SP3_H__
 #define __SP3_H__
 
+#include <ctime>
+
 #include "util/text_helper.h"
+#include "GPS.h"
 
 template <class FloatT>
 class SP3_Reader {
@@ -110,6 +113,21 @@ class SP3_Reader {
       int hour_start;
       int minute_start;
       FloatT second_start;
+      std::tm c_tm() const {
+        std::tm res = {
+          (int)second_start,
+          minute_start,
+          hour_start,
+          day_of_month_st,
+          month_start - 1,
+          year_start - 1900,
+        };
+        std::mktime(&res);
+        return res;
+      }
+      operator GPS_Time<FloatT>() const {
+        return GPS_Time<FloatT>(c_tm(), second_start - (int)second_start);
+      }
     };
     struct position_clock_t {
       char symbol[1];
