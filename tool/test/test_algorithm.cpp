@@ -65,6 +65,13 @@ BOOST_AUTO_TEST_CASE(interpolate_neville){
       BOOST_TEST_MESSAGE("(x,y)_given[" << i << "] = " << x_given[i] << ", " << y_given[i]);
     }
 
+    // vector version
+    std::vector<double> x_vec, y_vec;
+    for(int i(0); i <= order; ++i){
+      x_vec.push_back(x_given[i]);
+      y_vec.push_back(y_given[i]);
+    }
+
     // check new (x, y)
     for(int i(0); i < 10; ++i){
       double x(gen_rand());
@@ -73,31 +80,16 @@ BOOST_AUTO_TEST_CASE(interpolate_neville){
       for(int j(0); j <= order; ++j){
         y += coef[j] * std::pow(x, j);
       }
-      double y2(interpolate_Neville(x_given, y_given, x, y_buf, order));
+      interpolate_Neville(x_given, y_given, x, y_buf, order);
+      double y2(y_buf[0]);
+      double y3(interpolate_Neville<double>(x_vec, y_vec, x, order));
+      double y4(interpolate_Neville<double>(x_vec.begin(), y_vec.begin(), x, order));
 
-      BOOST_TEST_MESSAGE("(x,y,y2)[" << i << "] = " << x << ", " << y << ", " << y2);
+      BOOST_TEST_MESSAGE("(x,y,y2,y3,y4)[" << i << "] = "
+          << x << ", " << y << ", " << y2 << ", " << y3 << ", " << y4);
       BOOST_CHECK_SMALL(y - y2, 1E-8);
-    }
-
-    if(order != order_max){continue;}
-
-    // vector version
-    std::vector<double> x_vec, y_vec;
-    for(int order(0); order <= order_max; ++order){
-      x_vec.push_back(x_given[order]);
-      y_vec.push_back(y_given[order]);
-    }
-    for(int i(0); i < 10; ++i){
-      double x(gen_rand());
-
-      double y(0); // truth
-      for(int j(0); j <= order_max; ++j){
-        y += coef[j] * std::pow(x, j);
-      }
-      double y2(interpolate_Neville<order_max>(x_vec, y_vec, x));
-
-      BOOST_TEST_MESSAGE("(x,y,y2)[" << i << "] = " << x << ", " << y << ", " << y2);
-      BOOST_CHECK_SMALL(y - y2, 1E-8);
+      BOOST_CHECK_EQUAL(y2, y3);
+      BOOST_CHECK_EQUAL(y2, y4);
     }
   }
 }
