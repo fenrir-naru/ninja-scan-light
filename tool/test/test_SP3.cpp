@@ -2,6 +2,8 @@
 #include <string>
 #include <sstream>
 
+#include "navigation/coordinate.h"
+#include "navigation/GPS.h"
 #include "navigation/SP3.h"
 
 #include <boost/random.hpp>
@@ -60,6 +62,15 @@ BOOST_AUTO_TEST_CASE(SP3_d){
       "PG06  13855.140409 -11053.269706  19768.346019    289.556712\n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
+  static const fnum_t pos_clk[6][4] = { // units are [km] and [us]
+    {  5783.206741, -18133.044484, -18510.756016,     12.734450},
+    {-22412.401440,  13712.162332,    528.367722,    425.364822},
+    { 10114.112309, -17446.189044,  16665.051308,    189.049475},
+    {-24002.325710,   4250.313148, -11163.577756,    179.333612},
+    {-15087.153141,   8034.886396,  20331.626539,   -390.251167},
+    { 13855.140409, -11053.269706,  19768.346019,    289.556712},
+  };
+
   {
     std::stringbuf sbuf(src), sbuf2(src);
     std::istream in(&sbuf), in2(&sbuf2);
@@ -76,23 +87,15 @@ BOOST_AUTO_TEST_CASE(SP3_d){
           BOOST_CHECK_EQUAL(parsed.item.epoch.second_start, 0);
           break;
         case reader_t::parsed_t::POSITION_CLOCK: {
-          static const fnum_t cmp[6][4] = {
-            {  5783.206741, -18133.044484, -18510.756016,     12.734450},
-            {-22412.401440,  13712.162332,    528.367722,    425.364822},
-            { 10114.112309, -17446.189044,  16665.051308,    189.049475},
-            {-24002.325710,   4250.313148, -11163.577756,    179.333612},
-            {-15087.153141,   8034.886396,  20331.626539,   -390.251167},
-            { 13855.140409, -11053.269706,  19768.346019,    289.556712},
-          };
           for(int i(0); i < 3; ++i){
             BOOST_CHECK_SMALL(
                 parsed.item.position_clock.coordinate_km[i]
-                  - cmp[parsed.item.position_clock.vehicle_id - 1][i],
+                  - pos_clk[parsed.item.position_clock.vehicle_id - 1][i],
                 1E-6);
           }
           BOOST_CHECK_SMALL(
               parsed.item.position_clock.clock_us
-                - cmp[parsed.item.position_clock.vehicle_id - 1][3],
+                - pos_clk[parsed.item.position_clock.vehicle_id - 1][3],
               1E-6);
           break;
         }
@@ -117,6 +120,23 @@ BOOST_AUTO_TEST_CASE(SP3_d){
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
     BOOST_CHECK_EQUAL(reader_t::read_all(in, product), 6);
+    GPS_Time<fnum_t> epoch(1734, 259200);
+    for(int sat_id(1); sat_id <= 6; ++sat_id){
+      System_XYZ<fnum_t> pos(product.satellites[sat_id].position(epoch));
+      for(int i(0); i < 3; ++i){
+        BOOST_CHECK_SMALL(pos[i] - (pos_clk[sat_id - 1][i] * 1E3), 1E-3);
+      }
+      BOOST_CHECK_SMALL(
+          product.satellites[sat_id].clock_error(epoch)
+            - (pos_clk[sat_id - 1][3] * 1E-6),
+          1E-12);
+      BOOST_CHECK_THROW(
+          product.satellites[sat_id].velocity(epoch),
+          std::range_error);
+      BOOST_CHECK_THROW(
+          product.satellites[sat_id].clock_error_dot(epoch),
+          std::range_error);
+    }
   }
 }
 
@@ -154,6 +174,16 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
       "VG02  -9481.923808 -25832.652567  -7277.160056      8.801258 14 14 14 191       \n"
       "EV    22   22   22     111  1234567  1234567  1234567  1234567  1234567  1234567\n";
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  static const fnum_t pos_clk[2][4] = { // units are [km] and [us]
+    {-11044.805800, -10475.672350,  21929.418200,    189.163300},
+    {-12593.593500,  10170.327650, -20354.534400,    -55.976000},
+  };
+  static const fnum_t vel_rate[2][4] = { // units are [dm/s] and [100ps/s]
+    {20298.880364, -18462.044804,   1381.387685,     -4.534317},
+    {-9481.923808, -25832.652567,  -7277.160056,      8.801258},
+  };
+
   {
     std::stringbuf sbuf(src), sbuf2(src);
     std::istream in(&sbuf), in2(&sbuf2);
@@ -170,36 +200,28 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
           BOOST_CHECK_EQUAL(parsed.item.epoch.second_start, 0);
           break;
         case reader_t::parsed_t::POSITION_CLOCK: {
-          static const fnum_t cmp[2][4] = {
-            {-11044.805800, -10475.672350,  21929.418200,    189.163300},
-            {-12593.593500,  10170.327650, -20354.534400,    -55.976000},
-          };
           for(int i(0); i < 3; ++i){
             BOOST_CHECK_SMALL(
                 parsed.item.position_clock.coordinate_km[i]
-                  - cmp[parsed.item.position_clock.vehicle_id - 1][i],
+                  - pos_clk[parsed.item.position_clock.vehicle_id - 1][i],
                 1E-6);
           }
           BOOST_CHECK_SMALL(
               parsed.item.position_clock.clock_us
-                - cmp[parsed.item.position_clock.vehicle_id - 1][3],
+                - pos_clk[parsed.item.position_clock.vehicle_id - 1][3],
               1E-6);
           break;
         }
         case reader_t::parsed_t::VELOCITY_RATE: {
-          static const fnum_t cmp[2][4] = {
-            {20298.880364, -18462.044804,   1381.387685,     -4.534317},
-            {-9481.923808, -25832.652567,  -7277.160056,      8.801258},
-          };
           for(int i(0); i < 3; ++i){
             BOOST_CHECK_SMALL(
                 parsed.item.velocity_rate.velocity_dm_s[i]
-                  - cmp[parsed.item.velocity_rate.vehicle_id - 1][i],
+                  - vel_rate[parsed.item.velocity_rate.vehicle_id - 1][i],
                 1E-6);
           }
           BOOST_CHECK_SMALL(
               parsed.item.velocity_rate.clock_rate_chg_100ps_s
-                - cmp[parsed.item.velocity_rate.vehicle_id - 1][3],
+                - vel_rate[parsed.item.velocity_rate.vehicle_id - 1][3],
               1E-6);
           break;
         }
@@ -224,6 +246,25 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
     BOOST_CHECK_EQUAL(reader_t::read_all(in, product), 2);
+    GPS_Time<fnum_t> epoch(1126, 259200);
+    for(int sat_id(1); sat_id <= 2; ++sat_id){
+      GPS_SpaceNode<fnum_t>::SatelliteProperties::constellation_t
+          pos_vel(product.satellites[sat_id].constellation(epoch));
+      for(int i(0); i < 3; ++i){
+        BOOST_CHECK_SMALL(
+            pos_vel.position[i] - (pos_clk[sat_id - 1][i] * 1E3), 1E-3);
+        BOOST_CHECK_SMALL(
+            pos_vel.velocity[i] - (vel_rate[sat_id - 1][i] * 1E-1), 1E-7);
+      }
+      BOOST_CHECK_SMALL(
+          product.satellites[sat_id].clock_error(epoch)
+            - (pos_clk[sat_id - 1][3] * 1E-6),
+          1E-12);
+      BOOST_CHECK_SMALL(
+          product.satellites[sat_id].clock_error_dot(epoch)
+            - (vel_rate[sat_id - 1][3] * 1E-10),
+          1E-16);
+    }
   }
 }
 

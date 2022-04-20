@@ -39,22 +39,136 @@
 
 #include <ctime>
 #include <map>
+#include <algorithm>
+#include <stdexcept>
 
 #include "util/text_helper.h"
 #include "GPS.h"
 
 #include "param/vector3.h"
+#include "algorithm/interpolate.h"
 
 template <class FloatT>
 struct SP3_Product {
   struct prop_t {
-    int sat_id;
-    GPS_Time<FloatT> epoch;
-    Vector3<FloatT> pos, vel;
-    FloatT clk, rate;
-    bool valid_vel_rate;
+    Vector3<FloatT> xyz;
+    FloatT clk;
   };
-  std::map<int, std::vector<prop_t> > per_satellite;
+  struct per_satellite_t {
+    typedef std::map<GPS_Time<FloatT>, prop_t> history_t;
+    history_t pos_history;
+    history_t vel_history;
+
+    mutable struct {
+      struct target_t {
+
+        typedef typename std::vector<std::pair<GPS_Time<FloatT>, prop_t> > buf_t;
+        buf_t buf;
+        GPS_Time<FloatT> t0;
+        std::vector<FloatT> t;
+
+        /**
+         * maximum acceptable absolute time difference between current and epoch
+         * for interpolation
+         */
+        FloatT max_delta_t;
+
+        // max_epochs = 9 expects 15 min interval records; (2 hr * 2 / 15 min = 8)
+        target_t(const std::size_t &max_epochs = 9)
+            : buf(max_epochs), t0(0, 0), max_delta_t(60 * 60 * 2) {}
+
+        target_t &update(const GPS_Time<FloatT> &current, const history_t &history){
+
+          FloatT t_diff(t0 - current);
+          if((std::abs(t_diff) <= 10)
+              || ((t.size() >= 2)
+                && (std::abs(t_diff + t[0]) <= std::abs(t_diff + t[1]))) ){
+            return *this;
+          }
+
+          // If the 1st and 2nd nearest epochs are changed, then recalculate interpolation targets.
+          struct {
+            const GPS_Time<FloatT> &t_base;
+            bool operator()(
+                const typename history_t::value_type &rhs,
+                const typename history_t::value_type &lhs) const {
+              return std::abs(rhs.first - t_base) < std::abs(lhs.first - t_base);
+            }
+          } cmp = {(t0 = current)};
+
+          t.clear();
+          // extract t where t0-dt <= t <= t0+dt, then sort by ascending order of |t-t0|
+          for(typename buf_t::const_iterator
+                it(buf.begin()),
+                it_end(std::partial_sort_copy(
+                  history.lower_bound(current - max_delta_t),
+                  history.upper_bound(current + max_delta_t),
+                  buf.begin(), buf.end(), cmp));
+              it != it_end; ++it){
+            t.push_back(it->first - t0);
+          }
+
+          return *this;
+        }
+
+        Vector3<FloatT> interpolate_xyz(const GPS_Time<FloatT> &current) const {
+          if(t.empty()){
+            throw std::range_error("Insufficient records for interpolation");
+          }
+          struct second_iterator : public buf_t::const_iterator {
+            second_iterator(const typename buf_t::const_iterator &it)
+                : buf_t::const_iterator(it) {}
+            const Vector3<FloatT> &operator[](const int &n) const {
+              return buf_t::const_iterator::operator[](n).second.xyz;
+            }
+          } second(buf.begin());
+          return interpolate_Neville<Vector3<FloatT> >(
+              t, second, current - t0, t.size() - 1);
+        }
+        FloatT interpolate_clk(const GPS_Time<FloatT> &current) const {
+          if(t.empty()){
+            throw std::range_error("Insufficient records for interpolation");
+          }
+          struct second_iterator : public buf_t::const_iterator {
+            second_iterator(const typename buf_t::const_iterator &it)
+                : buf_t::const_iterator(it) {}
+            const FloatT &operator[](const int &n) const {
+              return buf_t::const_iterator::operator[](n).second.clk;
+            }
+          } second(buf.begin());
+          return interpolate_Neville<FloatT>(
+              t, second, current - t0, t.size() - 1);
+        }
+      } pos_clk, vel_rate;
+    } subset;
+
+    typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t
+        constellation(
+          const GPS_Time<FloatT> &t,
+          const bool &with_velocity = true) const {
+      typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res;
+      res.position = subset.pos_clk.update(t, pos_history).interpolate_xyz(t);
+      if(with_velocity){
+        res.velocity = subset.vel_rate.update(t, vel_history).interpolate_xyz(t);
+      }
+      return res;
+    }
+    typename GPS_SpaceNode<FloatT>::xyz_t position(
+        const GPS_Time<FloatT> &t) const {
+      return constellation(t, false).position;
+    }
+    typename GPS_SpaceNode<FloatT>::xyz_t velocity(
+        const GPS_Time<FloatT> &t) const {
+      return constellation(t, true).velocity;
+    }
+    FloatT clock_error(const GPS_Time<FloatT> &t) const {
+      return subset.pos_clk.update(t, pos_history).interpolate_clk(t);
+    }
+    FloatT clock_error_dot(const GPS_Time<FloatT> &t) const {
+      return subset.vel_rate.update(t, vel_history).interpolate_clk(t);
+    }
+  };
+  std::map<int, per_satellite_t> satellites;
 };
 
 template <class FloatT>
@@ -429,19 +543,23 @@ class SP3_Reader {
         }
         void flush(){
           if(!epoch.symbols[0]){return;}
+          GPS_Time<FloatT> gpst(epoch);
           for(typename entries_t::const_iterator it(entries.begin()), it_end(entries.end());
               it != it_end; ++it){
-            if(!it->second.pos.symbol[0]){continue;}
-            typename dst_t::prop_t prop = {
-              it->first, // sat_id
-              (GPS_Time<FloatT>)epoch,
-              Vector3<FloatT>(it->second.pos.coordinate_km) * 1E3,
-              Vector3<FloatT>(it->second.vel.velocity_dm_s) * 1E-1,
-              it->second.pos.clock_us * 1E-6,
-              it->second.vel.clock_rate_chg_100ps_s * 1E-10,
-            };
-            if(!it->second.vel.symbol[0]){prop.valid_vel_rate = false;}
-            dst.per_satellite[it->first].push_back(prop);
+            if(it->second.pos.symbol[0]){
+              typename dst_t::prop_t prop = {
+                Vector3<FloatT>(it->second.pos.coordinate_km) * 1E3,
+                it->second.pos.clock_us * 1E-6,
+              };
+              dst.satellites[it->first].pos_history.insert(std::make_pair(gpst, prop));
+            }
+            if(it->second.vel.symbol[0]){
+              typename dst_t::prop_t prop = {
+                Vector3<FloatT>(it->second.vel.velocity_dm_s) * 1E-1,
+                it->second.vel.clock_rate_chg_100ps_s * 1E-10,
+              };
+              dst.satellites[it->first].vel_history.insert(std::make_pair(gpst, prop));
+            }
             ++res;
           }
           entries.clear();
