@@ -18,6 +18,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/RINEX.h"
+#include "navigation/SP3.h"
 
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
@@ -1318,6 +1319,32 @@ template <class FloatT>
 struct RINEX_Observation {};
 }
 
+%inline {
+template <class FloatT>
+struct SP3 : public SP3_Product<FloatT> {
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    return SP3_Reader<FloatT>::read_all(fin, *this);
+  }
+  System_XYZ<FloatT, WGS84> position(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return const_cast<SP3 *>(this)->satellites[sat_id].position(t);
+  }
+  System_XYZ<FloatT, WGS84> velocity(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return const_cast<SP3 *>(this)->satellites[sat_id].velocity(t);
+  }
+  FloatT clock_error(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return const_cast<SP3 *>(this)->satellites[sat_id].clock_error(t);
+  }
+  FloatT clock_error_dot(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return const_cast<SP3 *>(this)->satellites[sat_id].clock_error_dot(t);
+  }
+};
+}
+
 #undef MAKE_ACCESSOR
 #undef MAKE_VECTOR2ARRAY
 #undef MAKE_ARRAY_INPUT
@@ -1337,6 +1364,7 @@ struct RINEX_Observation {};
 %template(Solver) GPS_Solver<type>;
 
 %template(RINEX_Observation) RINEX_Observation<type>;
+%template(SP3) SP3<type>;
 %enddef
 
 CONCRETIZE(double);
