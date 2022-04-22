@@ -67,17 +67,19 @@ struct SP3_Product {
         GPS_Time<FloatT> t0;
         std::vector<FloatT> dt;
 
+        target_t() : t0(0, 0) {}
+
         /**
-         * maximum acceptable absolute time difference between t and epoch
-         * for interpolation
+         * update interpolation source
+         * @param max_epochs maximum number of epochs used for interpolation,
+         * default is 9
+         * @param max_delta_t maximum acceptable absolute time difference between t and epoch,
+         * default is 2 hours corresponding to 15 min interval records; (2 hr * 2 / (9 - 1) = 15 min)
          */
-        FloatT max_delta_t;
-
-        // max_epochs = 9 expects 15 min interval records; (2 hr * 2 / 15 min = 8)
-        target_t(const std::size_t &max_epochs = 9)
-            : buf(max_epochs), t0(0, 0), max_delta_t(60 * 60 * 2) {}
-
-        target_t &update(const GPS_Time<FloatT> &t, const history_t &history){
+        target_t &update(
+            const GPS_Time<FloatT> &t, const history_t &history,
+            const std::size_t &max_epochs = 9,
+            const FloatT &max_delta_t = 60 * 60 * 2){
 
           FloatT t_diff(t0 - t);
           if((std::abs(t_diff) <= 10)
@@ -96,6 +98,7 @@ struct SP3_Product {
             }
           } cmp = {(t0 = t)};
 
+          buf.resize(max_epochs);
           dt.clear();
           // extract t where t0-dt <= t <= t0+dt, then sort by ascending order of |t-t0|
           for(typename buf_t::const_iterator
