@@ -60,7 +60,7 @@ Ty &interpolate_Neville(
     for(int d(-1 + (((int)nd >= j) ? j : nd)); d >= 0; --d){
       // d = 0, 1, ... are 1st, 2nd, ... order derivative
       // skip dy[d(>=j)] because of 0
-      Ty &dy0(dy[d]), &dy1(d > 0 ? dy[d - 1] : y);
+      Ty &dy0(dy[d]), &dy1(d > 0 ? (Ty &)dy[d - 1] : (Ty &)y); // cast required for MSVC
       for(int i(0); i <= ((int)n - j); ++i){
         if(d + 1 < j){
           Tx a(x_given[i + j] - x), b(x - x_given[i]);
