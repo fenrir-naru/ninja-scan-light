@@ -774,10 +774,14 @@ __SP3_TEXT__
           eph_pos_vel = sn.ephemeris(sat_id).constellation(t)
           delta = {
             :pos => (sp3.position(sat_id, t) - eph_pos_vel[0]).to_a,
+            :vel => (sp3.velocity(sat_id, t) - eph_pos_vel[1]).to_a,
           }
           puts "SP3 delta(#{t.seconds}, #{sat_id}): #{delta}"
           delta[:pos].each{|v|
             expect(v.abs).to be < 5 # 5m
+          }
+          delta[:vel].each{|v|
+            expect(v.abs).to be < 1E-3 # 1mm
           }
         }
       }

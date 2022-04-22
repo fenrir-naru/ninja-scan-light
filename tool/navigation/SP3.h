@@ -65,10 +65,10 @@ struct SP3_Product {
         typedef typename std::vector<std::pair<GPS_Time<FloatT>, prop_t> > buf_t;
         buf_t buf;
         GPS_Time<FloatT> t0;
-        std::vector<FloatT> t;
+        std::vector<FloatT> dt;
 
         /**
-         * maximum acceptable absolute time difference between current and epoch
+         * maximum acceptable absolute time difference between t and epoch
          * for interpolation
          */
         FloatT max_delta_t;
@@ -77,12 +77,12 @@ struct SP3_Product {
         target_t(const std::size_t &max_epochs = 9)
             : buf(max_epochs), t0(0, 0), max_delta_t(60 * 60 * 2) {}
 
-        target_t &update(const GPS_Time<FloatT> &current, const history_t &history){
+        target_t &update(const GPS_Time<FloatT> &t, const history_t &history){
 
-          FloatT t_diff(t0 - current);
+          FloatT t_diff(t0 - t);
           if((std::abs(t_diff) <= 10)
-              || ((t.size() >= 2)
-                && (std::abs(t_diff + t[0]) <= std::abs(t_diff + t[1]))) ){
+              || ((dt.size() >= 2)
+                && (std::abs(t_diff + dt[0]) <= std::abs(t_diff + dt[1]))) ){
             return *this;
           }
 
@@ -94,50 +94,63 @@ struct SP3_Product {
                 const typename history_t::value_type &lhs) const {
               return std::abs(rhs.first - t_base) < std::abs(lhs.first - t_base);
             }
-          } cmp = {(t0 = current)};
+          } cmp = {(t0 = t)};
 
-          t.clear();
+          dt.clear();
           // extract t where t0-dt <= t <= t0+dt, then sort by ascending order of |t-t0|
           for(typename buf_t::const_iterator
                 it(buf.begin()),
                 it_end(std::partial_sort_copy(
-                  history.lower_bound(current - max_delta_t),
-                  history.upper_bound(current + max_delta_t),
+                  history.lower_bound(t - max_delta_t),
+                  history.upper_bound(t + max_delta_t),
                   buf.begin(), buf.end(), cmp));
               it != it_end; ++it){
-            t.push_back(it->first - t0);
+            dt.push_back(it->first - t0);
           }
 
           return *this;
         }
 
-        Vector3<FloatT> interpolate_xyz(const GPS_Time<FloatT> &current) const {
-          if(t.empty()){
+        template <class Ty, class Ty_Array>
+        Ty interpolate(
+            const GPS_Time<FloatT> &t, const Ty_Array &y,
+            Ty *derivative = NULL) const {
+          int order(dt.size() - 1);
+          do{
+            if(order > 0){break;}
+            if((order == 0) && (!derivative)){return y[0];}
             throw std::range_error("Insufficient records for interpolation");
-          }
+          }while(false);
+          std::vector<Ty> y_buf(order), dy_buf(order);
+          interpolate_Neville(
+              dt, y, t - t0, y_buf, order,
+              &dy_buf, derivative ? 1 : 0);
+          if(derivative){*derivative = dy_buf[0];}
+          return y_buf[0];
+        }
+        Vector3<FloatT> interpolate_xyz(
+            const GPS_Time<FloatT> &t,
+            Vector3<FloatT> *derivative = NULL) const {
           struct second_iterator : public buf_t::const_iterator {
             second_iterator(const typename buf_t::const_iterator &it)
                 : buf_t::const_iterator(it) {}
             const Vector3<FloatT> &operator[](const int &n) const {
               return buf_t::const_iterator::operator[](n).second.xyz;
             }
-          } second(buf.begin());
-          return interpolate_Neville<Vector3<FloatT> >(
-              t, second, current - t0, t.size() - 1);
+          } xyz(buf.begin());
+          return interpolate(t, xyz, derivative);
         }
-        FloatT interpolate_clk(const GPS_Time<FloatT> &current) const {
-          if(t.empty()){
-            throw std::range_error("Insufficient records for interpolation");
-          }
+        FloatT interpolate_clk(
+            const GPS_Time<FloatT> &t,
+            FloatT *derivative = NULL) const {
           struct second_iterator : public buf_t::const_iterator {
             second_iterator(const typename buf_t::const_iterator &it)
                 : buf_t::const_iterator(it) {}
             const FloatT &operator[](const int &n) const {
               return buf_t::const_iterator::operator[](n).second.clk;
             }
-          } second(buf.begin());
-          return interpolate_Neville<FloatT>(
-              t, second, current - t0, t.size() - 1);
+          } clk(buf.begin());
+          return interpolate(t, clk, derivative);
         }
       } pos_clk, vel_rate;
     } subset;
@@ -145,12 +158,18 @@ struct SP3_Product {
     typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t
         constellation(
           const GPS_Time<FloatT> &t,
-          const bool &with_velocity = true) const {
+          bool with_velocity = true) const {
       typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res;
-      res.position = subset.pos_clk.update(t, pos_history).interpolate_xyz(t);
       if(with_velocity){
-        res.velocity = subset.vel_rate.update(t, vel_history).interpolate_xyz(t);
+        try{
+          res.velocity = subset.vel_rate.update(t, vel_history).interpolate_xyz(t);
+          with_velocity = false;
+        }catch(std::range_error &){}
       }
+      Vector3<FloatT> vel;
+      res.position = subset.pos_clk.update(t, pos_history)
+          .interpolate_xyz(t, with_velocity ? &vel : NULL); // velocity fallback to use position
+      if(with_velocity){res.velocity = vel;}
       return res;
     }
     typename GPS_SpaceNode<FloatT>::xyz_t position(
@@ -165,7 +184,13 @@ struct SP3_Product {
       return subset.pos_clk.update(t, pos_history).interpolate_clk(t);
     }
     FloatT clock_error_dot(const GPS_Time<FloatT> &t) const {
-      return subset.vel_rate.update(t, vel_history).interpolate_clk(t);
+      try{
+        return subset.vel_rate.update(t, vel_history).interpolate_clk(t);
+      }catch(std::range_error &){
+        FloatT res;
+        subset.pos_clk.update(t, pos_history).interpolate_clk(t, &res);
+        return res;
+      }
     }
   };
   std::map<int, per_satellite_t> satellites;
