@@ -36,31 +36,52 @@
 #include <vector>
 
 /*
- * perform Neville's interpolation
+ * perform Neville's interpolation (with derivative)
  *
  * @param x_given list of x assumed to be accessible with [], order is non-sensitive
  * @param y_given list of y assumed to be accessible with [], order is non-sensitive
  * @param x desired x
  * @param y y[0] is output and the others are used as buffer to store temporary results
  * @param n order
+ * @param dy dy[i][0] is (i+1)th derivative outputs like y[0]
+ * @param nd maximum order of required derivative
  * @return (Ty &) [0] = interpolated result
  */
 template <class Tx_Array, class Ty_Array, class Tx, class Ty>
 Ty &interpolate_Neville(
     const Tx_Array &x_given, const Ty_Array &y_given,
-    const Tx &x, Ty &y, const std::size_t &n) {
-  if(n == 0){y[0] = y_given[0];}
+    const Tx &x, Ty &y, const std::size_t &n,
+    Ty *dy = NULL, const std::size_t &nd = 0) {
+  if(n == 0){
+    y[0] = y_given[0];
+    // for(int d(nd); d >= 0; --d){dy[d][0] = 0;} // assumption
+  }
   for(int j(1); j <= (int)n; ++j){
-    for(int i(0); i <= ((int)n - j); ++i){
-      Tx width(x_given[i + j] - x_given[i]);
-      Tx w_a((x_given[i + j] - x) / width), w_b((x - x_given[i]) / width);
-      if(j > 1){
-        // 2nd, 3rd, ... order interpolation
-        y[i] = y[i] * w_a + y[i + 1] * w_b;
-      }else{
-        // linear interpolation
-        y[i] = y_given[i] * w_a + y_given[i + 1] * w_b;
+    for(int d(-1 + (((int)nd >= j) ? j : nd)); d >= 0; --d){
+      // d = 0, 1, ... are 1st, 2nd, ... order derivative
+      // skip dy[d(>=j)] because of 0
+      Ty &dy0(dy[d]), &dy1(d > 0 ? dy[d - 1] : y);
+      for(int i(0); i <= ((int)n - j); ++i){
+        if(d + 1 < j){
+          Tx a(x_given[i + j] - x), b(x - x_given[i]);
+          dy0[i] = dy0[i] * a + dy0[i + 1] * b;
+          dy0[i] += ((j > 1)
+              ? (dy1[i+1] - dy1[i])
+              : (y_given[i+1] - y_given[i])) * (d + 1);
+        }else{
+          dy0[i] = ((j > 1)
+              ? (dy1[i+1] - dy1[i])
+              : (y_given[i+1] - y_given[i])) * (d + 1);
+        }
+        dy0[i] /= (x_given[i + j] - x_given[i]);
       }
+    }
+    for(int i(0); i <= ((int)n - j); ++i){ // d = -1 (interpolation)
+      Tx a(x_given[i + j] - x), b(x - x_given[i]);
+      y[i] = (j > 1)
+          ? (y[i] * a + y[i + 1] * b) // 2nd, 3rd, ... order
+          : (y_given[i] * a + y_given[i + 1] * b); // linear
+      y[i] /= (x_given[i + j] - x_given[i]);
     }
   }
   return y;
@@ -70,7 +91,6 @@ template <class Tx_Array, class Ty_Array, class Tx, class Ty, std::size_t N>
 Ty interpolate_Neville(
     const Tx_Array &x_given, const Ty_Array &y_given,
     const Tx &x, Ty (&y_buf)[N]) {
-  if(N == 0){return y_given[0];}
   return interpolate_Neville(x_given, y_given, x, y_buf, N)[0];
 }
 

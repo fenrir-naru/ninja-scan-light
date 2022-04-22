@@ -40,51 +40,6 @@ struct Fixture {
   ~Fixture(){}
 };
 
-template <
-    class Tx_Array, class Ty_Array,
-    class Tx, class Ty, std::size_t dN>
-Ty &interpolate_Neville(
-    const Tx_Array &x_given, const Ty_Array &y_given,
-    const Tx &x, Ty &y, Ty (&dy)[dN], const std::size_t &n) {
-  if(n == 0){
-    y[0] = y_given[0];
-    // for(int d(dN); d >= 0; --d){dy[d][0] = 0;}
-  }
-  for(int j(1); j <= (int)n; ++j){
-    for(int d(-1 + (((int)dN >= j) ? j : dN)); d >= 0; --d){
-      // d(d(>j))y = 0;
-      Ty &dy0(dy[d]), &dy1(d > 0 ? dy[d - 1] : y);
-      BOOST_TEST_MESSAGE(
-          "(d,j) = (" << d << "," << j << ") => "
-          << ((d + 1 < j) ? "with same level" : "without same level"));
-      for(int i(0); i <= ((int)n - j); ++i){
-        if(d + 1 < j){
-          Tx a(x_given[i + j] - x), b(x - x_given[i]);
-          dy0[i] = dy0[i] * a + dy0[i + 1] * b;
-          dy0[i] += ((j > 1)
-              ? (dy1[i+1] - dy1[i])
-              : (y_given[i+1] - y_given[i])) * (d + 1);
-        }else{
-          dy0[i] = ((j > 1)
-              ? (dy1[i+1] - dy1[i])
-              : (y_given[i+1] - y_given[i])) * (d + 1);
-        }
-        dy0[i] /= (x_given[i + j] - x_given[i]);
-      }
-    }
-    { // d == -1
-      for(int i(0); i <= ((int)n - j); ++i){
-        Tx a(x_given[i + j] - x), b(x - x_given[i]);
-        y[i] = (j > 1)
-            ? (y[i] * a + y[i + 1] * b) // 2nd, 3rd, ... order interpolation
-            : (y_given[i] * a + y_given[i + 1] * b); // linear interpolation
-        y[i] /= (x_given[i + j] - x_given[i]);
-      }
-    }
-  }
-  return y;
-}
-
 BOOST_FIXTURE_TEST_SUITE(algorithm, Fixture)
 
 BOOST_AUTO_TEST_CASE(interpolate_neville){
@@ -155,7 +110,7 @@ BOOST_AUTO_TEST_CASE(interpolate_neville){
       BOOST_CHECK_EQUAL(y2, y4);
 
       // derivatives
-      interpolate_Neville(x_given, y_given, x, y_buf, dy_buf, order);
+      interpolate_Neville(x_given, y_given, x, y_buf, order, dy_buf, order);
       for(int j(1); j <= order; ++j){
         double dy(0); // truth
         for(int k(j); k <= order; ++k){
