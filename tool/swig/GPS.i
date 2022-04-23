@@ -1324,7 +1324,23 @@ template <class FloatT>
 struct SP3 : public SP3_Product<FloatT> {
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
-    return SP3_Reader<FloatT>::read_all(fin, *this);
+    struct callback_t {
+      static int sat_id_relocator(const int &orig){
+        switch((char)((orig >> 8) & 0xFF)){ // TODO
+          case '\0': break; // GPS, SBAS, QZSS
+          case 'R': // GLONASS
+          case 'L': // Low-Earth Orbiting (LEO) satellites
+          case 'E': // Galileo
+          case 'C': // BeiDou
+          case 'I': // IRNSS
+          default:
+            break;
+        }
+        return orig;
+      }
+    };
+    return SP3_Reader<FloatT>::read_all(
+        fin, *this, callback_t::sat_id_relocator);
   }
   System_XYZ<FloatT, WGS84> position(
       const int &sat_id, const GPS_Time<FloatT> &t) const {

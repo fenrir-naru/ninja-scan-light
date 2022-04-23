@@ -551,7 +551,17 @@ class SP3_Reader {
       }
     };
 
-    static int read_all(std::istream &in, SP3_Product<FloatT> &dst) {
+    /**
+     * @param sat_id_relocator function pointer to modify satellite ID
+     * provided as the first argument.
+     * The default "NULL" means using original satellite ID
+     * described in SP3 file.
+     * If the return value of this function is negative,
+     * its information is discarded.
+     */
+    static int read_all(
+        std::istream &in, SP3_Product<FloatT> &dst,
+        int (*sat_id_relocator)(const int &) = NULL) {
       SP3_Reader<FloatT> src(in);
       typedef SP3_Product<FloatT> dst_t;
       int res(0);
@@ -600,12 +610,20 @@ class SP3_Reader {
             buf.flush();
             buf.epoch = parsed.item.epoch;
             break;
-          case parsed_t::POSITION_CLOCK:
-            buf.entries[parsed.item.position_clock.vehicle_id].pos = parsed.item.position_clock;
+          case parsed_t::POSITION_CLOCK: {
+            int sat_id(parsed.item.position_clock.vehicle_id);
+            if(sat_id_relocator){sat_id = sat_id_relocator(sat_id);}
+            if(sat_id < 0){break;}
+            buf.entries[sat_id].pos = parsed.item.position_clock;
             break;
-          case parsed_t::VELOCITY_RATE:
-            buf.entries[parsed.item.velocity_rate.vehicle_id].vel = parsed.item.velocity_rate;
+          }
+          case parsed_t::VELOCITY_RATE: {
+            int sat_id(parsed.item.velocity_rate.vehicle_id);
+            if(sat_id_relocator){sat_id = sat_id_relocator(sat_id);}
+            if(sat_id < 0){break;}
+            buf.entries[sat_id].vel = parsed.item.velocity_rate;
             break;
+          }
           default: break;
         }
       }
