@@ -120,6 +120,7 @@ BOOST_AUTO_TEST_CASE(SP3_d){
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
     BOOST_CHECK_EQUAL(reader_t::read_all(in, product), 6);
+    BOOST_CHECK_EQUAL(product.epochs().size(), 1);
     GPS_Time<fnum_t> epoch(1734, 259200);
     for(int sat_id(1); sat_id <= 6; ++sat_id){
       System_XYZ<fnum_t> pos(product.satellites[sat_id].position(epoch));
@@ -246,6 +247,7 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
     BOOST_CHECK_EQUAL(reader_t::read_all(in, product), 2);
+    BOOST_CHECK_EQUAL(product.epochs().size(), 1);
     GPS_Time<fnum_t> epoch(1126, 259200);
     for(int sat_id(1); sat_id <= 2; ++sat_id){
       GPS_SpaceNode<fnum_t>::SatelliteProperties::constellation_t

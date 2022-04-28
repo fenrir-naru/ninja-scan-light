@@ -39,6 +39,7 @@
 
 #include <ctime>
 #include <map>
+#include <set>
 #include <algorithm>
 #include <stdexcept>
 
@@ -196,7 +197,32 @@ struct SP3_Product {
       }
     }
   };
-  std::map<int, per_satellite_t> satellites;
+  typedef std::map<int, per_satellite_t> satellites_t;
+  satellites_t satellites;
+
+  typedef std::set<GPS_Time<FloatT> > epochs_t;
+  epochs_t epochs() const {
+    epochs_t res;
+    struct time_iterator : public per_satellite_t::history_t::const_iterator {
+      time_iterator(
+          const typename per_satellite_t::history_t::const_iterator &it)
+          : per_satellite_t::history_t::const_iterator(it) {}
+      GPS_Time<FloatT> operator*() const {
+        return (*this)->first;
+      }
+    };
+    for(typename satellites_t::const_iterator
+          it(satellites.begin()), it_end(satellites.end());
+        it != it_end; ++it){
+      res.insert(
+          time_iterator(it->second.pos_history.begin()),
+          time_iterator(it->second.pos_history.end()));
+      res.insert(
+          time_iterator(it->second.vel_history.begin()),
+          time_iterator(it->second.vel_history.end()));
+    }
+    return res;
+  }
 };
 
 template <class FloatT>
