@@ -38,6 +38,7 @@
 #define __SP3_H__
 
 #include <ctime>
+#include <cstring>
 #include <map>
 #include <set>
 #include <algorithm>
@@ -223,6 +224,23 @@ struct SP3_Product {
     }
     return res;
   }
+
+  bool has_position() const {
+    for(typename satellites_t::const_iterator
+          it(satellites.begin()), it_end(satellites.end());
+        it != it_end; ++it){
+      if(!it->second.pos_history.empty()){return true;};
+    }
+    return false;
+  }
+  bool has_velocity() const {
+    for(typename satellites_t::const_iterator
+          it(satellites.begin()), it_end(satellites.end());
+        it != it_end; ++it){
+      if(!it->second.vel_history.empty()){return true;};
+    }
+    return false;
+  }
 };
 
 template <class FloatT>
@@ -244,6 +262,16 @@ class SP3_Reader {
       char coordinate_sys[5];
       char orbit_type[3];
       char agency[4];
+      l1_t &operator=(const GPS_Time<FloatT> &t) {
+        std::tm t_(t.c_tm());
+        year_start = t_.tm_year + 1900;
+        month_start = t_.tm_mon + 1;
+        day_of_month_st = t_.tm_mday;
+        hour_start = t_.tm_hour;
+        minute_start = t_.tm_min;
+        second_start = (t.seconds - (int)t.seconds) + t_.tm_sec;
+        return *this;
+      }
     };
     struct l2_t {
       char symbols[2];
@@ -286,7 +314,7 @@ class SP3_Reader {
     };
     struct comment_t {
       char symbols[2];
-      char comment[57];
+      char comment[77];
     };
     struct epoch_t {
       char symbols[2];
@@ -310,6 +338,16 @@ class SP3_Reader {
       }
       operator GPS_Time<FloatT>() const {
         return GPS_Time<FloatT>(c_tm(), second_start - (int)second_start);
+      }
+      epoch_t &operator=(const GPS_Time<FloatT> &t) {
+        std::tm t_(t.c_tm());
+        year_start = t_.tm_year + 1900;
+        month_start = t_.tm_mon + 1;
+        day_of_month_st = t_.tm_mday;
+        hour_start = t_.tm_hour;
+        minute_start = t_.tm_min;
+        second_start = (t.seconds - (int)t.seconds) + t_.tm_sec;
+        return *this;
       }
     };
     struct position_clock_t {
@@ -913,6 +951,93 @@ class SP3_Writer {
       }
       res.replace(0, std::strlen(table[parsed.type].symbol), table[parsed.type].symbol);
       return res;
+    }
+
+    static void dump_default(
+        std::ostream &out, typename reader_t::parsed_t &item){
+      out << print_line(item) << std::endl;
+    }
+
+    static int write_all(
+        std::ostream &out, const SP3_Product<FloatT> &src,
+        void (*dump)(
+          std::ostream &, typename reader_t::parsed_t &) = dump_default) {
+      typedef SP3_Product<FloatT> src_t;
+      typedef typename src_t::epochs_t epochs_t;
+      epochs_t epochs(src.epochs());
+      if(epochs.empty()){return 0;}
+      { // 1st line
+        typename reader_t::parsed_t header = {reader_t::parsed_t::L1};
+        header.item.l1 = *epochs.begin();
+        header.item.l1.number_of_epochs = epochs.size();
+        header.item.l1.pos_or_vel_flag[0] = src.has_velocity() ? 'V' : 'P';
+        dump(out, header);
+      }
+      { // 2nd line
+        typename reader_t::parsed_t first_epoch = {reader_t::parsed_t::L2};
+        GPS_Time<FloatT> t0(*epochs.begin());
+        first_epoch.item.l2.gps_week = t0.week;
+        first_epoch.item.l2.seconds_of_week = t0.seconds;
+        first_epoch.item.l2.epoch_interval
+            = (epochs.size() > 1) ? (*(++(epochs.begin())) - t0) : 0;
+        FloatT day_of_week(t0.seconds / 86400);
+        first_epoch.item.l2.mod_jul_day_st
+            = 44244 + (t0.week * 7) + (int)day_of_week;
+        first_epoch.item.l2.fractional_day
+            = day_of_week - (int)day_of_week;
+        dump(out, first_epoch);
+      }
+      typedef typename src_t::satellites_t sats_t;
+      { // 3rd line
+        int sats(src.satellites.size());
+        typename reader_t::parsed_t sat_list = {reader_t::parsed_t::L3_11};
+        sat_list.item.l3_11.number_of_sats = sats;
+        typename sats_t::const_iterator
+            it(src.satellites.begin()), it_end(src.satellites.end());
+        int lines((sats + 16) / 17);
+        for(int i(lines < 5 ? 5 : lines); i > 0; --i){
+          for(int j(0); j < 17; ++j){
+            sat_list.item.l3_11.sat_id[j] = ((it == it_end) ? 0 : (it++)->first);
+          }
+          dump(out, sat_list);
+          sat_list.item.l3_11.number_of_sats = 0;
+        }
+      }
+      typename reader_t::parsed_t
+          pos = {reader_t::parsed_t::POSITION_CLOCK},
+          vel = {reader_t::parsed_t::VELOCITY_RATE},
+          time = {reader_t::parsed_t::EPOCH};
+      pos.item.position_clock.has_sdev = false;
+      vel.item.velocity_rate.has_sdev = false;
+      int entries(0);
+      for(typename epochs_t::const_iterator it(epochs.begin()), it_end(epochs.end());
+          it != it_end; ++it){
+        time.item.epoch = *it;
+        dump(out, time);
+        for(typename sats_t::const_iterator
+              it2(src.satellites.begin()), it2_end(src.satellites.end());
+            it2 != it2_end; ++it2){
+          typename src_t::per_satellite_t::history_t::const_iterator it_entry;
+          if((it_entry = it2->second.pos_history.find(*it))
+              == it2->second.pos_history.end()){continue;}
+          ++entries;
+          pos.item.position_clock.vehicle_id = it2->first;
+          for(int i(0); i < 3; ++i){
+            pos.item.position_clock.coordinate_km[i] = it_entry->second.xyz[i] * 1E-3;
+          }
+          pos.item.position_clock.clock_us = it_entry->second.clk * 1E6;
+          dump(out, pos);
+          if((it_entry = it2->second.vel_history.find(*it))
+              == it2->second.vel_history.end()){continue;}
+          vel.item.velocity_rate.vehicle_id = it2->first;
+          for(int i(0); i < 3; ++i){
+            vel.item.velocity_rate.velocity_dm_s[i] = it_entry->second.xyz[i] * 1E1;
+          }
+          vel.item.velocity_rate.clock_rate_chg_100ps_s = it_entry->second.clk * 1E10;
+          dump(out, vel);
+        }
+      }
+      return entries;
     }
 };
 

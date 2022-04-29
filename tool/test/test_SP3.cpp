@@ -138,6 +138,10 @@ BOOST_AUTO_TEST_CASE(SP3_d){
           product.satellites[sat_id].clock_error_dot(epoch),
           std::range_error);
     }
+
+    std::stringstream ss;
+    writer_t::write_all(ss, product);
+    BOOST_TEST_MESSAGE(ss.str());
   }
 }
 
@@ -267,6 +271,10 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
             - (vel_rate[sat_id - 1][3] * 1E-10),
           1E-16);
     }
+
+    std::stringstream ss;
+    writer_t::write_all(ss, product);
+    BOOST_TEST_MESSAGE(ss.str());
   }
 }
 
