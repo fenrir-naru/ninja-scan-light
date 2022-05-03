@@ -128,41 +128,42 @@ class GPS_SinglePositioning : public SolverBaseT {
       inline satellite_t select(const prn_t &prn, const gps_time_t &receiver_time) const {
         return impl_select(impl, prn, receiver_time);
       }
-
-      struct broadcast_t {
-        static inline const typename space_node_t::Satellite &sat(const void *ptr) {
-          return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
+      static satellite_t select_broadcast(
+          const void *ptr, const prn_t &prn, const gps_time_t &receiver_time){
+        // If this static function is defined in inner struct,
+        // C2440 error raises with VC2010
+        const typename space_node_t::satellites_t &sats(
+            reinterpret_cast<const space_node_t *>(ptr)->satellites());
+        const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
+        if((it_sat == sats.end()) // has ephemeris?
+            || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
+          return satellite_t::unavailable();
         }
-        static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-          return sat(ptr).position(t, pseudo_range);
-        }
-        static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-          return sat(ptr).velocity(t, pseudo_range);
-        }
-        static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-          return sat(ptr).clock_error(t, pseudo_range);
-        }
-        static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-          return sat(ptr).clock_error_dot(t, pseudo_range);
-        }
-        static satellite_t select(
-            const void *ptr, const prn_t &prn, const gps_time_t &receiver_time){
-          const typename space_node_t::satellites_t &sats(
-              reinterpret_cast<const space_node_t *>(ptr)->satellites());
-          const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
-          if((it_sat == sats.end()) // has ephemeris?
-              || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
-            return satellite_t::unavailable();
+        struct impl_t {
+          static inline const typename space_node_t::Satellite &sat(const void *ptr) {
+            return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
           }
-          satellite_t res = {
-              &(it_sat->second),
-              position, velocity,
-              clock_error, clock_error_dot};
-          return res;
-        }
-      };
+          static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            return sat(ptr).position(t, pseudo_range);
+          }
+          static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            return sat(ptr).velocity(t, pseudo_range);
+          }
+          static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            return sat(ptr).clock_error(t, pseudo_range);
+          }
+          static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            return sat(ptr).clock_error_dot(t, pseudo_range);
+          }
+        };
+        satellite_t res = {
+            &(it_sat->second),
+            impl_t::position, impl_t::velocity,
+            impl_t::clock_error, impl_t::clock_error_dot};
+        return res;
+      }
       satellites_t(const space_node_t &sn)
-          : impl(&sn), impl_select(broadcast_t::select) {}
+          : impl(&sn), impl_select(select_broadcast) {}
     } satellites;
 
     struct klobuchar_t : public range_corrector_t {
