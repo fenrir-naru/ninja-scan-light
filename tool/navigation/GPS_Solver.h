@@ -95,7 +95,6 @@ class GPS_SinglePositioning : public SolverBaseT {
 
     typedef typename base_t::space_node_t space_node_t;
     inheritate_type(gps_time_t);
-    typedef typename space_node_t::Satellite satellite_t;
 
     inheritate_type(xyz_t);
     inheritate_type(llh_t);
@@ -106,6 +105,7 @@ class GPS_SinglePositioning : public SolverBaseT {
     inheritate_type(prn_obs_t);
     typedef typename base_t::measurement_t measurement_t;
     inheritate_type(measurement_items_t);
+    typedef typename base_t::satellite_t satellite_t;
     typedef typename base_t::range_error_t range_error_t;
     typedef typename base_t::range_corrector_t range_corrector_t;
     typedef typename base_t::range_correction_t range_correction_t;
@@ -119,11 +119,51 @@ class GPS_SinglePositioning : public SolverBaseT {
         GPS_SinglePositioning_Options<float_t>, base_t> options_t;
 
   protected:
-    const space_node_t &_space_node;
     GPS_SinglePositioning_Options<float_t> _options;
 
   public:
-    const space_node_t &space_node() const {return _space_node;}
+    struct satellites_t {
+      const void *impl;
+      satellite_t (*impl_select)(const void *, const prn_t &, const gps_time_t &);
+      inline satellite_t select(const prn_t &prn, const gps_time_t &receiver_time) const {
+        return impl_select(impl, prn, receiver_time);
+      }
+
+      struct broadcast_t {
+        static inline const typename space_node_t::Satellite &sat(const void *ptr) {
+          return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
+        }
+        static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          return sat(ptr).position(t, pseudo_range);
+        }
+        static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          return sat(ptr).velocity(t, pseudo_range);
+        }
+        static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          return sat(ptr).clock_error(t, pseudo_range);
+        }
+        static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          return sat(ptr).clock_error_dot(t, pseudo_range);
+        }
+        static satellite_t select(
+            const void *ptr, const prn_t &prn, const gps_time_t &receiver_time){
+          const typename space_node_t::satellites_t &sats(
+              reinterpret_cast<const space_node_t *>(ptr)->satellites());
+          const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
+          if((it_sat == sats.end()) // has ephemeris?
+              || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
+            return satellite_t::unavailable();
+          }
+          satellite_t res = {
+              &(it_sat->second),
+              position, velocity,
+              clock_error, clock_error_dot};
+          return res;
+        }
+      };
+      satellites_t(const space_node_t &sn)
+          : impl(&sn), impl_select(broadcast_t::select) {}
+    } satellites;
 
     struct klobuchar_t : public range_corrector_t {
       const space_node_t &space_node;
@@ -185,7 +225,8 @@ class GPS_SinglePositioning : public SolverBaseT {
     }
 
     GPS_SinglePositioning(const space_node_t &sn)
-        : base_t(), _space_node(sn), _options(available_options(options_t())),
+        : base_t(), _options(available_options(options_t())),
+        satellites(sn),
         ionospheric_klobuchar(sn), ionospheric_ntcm_gl(),
         tropospheric_simplified(),
         ionospheric_correction(), tropospheric_correction() {
@@ -309,27 +350,17 @@ class GPS_SinglePositioning : public SolverBaseT {
     }
 
     /**
-     * Check availability of a satellite with which observation is associated
+     * Select satellite with which observation is associated
      *
      * @param prn satellite number
      * @param receiver_time receiver time
-     * @return (const satellite_t *) If available, const pointer to satellite is returned,
-     * otherwise NULL.
+     * @return (satellite_t) If available, satellite.is_available() returning true is returned.
      */
-    const satellite_t *is_available(
-        const typename space_node_t::satellites_t::key_type &prn,
+    satellite_t select_satellite(
+        const prn_t &prn,
         const gps_time_t &receiver_time) const {
-
-      if(_options.exclude_prn[prn]){return NULL;}
-
-      const typename space_node_t::satellites_t &sats(_space_node.satellites());
-      const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
-      if((it_sat == sats.end()) // has ephemeris?
-          || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
-        return NULL;
-      }
-
-      return &(it_sat->second);
+      if(_options.exclude_prn[prn]){return satellite_t::unavailable();}
+      return satellites.select(prn, receiver_time);
     }
 
     /**
@@ -359,8 +390,8 @@ class GPS_SinglePositioning : public SolverBaseT {
         return res; // If no range entry, return with weight = 0
       }
 
-      const satellite_t *sat(is_available(prn, time_arrival));
-      if(!sat){return res;} // If satellite is unavailable, return with weight = 0
+      satellite_t sat(select_satellite(prn, time_arrival));
+      if(!sat.is_available()){return res;} // If satellite is unavailable, return with weight = 0
 
       residual_t residual = {
         res.range_residual,
@@ -369,9 +400,9 @@ class GPS_SinglePositioning : public SolverBaseT {
       };
 
       res.range_corrected = range_corrected(
-          *sat, range - receiver_error, time_arrival,
+          sat, range - receiver_error, time_arrival,
           usr_pos, residual, range_error);
-      res.rate_relative_neg = rate_relative_neg(*sat, res.range_corrected, time_arrival, usr_vel,
+      res.rate_relative_neg = rate_relative_neg(sat, res.range_corrected, time_arrival, usr_vel,
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
 
       return res;
@@ -415,7 +446,7 @@ class GPS_SinglePositioning : public SolverBaseT {
         float_t range;
         if(!this->range(it->second, range)){continue;} // No range entry
 
-        if(!is_available(it->first, receiver_time)){continue;} // No satellite
+        if(!(select_satellite(it->first, receiver_time).is_available())){continue;} // No satellite
 
         typename base_t::measurement2_t::value_type v = {
             it->first, &(it->second), this}; // prn, measurement, solver
@@ -432,8 +463,8 @@ class GPS_SinglePositioning : public SolverBaseT {
         const gps_time_t &time,
         xyz_t &res) const {
 
-      const satellite_t *sat(is_available(prn, time));
-      return sat ? &(res = sat->position(time)) : NULL;
+      satellite_t sat(select_satellite(prn, time));
+      return sat.is_available() ? &(res = sat.position(time)) : NULL;
     }
 };
 

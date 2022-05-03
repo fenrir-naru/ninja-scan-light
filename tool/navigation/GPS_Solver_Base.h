@@ -226,6 +226,33 @@ struct GPS_Solver_Base {
     return res;
   }
 
+  struct satellite_t {
+    const void *impl;
+    xyz_t (*impl_position)(const void *, const gps_time_t &, const float_t &);
+    xyz_t (*impl_velocity)(const void *, const gps_time_t &, const float_t &);
+    float_t (*impl_clock_error)(const void *, const gps_time_t &, const float_t &);
+    float_t (*impl_clock_error_dot)(const void *, const gps_time_t &, const float_t &);
+    inline bool is_available() const {
+      return impl != NULL;
+    }
+    inline xyz_t position(const gps_time_t &t, const float_t &pseudo_range = 0) const {
+      return impl_position(impl, t, pseudo_range);
+    }
+    inline xyz_t velocity(const gps_time_t &t, const float_t &pseudo_range = 0) const {
+      return impl_velocity(impl, t, pseudo_range);
+    }
+    inline float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const {
+      return impl_clock_error(impl, t, pseudo_range);
+    }
+    inline float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
+      return impl_clock_error_dot(impl, t, pseudo_range);
+    }
+    static const satellite_t &unavailable() {
+      static const satellite_t res = {NULL};
+      return res;
+    }
+  };
+
   struct range_corrector_t {
     virtual ~range_corrector_t() {}
     virtual bool is_available(const gps_time_t &t) const {
