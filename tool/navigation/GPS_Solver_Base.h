@@ -253,6 +253,20 @@ struct GPS_Solver_Base {
     }
   };
 
+  /**
+   * Select satellite by using PRN and time
+   * This function should be overridden.
+   *
+   * @param prn satellite number
+   * @param receiver_time receiver time
+   * @return (satellite_t) If available, satellite.is_available() returning true is returned.
+   */
+  virtual satellite_t select_satellite(
+      const prn_t &prn,
+      const gps_time_t &receiver_time) const {
+    return satellite_t::unavailable();
+  }
+
   struct range_corrector_t {
     virtual ~range_corrector_t() {}
     virtual bool is_available(const gps_time_t &t) const {
@@ -866,21 +880,6 @@ protected:
 
 public:
   /**
-   * Calculate satellite position
-   *
-   * @param prn satellite number
-   * @param time GPS time
-   * @param res object to which results are stored
-   * @return If position is available, &res will be returned, otherwise NULL.
-   */
-  virtual xyz_t *satellite_position(
-      const prn_t &prn,
-      const gps_time_t &time,
-      xyz_t &res) const {
-    return NULL;
-  }
-
-  /**
    * Calculate User position/velocity with hint
    * This is multi-constellation version,
    * and reference implementation to be hidden by optimized one in sub class.
@@ -909,8 +908,7 @@ public:
         it != it_end; ++it){
       typename measurement2_t::value_type v = {
           it->first, &(it->second), &select(it->first)}; // prn, measurement, solver
-      xyz_t sat;
-      if(!v.solver->satellite_position(v.prn, receiver_time, sat)){
+      if(!v.solver->select_satellite(v.prn, receiver_time).is_available()){
         // pre-check satellite availability; remove it when its position is unknown
         continue;
       }

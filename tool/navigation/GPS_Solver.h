@@ -351,7 +351,7 @@ class GPS_SinglePositioning : public SolverBaseT {
     }
 
     /**
-     * Select satellite with which observation is associated
+     * Select satellite by using PRN and time
      *
      * @param prn satellite number
      * @param receiver_time receiver time
@@ -457,15 +457,6 @@ class GPS_SinglePositioning : public SolverBaseT {
           res,
           measurement2, receiver_time, user_position_init, receiver_error_init,
           typename base_t::user_pvt_opt_t(good_init, with_velocity));
-    }
-
-    xyz_t *satellite_position(
-        const prn_t &prn,
-        const gps_time_t &time,
-        xyz_t &res) const {
-
-      satellite_t sat(select_satellite(prn, time));
-      return sat.is_available() ? &(res = sat.position(time)) : NULL;
     }
 };
 
