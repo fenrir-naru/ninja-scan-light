@@ -38,12 +38,13 @@
 /*
  * perform Neville's interpolation (with derivative)
  *
- * @param x_given list of x assumed to be accessible with [], order is non-sensitive
- * @param y_given list of y assumed to be accessible with [], order is non-sensitive
+ * @param x_given list of x assumed to be accessible with [0..n], order is non-sensitive
+ * @param y_given list of y assumed to be accessible with [0..n], order is non-sensitive
  * @param x desired x
- * @param y y[0] is output and the others are used as buffer to store temporary results
+ * @param y y[0] is output, and y[1..n-1] are used as buffer to store temporary results
  * @param n order
- * @param dy dy[i][0] is (i+1)th derivative outputs like y[0]
+ * @param dy dy[i][0] is (i+1)th derivative outputs like y[0];
+ * dy[0..nd][0..n-1] should be accessible
  * @param nd maximum order of required derivative
  * @return (Ty &) [0] = interpolated result
  */
@@ -54,33 +55,48 @@ Ty &interpolate_Neville(
     Ty *dy = NULL, const std::size_t &nd = 0) {
   if(n == 0){
     y[0] = y_given[0];
-    // for(int d(nd); d >= 0; --d){dy[d][0] = 0;} // assumption
+    // for(std::size_t d(nd); d >= 0; --d){dy[d][0] = 0;}
+    return y;
   }
-  for(int j(1); j <= (int)n; ++j){
-    for(int d(-1 + (((int)nd >= j) ? j : nd)); d >= 0; --d){
-      // d = 0, 1, ... are 1st, 2nd, ... order derivative
-      // skip dy[d(>=j)] because of 0
-      Ty &dy0(dy[d]), &dy1(d > 0 ? (Ty &)dy[d - 1] : (Ty &)y); // cast required for MSVC
-      for(int i(0); i <= ((int)n - j); ++i){
-        if(d + 1 < j){
-          Tx a(x_given[i + j] - x), b(x - x_given[i]);
-          dy0[i] = dy0[i] * a + dy0[i + 1] * b;
-          dy0[i] += ((j > 1)
-              ? (dy1[i+1] - dy1[i])
-              : (y_given[i+1] - y_given[i])) * (d + 1);
-        }else{
-          dy0[i] = ((j > 1)
-              ? (dy1[i+1] - dy1[i])
-              : (y_given[i+1] - y_given[i])) * (d + 1);
-        }
+  { // first step
+    if(nd > 0){ // for 1st order derivative
+      for(std::size_t i(0); i < n; ++i){
+        dy[0][i] = (y_given[i+1] - y_given[i]);
+        dy[0][i] /= (x_given[i+1] - x_given[i]);
+      }
+    }
+    for(std::size_t i(0); i < n; ++i){ // linear interpolation
+      Tx a(x_given[i+1] - x), b(x - x_given[i]);
+      y[i] = (y_given[i] * a + y_given[i+1] * b);
+      y[i] /= (x_given[i+1] - x_given[i]);
+    }
+  }
+  for(std::size_t j(2); j <= n; ++j){
+    int d((nd >= j) ? j : nd);
+    // d = 1, 2, ... are 1st, 2nd, ... order derivative
+    // In order to avoid overwriting of temporary calculation,
+    // higher derivative calculation is performed earlier.
+    // dy[d(>=j+1)] is skipped because of 0
+    if(d >= (int)j){ // for derivative, just use lower level
+      Ty &dy0(dy[d-1]), &dy1(d > 1 ? (Ty &)dy[d-2] : (Ty &)y); // cast required for MSVC
+      for(std::size_t i(0); i <= (n - j); ++i){
+        dy0[i] = (dy1[i+1] - dy1[i]) * d;
+        dy0[i] /= (x_given[i + j] - x_given[i]);
+      }
+      --d;
+    }
+    for(; d > 0; --d){ // for derivative, use same and lower level
+      Ty &dy0(dy[d-1]), &dy1(d > 1 ? (Ty &)dy[d-2] : (Ty &)y); // cast required for MSVC
+      for(std::size_t i(0); i <= (n - j); ++i){
+        Tx a(x_given[i + j] - x), b(x - x_given[i]);
+        dy0[i] = dy0[i] * a + dy0[i+1] * b;
+        dy0[i] += (dy1[i+1] - dy1[i]) * d;
         dy0[i] /= (x_given[i + j] - x_given[i]);
       }
     }
-    for(int i(0); i <= ((int)n - j); ++i){ // d = -1 (interpolation)
+    for(std::size_t i(0); i <= (n - j); ++i){ // d == 0 (interpolation), just use same level
       Tx a(x_given[i + j] - x), b(x - x_given[i]);
-      y[i] = (j > 1)
-          ? (y[i] * a + y[i + 1] * b) // 2nd, 3rd, ... order
-          : (y_given[i] * a + y_given[i + 1] * b); // linear
+      y[i] = (y[i] * a + y[i+1] * b);
       y[i] /= (x_given[i + j] - x_given[i]);
     }
   }

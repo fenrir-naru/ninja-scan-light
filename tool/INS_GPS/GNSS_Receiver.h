@@ -768,10 +768,13 @@ data.sbas.solver_options. expr
     };
     print_az_el_t az_el(const int &prn) const {
       print_az_el_t res = {false};
-      xyz_t xyz_sat;
-      if(xyz_base && raw.solver->select(prn).satellite_position(prn, raw.gpstime, xyz_sat)){
-        res.valid = true;
-        res.enu_sat = solver_t::enu_t::relative(xyz_sat, *xyz_base);
+      if(xyz_base){
+        typename solver_t::satellite_t sat(
+            raw.solver->select(prn).select_satellite(prn, raw.gpstime));
+        if(sat.is_available()){
+          res.valid = true;
+          res.enu_sat = solver_t::enu_t::relative(sat.position(raw.gpstime), *xyz_base);
+        }
       }
       return res;
     }
