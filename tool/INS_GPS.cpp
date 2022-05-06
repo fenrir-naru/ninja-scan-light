@@ -2933,7 +2933,9 @@ int main(int argc, char *argv[]){
     StreamProcessor stream_processor;
     args_t args_proc(args_proc_common);
 
-    receiver_t receiver;
+    receivers.resize(receivers.size() + 1);
+    receiver_t &receiver(receivers.back());
+    bool receiver_using(false);
 
     bool flag_common(false);
     for(; arg_index < argc; arg_index++){
@@ -2973,14 +2975,16 @@ int main(int argc, char *argv[]){
       }
       args_proc.clear();
 
-      // Currently one receiver par one log, which may be changed
-      receivers.push_back(receiver);
-      stream_processor.install_receiver(receivers.back(), processors.size());
+      // Currently one receiver per one log, which may be changed
+      stream_processor.install_receiver(receiver, processors.size());
+      receiver_using = true;
 
       processors.push_back(stream_processor);
       cerr << stream_processor.calibration() << endl;
       break;
     }
+
+    if(!receiver_using){receivers.pop_back();}
 
     if(args_proc.size() > args_proc_common.size()){
       cerr << "(error!) unused log specific arguments." << endl;
