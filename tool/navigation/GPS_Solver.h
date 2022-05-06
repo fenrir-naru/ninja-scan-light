@@ -175,6 +175,7 @@ class GPS_SinglePositioning : public SolverBaseT {
       float_t *calculate(
           const gps_time_t &t, const pos_t &usr_pos, const enu_t &sat_rel_pos,
           float_t &buf) const {
+        if(!is_available(t)){return NULL;}
         return &(buf = space_node.iono_correction(sat_rel_pos, usr_pos.llh, t));
       }
     } ionospheric_klobuchar;
