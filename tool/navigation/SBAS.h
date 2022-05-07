@@ -2183,10 +2183,11 @@ template <typename T>
 typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
     SBAS_SpaceNode<FloatT>::KnownSatellites::sort(T sorter){
   static const typename SBAS_SpaceNode<FloatT>::RangingCode codes[] = {
+    {120,  145, 01106,    5,   "ASECNA (A-SBAS)"},
     {121,  175, 01241,    5,   "EGNOS (Eutelsat 5WB)"},
     {122,   52, 00267,  143.5, "SPAN (INMARSAT 4F1)"},
     {123,   21, 00232,   31.5, "EGNOS (ASTRA 5B)"},
-    {124,  237, 01617,    0,   "EGNOS (Reserved)"},
+    //{124,  237, 01617,    0,   "(Reserved)"},
     {125,  235, 01076,  -16,   "SDCM (Luch-5A)"},
     {126,  886, 01764,   63.9, "EGNOS (INMARSAT 4F2)"},
     {127,  657, 00717,   55,   "GAGAN (GSAT-8)"},
@@ -2198,16 +2199,30 @@ typename SBAS_SpaceNode<FloatT>::KnownSatellites::list_t
     {133,  603, 01731, -129,   "WAAS (SES-15)"},
     {134,  130, 00706,   91.5, "KASS (MEASAT-3D)"},
     {135,  359, 01216, -125,   "WAAS (Intelsat Galaxy 30)"},
-    {136,  595, 00740,    5,   "EGNOS (SES-5)"},
+    {136,  595, 00740,    5,   "EGNOS (HOTBIRD 13G)"},
     {137,   68, 01007,  127,   "MSAS (QZS-3)"},
     {138,  386, 00450,  107.3, "WAAS (ANIK F1R)"},
+    //{139,  797, 00305,    0,   "MSAS (QZS-7)"},
     {140,  456, 01653,   95,   "SDCM (Luch-5V)"},
     {141,  499, 01411,  167,   "SDCM (Luch-5A)"},
+    //{142,  883, 01644,    0,   "(Unallocated)"},
     {143,  307, 01312,  110.5, "BDSBAS (G3)"},
     {144,  127, 01060,   80,   "BDSBAS (G2)"},
-    {147,  118, 00355,   42.5, "NSAS (NIGCOMSAT-1R)"},
+    //{145,  211, 01560,    0,   "(Unallocated)"},
+    //{146,  121, 00035,    0,   "(Unallocated)"},
+    {147,  118, 00355,    5,   "ASECNA (A-SBAS)"},
     {148,  163, 00335,  -24.8, "ASAL (ALCOMSAT-1)"},
-  }; ///< @see https://www.gps.gov/technical/prn-codes/L1-CA-PRN-code-assignments-2020-Apr.pdf
+    //{149,  628, 01254,    0,   "(Unallocated)"},
+    //{150,  853, 01041,    0,   "EGNOS"},
+    //{151,  484, 00142,    0,   "(Unallocated)"},
+    //{152,  289, 01641,    0,   "(Unallocated)"},
+    //{153,  811, 01504,    0,   "(Unallocated)"},
+    //{154,  202, 00751,    0,   "(Unallocated)"},
+    //{155, 1021, 01774,    0,   "(Unallocated)"},
+    //{156,  463, 00107,    0,   "(Unallocated)"},
+    //{157,  568, 01153,    0,   "(Unallocated)"},
+    //{158,  904, 01542,    0,   "(Unallocated)"},
+  }; ///< @see https://www.gps.gov/technical/prn-codes/L1-CA-PRN-code-assignments-2021-Jun.pdf
   list_t res;
   res.reserve(sizeof(codes) / sizeof(codes[0]));
   for(unsigned int i(0); i < sizeof(codes) / sizeof(codes[0]); ++i){
