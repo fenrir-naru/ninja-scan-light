@@ -73,7 +73,6 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
     typedef SBAS_SpaceNode<float_t> space_node_t;
     inheritate_type(gps_time_t);
-    typedef typename space_node_t::Satellite satellite_t;
 
     inheritate_type(xyz_t);
     inheritate_type(enu_t);
@@ -81,6 +80,7 @@ class SBAS_SinglePositioning : public SolverBaseT {
     inheritate_type(pos_t);
 
     typedef typename base_t::measurement_t measurement_t;
+    typedef typename base_t::satellite_t satellite_t;
     typedef typename base_t::range_error_t range_error_t;
     typedef typename base_t::range_corrector_t range_corrector_t;
     typedef typename base_t::range_correction_t range_correction_t;
@@ -92,11 +92,52 @@ class SBAS_SinglePositioning : public SolverBaseT {
         SBAS_SinglePositioning_Options<float_t>, base_t> options_t;
 
   protected:
-    const space_node_t &_space_node;
     SBAS_SinglePositioning_Options<float_t> _options;
 
   public:
-    const space_node_t &space_node() const {return _space_node;}
+    struct satellites_t {
+      const void *impl;
+      satellite_t (*impl_select)(const void *, const prn_t &, const gps_time_t &);
+      inline satellite_t select(const prn_t &prn, const gps_time_t &receiver_time) const {
+        return impl_select(impl, prn, receiver_time);
+      }
+      static satellite_t select_broadcast(
+          const void *ptr, const prn_t &prn, const gps_time_t &receiver_time){
+        const typename space_node_t::satellites_t &sats(
+            reinterpret_cast<const space_node_t *>(ptr)->satellites());
+        const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
+        if((it_sat == sats.end()) // has ephemeris?
+            || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
+          return satellite_t::unavailable();
+        }
+        struct impl_t {
+          static inline const typename space_node_t::Satellite &sat(const void *ptr) {
+            return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
+          }
+          static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            return sat(ptr).ephemeris().constellation(t, pseudo_range, false).position;
+          }
+          static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            return sat(ptr).ephemeris().constellation(t, pseudo_range, true).velocity;
+          }
+          static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            // Clock correction is taken into account in position()
+            return 0;
+          }
+          static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+            // Clock rate error is taken in account in velocity()
+            return 0;
+          }
+        };
+        satellite_t res = {
+            &(it_sat->second),
+            impl_t::position, impl_t::velocity,
+            impl_t::clock_error, impl_t::clock_error_dot};
+        return res;
+      }
+      satellites_t(const space_node_t &sn)
+          : impl(&sn), impl_select(select_broadcast) {}
+    } satellites;
 
     struct ionospheric_sbas_t : public range_corrector_t {
       const space_node_t &space_node;
@@ -155,7 +196,8 @@ class SBAS_SinglePositioning : public SolverBaseT {
     }
 
     SBAS_SinglePositioning(const space_node_t &sn)
-        : base_t(), _space_node(sn), _options(available_options(options_t())),
+        : base_t(), _options(available_options(options_t())),
+        satellites(sn),
         ionospheric_sbas(sn), tropospheric_sbas() {
 
       // default ionospheric correction: Broadcasted IGP.
@@ -168,25 +210,17 @@ class SBAS_SinglePositioning : public SolverBaseT {
     ~SBAS_SinglePositioning(){}
 
     /**
-     * Check availability of a satellite with which observation is associated
+     * Select satellite by using PRN and time
      *
      * @param prn satellite number
      * @param receiver_time receiver time
-     * @return (const satellite_t *) If available, const pointer to satellite is returned,
-     * otherwise NULL.
+     * @return (satellite_t) If available, satellite.is_available() returning true is returned.
      */
-    const satellite_t *is_available(
-        const typename space_node_t::satellites_t::key_type &prn,
+    satellite_t select_satellite(
+        const prn_t &prn,
         const gps_time_t &receiver_time) const {
-
-      const typename space_node_t::satellites_t &sats(_space_node.satellites());
-      const typename space_node_t::satellites_t::const_iterator it_sat(sats.find(prn));
-      if((it_sat == sats.end()) // has ephemeris?
-          || (!it_sat->second.ephemeris().is_valid(receiver_time))){ // valid ephemeris?
-        return NULL;
-      }
-
-      return &(it_sat->second);
+      if(_options.exclude_prn[prn]){return satellite_t::unavailable();}
+      return satellites.select(prn, receiver_time);
     }
 
     /**
@@ -210,33 +244,28 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
       relative_property_t res = {0};
 
-      if(_options.exclude_prn[prn]){return res;}
-
       float_t range;
       range_error_t range_error;
       if(!this->range(measurement, range, &range_error)){
         return res; // If no range entry, return with weight = 0
       }
 
-      const satellite_t *sat(is_available(prn, time_arrival));
-      if(!sat){return res;} // If satellite is unavailable, return with weight = 0
+      satellite_t sat(select_satellite(prn, time_arrival));
+      if(!sat.is_available()){return res;} // If satellite is unavailable, return with weight = 0
 
       ///< The following procedure is based on Appendix.S with modification
 
       range -= receiver_error;
 
-      // Clock correction will be performed in the following constellation()
-      if(!(range_error.unknown_flag & range_error_t::SATELLITE_CLOCK)){
-        range += range_error.value[range_error_t::SATELLITE_CLOCK];
-      }
+      // Clock error correction
+      range += ((range_error.unknown_flag & range_error_t::SATELLITE_CLOCK)
+          ? (sat.clock_error(time_arrival, range) * GPS_SpaceNode<float_t>::light_speed)
+          : range_error.value[range_error_t::SATELLITE_CLOCK]);
 
       // TODO WAAS long term clock correction (2.1.1.4.11)
 
-      // Calculate satellite position and velocity
-      typename space_node_t::SatelliteProperties::constellation_t sat_pos_vel(
-          sat->ephemeris().constellation(time_arrival, range));
-
-      const xyz_t &sat_pos(sat_pos_vel.position);
+      // Calculate satellite position
+      xyz_t sat_pos(sat.position(time_arrival, range));
       float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
       // Calculate residual with Sagnac correction (A.4.4.11)
@@ -283,23 +312,14 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
       res.range_corrected = range;
 
-      xyz_t rel_vel(sat_pos_vel.velocity - usr_vel); // Calculate velocity
+      xyz_t rel_vel(sat.velocity(time_arrival, range) - usr_vel); // Calculate velocity
 
-      // Note: clock rate error is already accounted for in constellation()
       res.rate_relative_neg = res.los_neg[0] * rel_vel.x()
           + res.los_neg[1] * rel_vel.y()
-          + res.los_neg[2] * rel_vel.z();
+          + res.los_neg[2] * rel_vel.z()
+          + sat.clock_error_dot(time_arrival, range) * GPS_SpaceNode<float_t>::light_speed;
 
       return res;
-    }
-
-    xyz_t *satellite_position(
-        const prn_t &prn,
-        const gps_time_t &time,
-        xyz_t &res) const {
-
-      const satellite_t *sat(is_available(prn, time));
-      return sat ? &(res = sat->ephemeris().constellation(time).position) : NULL;
     }
 };
 
