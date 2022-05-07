@@ -9,10 +9,14 @@ if [[ $(sdcc --version) =~ "${SDCC}" ]]; then
 fi
 
 if [ ! -d sdcc-${SDCC} ]; then
-  if [ ! -f sdcc-src-${SDCC}.tar.bz2 ]; then
-    wget "https://downloads.sourceforge.net/project/sdcc/sdcc/${SDCC}/sdcc-src-${SDCC}.tar.bz2" -O sdcc-src-${SDCC}.tar.bz2
+  SDCC_SRC=sdcc-src-${SDCC}.tar.bz2
+  if [ -f $(dirname "$0")/src/${SDCC_SRC} ]; then
+    SDCC_SRC=$(dirname "$0")/src/${SDCC_SRC}
+  elif [ ! -f ${SDCC_SRC} ]; then
+    # dead link?
+    wget "https://downloads.sourceforge.net/project/sdcc/sdcc/${SDCC}/${SDCC_SRC}" -O ${SDCC_SRC}
   fi
-  mkdir sdcc-${SDCC} && tar jvxf sdcc-src-${SDCC}.tar.bz2 -C sdcc-${SDCC} --strip-components 1
+  mkdir sdcc-${SDCC} && tar jvxf ${SDCC_SRC} -C sdcc-${SDCC} --strip-components 1
 fi
 
 cd sdcc-${SDCC}
