@@ -302,6 +302,18 @@ struct SP3_Product {
     }while(false);
     return GPS_Solver_Base<FloatT>::satellite_t::unavailable();
   }
+
+  static typename GPS_Solver_Base<FloatT>::satellite_t select_GPS(
+      const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
+    // SBAS and QZSS are identically treated with GPS.
+    return reinterpret_cast<const SP3_Product<FloatT> *>(ptr)
+        ->select(prn, receiver_time);
+  }
+  static typename GPS_Solver_Base<FloatT>::satellite_t select_GLONASS(
+      const void *ptr, const int &id, const GPS_Time<FloatT> &receiver_time){
+    return reinterpret_cast<const SP3_Product<FloatT> *>(ptr)
+        ->select(id + (((int)'R') << 8), receiver_time);
+  }
 };
 
 template <class FloatT>
