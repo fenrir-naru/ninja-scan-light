@@ -1344,19 +1344,19 @@ struct SP3 : public SP3_Product<FloatT> {
   }
   System_XYZ<FloatT, WGS84> position(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
-    return const_cast<SP3 *>(this)->satellites[sat_id].position(t);
+    return SP3_Product<FloatT>::select(sat_id, t).position(t);
   }
   System_XYZ<FloatT, WGS84> velocity(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
-    return const_cast<SP3 *>(this)->satellites[sat_id].velocity(t);
+    return SP3_Product<FloatT>::select(sat_id, t).velocity(t);
   }
   FloatT clock_error(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
-    return const_cast<SP3 *>(this)->satellites[sat_id].clock_error(t);
+    return SP3_Product<FloatT>::select(sat_id, t).clock_error(t);
   }
   FloatT clock_error_dot(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
-    return const_cast<SP3 *>(this)->satellites[sat_id].clock_error_dot(t);
+    return SP3_Product<FloatT>::select(sat_id, t).clock_error_dot(t);
   }
 };
 }
