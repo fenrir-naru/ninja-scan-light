@@ -248,7 +248,15 @@ struct GPS_Solver_Base {
       return impl_clock_error_dot(impl, t, pseudo_range);
     }
     static const satellite_t &unavailable() {
-      static const satellite_t res = {NULL};
+      struct impl_t {
+        static xyz_t v3(const void *, const gps_time_t &, const float_t &){
+          return xyz_t(0, 0, 0);
+        }
+        static float_t v(const void *, const gps_time_t &, const float_t &){
+          return float_t(0);
+        }
+      };
+      static const satellite_t res = {NULL, impl_t::v3, impl_t::v3, impl_t::v, impl_t::v};
       return res;
     }
   };
