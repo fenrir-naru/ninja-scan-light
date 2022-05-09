@@ -303,16 +303,51 @@ struct SP3_Product {
     return GPS_Solver_Base<FloatT>::satellite_t::unavailable();
   }
 
-  static typename GPS_Solver_Base<FloatT>::satellite_t select_GPS(
-      const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
-    // SBAS and QZSS are identically treated with GPS.
-    return reinterpret_cast<const SP3_Product<FloatT> *>(ptr)
-        ->select(prn, receiver_time);
+  enum system_t {
+    SYSTEM_GPS,
+    SYSTEM_SBAS,
+    SYSTEM_QZSS,
+    SYSTEM_GLONASS,
+    SYSTEM_LEO,
+    SYSTEM_GALILEO,
+    SYSTEM_BEIDOU,
+    SYSTEM_IRNSS,
+  };
+
+  template <char prefix, class SelectorT>
+  bool push(SelectorT &slct) const {
+    struct impl_t {
+      static typename GPS_Solver_Base<FloatT>::satellite_t select(
+          const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
+        return reinterpret_cast<const SP3_Product<FloatT> *>(ptr)
+            ->select(prn + (((int)prefix) << 8), receiver_time);
+      }
+    };
+    slct.impl_select = impl_t::select;
+    slct.impl = this;
+    return true;
   }
-  static typename GPS_Solver_Base<FloatT>::satellite_t select_GLONASS(
-      const void *ptr, const int &id, const GPS_Time<FloatT> &receiver_time){
-    return reinterpret_cast<const SP3_Product<FloatT> *>(ptr)
-        ->select(id + (((int)'R') << 8), receiver_time);
+
+  /**
+   * push SP3 product to satellite selector
+   *
+   * @param slct satellite selector having impl and impl_select members
+   * @param sys target system, default is GPS
+   * @return (bool) If push is successfully performed, true will be returned.
+   */
+  template <class SelectorT>
+  bool push(SelectorT &slct, const system_t &sys = SYSTEM_GPS) const {
+    switch(sys){
+      case SYSTEM_GPS: // SBAS and QZSS are identically treated as GPS.
+      case SYSTEM_SBAS:
+      case SYSTEM_QZSS:     return push<'\0'>(slct);
+      case SYSTEM_GLONASS:  return push<'R'>(slct);
+      case SYSTEM_LEO:      return push<'L'>(slct);
+      case SYSTEM_GALILEO:  return push<'E'>(slct);
+      case SYSTEM_BEIDOU:   return push<'C'>(slct);
+      case SYSTEM_IRNSS:    return push<'I'>(slct);
+      default: return false;
+    }
   }
 };
 

@@ -1326,6 +1326,9 @@ struct SP3 : public SP3_Product<FloatT> {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     return SP3_Reader<FloatT>::read_all(fin, *this);
   }
+  bool push(GPS_Solver<FloatT> &solver) const {
+    return SP3_Product<FloatT>::push(solver.gps.solver.satellites, SP3_Product<FloatT>::SYSTEM_GPS);
+  }
   System_XYZ<FloatT, WGS84> position(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
     return SP3_Product<FloatT>::select(sat_id, t).position(t);
