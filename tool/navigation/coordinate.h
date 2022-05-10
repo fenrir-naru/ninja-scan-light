@@ -220,6 +220,19 @@ class System_XYZ : public System_3D<FloatT> {
           std::atan2(y(), x()),
           (p / std::cos(_lat) - n));
     }
+
+    /**
+     * Get coordinates in a delayed (i.e., rotated) ECEF frame.
+     *
+     * @param (delay_sec) delayed seconds (both positive (delayed) and negative (hasten) values
+     * are acceptable)
+     * @return (self_t) coordinates
+     */
+    self_t after(const FloatT &delay_sec) const {
+      FloatT rad(delay_sec * -Earth::Omega_Earth_IAU); // Earth rotation is negative direction (y->x)
+      FloatT crad(std::cos(rad)), srad(std::sin(rad));
+      return self_t(x() * crad - y() * srad, x() * srad + y() * crad, z());
+    }
 };
 
 template <class FloatT, class Earth>
