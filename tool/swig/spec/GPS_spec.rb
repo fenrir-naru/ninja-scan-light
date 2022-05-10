@@ -786,5 +786,38 @@ __SP3_TEXT__
         }
       }
     end
+    it 'calculates position without any error with SP3 product' do
+      sn = solver.gps_space_node
+      sp3 = GPS::SP3::new
+      sp3.read(input[:sp3])
+      expect(sp3.push(solver)).to eq(true)
+      GPS::RINEX_Observation::read(input[:rinex_obs]){|item|
+        t_meas = item[:time]
+        sn.update_all_ephemeris(t_meas)
+        
+        meas = GPS::Measurement::new
+        types = (item[:meas_types]['G'] || item[:meas_types][' ']).collect.with_index{|type_, i|
+          type_ = {
+            "C1" => :L1_PSEUDORANGE,
+            "D1" => :L1_RANGE_RATE,
+          }[type_]
+          type_ && [i, GPS::Measurement::const_get(type_)]
+        }.compact
+        item[:meas].each{|k, v|
+          sys, prn = k
+          next unless sys == 'G' # GPS only
+          types.each{|i, type_|
+            meas.add(prn, type_, v[i][0]) if v[i]
+          }
+        }
+
+        pvt = solver.solve(meas, t_meas)
+        expect(pvt.position_solved?).to eq(true)
+        [-3952590.4754, 3360273.8926, 3697987.2632].zip(pvt.xyz.to_a).each{|a, b|
+          expect(a).to be_within(1E+2).of(b) # 10 m
+        }
+        puts ([:lat, :lng].collect{|f| pvt.llh.send(f) / Math::PI * 180} + [pvt.llh.alt]).inspect
+      }
+    end
   end
 end

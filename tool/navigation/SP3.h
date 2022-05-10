@@ -228,10 +228,12 @@ struct SP3_Product {
           return pr / GPS_SpaceNode<FloatT>::light_speed;
         }
         static xyz_t position(const void *ptr, const gt_t &t, const float_t &pr) {
-          return sat(ptr).position(t - pr2sec(pr));
+          float_t delta_t(pr2sec(pr));
+          return sat(ptr).position(t - delta_t).after(delta_t);
         }
         static xyz_t velocity(const void *ptr, const gt_t &t, const float_t &pr) {
-          return sat(ptr).velocity(t - pr2sec(pr));
+          float_t delta_t(pr2sec(pr));
+          return sat(ptr).velocity(t - delta_t).after(delta_t);
         }
         static float_t clock_error(const void *ptr, const gt_t &t, const float_t &pr) {
           return sat(ptr).clock_error(t - pr2sec(pr));
