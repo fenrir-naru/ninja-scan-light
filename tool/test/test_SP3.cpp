@@ -138,7 +138,18 @@ BOOST_AUTO_TEST_CASE(SP3_d){
           product.satellites[sat_id].clock_error_dot(epoch),
           std::range_error);
     }
-
+    {
+      SP3_Product<fnum_t>::satellite_count_t cnt(product.satellite_count());
+      BOOST_CHECK_EQUAL(cnt.gps, 6);
+      BOOST_CHECK_EQUAL(cnt.sbas, 0);
+      BOOST_CHECK_EQUAL(cnt.qzss, 0);
+      BOOST_CHECK_EQUAL(cnt.glonass, 0);
+      BOOST_CHECK_EQUAL(cnt.leo, 0);
+      BOOST_CHECK_EQUAL(cnt.galileo, 0);
+      BOOST_CHECK_EQUAL(cnt.beidou, 0);
+      BOOST_CHECK_EQUAL(cnt.irnss, 0);
+      BOOST_CHECK_EQUAL(cnt.unknown, 0);
+    }
     std::stringstream ss;
     writer_t::write_all(ss, product);
     BOOST_TEST_MESSAGE(ss.str());
@@ -271,7 +282,18 @@ BOOST_AUTO_TEST_CASE(SP3_d_GPS_only){
             - (vel_rate[sat_id - 1][3] * 1E-10),
           1E-16);
     }
-
+    {
+      SP3_Product<fnum_t>::satellite_count_t cnt(product.satellite_count());
+      BOOST_CHECK_EQUAL(cnt.gps, 2);
+      BOOST_CHECK_EQUAL(cnt.sbas, 0);
+      BOOST_CHECK_EQUAL(cnt.qzss, 0);
+      BOOST_CHECK_EQUAL(cnt.glonass, 0);
+      BOOST_CHECK_EQUAL(cnt.leo, 0);
+      BOOST_CHECK_EQUAL(cnt.galileo, 0);
+      BOOST_CHECK_EQUAL(cnt.beidou, 0);
+      BOOST_CHECK_EQUAL(cnt.irnss, 0);
+      BOOST_CHECK_EQUAL(cnt.unknown, 0);
+    }
     std::stringstream ss;
     writer_t::write_all(ss, product);
     BOOST_TEST_MESSAGE(ss.str());

@@ -313,7 +313,7 @@ struct SP3_Product {
     SYSTEM_LEO,
     SYSTEM_GALILEO,
     SYSTEM_BEIDOU,
-    SYSTEM_IRNSS,
+    SYSTEM_IRNSS
   };
 
   template <char prefix, class SelectorT>
@@ -350,6 +350,33 @@ struct SP3_Product {
       case SYSTEM_IRNSS:    return push<'I'>(slct);
       default: return false;
     }
+  }
+
+  struct satellite_count_t {
+    int gps, sbas, qzss, glonass, leo, galileo, beidou, irnss, unknown;
+  };
+  satellite_count_t satellite_count() const {
+    satellite_count_t res = {0};
+    for(typename satellites_t::const_iterator
+          it(satellites.begin()), it_end(satellites.end());
+        it != it_end; ++it){
+      switch((char)(it->first >> 8)){
+        case '\0': {
+          int id(it->first & 0xFF);
+          if(id < 100){++res.gps;}
+          else if(id < 192){++res.sbas;}
+          else{++res.qzss;}
+          break;
+        }
+        case 'R': ++res.glonass;  break;
+        case 'L': ++res.leo;      break;
+        case 'E': ++res.galileo;  break;
+        case 'C': ++res.beidou;   break;
+        case 'I': ++res.irnss;    break;
+        default: ++res.unknown; break;
+      }
+    }
+    return res;
   }
 };
 
