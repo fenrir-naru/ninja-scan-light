@@ -306,29 +306,29 @@ struct SP3_Product {
   }
 
   enum system_t {
-    SYSTEM_GPS,
-    SYSTEM_SBAS,
-    SYSTEM_QZSS,
-    SYSTEM_GLONASS,
-    SYSTEM_LEO,
-    SYSTEM_GALILEO,
-    SYSTEM_BEIDOU,
-    SYSTEM_IRNSS
+    SYSTEM_GPS      = (int)'\0' << 8,
+    SYSTEM_SBAS     = SYSTEM_GPS,
+    SYSTEM_QZSS     = SYSTEM_GPS,
+    SYSTEM_GLONASS  = (int)'R' << 8,
+    SYSTEM_LEO      = (int)'L' << 8,
+    SYSTEM_GALILEO  = (int)'E' << 8,
+    SYSTEM_BEIDOU   = (int)'C' << 8,
+    SYSTEM_IRNSS    = (int)'I' << 8,
   };
 
-  template <char prefix, class SelectorT>
-  bool push(SelectorT &slct) const {
-    struct impl_t {
-      static typename GPS_Solver_Base<FloatT>::satellite_t select(
-          const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
-        return reinterpret_cast<const SP3_Product<FloatT> *>(ptr)
-            ->select(prn + (((int)prefix) << 8), receiver_time);
-      }
-    };
-    slct.impl_select = impl_t::select;
-    slct.impl = this;
-    return true;
-  }
+#define gen_func(sys) \
+static typename GPS_Solver_Base<FloatT>::satellite_t select_ ## sys( \
+    const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){ \
+  return reinterpret_cast<const SP3_Product<FloatT> *>(ptr) \
+      ->select(prn + SYSTEM_ ## sys, receiver_time); \
+}
+  gen_func(GPS);
+  gen_func(GLONASS);
+  gen_func(LEO);
+  gen_func(GALILEO);
+  gen_func(BEIDOU);
+  gen_func(IRNSS);
+#undef gen_fun
 
   /**
    * push SP3 product to satellite selector
@@ -341,15 +341,18 @@ struct SP3_Product {
   bool push(SelectorT &slct, const system_t &sys = SYSTEM_GPS) const {
     switch(sys){
       case SYSTEM_GPS: // SBAS and QZSS are identically treated as GPS.
-      case SYSTEM_SBAS:
-      case SYSTEM_QZSS:     return push<'\0'>(slct);
-      case SYSTEM_GLONASS:  return push<'R'>(slct);
-      case SYSTEM_LEO:      return push<'L'>(slct);
-      case SYSTEM_GALILEO:  return push<'E'>(slct);
-      case SYSTEM_BEIDOU:   return push<'C'>(slct);
-      case SYSTEM_IRNSS:    return push<'I'>(slct);
+      //case SYSTEM_SBAS:
+      //case SYSTEM_QZSS:
+        slct.impl_select = select_GPS; break;
+      case SYSTEM_GLONASS:  slct.impl_select = select_GLONASS;  break;
+      case SYSTEM_LEO:      slct.impl_select = select_LEO;      break;
+      case SYSTEM_GALILEO:  slct.impl_select = select_GALILEO;  break;
+      case SYSTEM_BEIDOU:   slct.impl_select = select_BEIDOU;   break;
+      case SYSTEM_IRNSS:    slct.impl_select = select_IRNSS;    break;
       default: return false;
     }
+    slct.impl = this;
+    return true;
   }
 
   struct satellite_count_t {
@@ -360,19 +363,19 @@ struct SP3_Product {
     for(typename satellites_t::const_iterator
           it(satellites.begin()), it_end(satellites.end());
         it != it_end; ++it){
-      switch((char)(it->first >> 8)){
-        case '\0': {
+      switch(it->first & 0xFF00){
+        case SYSTEM_GPS: {
           int id(it->first & 0xFF);
           if(id < 100){++res.gps;}
           else if(id < 192){++res.sbas;}
           else{++res.qzss;}
           break;
         }
-        case 'R': ++res.glonass;  break;
-        case 'L': ++res.leo;      break;
-        case 'E': ++res.galileo;  break;
-        case 'C': ++res.beidou;   break;
-        case 'I': ++res.irnss;    break;
+        case SYSTEM_GLONASS:  ++res.glonass;  break;
+        case SYSTEM_LEO:      ++res.leo;      break;
+        case SYSTEM_GALILEO:  ++res.galileo;  break;
+        case SYSTEM_BEIDOU:   ++res.beidou;   break;
+        case SYSTEM_IRNSS:    ++res.irnss;    break;
         default: ++res.unknown; break;
       }
     }
