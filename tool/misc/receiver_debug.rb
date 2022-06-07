@@ -566,6 +566,14 @@ class GPS_Receiver
     }
     $stderr.puts ", %d epochs."%[count] 
   end
+  
+  def attach_sp3(fname)
+    @sp3 ||= GPS::SP3::new
+    read_items = @sp3.read(fname)
+    raise "Format error! (Not SP3) #{fname}" if read_items < 0
+    $stderr.puts "Read SP3 file (%s): %d items."%[fname, read_items]
+    @sp3.push(@solver)
+  end
 end
 
 if __FILE__ == $0 then
@@ -576,7 +584,7 @@ if __FILE__ == $0 then
   files = ARGV.collect{|arg|
     next [arg, nil] unless arg =~ /^--([^=]+)=?/
     k, v = [$1.downcase.to_sym, $']
-    next [v, k] if [:rinex_nav, :rinex_obs, :ubx].include?(k) # file type
+    next [v, k] if [:rinex_nav, :rinex_obs, :ubx, :sp3].include?(k) # file type
     options << [$1.to_sym, $']
     nil
   }.compact
@@ -622,6 +630,7 @@ if __FILE__ == $0 then
     when /\.\d{2}n$/; :rinex_nav
     when /\.\d{2}o$/; :rinex_obs
     when /\.ubx$/; :ubx
+    when /\.sp3$/; :sp3
     else
       raise "Format cannot be guessed, use --(format, ex. rinex_nav)=#{fname}"
     end
@@ -660,9 +669,12 @@ if __FILE__ == $0 then
 
   puts rcv.header
 
-  # parse RINEX NAV
+  # parse RINEX NAV or SP3
   files.each{|fname, ftype|
-    rcv.parse_rinex_nav(fname) if ftype == :rinex_nav
+    case ftype
+    when :rinex_nav; rcv.parse_rinex_nav(fname)
+    when :sp3; rcv.attach_sp3(fname)
+    end
   }
   
   # other files
