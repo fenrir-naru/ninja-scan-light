@@ -52,6 +52,7 @@
 #include <cstring>
 #include <limits>
 
+#include "util/text_helper.h"
 #include "GPS.h"
 
 template <class U = void>
@@ -59,56 +60,12 @@ class RINEX_Reader {
   public:
     typedef RINEX_Reader<U> self_t;
     typedef std::map<std::string, std::vector<std::string> > header_t;
-    
-    struct src_stream_t : public std::istream {
-      src_stream_t(std::istream &is) : std::istream(is.rdbuf()) {}
-      /**
-       * getline() for multi-platform (in addition to \n, \r\n and \r are supported)
-       *
-       * @see https://stackoverflow.com/questions/6089231/getting-std-ifstream-to-handle-lf-cr-and-crlf
-       * @see https://en.cppreference.com/w/cpp/io/basic_istream/getline
-       * TODO gcount() mismatch
-       */
-      std::istream& getline(
-          typename std::istream::char_type* s,
-          std::streamsize n){
-        std::streamsize i(1), consumed(0);
-        typename std::istream::sentry se(*this, true);
-        if((bool)se){
-          std::streambuf* sb(this->rdbuf());
-          for(; i < n; ++i){
-            int c(sb->sbumpc());
-            if(c == std::streambuf::traits_type::eof()){
-              this->setstate(std::ios::eofbit);
-              break;
-            }
-            ++consumed;
-            if(c == '\n'){
-              break;
-            }else if(c == '\r'){
-              if(sb->sgetc() == '\n'){
-                sb->sbumpc();
-                ++consumed;
-              }
-              break;
-            }
-            *(s++) = (typename std::istream::char_type)c;
-          }
-        }
-        if(((i == 1) && (consumed == 0)) || (i == n)){
-          this->setstate(std::ios::failbit);
-        }else{
-          *s = '\0';
-        }
-        return *this;
-      }
-    };
 
   protected:
     header_t _header;
-    src_stream_t src;
+    typename TextHelper<>::crlf_stream_t src;
     bool _has_next;
-    
+
   public:
     struct version_type_t {
       int version;
@@ -184,57 +141,8 @@ class RINEX_Reader {
     bool has_next() const {return _has_next;}
 
     template <class T, bool is_integer = std::numeric_limits<T>::is_integer>
-    struct conv_t {
-      static bool d(
-          std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
-        if(str2val){
-          std::stringstream ss(buf.substr(offset, length));
-          ss >> *(T *)value;
-          return (ss.rdstate() & std::ios_base::failbit) == 0;
-        }else{
-          std::stringstream ss;
-          ss << std::setfill(opt == 1 ? '0' : ' ') << std::right << std::setw(length) << *(T *)value;
-          buf.replace(offset, length, ss.str());
-          return true;
-        }
-      }
-      static bool f_pure(
-          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
-        if(str2val){
-          std::stringstream ss(buf.substr(offset, length));
-          ss >> *(T *)value;
-          return (ss.rdstate() & std::ios_base::failbit) == 0;
-        }else{
-          std::stringstream ss;
-          ss << std::setfill(' ') << std::right << std::setw(length)
-              << std::setprecision(precision) << std::fixed
-              << *(T *)value;
-          buf.replace(offset, length, ss.str());
-          return true;
-        }
-      }
-      static bool f(
-          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
-        bool res(f_pure(buf, offset, length, value, precision, str2val));
-        if((!str2val) && res){
-          if((*(T *)value) >= 0){
-            if((*(T *)value) < 1){
-              int i(length - precision - 2);
-              // 0.12345 => .12345
-              if(i >= 0){buf[i + offset] = ' ';}
-            }
-          }else{
-            if((*(T *)value) > -1){
-              int i(length - precision - 2);
-              // -0.12345 => -.12345
-              if(i >= 0){buf[i + offset] = '-';}
-              if(--i >= 0){buf[i + offset] = ' ';}
-            }
-          }
-        }
-        return res;
-      }
-      static bool e(
+    struct conv_t : public TextHelper<>::template format_t<T> {
+      static bool e_dot_head(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         if(str2val){
           std::string s(buf.substr(offset, length));
@@ -270,66 +178,25 @@ class RINEX_Reader {
         }
       }
     };
+
     template <class T>
-    struct conv_t<T, true> {
-      static bool d(
-          std::string &buf, const int &offset, const int &length, void *value, const int &opt = 0, const bool &str2val = true){
-        return conv_t<T, false>::d(buf, offset, length, value, opt, str2val);
-      }
-      static bool f_pure(
+    struct conv_t<T, true> : public TextHelper<>::template format_t<T> {
+      static bool e_dot_head(
           std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
         double v(*(T *)value);
         bool res(
-            conv_t<double, false>::f_pure(buf, offset, length, &v, precision, str2val));
-        *(T *)value = static_cast<T>(v);
-        return res;
-      }
-      static bool f(
-          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
-        double v(*(T *)value);
-        bool res(
-            conv_t<double, false>::f(buf, offset, length, &v, precision, str2val));
-        *(T *)value = static_cast<T>(v);
-        return res;
-      }
-      static bool e(
-          std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
-        double v(*(T *)value);
-        bool res(
-            conv_t<double, false>::e(buf, offset, length, &v, precision, str2val));
+            conv_t<double, false>::e_dot_head(buf, offset, length, &v, precision, str2val));
         *(T *)value = static_cast<T>(v);
         return res;
       }
     };
 
-    struct convert_item_t {
-      bool (*func)(
-          std::string &buf, const int &offset, const int &length, void *value,
-          const int &opt, const bool &str2val);
-      int offset;
-      int length;
-      int value_offset;
-      int opt;
-    };
-
-    /**
-     * @param recovery if conversion fails, then this functor is invoked.
-     * If recovery is successfully performed, this functor should return true.
-     * The return value of this function reflects it.
-     * @return (bool) if all conversion are successfully performed, true is returned; otherwise false.
-     */
-    static bool convert(
+    typedef typename TextHelper<>::convert_item_t convert_item_t;
+    
+    static inline bool convert(
         const convert_item_t *items, const int &size, const std::string &buf, void *values,
         bool (*recovery)(const int &, const std::string &, void *) = NULL){
-      // str => value
-      bool res(true);
-      for(int i(0); i < size; ++i){
-        if((*items[i].func)(
-            const_cast<std::string &>(buf), items[i].offset, items[i].length, (char *)values + items[i].value_offset,
-            items[i].opt, true)){continue;}
-        res &= (recovery ? (*recovery)(i, buf, values) : false);
-      }
-      return res;
+      return TextHelper<>::str2val(items, size, buf, values, recovery);
     }
     template <int N>
     static inline bool convert(
@@ -1091,10 +958,10 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
     {super_t::template conv_t<value_type>::d, offset, length, \
       offsetof(container_type, container_member), 1}
 #define GEN_F2(offset, length, precision, container_type, container_member, value_type) \
-    {super_t::template conv_t<value_type>::f, offset, length, \
+    {super_t::template conv_t<value_type>::f_dot_head, offset, length, \
       offsetof(container_type, container_member), precision}
 #define GEN_E2(offset, length, precision, container_type, container_member, value_type) \
-    {super_t::template conv_t<value_type>::e, offset, length, \
+    {super_t::template conv_t<value_type>::e_dot_head, offset, length, \
       offsetof(container_type, container_member), precision}
 #define GEN_F(offset, length, precision, container_type, container_member) \
     GEN_F2(offset, length, precision, container_type, container_member, FloatT)
@@ -1461,14 +1328,14 @@ class RINEX_Writer {
     static std::string RINEX_Float(
         const FloatT &value, const int width = 19, const int precision = 12){
       std::string s;
-      RINEX_Reader<U>::template conv_t<FloatT>::f(s, 0, width, &const_cast<FloatT &>(value), precision, false);
+      RINEX_Reader<U>::template conv_t<FloatT>::f_dot_head(s, 0, width, &const_cast<FloatT &>(value), precision, false);
       return s;
     }
     template <class FloatT>
     static std::string RINEX_FloatD(
         const FloatT &value, const int width = 19, const int precision = 12){
       std::string s;
-      RINEX_Reader<U>::template conv_t<FloatT>::e(s, 0, width, &const_cast<FloatT &>(value), precision, false);
+      RINEX_Reader<U>::template conv_t<FloatT>::e_dot_head(s, 0, width, &const_cast<FloatT &>(value), precision, false);
       return s;
     }
     template <class T>
@@ -1478,20 +1345,10 @@ class RINEX_Writer {
       return s;
     }
     
-    /**
-     * @return If all conversion are successfully performed, then true; otherwise false;
-     */
     static bool convert(
         const typename RINEX_Reader<U>::convert_item_t *items, const int &size,
         std::string &buf, const void *values){
-      // value => string
-      bool res(true);
-      for(int i(0); i < size; ++i){
-        res &= (*items[i].func)(
-            buf, items[i].offset, items[i].length, (char *)(const_cast<void *>(values)) + items[i].value_offset,
-            items[i].opt, false);
-      }
-      return res;
+      return TextHelper<>::val2str(items, size, buf, values);
     }
     template <int N>
     static inline bool convert(
