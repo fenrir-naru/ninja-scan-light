@@ -108,6 +108,12 @@ struct TextHelper {
         return true;
       }
     }
+    static bool d_blank(
+        std::string &buf, const int &offset, const int &length, void *value,
+        const int &opt = 0, const bool &str2val = true){
+      if((!str2val) && (*(T *)value == 0)){return true;}
+      return d(buf, offset, length, value, opt, str2val);
+    }
     static bool f(
         std::string &buf, const int &offset, const int &length, void *value, const int &precision = 0, const bool &str2val = true){
       if(str2val){
@@ -220,6 +226,22 @@ struct TextHelper {
   static inline bool val2str(
       const convert_item_t (&items)[N], std::string &buf, const void *values){
     return val2str(items, N, buf, values);
+  }
+};
+
+template <>
+template <>
+struct TextHelper<>::format_t<char, false> {
+  static bool c(
+      std::string &buf, const int &offset, const int &length, void *value,
+      const int &opt = 0, const bool &str2val = true){
+    if(str2val){
+      return buf.copy(static_cast<char *>(value), length, offset) == (std::size_t)length;
+    }else{
+      if((length <= 0) || (!(static_cast<char *>(value)[0]))){return true;}
+      buf.replace(offset, length, static_cast<char *>(value), length);
+      return true;
+    }
   }
 };
 
