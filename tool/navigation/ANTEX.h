@@ -60,12 +60,58 @@ struct ANTEX_Product {
     GPS_Time<FloatT> valid_until;
     std::map<std::string, per_freq_t> freq;
     std::map<std::string, per_freq_t> freq_rms;
+    bool is_satellite(int *sat_id = NULL) const {
+      if(serial.size() != 3){return false;}
+      int dummy;
+      return SP3_Reader<FloatT>::conv_t::sat_id(
+          const_cast<std::string &>(serial), 0, 3, (sat_id ? sat_id : &dummy));
+    }
   };
   typedef std::vector<antenna_t> prop_t;
   prop_t prop;
 
-  void move_to_antenna_position(SP3_Product<FloatT> &sp3) const {
-    // TODO
+  void move_to_antenna_position(
+      SP3_Product<FloatT> &sp3,
+      const std::map<char, std::string> &freq_table = std::map<char, std::string>()) const {
+
+    static const struct default_opt_t {
+      std::map<char, std::string> freq_table;
+      default_opt_t() : freq_table() {
+        freq_table['G'] = "G01"; // GPS L1; others are "G02"(L2), "G05"(L5)
+        freq_table['R'] = "R01"; // GLONASS G1; other is "R02"(G2)
+        freq_table['E'] = "E01"; // Galileo E1; others are "E05"(E5a), "E07"(E5b), "E08"(E5a+E5b), "E06"(E6)
+        freq_table['C'] = "C01"; // Compass E1; others are "C02"(E2), "C07"(E5b), "C06"(E6)
+        freq_table['J'] = "J01"; // QZSS L1; others are "J02"(L2), "J05"(L5), "J06"(LEX)
+        freq_table['S'] = "S01"; // SBAS L1; other is "S05"(L5)
+      }
+    } default_opt;
+
+    std::map<char, std::string> freq_table2(default_opt.freq_table);
+    freq_table2.insert(freq_table.begin(), freq_table.end());
+
+    for(typename prop_t::const_iterator it_ant(prop.begin()), it_ant_end(prop.end());
+        it_ant != it_ant_end; ++it_ant){
+      int sat_id;
+      if(!it_ant->is_satellite(&sat_id)){continue;} // If not satellite antenna, then skip.
+
+      typename std::map<std::string, per_freq_t>::const_iterator it_freq(
+          it_ant->freq.find(freq_table2[it_ant->serial[0]]));
+      if(it_freq == it_ant->freq.end()){continue;} // If target frequency is not registered, then skip.
+
+      typename SP3_Product<FloatT>::satellites_t::iterator it_sat(sp3.satellites.find(sat_id));
+      if(it_sat == sp3.satellites.end()){continue;} // If satellite is not registered, then skip.
+
+      for(typename SP3_Product<FloatT>::per_satellite_t::history_t::iterator
+            it_pos(it_sat->second.pos_history.begin()), it_pos_end(it_sat->second.pos_history.end());
+          it_pos != it_pos_end; ++it_pos){ // ascending order of target time
+        if(it_pos->first > it_ant->valid_until){break;} // skip if target time of position is after valid_until.
+        if(it_pos->first < it_ant->valid_from){continue;} // skip if target time of position is before valid_from.
+
+        // TODO correction
+        it_freq->second.north_east_up;
+        it_pos->second.xyz;
+      }
+    }
   }
 };
 
@@ -89,12 +135,6 @@ class ANTEX_Reader {
       static std::string to_string(const char (&c)[N]) {
         std::string buf(c, N);
         return buf.substr(0, buf.find_last_not_of(' ') + 1);
-      }
-      bool is_satellite(int *sat_id = NULL) const {
-        std::string buf(to_string(serial_or_prn));
-        if(buf.size() != 3){return false;}
-        int dummy;
-        return SP3_Reader<FloatT>::conv_t::sat_id(buf, 0, 3, (sat_id ? sat_id : &dummy));
       }
     };
     struct time_t {
