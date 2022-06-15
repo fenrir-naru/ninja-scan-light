@@ -269,6 +269,21 @@ BOOST_AUTO_TEST_CASE(gps_time){
     BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_tm), t->leap_seconds);
     BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_gps), t->leap_seconds);
   }
+  {
+    // UTC, julian date
+    std::tm tm2000 = {0, 0, 12, 1, 0, 2000 - 1900};
+    gpst_t t2000(tm2000, 13);
+    BOOST_REQUIRE_EQUAL(t2000.leap_seconds(), 13);
+    {
+      std::tm utc(t2000.utc());
+      BOOST_REQUIRE_SMALL(std::abs(
+          std::difftime(std::mktime(&utc), std::mktime(&tm2000))), 1E-8);
+    }
+
+    BOOST_REQUIRE_CLOSE(gpst_t(0, 0).julian_date(), 2444244.5, 1E-8);
+    BOOST_REQUIRE_CLOSE(t2000.julian_date(), 2451545.0, 1E-8);
+    BOOST_REQUIRE_SMALL(std::abs(t2000.julian_date_2000()), 1E-8);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(satellite_ephemeris){

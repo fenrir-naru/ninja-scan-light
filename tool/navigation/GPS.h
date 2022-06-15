@@ -452,7 +452,7 @@ struct GPS_Time {
     struct {
       int week;
       float_t seconds;
-    } uncorrected; // to work around of "incomplete type" error within g++
+    } uncorrected, corrected; // to work around of "incomplete type" error within g++
     leap_second_event_t(
         const int &year, const int &month, const int &day,
         const int &leap)
@@ -462,9 +462,11 @@ struct GPS_Time {
       t.tm_year = tm_year;
       t.tm_mon = tm_mon;
       t.tm_mday = tm_mday;
-      GPS_Time t_gps(t);
-      uncorrected.week = t_gps.week;
-      uncorrected.seconds = t_gps.seconds;
+      GPS_Time t_gps_uc(t), t_gps(t_gps_uc + leap);
+      uncorrected.week = t_gps_uc.week;
+      uncorrected.seconds = t_gps_uc.seconds;
+      corrected.week = t_gps.week;
+      corrected.seconds = t_gps.seconds;
     }
   };
   static const leap_second_event_t leap_second_events[];
@@ -484,6 +486,34 @@ struct GPS_Time {
     }
     return 0;
   }
+
+  int leap_seconds() const {
+    // Treat *this as (normal) GPS time, to which leap seconds are added when it is converted from std::tm
+    for(const leap_second_event_t *i(&leap_second_events[0]); i->leap_seconds > 0; ++i){
+      if(*this >= GPS_Time(i->corrected.week, i->corrected.seconds)){return i->leap_seconds;}
+    }
+    return 0;
+  }
+  float_t julian_date() const {
+    struct conv_t {
+      static int ymd2jd(const int &year, const int &month, const int &day){
+        // @see https://en.wikipedia.org/wiki/Julian_day#Converting_Gregorian_calendar_date_to_Julian_Day_Number
+        return std::div(1461 * (year + 4800 + std::div(month - 14, 12).quot), 4).quot
+            + std::div(367 * (month - 2 - 12 * std::div((month - 14), 12).quot), 12).quot
+            - std::div(3 * std::div((year + 4900 + std::div(month - 14, 12).quot), 100).quot, 4).quot
+            + day - 32075;
+      }
+    };
+    // origin of Julian day is "noon (not midnight)" BC4713/1/1
+    static const float_t t0(conv_t::ymd2jd(1980, 1, 6) - 0.5);
+    return t0 + week * 7 + (seconds - leap_seconds()) / seconds_day;
+  }
+  float_t julian_date_2000() const {
+    static const std::tm tm_2000 = {0, 0, 12, 1, 0, 2000 - 1900};
+    static const float_t jd2000(GPS_Time(tm_2000, 13).julian_date());
+    return julian_date() - jd2000;
+  }
+  std::tm utc() const {return c_tm(leap_seconds());}
 };
 
 template <class FloatT>
