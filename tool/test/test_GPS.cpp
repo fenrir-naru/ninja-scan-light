@@ -284,6 +284,17 @@ BOOST_AUTO_TEST_CASE(gps_time){
     BOOST_REQUIRE_CLOSE(t2000.julian_date(), 2451545.0, 1E-8);
     BOOST_REQUIRE_SMALL(std::abs(t2000.julian_date_2000()), 1E-8);
   }
+  {
+    // sidereal time
+    // @see https://astronomy.stackexchange.com/questions/21002/how-to-find-greenwich-mean-sideral-time
+    std::tm t1 = {0, 0, 0, 1, 0, 2019 - 1900}, t2 = {0, 0, 8, 1, 0, 2019 - 1900};
+    BOOST_REQUIRE_CLOSE(
+        gpst_t(t1, 18).greenwich_mean_sidereal_time_sec(), 1665686.527373333, 1E-8);
+    BOOST_REQUIRE_CLOSE(
+        gpst_t(t2, 18).greenwich_mean_sidereal_time_sec(),
+        1665686.527373333 + 28878.85178960284,
+        1E-8);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(satellite_ephemeris){

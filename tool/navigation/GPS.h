@@ -514,6 +514,29 @@ struct GPS_Time {
     return julian_date() - jd2000;
   }
   std::tm utc() const {return c_tm(leap_seconds());}
+
+  /**
+   * Calculate Greenwich mean sidereal time (GMST) in seconds
+   * @param delta_ut1 time difference of UTC and UT1; UT1 = UTC + delta_UT1,
+   * @return GMST in seconds. 86400 seconds correspond to one rotation
+   */
+  float_t greenwich_mean_sidereal_time_sec(const float_t &delta_ut1 = float_t(0)) const {
+    float_t jd2000(julian_date_2000() + delta_ut1 / seconds_day);
+    float_t jd2000_day(float_t(0.5) + std::floor(jd2000 - 0.5));
+
+    // @see Chapter 2 of Orbits(978-3540785217) by Xu Guochang
+    // @see Chapter 5 of IERS Conventions (1996) https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn21.html
+    float_t jc(jd2000_day / 36525), // Julian century
+        jc2(std::pow(jc, 2)), jc3(std::pow(jc, 3));
+    float_t gmst0(24110.54841 // = 6h 41m 50.54841s
+        + jc * 8640184.812866
+        + jc2 * 0.093104
+        - jc3 * 6.2E-6);
+    float_t omega_ast(1.002737909350795 // 7.2921158553E-5 = 1.002737909350795 / 86400 * 2pi
+        + jc * 5.9006E-11 // 4.3E-15 = 5.9E-11 / 86400 * 2pi
+        + jc2 * 5.9E-15); // in seconds
+    return gmst0 + omega_ast * (jd2000 - jd2000_day) * seconds_day;
+  }
 };
 
 template <class FloatT>
