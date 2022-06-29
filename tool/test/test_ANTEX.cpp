@@ -1,9 +1,13 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <iostream>
 #include <string>
 #include <sstream>
 
 #include "navigation/ANTEX.h"
 #include "navigation/SP3.h"
+#include "navigation/coordinate.h"
 
 #define BOOST_TEST_MAIN
 #include <boost/test/included/unit_test.hpp>
@@ -461,6 +465,59 @@ BOOST_AUTO_TEST_CASE(ANTEX_14){
           = Vector3<fnum_t>(0, 0, 0);
     }
     product.move_to_antenna_position(sp3);
+  }
+}
+
+BOOST_AUTO_TEST_CASE(sun_position){
+  System_XYZ<fnum_t> pos_tokyo(System_LLH<fnum_t>(
+      (35.0 + (42.0 / 60)) / 180 * M_PI,
+      (139.0 + (46.0 / 60)) / 180 * M_PI,
+      0).xyz());
+  struct ref_t { // reference is acquired with https://gml.noaa.gov/grad/solcalc/azel.html
+    int hr;
+    fnum_t az, el;
+    void compare(
+        const GPS_Time<fnum_t> &t_base, const System_XYZ<fnum_t> &pos_base) const {
+      System_XYZ<fnum_t> pos_sun(
+          ANTEX_Product<fnum_t>::sun_position_ecef(t_base + hr * 3600));
+      System_ENU<fnum_t> rel(System_ENU<fnum_t>::relative(pos_sun, pos_base));
+      fnum_t
+          az_(std::fmod(((rel.azimuth() / M_PI + 2) * 180), 360)),
+          el_(rel.elevation() / M_PI * 180);
+      BOOST_REQUIRE_SMALL(std::abs(az_ - az), 1.0);
+      BOOST_REQUIRE_SMALL(std::abs(el_ - el), 1.0);
+    }
+  };
+
+  { // 2010/1/1
+    std::tm t_tm = {0, 0, -9, 1, 0, 2010 - 1900};
+    GPS_Time<fnum_t> t_gps(t_tm, 15);
+    ref_t ref[] = {
+      { 8, 128.96, 10.9},
+      {10, 153.18, 26.33},
+      {12, 184.22, 31.19},
+      {14, 213.93, 23.12},
+      {16, 236.18,  5.92},
+    };
+    for(std::size_t i(0); i < sizeof(ref) / sizeof(ref[0]); ++i){
+      ref[i].compare(t_gps, pos_tokyo);
+    }
+  }
+  { // 2010/7/1
+    std::tm t_tm = {0, 0, -9, 1, 6, 2010 - 1900};
+    GPS_Time<fnum_t> t_gps(t_tm, 15);
+    ref_t ref[] = {
+      { 6,  72.84, 16.26},
+      { 8,  88.48, 40.18},
+      {10, 111.85, 64.09},
+      {12, 195.81, 76.99},
+      {14, 256.05, 58.17},
+      {16, 275.66, 33.98},
+      {18, 291.11, 10.41},
+    };
+    for(std::size_t i(0); i < sizeof(ref) / sizeof(ref[0]); ++i){
+      ref[i].compare(t_gps, pos_tokyo);
+    }
   }
 }
 
