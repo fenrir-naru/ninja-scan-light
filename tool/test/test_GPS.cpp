@@ -8,6 +8,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/GPS_Solver_Base.h"
+#include "navigation/coordinate.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -163,15 +164,19 @@ void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
 struct Fixture {
   boost::random::mt19937 gen;
   boost::random::uniform_int_distribution<> bin_dist;
+  boost::random::normal_distribution<> norm_dist;
 
   Fixture()
       : gen(0), //static_cast<unsigned long>(time(0))
-      bin_dist(0, 1)
+      bin_dist(0, 1), norm_dist(0, 1)
       {}
   ~Fixture(){}
 
   bool get_bool(){
     return bin_dist(gen) == 1;
+  }
+  double get_double(){
+    return norm_dist(gen);
   }
 };
 
@@ -319,6 +324,29 @@ BOOST_AUTO_TEST_CASE(satellite_ephemeris){
     sat.select_ephemeris(space_node_t::gps_time_t(2000, target[i].hr_in * 60 * 60));
     BOOST_TEST_MESSAGE(target[i].hr_in);
     BOOST_REQUIRE_EQUAL(sat.ephemeris().t_oc, target[i].hr_out * 60 * 60);
+  }
+}
+
+BOOST_FIXTURE_TEST_CASE(rotation, Fixture){
+  typedef space_node_t::xyz_t xyz_t;
+  typedef xyz_t::Rotation rot_t;
+  typedef Vector3<double> vec3_t;
+  double xyz[][3] = {
+      {1, 0, 0}, {0, 1, 0}, {0, 0, 1},
+      {get_double(), get_double(), get_double()},
+  };
+  vec3_t xyz_v[sizeof(xyz) / sizeof(xyz[0])];
+  for(std::size_t j(0); j < sizeof(xyz) / sizeof(xyz[0]); ++j){
+    xyz_v[j] = vec3_t(xyz[j]);
+  }
+  for(int i(0); i < 0x100; ++i){
+    rot_t rot(rot_t().then_x(get_double()).then_y(get_double()).then_z(get_double()));
+    for(std::size_t j(0); j < sizeof(xyz) / sizeof(xyz[0]); ++j){
+      xyz_t xyz_(xyz_v[j]);
+      rot.apply(xyz_);
+      vec3_t delta((vec3_t)xyz_ - (rot.q.conj() * xyz_v[j] * rot.q).vector());
+      BOOST_REQUIRE_SMALL(delta.abs2(), 1E-8);
+    }
   }
 }
 
