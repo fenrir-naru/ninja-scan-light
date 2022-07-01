@@ -335,7 +335,7 @@ struct ANTEX_Product {
     return System_XYZ<FloatT>(sun_direction_ecef(t, &r) * r);
   }
 
-  void move_to_antenna_position(
+  int move_to_antenna_position(
       SP3_Product<FloatT> &sp3,
       const std::map<char, std::string> &freq_table = std::map<char, std::string>()) const {
 
@@ -354,6 +354,7 @@ struct ANTEX_Product {
     std::map<char, std::string> freq_table2(default_opt.freq_table);
     freq_table2.insert(freq_table.begin(), freq_table.end());
 
+    int moved(0);
     for(typename prop_t::const_iterator it_ant(prop.begin()), it_ant_end(prop.end());
         it_ant != it_ant_end; ++it_ant){
       int sat_id;
@@ -372,11 +373,22 @@ struct ANTEX_Product {
         if(it_pos->first > it_ant->valid_until){break;} // skip if target time of position is after valid_until.
         if(it_pos->first < it_ant->valid_from){continue;} // skip if target time of position is before valid_from.
 
-        // TODO correction
-        it_freq->second.north_east_up;
-        it_pos->second.xyz;
+        // Calculate satellite frame unit vector in ECEF coordinate
+        Vector3<FloatT> z_dir(it_pos->second.xyz / -it_pos->second.xyz.abs());
+        Vector3<FloatT> y_dir(z_dir * sun_direction_ecef(it_pos->first));
+        y_dir /= y_dir.abs();
+        Vector3<FloatT> x_dir(y_dir * z_dir);
+
+        // correction
+        const FloatT (&xyz)[3](it_freq->second.north_east_up);
+        Vector3<FloatT> antenna_ecef(x_dir * xyz[0] + y_dir * xyz[1] + z_dir * xyz[2]);
+        it_pos->second.xyz += antenna_ecef;
+
+        ++moved;
       }
     }
+
+    return moved;
   }
 };
 
@@ -667,7 +679,7 @@ class ANTEX_Reader {
                 for(std::size_t i(0);
                     i < sizeof(per_freq->north_east_up) / sizeof(per_freq->north_east_up[0]);
                     ++ i){
-                  per_freq->north_east_up[i] = parsed.item.neu.values[i];
+                  per_freq->north_east_up[i] = parsed.item.neu.values[i] * 1E-3; // mm -> m
                 }
                 break;
               case parsed_t::NOAZI_VALUES: break; // TODO variable size, implement callback of parse_line()?

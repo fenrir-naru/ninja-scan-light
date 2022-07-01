@@ -460,11 +460,11 @@ BOOST_AUTO_TEST_CASE(ANTEX_14){
     SP3_Product<fnum_t> sp3;
     {
       sp3.satellites[1].pos_history[GPS_Time<fnum_t>(672, 86400)].xyz // 1992/11/23 00:00:00
-          = Vector3<fnum_t>(0, 0, 0);
+          = Vector3<fnum_t>(1E3, 1E3, 1E3);
       sp3.satellites[((int)'E' << 8) + 1].pos_history[GPS_Time<fnum_t>(1898, 86400 * 3)].xyz  // 2016/05/25 00:00:00
-          = Vector3<fnum_t>(0, 0, 0);
+          = Vector3<fnum_t>(1E3, 1E3, 1E3);
     }
-    product.move_to_antenna_position(sp3);
+    BOOST_CHECK_EQUAL(product.move_to_antenna_position(sp3), 2);
   }
 }
 
