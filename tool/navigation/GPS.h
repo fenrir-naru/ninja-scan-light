@@ -506,6 +506,9 @@ struct GPS_Time {
     };
     // origin of Julian day is "noon (not midnight)" BC4713/1/1
     static const float_t t0(conv_t::ymd2jd(1980, 1, 6) - 0.5);
+    // GPS Time is advanced by leap seconds compared with UTC.
+    // The following calculation is incorrect for a day in which a leap second is inserted or truncated.
+    // @see https://en.wikipedia.org/wiki/Julian_day#Julian_date_calculation
     return t0 + week * 7 + (seconds - leap_seconds()) / seconds_day;
   }
   float_t julian_date_2000() const {
@@ -515,14 +518,9 @@ struct GPS_Time {
   }
   std::tm utc() const {return c_tm(leap_seconds());}
 
-  /**
-   * Calculate Greenwich mean sidereal time (GMST) in seconds
-   * @param delta_ut1 time difference of UTC and UT1; UT1 = UTC + delta_UT1,
-   * @return GMST in seconds. 86400 seconds correspond to one rotation
-   */
-  float_t greenwich_mean_sidereal_time_sec(const float_t &delta_ut1 = float_t(0)) const {
+  float_t greenwich_mean_sidereal_time_sec_ires1996(const float_t &delta_ut1 = float_t(0)) const {
     float_t jd2000(julian_date_2000() + delta_ut1 / seconds_day);
-    float_t jd2000_day(float_t(0.5) + std::floor(jd2000 - 0.5));
+    float_t jd2000_day(float_t(0.5) + std::floor(jd2000 - 0.5)); // +/-0.5, +/-1.5, ...
 
     // @see Chapter 2 of Orbits(978-3540785217) by Xu Guochang
     // @see Chapter 5 of IERS Conventions (1996) https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn21.html
@@ -532,10 +530,47 @@ struct GPS_Time {
         + jc * 8640184.812866
         + jc2 * 0.093104
         - jc3 * 6.2E-6);
-    float_t omega_ast(1.002737909350795 // 7.2921158553E-5 = 1.002737909350795 / 86400 * 2pi
+    // ratio of universal to sidereal time as given by Aoki et al. (1982)
+    float_t r(1.002737909350795 // 7.2921158553E-5 = 1.002737909350795 / 86400 * 2pi
         + jc * 5.9006E-11 // 4.3E-15 = 5.9E-11 / 86400 * 2pi
-        + jc2 * 5.9E-15); // in seconds
-    return gmst0 + omega_ast * (jd2000 - jd2000_day) * seconds_day;
+        - jc2 * 5.9E-15); // in seconds
+    return gmst0 + r * (jd2000 - jd2000_day) * seconds_day;
+  }
+
+  /**
+   * ERA (Earth rotation rate) defined in Sec. 5.5.3 in IERS 2010(Technical Note No.36)
+   */
+  float_t earth_rotation_angle(const float_t &delta_ut1 = float_t(0),
+      const float_t &scale_factor = float_t(M_PI * 2)) const {
+    float_t jd2000(julian_date_2000() + delta_ut1 / seconds_day);
+    return (jd2000 * 1.00273781191135448 + 0.7790572732640) * scale_factor; // Eq.(5.14)
+  }
+
+  float_t greenwich_mean_sidereal_time_sec_ires2010(const float_t &delta_ut1 = float_t(0)) const {
+    float_t era(earth_rotation_angle(delta_ut1, seconds_day));
+
+    float_t t(julian_date_2000() / 36525);
+    // @see Eq.(5.32) Chapter 5 of IERS Conventions (2010)
+#define AS2SEC(as) (((float_t)seconds_day / (360 * 3600)) * (as))
+    return era
+        + AS2SEC(0.014506)
+        + t * AS2SEC(4612.156534)
+        + std::pow(t, 2) * AS2SEC(1.3915817)
+        - std::pow(t, 3) * AS2SEC(0.00000044)
+        - std::pow(t, 4) * AS2SEC(0.000029956)
+        - std::pow(t, 5) * AS2SEC(0.0000000368);
+#undef AS2SEC
+  }
+
+  /**
+   * Calculate Greenwich mean sidereal time (GMST) in seconds
+   * Internally, greenwich_mean_sidereal_time_sec_ired2010() is called.
+   * @param delta_ut1 time difference of UTC and UT1; UT1 = UTC + delta_UT1,
+   * @return GMST in seconds. 86400 seconds correspond to one rotation
+   * @see greenwich_mean_sidereal_time_sec_ires2010()
+   */
+  float_t greenwich_mean_sidereal_time_sec(const float_t &delta_ut1 = float_t(0)) const {
+    return greenwich_mean_sidereal_time_sec_ires2010(delta_ut1);
   }
 };
 

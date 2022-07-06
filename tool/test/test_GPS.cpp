@@ -1,3 +1,6 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <ctime>
 #include <climits>
 #include <iostream>
@@ -274,10 +277,10 @@ BOOST_AUTO_TEST_CASE(gps_time){
     BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_tm), t->leap_seconds);
     BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_gps), t->leap_seconds);
   }
+  std::tm tm2000 = {0, 0, 12, 1, 0, 2000 - 1900};
+  gpst_t t2000(tm2000, 13);
   {
     // UTC, julian date
-    std::tm tm2000 = {0, 0, 12, 1, 0, 2000 - 1900};
-    gpst_t t2000(tm2000, 13);
     BOOST_REQUIRE_EQUAL(t2000.leap_seconds(), 13);
     {
       std::tm utc(t2000.utc());
@@ -289,17 +292,65 @@ BOOST_AUTO_TEST_CASE(gps_time){
     BOOST_REQUIRE_CLOSE(t2000.julian_date(), 2451545.0, 1E-8);
     BOOST_REQUIRE_SMALL(std::abs(t2000.julian_date_2000()), 1E-8);
   }
-  {
-    // sidereal time
-    // @see https://astronomy.stackexchange.com/questions/21002/how-to-find-greenwich-mean-sideral-time
-    std::tm t1 = {0, 0, 0, 1, 0, 2019 - 1900}, t2 = {0, 0, 8, 1, 0, 2019 - 1900};
-    BOOST_REQUIRE_CLOSE(
-        gpst_t(t1, 18).greenwich_mean_sidereal_time_sec(), 1665686.527373333, 1E-8);
-    BOOST_REQUIRE_CLOSE(
-        gpst_t(t2, 18).greenwich_mean_sidereal_time_sec(),
-        1665686.527373333 + 28878.85178960284,
-        1E-8);
+
+  std::tm t_tm[] = {
+    {0, 0, 0, 1, 0, 2019 - 1900},
+    {0, 0, 8, 1, 0, 2019 - 1900},
+  };
+  gpst_t t_gps[] = {
+    gpst_t(t_tm[0], 18),
+    gpst_t(t_tm[1], 18),
+  };
+
+#define HMS2S(hh, mm, ss) ((3600.0 * (hh)) + (60.0 * (mm)) + (ss))
+#define DMS2RAD(dd, mm, ss) (M_PI / 180 * HMS2S(dd, mm, ss) / 3600)
+  { // ERA (Earth rotation angle)
+    // @see https://dc.zah.uni-heidelberg.de/apfs/times/q/form
+    struct cmp_t {
+      static void cmp(const double &a, const double &b, const double &delta){
+        double a_(a - M_PI * 2 * std::floor(a / (M_PI * 2))); // [0, 2pi)
+        double b_(b - M_PI * 2 * std::floor(b / (M_PI * 2)));
+        BOOST_REQUIRE_SMALL(std::abs(a_ - b_), delta);
+      }
+    };
+    cmp_t::cmp(t2000.earth_rotation_angle(), DMS2RAD(280, 27, 38.227), DMS2RAD(0, 0, 1));
+    cmp_t::cmp(t_gps[0].earth_rotation_angle(), DMS2RAD(100, 7, 1.530), DMS2RAD(0, 0, 1));
+    cmp_t::cmp(t_gps[1].earth_rotation_angle(), DMS2RAD(220, 26, 44.265), DMS2RAD(0, 0, 1));
   }
+  { // sidereal time
+    // @see (1) https://astronomy.stackexchange.com/questions/21002/how-to-find-greenwich-mean-sideral-time
+    double t1_gmst(t_gps[0].greenwich_mean_sidereal_time_sec_ires1996());
+    BOOST_REQUIRE_SMALL(std::abs(t1_gmst - 1665686.527373333), 1E-4);
+
+    double t2_gmst(t_gps[1].greenwich_mean_sidereal_time_sec_ires1996());
+    BOOST_REQUIRE_SMALL(
+        std::abs(t2_gmst - (1665686.527373333 + 28878.85178960284)),
+        1E-4);
+
+    // @see (2) https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/gst_en.cgi
+    // @see (3) https://dc.zah.uni-heidelberg.de/apfs/times/q/form
+    struct cmp_t {
+      static void cmp(const double &a, const double &b, const double &delta){
+        double a_(a - std::floor(a / (24 * 3600)) * (24 * 3600)); // [0, 86400)
+        double b_(b - std::floor(b / (24 * 3600)) * (24 * 3600));
+        BOOST_REQUIRE_SMALL(std::abs(a_ - b_), delta);
+      }
+    };
+    cmp_t::cmp(
+        t2000.greenwich_mean_sidereal_time_sec_ires2010(),
+        HMS2S(18, 41, 50.5494),
+        1E-3);
+    cmp_t::cmp(
+        t_gps[0].greenwich_mean_sidereal_time_sec_ires2010(),
+        HMS2S(6, 41, 26.5248),
+        1E-3);
+    cmp_t::cmp(
+        t_gps[1].greenwich_mean_sidereal_time_sec_ires2010(),
+        HMS2S(14, 42, 45.3766),
+        1E-3);
+  }
+#undef DMS2RAD
+#undef HMS2S
 }
 
 BOOST_AUTO_TEST_CASE(satellite_ephemeris){
