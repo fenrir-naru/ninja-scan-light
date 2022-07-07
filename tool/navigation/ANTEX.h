@@ -86,50 +86,34 @@ struct ANTEX_Product {
 
     typedef typename System_XYZ<FloatT>::Rotation rot_t;
 
-    // date of TDT(Terrestrial Dynamic Time)
-    FloatT t_date(t_gps.julian_date_2000() + (19.0 + 32.184) / 86400);
-    FloatT t(t_date / 36525), t2(t * t), t3(t2 * t); // century
+    // pp.20 in IERS Conventions (1996) and Eq.(5.2) in Chapter 5 of IERS Conventions (2010) defines
+    // t = (TT - 2000 January ld 12h TT) in days/36525,
+    // where t is relative time as it computed with a difference of two Terrestrial Time (TT).
+    // Note: TT is approximately TAI + 32.184s = GPS + 19 + 32.184.
+    FloatT t_date(t_gps.julian_date_2000()/* + (19.0 + 32.184) / 86400*/); // TODO need offset?
+    FloatT t(t_date / 36525), t2(t * t), t3(t2 * t); // century and its powered
 
 #define AS2RAD(x) ((x) * (M_PI / 3600 / 180)) // arcseconds to radians
-#define DMS2RAD(d, m, s) AS2RAD(s + m * 60 + d * 3600)
-#define DEG2RAD(d) DMS2RAD(d, 0, 0.0)
+#define DMS2RAD(d, m, s) AS2RAD((FloatT)(s) + (FloatT)(m) * 60 + (FloatT)(d) * 3600)
+#define DEG2RAD(d) DMS2RAD(d, 0, 0)
     // astronomical arguments
     struct ast_args_t {
       FloatT f[5]; // rad
       ast_args_t(const FloatT &t){
-        // @see Chapter 5 of IERS Conventions (1996) https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn21.html
+        // @see Eq.(5.43) in Chapter 5 of IERS Conventions (2010)
+        // https://www.iers.org/SharedDocs/Publikationen/EN/IERS/Publications/tn/TechnNote36/tn36_043.pdf#page=25
         static const FloatT fc[][5] = {
+          // F1(l): Mean Anomaly of the Moon
           {DEG2RAD(134.96340251), AS2RAD(1717915923.2178), AS2RAD( 31.8792), AS2RAD( 0.051635), AS2RAD(-0.00024470)},
-          {DEG2RAD(357.52910918), AS2RAD( 129596581.0481), AS2RAD( -0.5532), AS2RAD(-0.000136), AS2RAD(-0.00001149)},
+          // F2(l'): Mean Anomaly of the Sun
+          {DEG2RAD(357.52910918), AS2RAD( 129596581.0481), AS2RAD( -0.5532), AS2RAD( 0.000136), AS2RAD(-0.00001149)},
+          // F3(F)
           {DEG2RAD( 93.27209062), AS2RAD(1739527262.8478), AS2RAD(-12.7512), AS2RAD(-0.001037), AS2RAD( 0.00000417)},
+          // F4(D): Mean Elongation of the Moon from the Sun
           {DEG2RAD(297.85019547), AS2RAD(1602961601.2090), AS2RAD( -6.3706), AS2RAD( 0.006593), AS2RAD(-0.00003169)},
+          // F5(Omega): Mean Longitude of the Ascending Node of the Moon
           {DEG2RAD(125.04455501), AS2RAD(  -6962890.2665), AS2RAD(  7.4722), AS2RAD( 0.007702), AS2RAD(-0.00005939)},
         };
-#if 0
-        // @see http://astro.starfree.jp/commons/astrometry/obliquity_ecliptic.html
-        static const FloatT fc[][4] = { // coefficients for IAU 1980 nutation
-          {DMS2RAD(134, 57, 46.733),
-              DMS2RAD(1325 * 360 + 198, 52, 2.633),
-              DMS2RAD(0, 0, 31.310),
-              DMS2RAD(0, 0, 0.064)}, // l
-          {DMS2RAD(357, 31, 39.804),
-              DMS2RAD((99 * 360) + 359, 3, 1.224),
-              DMS2RAD(0, 0, 0.577),
-              DMS2RAD(0, 0, 0.012)}, // l'
-          {DMS2RAD(93, 16, 18.877),
-              DMS2RAD((1342 * 360) + 82, 1, 3.137),
-              DMS2RAD(0, 0, 13.257),
-              DMS2RAD(0, 0, 0.011)}, // F
-          {DMS2RAD(297, 51, 01.307),
-              DMS2RAD((1236 * 360) + 307, 6, 41.328),
-              DMS2RAD(0, 0, 6.891),
-              DMS2RAD(0, 0, 0.019)}, // D
-          {DMS2RAD(125, 2, 40.280),
-              DMS2RAD(-((5 * 360) + 134), 8, 10.539),
-              DMS2RAD(0, 0, 7.455),
-              DMS2RAD(0, 0, 0.008)}, // Omega
-        };
-#endif
         FloatT tt[] = {1, t, std::pow(t, 2), std::pow(t, 3), std::pow(t, 4)};
         for(std::size_t i(0); i < sizeof(f) / sizeof(f[0]); i++){
           f[i] = 0;
@@ -148,7 +132,7 @@ struct ANTEX_Product {
         theta(t * AS2RAD(2004.3109) - t2 * AS2RAD(0.42665) - t3 * AS2RAD(0.041833)),
         z    (t * AS2RAD(2306.2181) + t2 * AS2RAD(1.09468) + t3 * AS2RAD(0.018203));
 
-    // Precession=R3(-z)*R2(theta)*R3(-zeta) TODO inverted?
+    // Precession=R3(-z)*R2(theta)*R3(-zeta)
     rot_t r_p(rot_t().then_z(-zeta).then_y(theta).then_z(-z));
 
     struct nut_iau1980_t {
@@ -289,21 +273,33 @@ struct ANTEX_Product {
         + t3 * AS2RAD( 0.001813));
 
     // IAU 1980 nutation
-    // Nutation=R1(-epsilon-de)*R3(dpsi)*R1(epsilon) TODO inverted?
+    // Nutation=R1(-epsilon-de)*R3(dpsi)*R1(epsilon)
     rot_t r_n(rot_t().then_x(eps).then_z(-nut_iau1980.dpsi).then_x(-eps - nut_iau1980.deps));
 
-    // greenwich aparent sidereal time (rad)
-    FloatT gmst(t_gps.greenwich_mean_sidereal_time_sec(opt.delta_UT1) / 86400 * 2 * M_PI);
-    FloatT gast(gmst
-        + nut_iau1980.dpsi * std::cos(eps)
-        + AS2RAD(0.00264) * std::sin(ast_args.f[4])
-        + AS2RAD(0.000063) * std::sin(ast_args.f[4] * 2));
+    rot_t r_s;
+#if 1
+    { // Greenwich apparent sidereal time (rad)
+      // IERS Conventions 1996 Chapter.5 pp.21
+      FloatT gmst(
+          t_gps.greenwich_mean_sidereal_time_sec_ires1996(opt.delta_UT1)
+            * (M_PI * 2 / 86400)); // [rad]
+      FloatT gast(gmst // GAST or GST
+          + nut_iau1980.dpsi * std::cos(eps)
+          + AS2RAD(0.00264) * std::sin(ast_args.f[4])
+          + AS2RAD(0.000063) * std::sin(ast_args.f[4] * 2));
+      r_s.then_z(gast);
+    }
+#else
+    // Eq.(5.14) of IERS 2010(Technical Note No.36)
+    // TODO t_date will be corrected to make it based on UT1
+    r_s.then_z(t_gps.earth_rotation_angle(opt.delta_UT1));
+#endif
 
     // Polar motion
     rot_t r_m(rot_t().then_x(-opt.y_p).then_y(-opt.x_p));
 
     // eci to ecef transformation matrix
-    return r_p.then(r_n).then_z(gast).then(r_m);
+    return r_p.then(r_n).then(r_s).then(r_m);
 #undef DEG2RAD
 #undef DMS2RAD
 #undef AS2RAD
@@ -313,16 +309,20 @@ struct ANTEX_Product {
       const GPS_Time<FloatT> &t,
       FloatT *r = NULL){
     // @see https://en.wikipedia.org/wiki/Position_of_the_Sun
+    // @see https://astronomy.stackexchange.com/a/37199
 #define DEG2RAD(deg) ((deg) / 180 * M_PI)
-    FloatT n(t.julian_date_2000()); // GPS_Time -> Julian day -> J2000.0
-    FloatT L_deg(280.460 + 0.9856474 * n);
-    FloatT g_deg(357.528 + 0.9856003 * n), g(DEG2RAD(g_deg));
-    FloatT lambda_deg(L_deg + 1.915 * std::sin(g) + 0.020 * std::sin(g * 2)), lambda(DEG2RAD(lambda_deg));
+    FloatT n(t.julian_date_2000()/* + 19.0 / 86400*/); // GPS_Time -> Julian day -> J2000.0
+    FloatT L(DEG2RAD(280.4606184) + DEG2RAD(36000.77005361 / 36525) * n); // mean longitude
+    FloatT g(DEG2RAD(357.5277233) + DEG2RAD(35999.05034 / 36525) * n); // mean anomaly
+    FloatT lambda(L
+        + DEG2RAD(1.914666471) * std::sin(g)
+        + DEG2RAD(0.918994643) * std::sin(g * 2)); // ecliptic longitude of the Sun
     FloatT clambda(std::cos(lambda)), slambda(std::sin(lambda));
-    FloatT epsilon_deg(23.439 - 0.0000004 * n), epsilon(DEG2RAD(epsilon_deg));
+    FloatT epsilon(DEG2RAD(23.43929) - DEG2RAD(46.8093/3600/36525) * n); // eccentricity
     FloatT cepsilon(std::cos(epsilon)), sepsilon(std::sin(epsilon));
     if(r){
-      *r = (1.00014 - 0.01671 * std::cos(g) - 0.00014 * std::cos(g * 2)) * 1.495978707E11; // meter
+      *r = (1.000140612 - 0.016708617 * std::cos(g) - 0.000139589 * std::cos(g * 2))
+          * 1.495978707E11; // AU -> meter
     }
     FloatT dir[] = {clambda, cepsilon * slambda, sepsilon * slambda};
     eci2ecef(t).apply(dir); // ECI -> ECEF
