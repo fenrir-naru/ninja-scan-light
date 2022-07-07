@@ -546,6 +546,118 @@ __SP3_TEXT__
       # mirrored: ftp://garner.ucsd.edu/pub/products/1849/igs18492.sp3.Z
       f.path
     },
+    :antex => Tempfile::open{|f|
+      f.write(<<-__ANTEX_TEXT__)
+     1.4            M                                       ANTEX VERSION / SYST
+A                                                           PCV TYPE / REFANT   
+                                                            END OF HEADER       
+                                                            START OF ANTENNA    
+BLOCK IIR-M         G12                 G058      2006-052A TYPE / SERIAL NO    
+                                             0    29-JAN-17 METH / BY / # / DATE
+     0.0                                                    DAZI                
+     0.0  17.0   1.0                                        ZEN1 / ZEN2 / DZEN  
+     2                                                      # OF FREQUENCIES    
+  2006    11    17     0     0    0.0000000                 VALID FROM          
+IGS14_2196                                                  SINEX CODE          
+   G01                                                      START OF FREQUENCY  
+     10.20     -5.60    767.80                              NORTH / EAST / UP   
+   NOAZI   10.70   10.10    8.00    4.60    0.50   -3.80   -7.50   -9.70  -10.30   -9.50   -7.40   -4.10    0.30    6.00   12.10   22.00   30.40   40.60
+   G01                                                      END OF FREQUENCY    
+   G02                                                      START OF FREQUENCY  
+     10.20     -5.60    767.80                              NORTH / EAST / UP   
+   NOAZI   10.70   10.10    8.00    4.60    0.50   -3.80   -7.50   -9.70  -10.30   -9.50   -7.40   -4.10    0.30    6.00   12.10   22.00   30.40   40.60
+   G02                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+                                                            START OF ANTENNA    
+BLOCK IIR-A         G18                 G054      2001-004A TYPE / SERIAL NO    
+                                             0    29-JAN-17 METH / BY / # / DATE
+     0.0                                                    DAZI                
+     0.0  17.0   1.0                                        ZEN1 / ZEN2 / DZEN  
+     2                                                      # OF FREQUENCIES    
+  2001     1    30     0     0    0.0000000                 VALID FROM          
+  2018     1    23    23    59   59.9999999                 VALID UNTIL         
+IGS14_2196                                                  SINEX CODE          
+   G01                                                      START OF FREQUENCY  
+     13.90      0.30   1248.60                              NORTH / EAST / UP   
+   NOAZI   -6.10   -5.20   -3.30   -1.00    1.40    3.50    4.70    4.90    4.10    2.80    0.80   -1.00   -2.10   -2.10   -1.40   -0.80    2.00    6.40
+   G01                                                      END OF FREQUENCY    
+   G02                                                      START OF FREQUENCY  
+     13.90      0.30   1248.60                              NORTH / EAST / UP   
+   NOAZI   -6.10   -5.20   -3.30   -1.00    1.40    3.50    4.70    4.90    4.10    2.80    0.80   -1.00   -2.10   -2.10   -1.40   -0.80    2.00    6.40
+   G02                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+                                                            START OF ANTENNA    
+BLOCK IIF           G24                 G065      2012-053A TYPE / SERIAL NO    
+                                             0    29-JAN-17 METH / BY / # / DATE
+     0.0                                                    DAZI                
+     0.0  17.0   1.0                                        ZEN1 / ZEN2 / DZEN  
+     2                                                      # OF FREQUENCIES    
+  2012    10     4     0     0    0.0000000                 VALID FROM          
+IGS14_2196                                                  SINEX CODE          
+   G01                                                      START OF FREQUENCY  
+    394.00      0.00   1407.10                              NORTH / EAST / UP   
+   NOAZI    6.10    4.40    2.80    1.30   -0.20   -1.40   -2.80   -3.90   -4.40   -4.40   -3.70   -2.30   -0.20    3.00    5.70   12.40   18.20   23.50
+   G01                                                      END OF FREQUENCY    
+   G02                                                      START OF FREQUENCY  
+    394.00      0.00   1407.10                              NORTH / EAST / UP   
+   NOAZI    6.10    4.40    2.80    1.30   -0.20   -1.40   -2.80   -3.90   -4.40   -4.40   -3.70   -2.30   -0.20    3.00    5.70   12.40   18.20   23.50
+   G02                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+                                                            START OF ANTENNA    
+BLOCK IIF           G25                 G062      2010-022A TYPE / SERIAL NO    
+                                             0    29-JAN-17 METH / BY / # / DATE
+     0.0                                                    DAZI                
+     0.0  17.0   1.0                                        ZEN1 / ZEN2 / DZEN  
+     2                                                      # OF FREQUENCIES    
+  2010     5    28     0     0    0.0000000                 VALID FROM          
+IGS14_2196                                                  SINEX CODE          
+   G01                                                      START OF FREQUENCY  
+    394.00      0.00   1517.40                              NORTH / EAST / UP   
+   NOAZI    6.10    4.40    2.80    1.30   -0.20   -1.40   -2.80   -3.90   -4.40   -4.40   -3.70   -2.30   -0.20    3.00    5.70   12.40   18.20   23.50
+   G01                                                      END OF FREQUENCY    
+   G02                                                      START OF FREQUENCY  
+    394.00      0.00   1517.40                              NORTH / EAST / UP   
+   NOAZI    6.10    4.40    2.80    1.30   -0.20   -1.40   -2.80   -3.90   -4.40   -4.40   -3.70   -2.30   -0.20    3.00    5.70   12.40   18.20   23.50
+   G02                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+                                                            START OF ANTENNA    
+BLOCK IIR-M         G29                 G057      2007-062A TYPE / SERIAL NO    
+                                             0    29-JAN-17 METH / BY / # / DATE
+     0.0                                                    DAZI                
+     0.0  17.0   1.0                                        ZEN1 / ZEN2 / DZEN  
+     2                                                      # OF FREQUENCIES    
+  2007    12    20     0     0    0.0000000                 VALID FROM          
+IGS14_2196                                                  SINEX CODE          
+   G01                                                      START OF FREQUENCY  
+     10.90     -4.50    791.80                              NORTH / EAST / UP   
+   NOAZI   10.70   10.10    8.00    4.60    0.50   -3.80   -7.50   -9.70  -10.30   -9.50   -7.40   -4.10    0.30    6.00   12.10   22.00   30.40   40.60
+   G01                                                      END OF FREQUENCY    
+   G02                                                      START OF FREQUENCY  
+     10.90     -4.50    791.80                              NORTH / EAST / UP   
+   NOAZI   10.70   10.10    8.00    4.60    0.50   -3.80   -7.50   -9.70  -10.30   -9.50   -7.40   -4.10    0.30    6.00   12.10   22.00   30.40   40.60
+   G02                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+                                                            START OF ANTENNA    
+BLOCK IIR-M         G31                 G052      2006-042A TYPE / SERIAL NO    
+                                             0    29-JAN-17 METH / BY / # / DATE
+     0.0                                                    DAZI                
+     0.0  17.0   1.0                                        ZEN1 / ZEN2 / DZEN  
+     2                                                      # OF FREQUENCIES    
+  2006     9    25     0     0    0.0000000                 VALID FROM          
+IGS14_2196                                                  SINEX CODE          
+   G01                                                      START OF FREQUENCY  
+     -0.80      5.80    912.50                              NORTH / EAST / UP   
+   NOAZI   10.70   10.10    8.00    4.60    0.50   -3.80   -7.50   -9.70  -10.30   -9.50   -7.40   -4.10    0.30    6.00   12.10   22.00   30.40   40.60
+   G01                                                      END OF FREQUENCY    
+   G02                                                      START OF FREQUENCY  
+     -0.80      5.80    912.50                              NORTH / EAST / UP   
+   NOAZI   10.70   10.10    8.00    4.60    0.50   -3.80   -7.50   -9.70  -10.30   -9.50   -7.40   -4.10    0.30    6.00   12.10   22.00   30.40   40.60
+   G02                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+__ANTEX_TEXT__
+      # https://files.igs.org/pub/station/general/igs14.atx
+      f.path
+    },
   }}
   let(:solver){
     res = GPS::Solver::new
@@ -760,9 +872,10 @@ __SP3_TEXT__
         }
       }
     end
-    it 'calculates satellites position based on SP3' do
+    it 'calculates satellites position based on SP3 with ANTEX' do
       sp3, sn = [GPS::SP3::new, solver.gps_space_node]
       expect(sp3.read(input[:sp3])).to eq(32 * 9)
+      expect(sp3.apply_antex(input[:antex])).to eq(6 * 9)
       sn.read(input[:rinex_nav])
         
       t0 = GPS::Time::new(1849, 172800)
@@ -781,15 +894,16 @@ __SP3_TEXT__
             expect(v.abs).to be < 5 # 5m
           }
           delta[:vel].each{|v|
-            expect(v.abs).to be < 1E-3 # 1mm
+            expect(v.abs).to be < 1E-2 # 10mm
           }
         }
       }
     end
-    it 'calculates position without any error with SP3 product' do
+    it 'calculates position without any error with SP3 and ANTEX' do
       sn = solver.gps_space_node
       sp3 = GPS::SP3::new
       sp3.read(input[:sp3])
+      sp3.apply_antex(input[:antex])
       expect(sp3.push(solver)).to eq(true)
       GPS::RINEX_Observation::read(input[:rinex_obs]){|item|
         t_meas = item[:time]
