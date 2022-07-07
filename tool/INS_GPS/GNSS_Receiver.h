@@ -57,6 +57,7 @@
 
 #if !defined(BUILD_WITHOUT_SP3)
 #include "navigation/SP3.h"
+#include "navigation/ANTEX.h"
 #endif
 
 template <class FloatT>
@@ -367,6 +368,22 @@ struct GNSS_Receiver {
         if(cnt.gps > 0){std::cerr << "SP3 GPS satellites: " << cnt.gps << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
+      return true;
+    }
+    if(value = runtime_opt_t::get_value(spec, "antex", false)){
+      if(dry_run){return true;}
+      std::cerr << "ANTEX file (" << value << ") reading..." << std::endl;
+      std::istream &in(options.spec2istream(value));
+      ANTEX_Product<FloatT> atx;
+      int entries(ANTEX_Reader<FloatT>::read_all(in, atx));
+      if(entries < 0){
+        std::cerr << "(error!) Invalid format!" << std::endl;
+        return false;
+      }else{
+        std::cerr << "antex: " << entries << " items captured." << std::endl;
+        int moved(atx.move_to_antenna_position(data.sp3));
+        std::cerr << "Moved SP3 positions: " << moved << std::endl;
+      }
       return true;
     }
 #endif
