@@ -1555,7 +1555,10 @@ struct SP3 : public SP3_Product<FloatT> {
             solver.gps.solver.satellites, SP3_Product<FloatT>::SYSTEM_GPS);
       case SYS_SBAS:
       case SYS_QZSS:
+        break;
       case SYS_GLONASS:
+        return SP3_Product<FloatT>::push(
+            solver.glonass.solver.satellites, SP3_Product<FloatT>::SYSTEM_GLONASS);
       case SYS_GALILEO:
       case SYS_BEIDOU:
       default:
@@ -1568,7 +1571,7 @@ struct SP3 : public SP3_Product<FloatT> {
       SYS_GPS,
       //SYS_SBAS,
       //SYS_QZSS,
-      //SYS_GLONASS,
+      SYS_GLONASS,
       //SYS_GALILEO,
       //SYS_BEIDOU,
     };
