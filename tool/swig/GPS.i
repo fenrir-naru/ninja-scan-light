@@ -1479,6 +1479,8 @@ struct SP3 : public SP3_Product<FloatT> {
         return SP3_Product<FloatT>::push(
             solver.gps.solver.satellites, SP3_Product<FloatT>::SYSTEM_GPS);
       case SYS_SBAS:
+        return SP3_Product<FloatT>::push(
+            solver.sbas.solver.satellites, SP3_Product<FloatT>::SYSTEM_SBAS);
       case SYS_QZSS:
       case SYS_GLONASS:
       case SYS_GALILEO:
@@ -1491,7 +1493,7 @@ struct SP3 : public SP3_Product<FloatT> {
   bool push(GPS_Solver<FloatT> &solver) const {
     system_t target[] = {
       SYS_GPS,
-      //SYS_SBAS,
+      SYS_SBAS,
       //SYS_QZSS,
       //SYS_GLONASS,
       //SYS_GALILEO,

@@ -193,6 +193,7 @@ struct GNSS_Receiver {
 #if !defined(BUILD_WITHOUT_SP3)
       typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
       if(cnt.gps > 0){data.sp3.push(gps.satellites, SP3_Product<FloatT>::SYSTEM_GPS);}
+      if(cnt.sbas > 0){data.sp3.push(sbas.satellites, SP3_Product<FloatT>::SYSTEM_SBAS);}
 #endif
     }
   } solver_GNSS;
@@ -402,6 +403,7 @@ struct GNSS_Receiver {
         std::cerr << "sp3: " << entries << " items captured." << std::endl;
         typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
         if(cnt.gps > 0){std::cerr << "SP3 GPS satellites: " << cnt.gps << std::endl;}
+        if(cnt.sbas > 0){std::cerr << "SP3 SBAS satellites: " << cnt.sbas << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
