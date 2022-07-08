@@ -572,7 +572,14 @@ class GPS_Receiver
     read_items = @sp3.read(fname)
     raise "Format error! (Not SP3) #{fname}" if read_items < 0
     $stderr.puts "Read SP3 file (%s): %d items."%[fname, read_items]
-    @sp3.push(@solver)
+    sats = @sp3.satellites
+    @sp3.class.constants.each{|sys|
+      next unless /^SYS_(?!SYSTEMS)(.*)/ =~ sys.to_s
+      idx, sys_name = [@sp3.class.const_get(sys), $1]
+      next unless sats[idx] > 0
+      next unless @sp3.push(@solver, idx)
+      $stderr.puts "Change ephemeris source of #{sys_name} to SP3" 
+    }
   end
   
   def attach_antex(fname)
