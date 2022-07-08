@@ -875,6 +875,10 @@ __ANTEX_TEXT__
     it 'calculates satellites position based on SP3 with ANTEX' do
       sp3, sn = [GPS::SP3::new, solver.gps_space_node]
       expect(sp3.read(input[:sp3])).to eq(32 * 9)
+      proc{|sats|
+        expect(sats.kind_of?(Array)).to eq(true) 
+        expect(sats[sp3.class::SYS_GPS]).to eq(32)
+      }.call(sp3.satellites)
       expect(sp3.apply_antex(input[:antex])).to eq(6 * 9)
       sn.read(input[:rinex_nav])
         
@@ -904,7 +908,7 @@ __ANTEX_TEXT__
       sp3 = GPS::SP3::new
       sp3.read(input[:sp3])
       sp3.apply_antex(input[:antex])
-      expect(sp3.push(solver)).to eq(true)
+      expect(sp3.push(solver, sp3.class::SYS_GPS)).to eq(true)
       GPS::RINEX_Observation::read(input[:rinex_obs]){|item|
         t_meas = item[:time]
         sn.update_all_ephemeris(t_meas)
