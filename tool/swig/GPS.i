@@ -1339,7 +1339,28 @@ struct GPS_Solver
     HookableSolver<
         GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
         GPS_Solver<FloatT> > solver;
-    gps_t() : space_node(), options(), solver(space_node) {
+    struct ephemeris_proxy_t {
+      struct item_t {
+        const void *impl;
+        typename base_t::satellite_t (*impl_select)(
+            const void *,
+            const typename base_t::prn_t &, const typename base_t::gps_time_t &);
+      } gps, qzss;
+      static typename base_t::satellite_t forward(
+          const void *ptr,
+          const typename base_t::prn_t &prn, const typename base_t::gps_time_t &t){
+        const ephemeris_proxy_t *proxy(static_cast<const ephemeris_proxy_t *>(ptr));
+        const item_t &target(((prn >= 193) && (prn <= 202)) ? proxy->qzss : proxy->gps);
+        return target.impl_select(target.impl, prn, t);
+      }
+      ephemeris_proxy_t(GPS_SinglePositioning<FloatT> &solver){
+        gps.impl = qzss.impl = solver.satellites.impl;
+        gps.impl_select = qzss.impl_select = solver.satellites.impl_select;
+        solver.satellites.impl = this;
+        solver.satellites.impl_select = forward;
+      }
+    } ephemeris_proxy;
+    gps_t() : space_node(), options(), solver(space_node), ephemeris_proxy(solver) {
       options.exclude_L2C = true;
     }
   } gps;
@@ -1579,9 +1600,12 @@ struct PushableData {
     switch(sys){
       case SYS_GPS:
         return data.push(
-            solver.gps.solver.satellites, DataT::SYSTEM_GPS);
+            solver.gps.ephemeris_proxy.gps, DataT::SYSTEM_GPS);
       case SYS_SBAS:
+        break;
       case SYS_QZSS:
+        return data.push(
+            solver.gps.ephemeris_proxy.qzss, DataT::SYSTEM_QZSS);
       case SYS_GLONASS:
       case SYS_GALILEO:
       case SYS_BEIDOU:
@@ -1595,7 +1619,7 @@ struct PushableData {
     system_t target[] = {
       SYS_GPS,
       //SYS_SBAS,
-      //SYS_QZSS,
+      SYS_QZSS,
       //SYS_GLONASS,
       //SYS_GALILEO,
       //SYS_BEIDOU,
