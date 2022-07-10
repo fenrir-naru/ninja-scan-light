@@ -51,6 +51,7 @@
 #endif
 
 #include "param/vector3.h"
+#include "param/quaternion.h"
 #include "param/matrix.h"
 
 #include "WGS84.h"
@@ -130,6 +131,73 @@ class System_3D {
       in >> self[2];
       return in;
     }
+
+
+    ///< Coordinate rotation
+    struct Rotation {
+      Quaternion<FloatT> q;
+      Rotation() : q(1, 0, 0, 0) {}
+      Rotation &then(const Quaternion<FloatT> &q_) {
+        q *= q_;
+        return *this;
+      }
+      Rotation &then(const Rotation &rot) {
+        return then(rot.q);
+      }
+      Rotation &then_x(const FloatT &rad) {
+        return then(Quaternion<FloatT>(
+            std::cos(rad / 2), std::sin(rad / 2), 0, 0));
+      }
+      Rotation &then_y(const FloatT &rad) {
+        return then(Quaternion<FloatT>(
+            std::cos(rad / 2), 0, std::sin(rad / 2), 0));
+      }
+      Rotation &then_z(const FloatT &rad) {
+        return then(Quaternion<FloatT>(
+            std::cos(rad / 2), 0, 0, std::sin(rad / 2)));
+      }
+      operator Matrix<FloatT>() const {
+        return q.getDCM();
+      }
+      /**
+       * Perform coordinate rotation
+       * For example; application of clockwise 90 degree coordinate rotation along to z axis
+       * to vector(1,0,0) yields to vector(0,-1,0).
+       * This is not identical to vector rotation along with some axis,
+       * which corresponds to vector(0,1,0) of example, i.e.,
+       * z-axis 90 degree rotation of vector(1,0,0).
+       *
+       * @param vec target vector to which rotation is applied.
+       */
+      void apply(FloatT (&vec)[3]) const {
+#if 0
+        // as definition: (~q * vec * q).vector();
+        Vector3<FloatT> v(((q.conj() *= Vector3<FloatT>(vec.v)) *= q).vector());
+        vec[0] = v[0];
+        vec[1] = v[1];
+        vec[2] = v[2];
+#else // optimized version
+        FloatT q0(q[0]), qv[3] = {q[1], q[2], q[3]};
+        FloatT q0_(qv[0] * vec[0] + qv[1] * vec[1] + qv[2] * vec[2]), // -q~.vec (i*) vec
+            qv_[3] = { // q~[0] * vec + q~.vec (e*) vec
+              q0 * vec[0] - qv[1] * vec[2] + qv[2] * vec[1], // polarity checked; q~.vec = -qv
+              q0 * vec[1] - qv[2] * vec[0] + qv[0] * vec[2],
+              q0 * vec[2] - qv[0] * vec[1] + qv[1] * vec[0]};
+        vec[0] = q0_ * qv[0] + q0 * qv_[0] + qv_[1] * qv[2] - qv_[2] * qv[1];
+        vec[1] = q0_ * qv[1] + q0 * qv_[1] + qv_[2] * qv[0] - qv_[0] * qv[2];
+        vec[2] = q0_ * qv[2] + q0 * qv_[2] + qv_[0] * qv[1] - qv_[1] * qv[0];
+#endif
+      }
+
+      /**
+       * Perform coordinate rotation by invoking apply(vec.v)
+       *
+       * @see apply(FloatT (&vec)[3])
+       */
+      void apply(System_3D &vec) const {
+        apply(vec.v);
+      }
+    };
 };
 
 template <class FloatT, class Earth> class System_XYZ;
@@ -186,7 +254,6 @@ class System_XYZ : public System_3D<FloatT> {
     }
     
     FloatT dist() const {
-      
       return FloatT(std::sqrt(
           pow2(x()) + pow2(y()) + pow2(z())));
     }

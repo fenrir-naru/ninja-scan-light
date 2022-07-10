@@ -55,6 +55,11 @@
 #include "navigation/GPS_Solver_MultiFrequency.h"
 #endif
 
+#if !defined(BUILD_WITHOUT_SP3)
+#include "navigation/SP3.h"
+#include "navigation/ANTEX.h"
+#endif
+
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
@@ -87,6 +92,10 @@ struct GNSS_Receiver {
       typename gps_solver_t::options_t solver_options;
     } gps;
     std::ostream *out_rinex_nav;
+#if !defined(BUILD_WITHOUT_SP3)
+    typedef SP3_Product<FloatT> sp3_t;
+    sp3_t sp3;
+#endif
     data_t() : gps(), out_rinex_nav(NULL) {}
     ~data_t(){
       if(out_rinex_nav){
@@ -147,16 +156,25 @@ struct GNSS_Receiver {
         }
       }
     }
+
+    void update_ephemeris_source(const data_t &data){
+#if !defined(BUILD_WITHOUT_SP3)
+      typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
+      if(cnt.gps > 0){data.sp3.push(gps.satellites, SP3_Product<FloatT>::SYSTEM_GPS);}
+#endif
+    }
   } solver_GNSS;
 
   GNSS_Receiver() : data(), solver_GNSS(*this) {}
   GNSS_Receiver(const GNSS_Receiver &another)
       : data(another.data), solver_GNSS(*this) {
     solver_GNSS.copy_range_correction(another.solver_GNSS);
+    solver_GNSS.update_ephemeris_source(data);
   }
   GNSS_Receiver &operator=(const GNSS_Receiver &another){
     data = another.data;
     solver_GNSS.copy_range_correction(another.solver_GNSS);
+    solver_GNSS.update_ephemeris_source(data);
     return *this;
   }
 
@@ -335,6 +353,41 @@ struct GNSS_Receiver {
       return true;
     }
 
+#if !defined(BUILD_WITHOUT_SP3)
+    if(value = runtime_opt_t::get_value(spec, "sp3", false)){
+      if(dry_run){return true;}
+      std::cerr << "SP3 file (" << value << ") reading..." << std::endl;
+      std::istream &in(options.spec2istream(value));
+      int entries(SP3_Reader<FloatT>::read_all(in, data.sp3));
+      if(entries < 0){
+        std::cerr << "(error!) Invalid format!" << std::endl;
+        return false;
+      }else{
+        std::cerr << "sp3: " << entries << " items captured." << std::endl;
+        typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
+        if(cnt.gps > 0){std::cerr << "SP3 GPS satellites: " << cnt.gps << std::endl;}
+      }
+      solver_GNSS.update_ephemeris_source(data);
+      return true;
+    }
+    if(value = runtime_opt_t::get_value(spec, "antex", false)){
+      if(dry_run){return true;}
+      std::cerr << "ANTEX file (" << value << ") reading..." << std::endl;
+      std::istream &in(options.spec2istream(value));
+      ANTEX_Product<FloatT> atx;
+      int entries(ANTEX_Reader<FloatT>::read_all(in, atx));
+      if(entries < 0){
+        std::cerr << "(error!) Invalid format!" << std::endl;
+        return false;
+      }else{
+        std::cerr << "antex: " << entries << " items captured." << std::endl;
+        int moved(atx.move_to_antenna_position(data.sp3));
+        std::cerr << "Moved SP3 positions: " << moved << std::endl;
+      }
+      return true;
+    }
+#endif
+
 #define option_apply(expr) \
 data.gps.solver_options. expr
     if(value = runtime_opt_t::get_value(spec, "GNSS_elv_mask_deg", false)){
@@ -425,12 +478,12 @@ data.gps.solver_options. expr
 
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_FREQUENCY)
     if(value = runtime_opt_t::get_value(spec, "GNSS_L2", true)){
-    if(dry_run){return true;}
-    bool use(runtime_opt_t::is_true(value));
-    std::cerr << "GNSS_L2: " << (use ? "on" : "off") << std::endl;
-    data.gps.solver_options.exclude_L2C = !use;
-    return true;
-  }
+      if(dry_run){return true;}
+      bool use(runtime_opt_t::is_true(value));
+      std::cerr << "GNSS_L2: " << (use ? "on" : "off") << std::endl;
+      data.gps.solver_options.exclude_L2C = !use;
+      return true;
+    }
 #endif
 
     return false;

@@ -452,7 +452,7 @@ struct GPS_Time {
     struct {
       int week;
       float_t seconds;
-    } uncorrected; // to work around of "incomplete type" error within g++
+    } uncorrected, corrected; // to work around of "incomplete type" error within g++
     leap_second_event_t(
         const int &year, const int &month, const int &day,
         const int &leap)
@@ -462,9 +462,11 @@ struct GPS_Time {
       t.tm_year = tm_year;
       t.tm_mon = tm_mon;
       t.tm_mday = tm_mday;
-      GPS_Time t_gps(t);
-      uncorrected.week = t_gps.week;
-      uncorrected.seconds = t_gps.seconds;
+      GPS_Time t_gps_uc(t), t_gps(t_gps_uc + leap);
+      uncorrected.week = t_gps_uc.week;
+      uncorrected.seconds = t_gps_uc.seconds;
+      corrected.week = t_gps.week;
+      corrected.seconds = t_gps.seconds;
     }
   };
   static const leap_second_event_t leap_second_events[];
@@ -483,6 +485,92 @@ struct GPS_Time {
       if(uncorrected >= GPS_Time(i->uncorrected.week, i->uncorrected.seconds)){return i->leap_seconds;}
     }
     return 0;
+  }
+
+  int leap_seconds() const {
+    // Treat *this as (normal) GPS time, to which leap seconds are added when it is converted from std::tm
+    for(const leap_second_event_t *i(&leap_second_events[0]); i->leap_seconds > 0; ++i){
+      if(*this >= GPS_Time(i->corrected.week, i->corrected.seconds)){return i->leap_seconds;}
+    }
+    return 0;
+  }
+  float_t julian_date() const {
+    struct conv_t {
+      static int ymd2jd(const int &year, const int &month, const int &day){
+        // @see https://en.wikipedia.org/wiki/Julian_day#Converting_Gregorian_calendar_date_to_Julian_Day_Number
+        return std::div(1461 * (year + 4800 + std::div(month - 14, 12).quot), 4).quot
+            + std::div(367 * (month - 2 - 12 * std::div((month - 14), 12).quot), 12).quot
+            - std::div(3 * std::div((year + 4900 + std::div(month - 14, 12).quot), 100).quot, 4).quot
+            + day - 32075;
+      }
+    };
+    // origin of Julian day is "noon (not midnight)" BC4713/1/1
+    static const float_t t0(conv_t::ymd2jd(1980, 1, 6) - 0.5);
+    // GPS Time is advanced by leap seconds compared with UTC.
+    // The following calculation is incorrect for a day in which a leap second is inserted or truncated.
+    // @see https://en.wikipedia.org/wiki/Julian_day#Julian_date_calculation
+    return t0 + week * 7 + (seconds - leap_seconds()) / seconds_day;
+  }
+  float_t julian_date_2000() const {
+    static const std::tm tm_2000 = {0, 0, 12, 1, 0, 2000 - 1900};
+    static const float_t jd2000(GPS_Time(tm_2000, 13).julian_date());
+    return julian_date() - jd2000;
+  }
+  std::tm utc() const {return c_tm(leap_seconds());}
+
+  float_t greenwich_mean_sidereal_time_sec_ires1996(const float_t &delta_ut1 = float_t(0)) const {
+    float_t jd2000(julian_date_2000() + delta_ut1 / seconds_day);
+    float_t jd2000_day(float_t(0.5) + std::floor(jd2000 - 0.5)); // +/-0.5, +/-1.5, ...
+
+    // @see Chapter 2 of Orbits(978-3540785217) by Xu Guochang
+    // @see Chapter 5 of IERS Conventions (1996) https://www.iers.org/IERS/EN/Publications/TechnicalNotes/tn21.html
+    float_t jc(jd2000_day / 36525), // Julian century
+        jc2(std::pow(jc, 2)), jc3(std::pow(jc, 3));
+    float_t gmst0(24110.54841 // = 6h 41m 50.54841s
+        + jc * 8640184.812866
+        + jc2 * 0.093104
+        - jc3 * 6.2E-6);
+    // ratio of universal to sidereal time as given by Aoki et al. (1982)
+    float_t r(1.002737909350795 // 7.2921158553E-5 = 1.002737909350795 / 86400 * 2pi
+        + jc * 5.9006E-11 // 4.3E-15 = 5.9E-11 / 86400 * 2pi
+        - jc2 * 5.9E-15); // in seconds
+    return gmst0 + r * (jd2000 - jd2000_day) * seconds_day;
+  }
+
+  /**
+   * ERA (Earth rotation rate) defined in Sec. 5.5.3 in IERS 2010(Technical Note No.36)
+   */
+  float_t earth_rotation_angle(const float_t &delta_ut1 = float_t(0),
+      const float_t &scale_factor = float_t(M_PI * 2)) const {
+    float_t jd2000(julian_date_2000() + delta_ut1 / seconds_day);
+    return (jd2000 * 1.00273781191135448 + 0.7790572732640) * scale_factor; // Eq.(5.14)
+  }
+
+  float_t greenwich_mean_sidereal_time_sec_ires2010(const float_t &delta_ut1 = float_t(0)) const {
+    float_t era(earth_rotation_angle(delta_ut1, seconds_day));
+
+    float_t t(julian_date_2000() / 36525);
+    // @see Eq.(5.32) Chapter 5 of IERS Conventions (2010)
+#define AS2SEC(as) (((float_t)seconds_day / (360 * 3600)) * (as))
+    return era
+        + AS2SEC(0.014506)
+        + t * AS2SEC(4612.156534)
+        + std::pow(t, 2) * AS2SEC(1.3915817)
+        - std::pow(t, 3) * AS2SEC(0.00000044)
+        - std::pow(t, 4) * AS2SEC(0.000029956)
+        - std::pow(t, 5) * AS2SEC(0.0000000368);
+#undef AS2SEC
+  }
+
+  /**
+   * Calculate Greenwich mean sidereal time (GMST) in seconds
+   * Internally, greenwich_mean_sidereal_time_sec_ired2010() is called.
+   * @param delta_ut1 time difference of UTC and UT1; UT1 = UTC + delta_UT1,
+   * @return GMST in seconds. 86400 seconds correspond to one rotation
+   * @see greenwich_mean_sidereal_time_sec_ires2010()
+   */
+  float_t greenwich_mean_sidereal_time_sec(const float_t &delta_ut1 = float_t(0)) const {
+    return greenwich_mean_sidereal_time_sec_ires2010(delta_ut1);
   }
 };
 
