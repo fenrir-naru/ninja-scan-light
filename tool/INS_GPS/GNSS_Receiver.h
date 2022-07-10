@@ -120,9 +120,31 @@ struct GNSS_Receiver {
     struct measurement_items_t : public gps_solver_t::measurement_items_t {
       // TODO
     };
+    struct ephemeris_proxy_t {
+      struct item_t {
+        const void *impl;
+        typename base_t::satellite_t (*impl_select)(
+            const void *,
+            const typename base_t::prn_t &, const typename base_t::gps_time_t &);
+      } gps, qzss;
+      static typename base_t::satellite_t forward(
+          const void *ptr,
+          const typename base_t::prn_t &prn, const typename base_t::gps_time_t &t){
+        const ephemeris_proxy_t *proxy(static_cast<const ephemeris_proxy_t *>(ptr));
+        const item_t &target(((prn >= 193) && (prn <= 202)) ? proxy->qzss : proxy->gps);
+        return target.impl_select(target.impl, prn, t);
+      }
+      ephemeris_proxy_t(gps_solver_t &solver){
+        gps.impl = qzss.impl = solver.satellites.impl;
+        gps.impl_select = qzss.impl_select = solver.satellites.impl_select;
+        solver.satellites.impl = this;
+        solver.satellites.impl_select = forward;
+      }
+    } ephemeris_proxy;
     solver_t(const GNSS_Receiver &rcv)
         : base_t(),
-        gps(rcv.data.gps.space_node)
+        gps(rcv.data.gps.space_node),
+        ephemeris_proxy(gps)
         {}
 
     // Proxy functions
@@ -171,12 +193,14 @@ struct GNSS_Receiver {
     void update_ephemeris_source(const data_t &data){
 #if !defined(BUILD_WITHOUT_SP3)
       typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
-      if(cnt.gps > 0){data.sp3.push(gps.satellites, SP3_Product<FloatT>::SYSTEM_GPS);}
+      if(cnt.gps > 0){data.sp3.push(ephemeris_proxy.gps, SP3_Product<FloatT>::SYSTEM_GPS);}
+      if(cnt.qzss > 0){data.sp3.push(ephemeris_proxy.qzss, SP3_Product<FloatT>::SYSTEM_QZSS);}
 #endif
 #if !defined(BUILD_WITHOUT_RINEX_CLK)
       // RINEX clock has higher priority to be applied than SP3
       typename data_t::clk_t::count_t cnt2(data.clk.count());
-      if(cnt2.gps > 0){data.clk.push(gps.satellites, data_t::clk_t::SYSTEM_GPS);}
+      if(cnt2.gps > 0){data.clk.push(ephemeris_proxy.gps, data_t::clk_t::SYSTEM_GPS);}
+      if(cnt2.qzss > 0){data.clk.push(ephemeris_proxy.qzss, data_t::clk_t::SYSTEM_QZSS);}
 #endif
     }
   } solver_GNSS;
@@ -383,6 +407,7 @@ struct GNSS_Receiver {
         std::cerr << "sp3: " << entries << " items captured." << std::endl;
         typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
         if(cnt.gps > 0){std::cerr << "SP3 GPS satellites: " << cnt.gps << std::endl;}
+        if(cnt.qzss > 0){std::cerr << "SP3 QZSS satellites: " << cnt.qzss << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
@@ -418,6 +443,7 @@ struct GNSS_Receiver {
         std::cerr << "rinex_clk: " << entries << " items captured." << std::endl;
         typename data_t::clk_t::count_t cnt(data.clk.count());
         if(cnt.gps > 0){std::cerr << "RINEX clock GPS satellites: " << cnt.gps << std::endl;}
+        if(cnt.qzss > 0){std::cerr << "RINEX clock QZSS satellites: " << cnt.qzss << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
