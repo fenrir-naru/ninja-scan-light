@@ -20,6 +20,8 @@
 #include "navigation/GPS.h"
 #include "navigation/SBAS.h"
 #include "navigation/RINEX.h"
+#include "navigation/SP3.h"
+#include "navigation/ANTEX.h"
 
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
@@ -1437,6 +1439,95 @@ template <class FloatT>
 struct RINEX_Observation {};
 }
 
+%extend SP3 {
+  %typemap(in,numinputs=0) int count[ANY] (int temp[$1_dim0]) "$1 = temp;"
+  %typemap(argout) int count[ANY] {
+    for(int i(0); i < $1_dim0; ++i){
+      %append_output(SWIG_From(int)($1[i]));
+    }
+  }
+  void satellites(int count[SP3::SYS_SYSTEMS]) const {
+    typename SP3_Product<FloatT>::satellite_count_t x(self->satellite_count());
+    count[SP3<FloatT>::SYS_GPS] = x.gps;
+    count[SP3<FloatT>::SYS_SBAS] = x.sbas;
+    count[SP3<FloatT>::SYS_QZSS] = x.qzss;
+    count[SP3<FloatT>::SYS_GLONASS] = x.glonass;
+    count[SP3<FloatT>::SYS_GALILEO] = x.galileo;
+    count[SP3<FloatT>::SYS_BEIDOU] = x.beidou;
+  }
+
+} 
+%inline {
+template <class FloatT>
+struct SP3 : public SP3_Product<FloatT> {
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    return SP3_Reader<FloatT>::read_all(fin, *this);
+  }
+  enum system_t {
+    SYS_GPS,
+    SYS_SBAS,
+    SYS_QZSS,
+    SYS_GLONASS,
+    SYS_GALILEO,
+    SYS_BEIDOU,
+    SYS_SYSTEMS,
+  };
+  bool push(GPS_Solver<FloatT> &solver, const system_t &sys) const {
+    switch(sys){
+      case SYS_GPS:
+        return SP3_Product<FloatT>::push(
+            solver.gps.solver.satellites, SP3_Product<FloatT>::SYSTEM_GPS);
+      case SYS_SBAS:
+      case SYS_QZSS:
+      case SYS_GLONASS:
+      case SYS_GALILEO:
+      case SYS_BEIDOU:
+      default:
+        break;
+    }
+    return false;
+  }
+  bool push(GPS_Solver<FloatT> &solver) const {
+    system_t target[] = {
+      SYS_GPS,
+      //SYS_SBAS,
+      //SYS_QZSS,
+      //SYS_GLONASS,
+      //SYS_GALILEO,
+      //SYS_BEIDOU,
+    };
+    for(std::size_t i(0); i < sizeof(target) / sizeof(target[0]); ++i){
+      if(!push(solver, target[i])){return false;}
+    }
+    return true;
+  }
+  System_XYZ<FloatT, WGS84> position(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return SP3_Product<FloatT>::select(sat_id, t).position(t);
+  }
+  System_XYZ<FloatT, WGS84> velocity(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return SP3_Product<FloatT>::select(sat_id, t).velocity(t);
+  }
+  FloatT clock_error(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return SP3_Product<FloatT>::select(sat_id, t).clock_error(t);
+  }
+  FloatT clock_error_dot(
+      const int &sat_id, const GPS_Time<FloatT> &t) const {
+    return SP3_Product<FloatT>::select(sat_id, t).clock_error_dot(t);
+  }
+  int apply_antex(const char *fname) {
+    ANTEX_Product<FloatT> antex;
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    int read_items(ANTEX_Reader<FloatT>::read_all(fin, antex));
+    if(read_items < 0){return read_items;}
+    return antex.move_to_antenna_position(*this);
+  }
+};
+}
+
 #undef MAKE_ACCESSOR
 #undef MAKE_VECTOR2ARRAY
 #undef MAKE_ARRAY_INPUT
@@ -1460,6 +1551,7 @@ struct RINEX_Observation {};
 %template(SolverOptions_SBAS) SBAS_SolverOptions<type>;
 
 %template(RINEX_Observation) RINEX_Observation<type>;
+%template(SP3) SP3<type>;
 %enddef
 
 CONCRETIZE(double);

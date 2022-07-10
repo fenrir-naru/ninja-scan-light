@@ -324,7 +324,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
   INS_GPS_RealTime_Property<float_sylph_t> realttime_property;
 
   // GPS options
-  bool gps_fake_lock; ///< true when gps dummy date is used.
+  bool gps_fake_lock; ///< true when dummy GPS data is used.
   struct gps_threshold_t {
     float_sylph_t init_acc_2d; ///< Initial measurement update threshold for GPS 2D estimated error
     float_sylph_t init_acc_v;  ///< Initial measurement update threshold for GPS vertical estimated error
@@ -1722,6 +1722,7 @@ class StreamProcessor
           week_number(Options::gps_time_t::WN_INVALID), status(),
           packet_raw_latest(), loader() {
         previous_seek_next = G_Observer_t::ready();
+        packet_latest.valid_position = packet_latest.valid_velocity = false;
       }
       ~GHandler(){}
 
@@ -1746,6 +1747,18 @@ class StreamProcessor
         Handler::outer.updatable->update(packet);
       }
 
+      void update_PV(const int &itow_ms){
+        packet_latest.itow = (float_sylph_t)1E-3 * itow_ms;
+        if(options.gps_fake_lock){
+          packet_latest.latitude = packet_latest.longitude = packet_latest.height = 0;
+          packet_latest.sigma_2d = packet_latest.sigma_height = 1E+1;
+          packet_latest.v_n = packet_latest.v_e = packet_latest.v_d = 0;
+          packet_latest.sigma_vel = 1;
+        }
+        update(packet_latest);
+        packet_latest.valid_position = packet_latest.valid_velocity = false; // invalidate
+      }
+
       /**
        * Extract the following data.
        * {class, id} = {0x01, 0x02} : position
@@ -1766,16 +1779,25 @@ class StreamProcessor
               // Assumption, 0x02 and 0x14 are generated before 0x12
               if((observer[6 + 3] & 0x01) != 0){return;} // invalid?
               itow_ms = observer.fetch_ITOW_ms(4);
+              if(itow_ms == itow_ms_0x0102){ // when 0x0102 comes earlier
+                packet_latest.valid_position = false; // accept overwrite with 0x0114
+              }
               position = observer.fetch_position_hp();
               position_acc = observer.fetch_position_acc_hp();
             }else{
               itow_ms = observer.fetch_ITOW_ms();
-              if(itow_ms == itow_ms_0x0102){return;}
+              if(itow_ms == itow_ms_0x0102){ // when 0x0114 comes earlier
+                return; // skip 0x0102.
+              }
               position = observer.fetch_position();
               position_acc = observer.fetch_position_acc();
             }
 
             //cerr << "G_Arrive 0x02 : " << observer.fetch_ITOW() << endl;
+
+            if(packet_latest.valid_position){ // previous position is not committed
+              update_PV(itow_ms_0x0102);
+            }
 
             itow_ms_0x0102 = itow_ms;
 
@@ -1784,8 +1806,12 @@ class StreamProcessor
             packet_latest.height = position.altitude;
             packet_latest.sigma_2d = position_acc.horizontal;
             packet_latest.sigma_height = position_acc.vertical;
+            packet_latest.valid_position = true;
 
-            break;
+            if(itow_ms_0x0102 == itow_ms_0x0112){ // commit position and velocity
+              update_PV(itow_ms_0x0102);
+            }
+            return;
           }
           case 0x03: { // NAV-STATUS
             G_Observer_t::status_t st(observer.fetch_status());
@@ -1810,14 +1836,22 @@ class StreamProcessor
 
             //cerr << "G_Arrive 0x12 : " << current_itow << " =? " << packet.itow << endl;
 
+            if(packet_latest.valid_velocity){ // previous velocity is not committed
+              update_PV(itow_ms_0x0112);
+            }
+
             itow_ms_0x0112 = observer.fetch_ITOW_ms();
 
             packet_latest.v_n = velocity.north;
             packet_latest.v_e = velocity.east;
             packet_latest.v_d = velocity.down;
             packet_latest.sigma_vel = velocity_acc.acc;
+            packet_latest.valid_velocity = true;
 
-            break;
+            if(itow_ms_0x0102 == itow_ms_0x0112){ // commit position and velocity
+              update_PV(itow_ms_0x0112);
+            }
+            return;
           }
           case 0x20: { // NAV-TIMEGPS
             TimePacket packet;
@@ -1833,21 +1867,9 @@ class StreamProcessor
               }
             }
             Handler::outer.updatable->update(packet);
-            break;
+            return;
           }
           default: return;
-        }
-
-        // this flow is only available when 0x0102 or 0x0112
-        if(itow_ms_0x0102 == itow_ms_0x0112){
-          packet_latest.itow = (float_sylph_t)1E-3 * itow_ms_0x0102;
-          if(options.gps_fake_lock){
-            packet_latest.latitude = packet_latest.longitude = packet_latest.height = 0;
-            packet_latest.sigma_2d = packet_latest.sigma_height = 1E+1;
-            packet_latest.v_n = packet_latest.v_e = packet_latest.v_d = 0;
-            packet_latest.sigma_vel = 1;
-          }
-          update(packet_latest);
         }
       }
 
