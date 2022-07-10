@@ -19,6 +19,7 @@
 #include "navigation/GPS.h"
 #include "navigation/RINEX.h"
 #include "navigation/SP3.h"
+#include "navigation/ANTEX.h"
 
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
@@ -1344,6 +1345,13 @@ struct SP3 : public SP3_Product<FloatT> {
   FloatT clock_error_dot(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
     return SP3_Product<FloatT>::select(sat_id, t).clock_error_dot(t);
+  }
+  int apply_antex(const char *fname) {
+    ANTEX_Product<FloatT> antex;
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    int read_items(ANTEX_Reader<FloatT>::read_all(fin, antex));
+    if(read_items < 0){return read_items;}
+    return antex.move_to_antenna_position(*this);
   }
 };
 }

@@ -1,3 +1,6 @@
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <ctime>
 #include <climits>
 #include <iostream>
@@ -8,6 +11,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/GPS_Solver_Base.h"
+#include "navigation/coordinate.h"
 
 #include <boost/random.hpp>
 #include <boost/random/random_device.hpp>
@@ -163,15 +167,19 @@ void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
 struct Fixture {
   boost::random::mt19937 gen;
   boost::random::uniform_int_distribution<> bin_dist;
+  boost::random::normal_distribution<> norm_dist;
 
   Fixture()
       : gen(0), //static_cast<unsigned long>(time(0))
-      bin_dist(0, 1)
+      bin_dist(0, 1), norm_dist(0, 1)
       {}
   ~Fixture(){}
 
   bool get_bool(){
     return bin_dist(gen) == 1;
+  }
+  double get_double(){
+    return norm_dist(gen);
   }
 };
 
@@ -269,6 +277,80 @@ BOOST_AUTO_TEST_CASE(gps_time){
     BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_tm), t->leap_seconds);
     BOOST_REQUIRE_EQUAL(gpst_t::guess_leap_seconds(t_gps), t->leap_seconds);
   }
+  std::tm tm2000 = {0, 0, 12, 1, 0, 2000 - 1900};
+  gpst_t t2000(tm2000, 13);
+  {
+    // UTC, julian date
+    BOOST_REQUIRE_EQUAL(t2000.leap_seconds(), 13);
+    {
+      std::tm utc(t2000.utc());
+      BOOST_REQUIRE_SMALL(std::abs(
+          std::difftime(std::mktime(&utc), std::mktime(&tm2000))), 1E-8);
+    }
+
+    BOOST_REQUIRE_CLOSE(gpst_t(0, 0).julian_date(), 2444244.5, 1E-8);
+    BOOST_REQUIRE_CLOSE(t2000.julian_date(), 2451545.0, 1E-8);
+    BOOST_REQUIRE_SMALL(std::abs(t2000.julian_date_2000()), 1E-8);
+  }
+
+  std::tm t_tm[] = {
+    {0, 0, 0, 1, 0, 2019 - 1900},
+    {0, 0, 8, 1, 0, 2019 - 1900},
+  };
+  gpst_t t_gps[] = {
+    gpst_t(t_tm[0], 18),
+    gpst_t(t_tm[1], 18),
+  };
+
+#define HMS2S(hh, mm, ss) ((3600.0 * (hh)) + (60.0 * (mm)) + (ss))
+#define DMS2RAD(dd, mm, ss) (M_PI / 180 * HMS2S(dd, mm, ss) / 3600)
+  { // ERA (Earth rotation angle)
+    // @see https://dc.zah.uni-heidelberg.de/apfs/times/q/form
+    struct cmp_t {
+      static void cmp(const double &a, const double &b, const double &delta){
+        double a_(a - M_PI * 2 * std::floor(a / (M_PI * 2))); // [0, 2pi)
+        double b_(b - M_PI * 2 * std::floor(b / (M_PI * 2)));
+        BOOST_REQUIRE_SMALL(std::abs(a_ - b_), delta);
+      }
+    };
+    cmp_t::cmp(t2000.earth_rotation_angle(), DMS2RAD(280, 27, 38.227), DMS2RAD(0, 0, 1));
+    cmp_t::cmp(t_gps[0].earth_rotation_angle(), DMS2RAD(100, 7, 1.530), DMS2RAD(0, 0, 1));
+    cmp_t::cmp(t_gps[1].earth_rotation_angle(), DMS2RAD(220, 26, 44.265), DMS2RAD(0, 0, 1));
+  }
+  { // sidereal time
+    // @see (1) https://astronomy.stackexchange.com/questions/21002/how-to-find-greenwich-mean-sideral-time
+    double t1_gmst(t_gps[0].greenwich_mean_sidereal_time_sec_ires1996());
+    BOOST_REQUIRE_SMALL(std::abs(t1_gmst - 1665686.527373333), 1E-4);
+
+    double t2_gmst(t_gps[1].greenwich_mean_sidereal_time_sec_ires1996());
+    BOOST_REQUIRE_SMALL(
+        std::abs(t2_gmst - (1665686.527373333 + 28878.85178960284)),
+        1E-4);
+
+    // @see (2) https://eco.mtk.nao.ac.jp/cgi-bin/koyomi/cande/gst_en.cgi
+    // @see (3) https://dc.zah.uni-heidelberg.de/apfs/times/q/form
+    struct cmp_t {
+      static void cmp(const double &a, const double &b, const double &delta){
+        double a_(a - std::floor(a / (24 * 3600)) * (24 * 3600)); // [0, 86400)
+        double b_(b - std::floor(b / (24 * 3600)) * (24 * 3600));
+        BOOST_REQUIRE_SMALL(std::abs(a_ - b_), delta);
+      }
+    };
+    cmp_t::cmp(
+        t2000.greenwich_mean_sidereal_time_sec_ires2010(),
+        HMS2S(18, 41, 50.5494),
+        1E-3);
+    cmp_t::cmp(
+        t_gps[0].greenwich_mean_sidereal_time_sec_ires2010(),
+        HMS2S(6, 41, 26.5248),
+        1E-3);
+    cmp_t::cmp(
+        t_gps[1].greenwich_mean_sidereal_time_sec_ires2010(),
+        HMS2S(14, 42, 45.3766),
+        1E-3);
+  }
+#undef DMS2RAD
+#undef HMS2S
 }
 
 BOOST_AUTO_TEST_CASE(satellite_ephemeris){
@@ -293,6 +375,29 @@ BOOST_AUTO_TEST_CASE(satellite_ephemeris){
     sat.select_ephemeris(space_node_t::gps_time_t(2000, target[i].hr_in * 60 * 60));
     BOOST_TEST_MESSAGE(target[i].hr_in);
     BOOST_REQUIRE_EQUAL(sat.ephemeris().t_oc, target[i].hr_out * 60 * 60);
+  }
+}
+
+BOOST_FIXTURE_TEST_CASE(rotation, Fixture){
+  typedef space_node_t::xyz_t xyz_t;
+  typedef xyz_t::Rotation rot_t;
+  typedef Vector3<double> vec3_t;
+  double xyz[][3] = {
+      {1, 0, 0}, {0, 1, 0}, {0, 0, 1},
+      {get_double(), get_double(), get_double()},
+  };
+  vec3_t xyz_v[sizeof(xyz) / sizeof(xyz[0])];
+  for(std::size_t j(0); j < sizeof(xyz) / sizeof(xyz[0]); ++j){
+    xyz_v[j] = vec3_t(xyz[j]);
+  }
+  for(int i(0); i < 0x100; ++i){
+    rot_t rot(rot_t().then_x(get_double()).then_y(get_double()).then_z(get_double()));
+    for(std::size_t j(0); j < sizeof(xyz) / sizeof(xyz[0]); ++j){
+      xyz_t xyz_(xyz_v[j]);
+      rot.apply(xyz_);
+      vec3_t delta((vec3_t)xyz_ - (rot.q.conj() * xyz_v[j] * rot.q).vector());
+      BOOST_REQUIRE_SMALL(delta.abs2(), 1E-8);
+    }
   }
 }
 
