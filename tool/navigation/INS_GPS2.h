@@ -50,15 +50,16 @@
  */
 template <class FloatT>
 struct GPS_Solution{
-  FloatT v_n,          ///< 北方向速度
-         v_e,          ///< 東方向速度
-         v_d;          ///< 下方向速度
-  FloatT sigma_vel;    ///< 速度ベクトルの絶対値の推定誤差
-  FloatT latitude,     ///< 緯度
-         longitude,    ///< 経度
-         height;       ///< 高度
-  FloatT sigma_2d,     ///< 水平面上の推定誤差
-         sigma_height; ///< 高度方向の推定誤差
+  FloatT v_n,          ///< North-ward speed, 北方向速度
+         v_e,          ///< East-ward speed, 東方向速度
+         v_d;          ///< Downward speed 下方向速度
+  FloatT sigma_vel;    ///< Standard deviation of velocity norm 速度ベクトルの絶対値の推定誤差
+  FloatT latitude,     ///< Latitude, 緯度
+         longitude,    ///< Longitude, 経度
+         height;       ///< Altitude, 高度
+  FloatT sigma_2d,     ///< Standard deviation of horizontal position, 水平面上の推定誤差
+         sigma_height; ///< Standard deviation of vertical position, 高度方向の推定誤差
+  bool valid_velocity, valid_position;
 
   struct sigma_vel_ned_t {
     FloatT n, e, d;
@@ -138,90 +139,90 @@ class INS_GPS2 : public BaseFINS{
       using std::cos;
       using std::sin;
       float_t azimuth(BaseFINS::azimuth());
-      
-      //cout << "__correct__" << endl;
-      
-      quat_t q_e2n_gps(BaseFINS::e2n(gps.latitude, gps.longitude));
-      
-      //cout << "__correct__" << endl;
-      
-      //観測量z
-      float_t z_serialized[8][1];
+
+      float_t z_serialized[8][1]; ///< observed values, 観測量
+#define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
+      float_t H_serialized[z_size][P_SIZE] = {{0}}; ///< state variable(x) = H * z + v
+      float_t R_serialized[z_size][z_size] = {{0}}; //< covariance matrix of observed values
+
+      unsigned int offset(0), rows(0);
+
 #define z(i, j) z_serialized[i][j]
-      {
+#define H(i, j) H_serialized[i][j]
+#define R(i, j) R_serialized[i][j]
+      if(gps.valid_velocity){ // for velocity
+        rows += 3;
         z(0, 0) = get(0) - (gps.v_n * cos(azimuth) + gps.v_e * sin(azimuth));
         z(1, 0) = get(1) - (gps.v_n * -sin(azimuth) + gps.v_e * cos(azimuth));
         z(2, 0) = get(2) - gps.v_d;
-        z(3, 0) = get(3) - q_e2n_gps[0];
-        z(4, 0) = get(4) - q_e2n_gps[1];
-        z(5, 0) = get(5) - q_e2n_gps[2];
-        z(6, 0) = get(6) - q_e2n_gps[3];
-        z(7, 0) = get(7) - gps.height;
-      }
-#undef z
-#define z_size (sizeof(z_serialized) / sizeof(z_serialized[0]))
-      mat_t z(z_size, 1, (float_t *)z_serialized);
-      
-      //行列Hの作成
-      float_t H_serialized[z_size][P_SIZE] = {{0}};
-#define H(i, j) H_serialized[i][j]
-      {
+
         H(0, 0) = 1;
         H(1, 1) = 1;
         H(2, 2) = 1;
-        
-        H(3, 3) = -get(4);
-        H(3, 4) = -get(5);
-        H(3, 5) = -get(6);
-        
-        H(4, 3) =  get(3);
-        H(4, 4) =  get(6);
-        H(4, 5) = -get(5);
-        
-        H(5, 3) = -get(6);
-        H(5, 4) =  get(3);
-        H(5, 5) =  get(4);
-        
-        H(6, 3) =  get(5);
-        H(6, 4) = -get(4);
-        H(6, 5) =  get(3);
-        
-        H(7, 6) = 1;
-      }
-#undef H
-      mat_t H(z_size, P_SIZE, (float_t *)H_serialized);
-      
-      float_t lat_sigma(BaseFINS::meter2lat(gps.sigma_2d));
-      float_t long_sigma(BaseFINS::meter2long(gps.sigma_2d));
-      
-      //観測値誤差行列R
-      float_t R_serialized[z_size][z_size] = {{0}};
-#define R(i, j) R_serialized[i][j]
-      {
+
         typename GPS_Solution<float_t>::sigma_vel_ned_t sigma_vel_ned(
             gps.sigma_vel_ned());
         R(0, 0) = pow2(sigma_vel_ned.n);
         R(1, 1) = pow2(sigma_vel_ned.e);
         R(2, 2) = pow2(sigma_vel_ned.d);
-        
+      }else{
+        offset += 3;
+      }
+
+      if(gps.valid_position){ // for position
+        rows += 5;
+        quat_t q_e2n_gps(BaseFINS::e2n(gps.latitude, gps.longitude));
+        z(3, 0) = get(3) - q_e2n_gps[0];
+        z(4, 0) = get(4) - q_e2n_gps[1];
+        z(5, 0) = get(5) - q_e2n_gps[2];
+        z(6, 0) = get(6) - q_e2n_gps[3];
+        z(7, 0) = get(7) - gps.height;
+
+        H(3, 3) = -get(4);
+        H(3, 4) = -get(5);
+        H(3, 5) = -get(6);
+
+        H(4, 3) =  get(3);
+        H(4, 4) =  get(6);
+        H(4, 5) = -get(5);
+
+        H(5, 3) = -get(6);
+        H(5, 4) =  get(3);
+        H(5, 5) =  get(4);
+
+        H(6, 3) =  get(5);
+        H(6, 4) = -get(4);
+        H(6, 5) =  get(3);
+
+        H(7, 6) = 1;
+
+        float_t lat_sigma(BaseFINS::meter2lat(gps.sigma_2d));
+        float_t long_sigma(BaseFINS::meter2long(gps.sigma_2d));
+
         float_t s_lambda1 = sin((gps.longitude + azimuth) / 2);
         float_t s_lambda2 = sin((gps.longitude - azimuth) / 2);
         float_t c_lambda1 = cos((gps.longitude + azimuth) / 2);
         float_t c_lambda2 = cos((gps.longitude - azimuth) / 2);
         float_t s_phi = sin(-gps.latitude / 2);
         float_t c_phi = cos(-gps.latitude / 2);
-        
+
         R(3, 3) = pow2( c_lambda1 * (s_phi - c_phi) * lat_sigma / 2) + pow2(-s_lambda1 * (c_phi + s_phi) * long_sigma / 2);
         R(4, 4) = pow2( s_lambda2 * (s_phi + c_phi) * lat_sigma / 2) + pow2( c_lambda2 * (c_phi - s_phi) * long_sigma / 2);
         R(5, 5) = pow2(-c_lambda2 * (s_phi + c_phi) * lat_sigma / 2) + pow2( s_lambda2 * (c_phi - s_phi) * long_sigma / 2);
         R(6, 6) = pow2( s_lambda1 * (s_phi - c_phi) * lat_sigma / 2) + pow2( c_lambda1 * (c_phi + s_phi) * long_sigma / 2);
-        
+
         R(7, 7) = pow2(gps.sigma_height);
       }
 #undef R
-      mat_t R(z_size, z_size, (float_t *)R_serialized);
+#undef H
+#undef z
+
+      mat_t z(rows, 1, (float_t *)z_serialized[offset]);
+      mat_t H(rows, P_SIZE, (float_t *)H_serialized[offset]);
+      mat_t R_(z_size, z_size, (float_t *)R_serialized);
+      mat_t R(R_.partial(rows, rows, offset, offset).copy());
 #undef z_size
-      
+
       return CorrectInfo<float_t>(H, z, R);
     }
     
