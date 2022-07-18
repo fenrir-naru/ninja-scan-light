@@ -292,13 +292,15 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
      * @param observer G page observer
      */
     struct HandlerG {
+      bool change_0x0102, change_0x0112;
       unsigned int itow_ms_0x0102, itow_ms_0x0112;
       super_t::G_Observer_t::position_t position;
       super_t::G_Observer_t::position_acc_t position_acc;
       super_t::G_Observer_t::velocity_t velocity;
       super_t::G_Observer_t::velocity_acc_t velocity_acc;
       HandlerG() 
-          : itow_ms_0x0102(0), itow_ms_0x0112(0),
+          : change_0x0102(false), change_0x0112(false),
+          itow_ms_0x0102(0), itow_ms_0x0112(0),
           position(0, 0, 0), position_acc(0, 0),
           velocity(0, 0, 0), velocity_acc(0) {
       }
@@ -333,31 +335,86 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         update_time(observer, true);
       }
 
+      void dump(const unsigned int &itow_ms){
+        if(options.page_selected[Options::PAGE_G] <= Options::PAGE_SELECTED_DEFAULT){return;}
+
+        float_sylph_t current(1E-3 * itow_ms);
+        if(!options.is_time_in_range(current)){return;}
+
+        options.out() << options.format_time(current) << ", ";
+        if(change_0x0102){
+          options.out() << position.latitude << ", "
+              << position.longitude << ", "
+              << position.altitude << ", "
+              << position_acc.horizontal << ", "
+              << position_acc.vertical << ", ";
+        }else{
+          options.out() << ", , , , , ";
+        }
+        if(change_0x0112){
+          options.out() << velocity.north << ", "
+              << velocity.east << ", "
+              << velocity.down << ", "
+              << velocity_acc.acc;
+        }else{
+          options.out() << ", , , ";
+        }
+        options.out() << endl;
+        change_0x0102 = change_0x0112 = false;
+      }
+
       void operator()(const super_t::G_Observer_t &observer){
         if(!observer.validate()){return;}
         
-        bool change_itow(false);
         super_t::G_Observer_t::packet_type_t
             packet_type(observer.packet_type());
         switch(packet_type.mclass){
           case 0x01: {
             switch(packet_type.mid){
-              case 0x02: { // NAV-POSLLH
-                position = observer.fetch_position();
-                position_acc = observer.fetch_position_acc();
-                
+              case 0x02:   // NAV-POSLLH
+              case 0x14: { // NAV-HPPOSLLH
+                unsigned int itow_ms;
+                super_t::G_Observer_t::position_t pos;
+                super_t::G_Observer_t::position_acc_t pos_acc;
+                if(packet_type.mid == 0x14){
+                  itow_ms = observer.fetch_ITOW_ms(4);
+                  if(itow_ms == itow_ms_0x0102){ // when 0x0102 comes earlier
+                    change_0x0102 = false; // accept overwrite with 0x0114
+                  }
+                  pos = observer.fetch_position_hp();
+                  pos_acc = observer.fetch_position_acc_hp();
+                }else{
+                  itow_ms = observer.fetch_ITOW_ms();
+                  if(itow_ms == itow_ms_0x0102){ // when 0x0114 comes earlier
+                    break; // skip 0x0102.
+                  }
+                  pos = observer.fetch_position();
+                  pos_acc = observer.fetch_position_acc();
+                }
+
+                if(change_0x0102){ // previous position is not dumped
+                  dump(itow_ms_0x0102);
+                }
                 itow_ms_0x0102 = observer.fetch_ITOW_ms();
-                change_itow = true;
-                
+                position = pos;
+                position_acc = pos_acc;
+                change_0x0102 = true;
+                if(itow_ms_0x0102 == itow_ms_0x0112){ // position and velocity are acquired
+                  dump(itow_ms_0x0102);
+                }
                 break;
               }
               case 0x12: { // NAV-VELNED
+                if(change_0x0112){ // previous velocity is not dumped
+                  dump(itow_ms_0x0112);
+                }
+                itow_ms_0x0112 = observer.fetch_ITOW_ms();
                 velocity = observer.fetch_velocity();
                 velocity_acc = observer.fetch_velocity_acc();
-                
-                itow_ms_0x0112 = observer.fetch_ITOW_ms();
-                change_itow = true;
-                
+                change_0x0112 = true;
+                if(itow_ms_0x0102 == itow_ms_0x0112){ // position and velocity are acquired
+                  dump(itow_ms_0x0112);
+                }
                 break;
               }
               case 0x20: { // NAV-TIMEGPS
@@ -369,26 +426,6 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
           }
           default:
             break;
-        }
-        
-        if(options.page_selected[Options::PAGE_G] <= Options::PAGE_SELECTED_DEFAULT){return;}
-
-        if(change_itow
-            && (itow_ms_0x0102 == itow_ms_0x0112)){
-          
-          float_sylph_t current(1E-3 * itow_ms_0x0102);
-          if(!options.is_time_in_range(current)){return;}
-          
-          options.out() << options.format_time(current) << ", "
-              << position.latitude << ", "
-              << position.longitude << ", "
-              << position.altitude << ", "
-              << position_acc.horizontal << ", "
-              << position_acc.vertical << ", "
-              << velocity.north << ", "
-              << velocity.east << ", "
-              << velocity.down << ", "
-              << velocity_acc.acc << endl;
         }
       }
     } handler_G;
