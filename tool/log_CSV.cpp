@@ -371,13 +371,33 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         switch(packet_type.mclass){
           case 0x01: {
             switch(packet_type.mid){
-              case 0x02: { // NAV-POSLLH
+              case 0x02:   // NAV-POSLLH
+              case 0x14: { // NAV-HPPOSLLH
+                unsigned int itow_ms;
+                super_t::G_Observer_t::position_t pos;
+                super_t::G_Observer_t::position_acc_t pos_acc;
+                if(packet_type.mid == 0x14){
+                  itow_ms = observer.fetch_ITOW_ms(4);
+                  if(itow_ms == itow_ms_0x0102){ // when 0x0102 comes earlier
+                    change_0x0102 = false; // accept overwrite with 0x0114
+                  }
+                  pos = observer.fetch_position_hp();
+                  pos_acc = observer.fetch_position_acc_hp();
+                }else{
+                  itow_ms = observer.fetch_ITOW_ms();
+                  if(itow_ms == itow_ms_0x0102){ // when 0x0114 comes earlier
+                    break; // skip 0x0102.
+                  }
+                  pos = observer.fetch_position();
+                  pos_acc = observer.fetch_position_acc();
+                }
+
                 if(change_0x0102){ // previous position is not dumped
                   dump(itow_ms_0x0102);
                 }
                 itow_ms_0x0102 = observer.fetch_ITOW_ms();
-                position = observer.fetch_position();
-                position_acc = observer.fetch_position_acc();
+                position = pos;
+                position_acc = pos_acc;
                 change_0x0102 = true;
                 if(itow_ms_0x0102 == itow_ms_0x0112){ // position and velocity are acquired
                   dump(itow_ms_0x0102);
