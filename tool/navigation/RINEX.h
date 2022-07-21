@@ -726,29 +726,37 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       int year, month, day;
       FloatT tau_c_neg, tau_GPS; // TODO check tau_GPS polarity
       int leap_sec;
+      int flags;
+      enum {
+        TAU_C_NEG = 0x01,
+        TAU_GPS   = 0x02,
+        LEAP_SEC  = 0x04,
+      };
     };
     static const typename super_t::convert_item_t t_corr_glonass_v2[4];
 
     bool extract_t_corr_glonass_v2(t_corr_glonass_t &t_corr_glonass) const {
-      bool utc, leap;
+      t_corr_glonass.flags = 0;
       super_t::header_t::const_iterator it;
 
-      if(utc = ((it = _header.find("CORR TO SYSTEM TIME")) != _header.end())){
+      if((it = _header.find("CORR TO SYSTEM TIME")) != _header.end()){
         super_t::convert(t_corr_glonass_v2, it->second.front(), &t_corr_glonass);
+        t_corr_glonass.flags |= t_corr_glonass_t::TAU_C_NEG;
       }
 
-      if(leap = ((it = _header.find("LEAP SECONDS")) != _header.end())){
+      if((it = _header.find("LEAP SECONDS")) != _header.end()){
         iono_utc_t iono_utc;
         super_t::convert(utc_leap_v2, it->second.front(), &iono_utc);
         t_corr_glonass.leap_sec = iono_utc.delta_t_LS;
+        t_corr_glonass.flags |= t_corr_glonass_t::LEAP_SEC;
       }
 
-      return utc && leap;
+      return t_corr_glonass.flags > 0;
     }
 
     bool extract_t_corr_glonass_v3(t_corr_glonass_t &t_corr_glonass) const {
       iono_utc_t iono_utc;
-      bool utc(false), leap(false);
+      t_corr_glonass.flags = 0;
       typedef super_t::header_t::const_iterator it_t;
       typedef super_t::header_t::mapped_type::const_iterator it2_t;
 
@@ -760,11 +768,12 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
             super_t::convert(utc_v3, *it2, &iono_utc);
             t_corr_glonass.year = t_corr_glonass.month = t_corr_glonass.day = 0;
             t_corr_glonass.tau_c_neg = iono_utc.A0;
+            t_corr_glonass.flags |= t_corr_glonass_t::TAU_C_NEG;
           }else if(it2->find("GLGP") != it2->npos){
             super_t::convert(utc_v3, *it2, &iono_utc);
             t_corr_glonass.tau_GPS = iono_utc.A0;
+            t_corr_glonass.flags |= t_corr_glonass_t::TAU_GPS;
           }
-          utc = true;
         }
       }
 
@@ -775,10 +784,10 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
           super_t::convert(utc_leap_v2, it->second.front(), &iono_utc);
         }
         t_corr_glonass.leap_sec = iono_utc.delta_t_LS;
-        leap = true;
+        t_corr_glonass.flags |= t_corr_glonass_t::LEAP_SEC;
       }
 
-      return utc && leap;
+      return t_corr_glonass.flags > 0;
     }
 
     struct space_node_list_t {
@@ -815,8 +824,11 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
             typename message_glonass_t::eph_t eph0(reader.msg_glonass);
             eph0.tau_c = -t_corr_glonass.tau_c_neg;
             eph0.tau_GPS = t_corr_glonass.tau_GPS;
-            typename GLONASS_SpaceNode<FloatT>
-                ::SatelliteProperties::Ephemeris_with_GPS_Time eph(eph0, t_corr_glonass.leap_sec);
+            typename GLONASS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris_with_GPS_Time eph(
+                eph0,
+                (t_corr_glonass.flags & t_corr_glonass_t::LEAP_SEC)
+                   ? t_corr_glonass.leap_sec
+                   : GPS_Time<FloatT>::guess_leap_seconds(reader.msg_glonass.date_tm));
             space_nodes.glonass->satellite(reader.msg_glonass.svid).register_ephemeris(eph);
             res++;
             break;

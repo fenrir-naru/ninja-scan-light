@@ -293,7 +293,7 @@ BOOST_AUTO_TEST_CASE(nav_GLONASS_v2){
 
   {
     std::tm t_tm = {0, 15, 0, 15, 2 - 1, 1998 - 1900};
-    /*typename*/ gps_t::gps_time_t t(t_tm);
+    /*typename*/ gps_t::gps_time_t t(t_tm, 12);
     glonass.satellite(3).select_ephemeris(t);
     const /*typename*/ glonass_t::Satellite::Ephemeris &eph(glonass.satellite(3).ephemeris());
 
@@ -369,7 +369,7 @@ BOOST_AUTO_TEST_CASE(nav_GLONASS_v3){
 
   {
     std::tm t_oc_tm = {0, 15, 0, 1, 10 - 1, 2006 - 1900};
-    /*typename*/ gps_t::gps_time_t t_oc(t_oc_tm);
+    /*typename*/ gps_t::gps_time_t t_oc(t_oc_tm, 14);
     glonass.satellite(1).select_ephemeris(t_oc);
     const /*typename*/ glonass_t::Satellite::Ephemeris &eph(glonass.satellite(1).ephemeris());
 
