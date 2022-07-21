@@ -770,6 +770,11 @@ class SP3_Reader {
         dst_t &dst;
         int &res;
         epoch_t epoch;
+        enum {
+          TS_UNKNOWN,
+          TS_GPS,
+          TS_UTC
+        } time_system;
         struct pv_t {
           position_clock_t pos;
           velocity_rate_t vel;
@@ -777,12 +782,15 @@ class SP3_Reader {
         };
         typedef std::map<int, pv_t> entries_t;
         entries_t entries;
-        buf_t(dst_t &dst_, int &res_) : dst(dst_), res(res_), entries(){
+        buf_t(dst_t &dst_, int &res_) : dst(dst_), res(res_), time_system(TS_UNKNOWN), entries(){
           epoch.symbols[0] = 0;
         }
         void flush(){
           if(!epoch.symbols[0]){return;}
           GPS_Time<FloatT> gpst(epoch);
+          if(time_system == TS_UTC){
+            gpst += GPS_Time<FloatT>::guess_leap_seconds(gpst);
+          }
           for(typename entries_t::const_iterator it(entries.begin()), it_end(entries.end());
               it != it_end; ++it){
             if(it->second.pos.symbol[0]){
@@ -807,6 +815,14 @@ class SP3_Reader {
       while(src.has_next()){
         parsed_t parsed(src.parse_line());
         switch(parsed.type){
+          case parsed_t::L21_22: // check time system
+            if(buf.time_system != buf_t::TS_UNKNOWN){break;}
+            if(std::strncmp(parsed.item.l21_22.time_system, "GPS", 3) == 0){
+              buf.time_system = buf_t::TS_GPS;
+            }else if(std::strncmp(parsed.item.l21_22.time_system, "UTC", 3) == 0){
+              buf.time_system = buf_t::TS_UTC;
+            }
+            break;
           case parsed_t::EPOCH:
             buf.flush();
             buf.epoch = parsed.item.epoch;
