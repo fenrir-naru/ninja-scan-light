@@ -384,20 +384,25 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         break;
     }
   }
-  %typemap(in,numinputs=0) System_XYZ<FloatT, WGS84> & (System_XYZ<FloatT, WGS84> temp) %{
-    $1 = &temp;
-  %}
+  %typemap(in,numinputs=0) System_XYZ<FloatT, WGS84> & (System_XYZ<FloatT, WGS84> temp) "$1 = &temp;"
   %typemap(argout) System_XYZ<FloatT, WGS84> & {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
+  %typemap(in,numinputs=0) FloatT clke_dclke[2] (FloatT temp[2]) "$1 = temp;"
+  %typemap(argout) FloatT clke_dclke[2] {
+    %append_output(swig::from($1[0]));
+    %append_output(swig::from($1[1]));
+  }
   void constellation(
       System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
-      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0,
-      const bool &with_velocity = true) const {
+      FloatT clke_dclke[2],
+      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0) const {
     typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
-        self->constellation(t, pseudo_range, with_velocity));
+        self->constellation(t, pseudo_range, true));
     position = res.position;
     velocity = res.velocity;
+    clke_dclke[0] = self->clock_error(t, pseudo_range);
+    clke_dclke[1] = self->clock_error_dot(t, pseudo_range);
   }
 #if defined(SWIGRUBY)
   %rename("consistent?") is_consistent;
