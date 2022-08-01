@@ -127,4 +127,71 @@ BOOST_AUTO_TEST_CASE(interpolate_neville){
   }
 }
 
+BOOST_AUTO_TEST_CASE(interpolatable_set){
+  typedef InterpolatableSet<int, int> target_t;
+  target_t target;
+  std::map<int, int> src;
+  for(int i(0); i < 10; ++i){
+    src[i * 10] = 0;
+  }
+
+  target_t::condition_t cnd = {5, 100};
+
+  // case: -10=x0, 0, 10, 20, 30, 40
+  target.update(-10, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), 10 + i * 10) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, -10);
+  BOOST_CHECK_EQUAL(target.x_upper, 5);
+
+  // case: 0, 2=x0, 10, 20, 30, 40
+  target.update(2, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), 10 + i * 10) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, -10);
+  BOOST_CHECK_EQUAL(target.x_upper, 5);
+
+  // case: 0, 10, 20, 22=x0, 30, 40
+  target.update(22, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), -22 + i * 10) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, 20);
+  BOOST_CHECK_EQUAL(target.x_upper, 25);
+
+  // case: 10, 20, 28=x0, 30, 40, 50
+  target.update(28, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), -28 + i * 10 + 10) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, 25);
+  BOOST_CHECK_EQUAL(target.x_upper, 30);
+
+  // case: 50, 60, 70, 80, 88=x0, 90
+  target.update(88, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), -88 + i * 10 + 50) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, 85);
+  BOOST_CHECK_EQUAL(target.x_upper, 88);
+
+  // case: 50, 60, 70, 80, 90, 100=x0
+  target.update(100, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), -100 + i * 10 + 50) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, 85);
+  BOOST_CHECK_EQUAL(target.x_upper, 100);
+
+  // case: 0, 2=x0, 10, 20, 30, 40
+  target.update(2, src, cnd);
+  for(std::size_t i(0); i < cnd.max_x_size; ++i){
+    BOOST_CHECK(find(target.dx.begin(), target.dx.end(), -2 + i * 10) != target.dx.end());
+  }
+  BOOST_CHECK_EQUAL(target.x_lower, 2);
+  BOOST_CHECK_EQUAL(target.x_upper, 5);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

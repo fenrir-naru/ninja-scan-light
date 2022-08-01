@@ -498,10 +498,10 @@ class GPS_Receiver
           {
             :L1_PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
             :L1_PSEUDORANGE_SIGMA => [43, 1, nil, proc{|v|
-              (trk_stat & 0x1 == 0x1) ? (1E-2 * (v[0] & 0xF)) : nil
+              (trk_stat & 0x1 == 0x1) ? (1E-2 * (1 << (v[0] & 0xF))) : nil
             }],
             :L1_DOPPLER => [32, 4, "e"],
-            :L1_DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (v[0] & 0xF)}],
+            :L1_DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (1 << (v[0] & 0xF))}],
             :L1_CARRIER_PHASE => [24, 8, "E", proc{|v| (trk_stat & 0x2 == 0x2) ? v : nil}],
             :L1_CARRIER_PHASE_SIGMA => [44, 1, nil, proc{|v|
               (trk_stat & 0x2 == 0x2) ? (0.004 * (v[0] & 0xF)) : nil

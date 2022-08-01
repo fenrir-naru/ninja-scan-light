@@ -143,17 +143,17 @@ class GPS_SinglePositioning : public SolverBaseT {
           static inline const typename space_node_t::Satellite &sat(const void *ptr) {
             return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
           }
-          static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).position(t, pseudo_range);
+          static xyz_t position(const void *ptr, const gps_time_t &t_tx, const float_t &dt_transit) {
+            return sat(ptr).position(t_tx, dt_transit);
           }
-          static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).velocity(t, pseudo_range);
+          static xyz_t velocity(const void *ptr, const gps_time_t &t_tx, const float_t &dt_transit) {
+            return sat(ptr).velocity(t_tx, dt_transit);
           }
-          static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).clock_error(t, pseudo_range);
+          static float_t clock_error(const void *ptr, const gps_time_t &t_tx) {
+            return sat(ptr).clock_error(t_tx);
           }
-          static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).clock_error_dot(t, pseudo_range);
+          static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
+            return sat(ptr).clock_error_dot(t_tx);
           }
         };
         satellite_t res = {
@@ -272,13 +272,16 @@ class GPS_SinglePositioning : public SolverBaseT {
         residual_t &residual,
         const range_error_t &error = range_error_t::not_corrected) const {
 
+      static const float_t &c(space_node_t::light_speed);
+
       // Clock error correction
       range += ((error.unknown_flag & range_error_t::SATELLITE_CLOCK)
-          ? (sat.clock_error(time_arrival, range) * space_node_t::light_speed)
+          ? (sat.clock_error(time_arrival - range / c) * c)
           : error.value[range_error_t::SATELLITE_CLOCK]);
 
       // Calculate satellite position
-      xyz_t sat_pos(sat.position(time_arrival, range));
+      float_t dt_transit(range / c);
+      xyz_t sat_pos(sat.position(time_arrival - dt_transit, dt_transit));
       float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
       // Calculate residual
@@ -344,11 +347,15 @@ class GPS_SinglePositioning : public SolverBaseT {
         const xyz_t &usr_vel,
         const float_t &los_neg_x, const float_t &los_neg_y, const float_t &los_neg_z) const {
 
-      xyz_t rel_vel(sat.velocity(time_arrival, range) - usr_vel); // Calculate velocity
+      static const float_t &c(space_node_t::light_speed);
+
+      float_t dt_transit(range / c);
+      gps_time_t t_tx(time_arrival - dt_transit);
+      xyz_t rel_vel(sat.velocity(t_tx, dt_transit) - usr_vel); // Calculate velocity
       return los_neg_x * rel_vel.x()
           + los_neg_y * rel_vel.y()
           + los_neg_z * rel_vel.z()
-          + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed; // considering clock rate error
+          + sat.clock_error_dot(t_tx) * c; // considering clock error rate
     }
 
     /**

@@ -299,6 +299,10 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   GPS_Ephemeris(const typename GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris &eph) 
       : GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris(eph),
       iode_subframe3(eph.iode) {}
+  struct constellation_res_t {
+    System_XYZ<FloatT, WGS84> position, velocity;
+    FloatT clock_error, clock_error_dot;
+  };
 };
 %}
 %extend GPS_Ephemeris {
@@ -386,20 +390,21 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         break;
     }
   }
-  %typemap(in,numinputs=0) System_XYZ<FloatT, WGS84> & (System_XYZ<FloatT, WGS84> temp) %{
-    $1 = &temp;
-  %}
-  %typemap(argout) System_XYZ<FloatT, WGS84> & {
-    %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
+  %typemap(out) constellation_res_t {
+    %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
+        $descriptor(System_XYZ<FloatT, WGS84> *), SWIG_POINTER_OWN));
+    %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.velocity)), 
+        $descriptor(System_XYZ<FloatT, WGS84> *), SWIG_POINTER_OWN));
+    %append_output(swig::from($1.clock_error));
+    %append_output(swig::from($1.clock_error_dot));
   }
-  void constellation(
-      System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
-      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0,
-      const bool &with_velocity = true) const {
-    typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
-        self->constellation(t, pseudo_range, with_velocity));
-    position = res.position;
-    velocity = res.velocity;
+  typename GPS_Ephemeris<FloatT>::constellation_res_t constellation(
+      const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit = 0) const {
+    typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t pv(
+        self->constellation(t_tx, dt_transit, true));
+    typename GPS_Ephemeris<FloatT>::constellation_res_t res = {
+        pv.position, pv.velocity, self->clock_error(t_tx), self->clock_error_dot(t_tx)};
+    return res;
   }
 #if defined(SWIGRUBY)
   %rename("consistent?") is_consistent;

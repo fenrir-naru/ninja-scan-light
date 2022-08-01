@@ -1113,16 +1113,14 @@ static s ## bits ## _t name(const InputT *buf){ \
            * Calculate correction value in accordance with clock error model
            *
            * @param t current time
-           * @param pseudo_range pseudo range in meters
            * @param gamma factor for compensation of group delay
            * L1 = 1, L2 = (77/60)^2, see ICD 20.3.3.3.3.2 L1 - L2 Correction
            * @return in seconds
            */
-          float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0,
+          float_t clock_error(const gps_time_t &t,
               const float_t &gamma = 1) const{
 
-            float_t transit_time(pseudo_range / light_speed);
-            float_t tk(period_from_time_of_clock(t) - transit_time);
+            float_t tk(period_from_time_of_clock(t));
             float_t Ek(eccentric_anomaly(tk));
 
             // Relativistic correction term
@@ -1134,10 +1132,9 @@ static s ## bits ## _t name(const InputT *buf){ \
             return dt_sv - (gamma * t_GD);
           }
 
-          float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
+          float_t clock_error_dot(const gps_time_t &t) const {
 
-            float_t transit_time(pseudo_range / light_speed);
-            float_t tk(period_from_time_of_clock(t) - transit_time);
+            float_t tk(period_from_time_of_clock(t));
             float_t Ek(eccentric_anomaly(tk));
             float_t Ek_dot(eccentric_anomaly_dot(Ek));
 
@@ -1150,17 +1147,24 @@ static s ## bits ## _t name(const InputT *buf){ \
             return dt_sv_dot;
           }
 
+          /**
+           * Return satellite position and velocity at the transmission time in EFEC.
+           * @param t_tx transmission time
+           * @param dt_transit Transit time. default is zero.
+           * If zero, the returned value is along with the ECEF at the transmission time.
+           * Otherwise (non-zero), they are along with the ECEF at the reception time,
+           * that is, the transmission time added by the transit time.
+           * @param with_velocity If true, velocity calculation is performed,
+           * otherwise invalid velocity is returned.
+           */
           constellation_t constellation(
-              const gps_time_t &t, const float_t &pseudo_range = 0,
+              const gps_time_t &t_tx, const float_t &dt_transit = 0,
               const bool &with_velocity = true) const {
 
             constellation_t res;
 
             // Time from ephemeris reference epoch (tk)
-            float_t tk0(period_from_time_of_ephemeris(t));
-
-            // Remove transit time
-            float_t tk(tk0 - pseudo_range / light_speed);
+            float_t tk(period_from_time_of_ephemeris(t_tx));
 
             // Eccentric Anomaly (Ek)
             float_t Ek(eccentric_anomaly(tk));
@@ -1207,12 +1211,12 @@ static s ## bits ## _t name(const InputT *buf){ \
             float_t Omegak(Omega0);
             if(false){ // __MISUNDERSTANDING_ABOUT_OMEGA0_CORRECTION__
               Omegak += (
-                  (dot_Omega0 - WGS84::Omega_Earth_IAU) * tk0
+                  (dot_Omega0 - WGS84::Omega_Earth_IAU) * tk
                   - WGS84::Omega_Earth_IAU * t_oe);
             }else{
               Omegak += (
-                  dot_Omega0 * tk                            // corrected with the time when the wave is transmitted
-                  - WGS84::Omega_Earth_IAU * (t_oe + tk0));  // corrected with the time when the wave is received
+                  dot_Omega0 * tk // correction (at the transmission)
+                  - WGS84::Omega_Earth_IAU * (t_oe + tk + dt_transit)); // correction and coordinate transformation
             }
 
             float_t Omegak_sin(sin(Omegak)),
@@ -2013,26 +2017,26 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               &eph_t::period_from_time_of_clock) || is_valid;
         }
 
-        float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const{
-          return ephemeris().clock_error(t, pseudo_range);
+        float_t clock_error(const gps_time_t &t_tx) const{
+          return ephemeris().clock_error(t_tx);
         }
 
-        float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-          return ephemeris().clock_error_dot(t, pseudo_range);
+        float_t clock_error_dot(const gps_time_t &t_tx) const {
+          return ephemeris().clock_error_dot(t_tx);
         }
 
         typename SatelliteProperties::constellation_t constellation(
-            const gps_time_t &t, const float_t &pseudo_range = 0,
+            const gps_time_t &t_tx, const float_t &dt_transit = 0,
             const bool &with_velocity = true) const {
-          return ephemeris().constellation(t, pseudo_range, with_velocity);
+          return ephemeris().constellation(t_tx, dt_transit, with_velocity);
         }
         
-        xyz_t position(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-          return constellation(t, pseudo_range, false).position;
+        xyz_t position(const gps_time_t &t_tx, const float_t &dt_transit = 0) const {
+          return constellation(t_tx, dt_transit, false).position;
         }
         
-        xyz_t velocity(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-          return constellation(t, pseudo_range, true).velocity;
+        xyz_t velocity(const gps_time_t &t_tx, const float_t &dt_transit = 0) const {
+          return constellation(t_tx, dt_transit, true).velocity;
         }
     };
   public:
