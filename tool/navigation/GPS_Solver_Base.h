@@ -230,29 +230,49 @@ struct GPS_Solver_Base {
     const void *impl;
     xyz_t (*impl_position)(const void *, const gps_time_t &, const float_t &);
     xyz_t (*impl_velocity)(const void *, const gps_time_t &, const float_t &);
-    float_t (*impl_clock_error)(const void *, const gps_time_t &, const float_t &);
-    float_t (*impl_clock_error_dot)(const void *, const gps_time_t &, const float_t &);
+    float_t (*impl_clock_error)(const void *, const gps_time_t &);
+    float_t (*impl_clock_error_dot)(const void *, const gps_time_t &);
     inline bool is_available() const {
       return impl != NULL;
     }
-    inline xyz_t position(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-      return impl_position(impl, t, pseudo_range);
+    /**
+     * Return satellite position at the transmission time in EFEC.
+     * @param t_tx transmission time
+     * @param dt_transit Transit time. default is zero.
+     * If zero, the returned value is along with the ECEF at the transmission time.
+     * Otherwise (non-zero), they are along with the ECEF at the reception time,
+     * that is, the transmission time added by the transit time.
+     */
+    inline xyz_t position(const gps_time_t &t_tx, const float_t &dt_transit = 0) const {
+      return impl_position(impl, t_tx, dt_transit);
     }
-    inline xyz_t velocity(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-      return impl_velocity(impl, t, pseudo_range);
+    /**
+     * Return satellite velocity at the transmission time in EFEC.
+     * @see position
+     */
+    inline xyz_t velocity(const gps_time_t &t_tx, const float_t &dt_transit = 0) const {
+      return impl_velocity(impl, t_tx, dt_transit);
     }
-    inline float_t clock_error(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-      return impl_clock_error(impl, t, pseudo_range);
+    /**
+     * Return satellite clock error [s] at the transmission time.
+     * @param t_tx transmission time
+     */
+    inline float_t clock_error(const gps_time_t &t_tx) const {
+      return impl_clock_error(impl, t_tx);
     }
-    inline float_t clock_error_dot(const gps_time_t &t, const float_t &pseudo_range = 0) const {
-      return impl_clock_error_dot(impl, t, pseudo_range);
+    /**
+     * Return satellite clock error derivative [s/s] at the transmission time.
+     * @param t_tx transmission time
+     */
+    inline float_t clock_error_dot(const gps_time_t &t_tx) const {
+      return impl_clock_error_dot(impl, t_tx);
     }
     static const satellite_t &unavailable() {
       struct impl_t {
         static xyz_t v3(const void *, const gps_time_t &, const float_t &){
           return xyz_t(0, 0, 0);
         }
-        static float_t v(const void *, const gps_time_t &, const float_t &){
+        static float_t v(const void *, const gps_time_t &){
           return float_t(0);
         }
       };

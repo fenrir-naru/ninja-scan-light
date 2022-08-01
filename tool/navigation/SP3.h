@@ -224,22 +224,17 @@ struct SP3_Product {
         static inline const per_satellite_t &sat(const void *ptr) {
           return *reinterpret_cast<const per_satellite_t *>(ptr);
         }
-        static inline float_t pr2sec(const float_t &pr){
-          return pr / GPS_SpaceNode<FloatT>::light_speed;
+        static xyz_t position(const void *ptr, const gt_t &t_tx, const float_t &dt_transit) {
+          return sat(ptr).position(t_tx).after(dt_transit);
         }
-        static xyz_t position(const void *ptr, const gt_t &t, const float_t &pr) {
-          float_t delta_t(pr2sec(pr));
-          return sat(ptr).position(t - delta_t).after(delta_t);
+        static xyz_t velocity(const void *ptr, const gt_t &t_tx, const float_t &dt_transit) {
+          return sat(ptr).velocity(t_tx).after(dt_transit);
         }
-        static xyz_t velocity(const void *ptr, const gt_t &t, const float_t &pr) {
-          float_t delta_t(pr2sec(pr));
-          return sat(ptr).velocity(t - delta_t).after(delta_t);
+        static float_t clock_error(const void *ptr, const gt_t &t_tx) {
+          return sat(ptr).clock_error(t_tx);
         }
-        static float_t clock_error(const void *ptr, const gt_t &t, const float_t &pr) {
-          return sat(ptr).clock_error(t - pr2sec(pr));
-        }
-        static float_t clock_error_dot(const void *ptr, const gt_t &t, const float_t &pr) {
-          return sat(ptr).clock_error_dot(t - pr2sec(pr));
+        static float_t clock_error_dot(const void *ptr, const gt_t &t_tx) {
+          return sat(ptr).clock_error_dot(t_tx);
         }
       };
       typename GPS_Solver_Base<FloatT>::satellite_t res = {

@@ -396,13 +396,13 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   void constellation(
       System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
       FloatT clke_dclke[2],
-      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0) const {
+      const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit = 0) const {
     typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
-        self->constellation(t, pseudo_range, true));
+        self->constellation(t_tx, dt_transit, true));
     position = res.position;
     velocity = res.velocity;
-    clke_dclke[0] = self->clock_error(t, pseudo_range);
-    clke_dclke[1] = self->clock_error_dot(t, pseudo_range);
+    clke_dclke[0] = self->clock_error(t_tx);
+    clke_dclke[1] = self->clock_error_dot(t_tx);
   }
 #if defined(SWIGRUBY)
   %rename("consistent?") is_consistent;
