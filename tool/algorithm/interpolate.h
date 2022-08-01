@@ -34,6 +34,9 @@
 
 #include <cstddef>
 #include <vector>
+#include <map>
+#include <algorithm>
+#include <stdexcept>
 
 /*
  * perform Neville's interpolation (with derivative)
@@ -117,5 +120,108 @@ Ty interpolate_Neville(
   std::vector<Ty> y_buf(n);
   return interpolate_Neville(x_given, y_given, x, y_buf, n)[0];
 }
+
+template <class Tx, class Ty, class Tx_delta = Tx>
+struct InterpolatableSet {
+  struct condition_t {
+    std::size_t max_x_size; ///< maximum number of data used for interpolation
+    Tx_delta max_dx_range; ///< maximum acceptable absolute difference between x and x0
+  };
+
+  typedef typename std::vector<std::pair<Tx, Ty> > buffer_t;
+  buffer_t buf;
+  Tx x0, x_lower, x_upper;
+  std::vector<Tx_delta> dx;
+  bool ready;
+
+  InterpolatableSet() : x0(), dx(), ready(false) {}
+
+  /**
+   * update interpolation source
+   * @param force_update If true, update is forcibly performed irrespective of current state
+   * @param cnd condition for source data selection
+   */
+  InterpolatableSet &update(
+      const Tx &x, const std::map<Tx, Ty> &xy_table,
+      const condition_t &cnd,
+      const bool &force_update = false){
+
+    do{
+      if(force_update){break;}
+      if(dx.size() <= 2){break;}
+      if(x < x_lower){break;}
+      if(x > x_upper){break;}
+      return *this;
+    }while(false);
+
+    // If the 1st and 2nd nearest items are changed, then recalculate interpolation targets.
+    struct {
+      const Tx &x_base;
+      bool operator()(
+          const typename std::map<Tx, Ty>::value_type &rhs,
+          const typename std::map<Tx, Ty>::value_type &lhs) const {
+        return std::abs(rhs.first - x_base) < std::abs(lhs.first - x_base);
+      }
+    } cmp = {(x0 = x)};
+
+    buf.resize(cnd.max_x_size);
+    dx.clear();
+    // extract x where x0-dx_range <= x <= x0+dx_range, then sort by ascending order of |x-x0|
+    for(typename buffer_t::const_iterator
+          it(buf.begin()),
+          it_end(std::partial_sort_copy(
+            xy_table.lower_bound(x - cnd.max_dx_range),
+            xy_table.upper_bound(x + cnd.max_dx_range),
+            buf.begin(), buf.end(), cmp));
+        it != it_end; ++it){
+      dx.push_back(it->first - x0);
+    }
+    if(dx.size() >= 2){ // calculate a necessary condition to update samples for new x
+      // According to Nth nearest points, x range in which the order of extracted samples
+      // is retained can be calculated.
+      bool ascending(buf[0].first <= buf[1].first);
+      Tx &xa(ascending ? x_lower : x_upper), &xb(ascending ? x_upper : x_lower);
+      xa = x0;
+      for(std::size_t i(2); i < buf.size(); ++i){
+        if(ascending ? (dx[1] <= dx[i]) : (dx[1] >= dx[i])){continue;}
+        xa = x0 + (dx[1] + dx[i]) / 2;
+        break;
+      }
+      xb = x0 + (dx[0] + dx[1]) / 2;
+    }
+    ready = (dx.size() >= cnd.max_x_size);
+
+    return *this;
+  }
+
+  template <class Ty2, class Ty2_Iterator>
+  Ty2 interpolate2(
+      const Tx &x, const Ty2_Iterator &y,
+      Ty2 *derivative = NULL) const {
+    int order(dx.size() - 1);
+    do{
+      if(order > 0){break;}
+      if((order == 0) && (!derivative)){return y[0];}
+      throw std::range_error("Insufficient records for interpolation");
+    }while(false);
+    std::vector<Ty2> y_buf(order), dy_buf(order);
+    interpolate_Neville(
+        dx, y, x - x0, y_buf, order,
+        &dy_buf, derivative ? 1 : 0);
+    if(derivative){*derivative = dy_buf[0];}
+    return y_buf[0];
+  }
+
+  Ty interpolate(const Tx &x, Ty *derivative = NULL) const {
+    struct second_iterator : public buffer_t::const_iterator {
+      second_iterator(const typename buffer_t::const_iterator &it)
+          : buffer_t::const_iterator(it) {}
+      const Ty &operator[](const int &n) const {
+        return buffer_t::const_iterator::operator[](n).second;
+      }
+    } y_it(buf.begin());
+    return interpolate2(x, y_it, derivative);
+  }
+};
 
 #endif /* __INTERPOLATE_H__ */

@@ -41,7 +41,6 @@
 #include <cstring>
 #include <map>
 #include <set>
-#include <algorithm>
 #include <stdexcept>
 
 #include "util/text_helper.h"
@@ -61,22 +60,15 @@ struct SP3_Product {
     typedef std::map<GPS_Time<FloatT>, prop_t> history_t;
     history_t pos_history;
     history_t vel_history;
-
-    static const struct interpolate_cnd_t {
-      std::size_t max_epochs; ///< maximum number of epochs used for interpolation
-      FloatT max_delta_t; ///< maximum acceptable absolute time difference between t and epoch
-    } interpolate_cnd_default;
+    
+    typedef InterpolatableSet<GPS_Time<FloatT>, prop_t, FloatT> interpolator_t;
+    typedef typename interpolator_t::condition_t interpolate_cnd_t;
+    static const interpolate_cnd_t interpolate_cnd_default;
 
     mutable struct {
-      struct target_t {
+      struct target_t : public interpolator_t {
 
-        typedef typename std::vector<std::pair<GPS_Time<FloatT>, prop_t> > buf_t;
-        buf_t buf;
-        GPS_Time<FloatT> t0;
-        std::vector<FloatT> dt;
-        bool updated_full_cnd;
-
-        target_t() : t0(0, 0), updated_full_cnd(false) {}
+        target_t() : interpolator_t() {}
 
         /**
          * update interpolation source
@@ -88,58 +80,13 @@ struct SP3_Product {
             const bool &force_update = false,
             const interpolate_cnd_t &cnd = interpolate_cnd_default){
 
-          FloatT t_diff(t0 - t);
-          if((!force_update)
-              && ((std::abs(t_diff) <= 10)
-                || ((dt.size() >= 2)
-                  && (std::abs(t_diff + dt[0]) <= std::abs(t_diff + dt[1])))) ){
-            return *this;
-          }
-
-          // If the 1st and 2nd nearest epochs are changed, then recalculate interpolation targets.
-          struct {
-            const GPS_Time<FloatT> &t_base;
-            bool operator()(
-                const typename history_t::value_type &rhs,
-                const typename history_t::value_type &lhs) const {
-              return std::abs(rhs.first - t_base) < std::abs(lhs.first - t_base);
-            }
-          } cmp = {(t0 = t)};
-
-          buf.resize(cnd.max_epochs);
-          dt.clear();
-          // extract t where t0-dt <= t <= t0+dt, then sort by ascending order of |t-t0|
-          for(typename buf_t::const_iterator
-                it(buf.begin()),
-                it_end(std::partial_sort_copy(
-                  history.lower_bound(t - cnd.max_delta_t),
-                  history.upper_bound(t + cnd.max_delta_t),
-                  buf.begin(), buf.end(), cmp));
-              it != it_end; ++it){
-            dt.push_back(it->first - t0);
-          }
-          updated_full_cnd = (dt.size() >= cnd.max_epochs);
-
+          if((!force_update) && (std::abs(t - interpolator_t::x0) <= 10)){return *this;}
+          interpolator_t::update(t, history, cnd, force_update);
           return *this;
         }
 
-        template <class Ty, class Ty_Array>
-        Ty interpolate(
-            const GPS_Time<FloatT> &t, const Ty_Array &y,
-            Ty *derivative = NULL) const {
-          int order(dt.size() - 1);
-          do{
-            if(order > 0){break;}
-            if((order == 0) && (!derivative)){return y[0];}
-            throw std::range_error("Insufficient records for interpolation");
-          }while(false);
-          std::vector<Ty> y_buf(order), dy_buf(order);
-          interpolate_Neville(
-              dt, y, t - t0, y_buf, order,
-              &dy_buf, derivative ? 1 : 0);
-          if(derivative){*derivative = dy_buf[0];}
-          return y_buf[0];
-        }
+        typedef typename interpolator_t::buffer_t buf_t;
+
         Vector3<FloatT> interpolate_xyz(
             const GPS_Time<FloatT> &t,
             Vector3<FloatT> *derivative = NULL) const {
@@ -149,8 +96,8 @@ struct SP3_Product {
             const Vector3<FloatT> &operator[](const int &n) const {
               return buf_t::const_iterator::operator[](n).second.xyz;
             }
-          } xyz(buf.begin());
-          return interpolate(t, xyz, derivative);
+          } xyz(interpolator_t::buf.begin());
+          return interpolator_t::interpolate2(t, xyz, derivative);
         }
         FloatT interpolate_clk(
             const GPS_Time<FloatT> &t,
@@ -161,8 +108,8 @@ struct SP3_Product {
             const FloatT &operator[](const int &n) const {
               return buf_t::const_iterator::operator[](n).second.clk;
             }
-          } clk(buf.begin());
-          return interpolate(t, clk, derivative);
+          } clk(interpolator_t::buf.begin());
+          return interpolator_t::interpolate2(t, clk, derivative);
         }
       } pos_clk, vel_rate;
     } subset;
@@ -175,7 +122,7 @@ struct SP3_Product {
     bool precheck(const GPS_Time<FloatT> &t) const {
       // Only position/clock is checked, because velocity/rate can be calculated based on pos/clk.
       subset.pos_clk.update(t, pos_history);
-      return subset.pos_clk.updated_full_cnd;
+      return subset.pos_clk.ready;
     }
 
     typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t
@@ -224,22 +171,17 @@ struct SP3_Product {
         static inline const per_satellite_t &sat(const void *ptr) {
           return *reinterpret_cast<const per_satellite_t *>(ptr);
         }
-        static inline float_t pr2sec(const float_t &pr){
-          return pr / GPS_SpaceNode<FloatT>::light_speed;
+        static xyz_t position(const void *ptr, const gt_t &t_tx, const float_t &dt_transit) {
+          return sat(ptr).position(t_tx).after(dt_transit);
         }
-        static xyz_t position(const void *ptr, const gt_t &t, const float_t &pr) {
-          float_t delta_t(pr2sec(pr));
-          return sat(ptr).position(t - delta_t).after(delta_t);
+        static xyz_t velocity(const void *ptr, const gt_t &t_tx, const float_t &dt_transit) {
+          return sat(ptr).velocity(t_tx).after(dt_transit);
         }
-        static xyz_t velocity(const void *ptr, const gt_t &t, const float_t &pr) {
-          float_t delta_t(pr2sec(pr));
-          return sat(ptr).velocity(t - delta_t).after(delta_t);
+        static float_t clock_error(const void *ptr, const gt_t &t_tx) {
+          return sat(ptr).clock_error(t_tx);
         }
-        static float_t clock_error(const void *ptr, const gt_t &t, const float_t &pr) {
-          return sat(ptr).clock_error(t - pr2sec(pr));
-        }
-        static float_t clock_error_dot(const void *ptr, const gt_t &t, const float_t &pr) {
-          return sat(ptr).clock_error_dot(t - pr2sec(pr));
+        static float_t clock_error_dot(const void *ptr, const gt_t &t_tx) {
+          return sat(ptr).clock_error_dot(t_tx);
         }
       };
       typename GPS_Solver_Base<FloatT>::satellite_t res = {
@@ -386,8 +328,11 @@ static typename GPS_Solver_Base<FloatT>::satellite_t select_ ## sys( \
 template <class FloatT>
 const typename SP3_Product<FloatT>::per_satellite_t::interpolate_cnd_t
     SP3_Product<FloatT>::per_satellite_t::interpolate_cnd_default = {
-  9, // max_epochs
-  60 * 60 * 2, // max_delta_t, default is 2 hr = 15 min interval records; (2 hr * 2 / (9 - 1) = 15 min)
+  9, // maximum number of epochs used for interpolation
+  /* maximum acceptable absolute time difference between t and epoch,
+   * default is 2 hr = 15 min interval records; (2 hr * 2 / (9 - 1) = 15 min)
+   */
+  60 * 60 * 2,
 };
 
 template <class FloatT>
