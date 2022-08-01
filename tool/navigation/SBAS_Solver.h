@@ -114,17 +114,17 @@ class SBAS_SinglePositioning : public SolverBaseT {
           static inline const typename space_node_t::Satellite &sat(const void *ptr) {
             return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
           }
-          static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).ephemeris().constellation(t, pseudo_range, false).position;
+          static xyz_t position(const void *ptr, const gps_time_t &t_tx, const float_t &dt_transit) {
+            return sat(ptr).ephemeris().constellation(t_tx, dt_transit, false).position;
           }
-          static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).ephemeris().constellation(t, pseudo_range, true).velocity;
+          static xyz_t velocity(const void *ptr, const gps_time_t &t_tx, const float_t &dt_transit) {
+            return sat(ptr).ephemeris().constellation(t_tx, dt_transit, true).velocity;
           }
-          static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          static float_t clock_error(const void *ptr, const gps_time_t &t_tx) {
             // Clock correction is taken into account in position()
             return 0;
           }
-          static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
             // Clock rate error is taken in account in velocity()
             return 0;
           }
@@ -257,20 +257,25 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
       range -= receiver_error;
 
+      static const float_t &c(GPS_SpaceNode<float_t>::light_speed);
+
       // Clock error correction
       range += ((range_error.unknown_flag & range_error_t::SATELLITE_CLOCK)
-          ? (sat.clock_error(time_arrival, range) * GPS_SpaceNode<float_t>::light_speed)
+          ? (sat.clock_error(time_arrival - range / c) * c)
           : range_error.value[range_error_t::SATELLITE_CLOCK]);
 
       // TODO WAAS long term clock correction (2.1.1.4.11)
 
       // Calculate satellite position
-      xyz_t sat_pos(sat.position(time_arrival, range));
+      float_t dt_transit(range / c);
+      gps_time_t t_tx(time_arrival - dt_transit);
+      xyz_t sat_pos(sat.position(t_tx, dt_transit));
       float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
-      // Calculate residual with Sagnac correction (A.4.4.11)
+      // Calculate residual without Sagnac correction (A.4.4.11),
+      // because of the satellite position is calculated in the reception time ECEF.
       res.range_residual = range
-          + space_node_t::sagnac_correction(sat_pos, usr_pos.xyz)
+          // + space_node_t::sagnac_correction(sat_pos, usr_pos.xyz)
           - geometric_range;
 
       // Setup design matrix
@@ -312,12 +317,12 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
       res.range_corrected = range;
 
-      xyz_t rel_vel(sat.velocity(time_arrival, range) - usr_vel); // Calculate velocity
+      xyz_t rel_vel(sat.velocity(t_tx, dt_transit) - usr_vel); // Calculate velocity
 
       res.rate_relative_neg = res.los_neg[0] * rel_vel.x()
           + res.los_neg[1] * rel_vel.y()
           + res.los_neg[2] * rel_vel.z()
-          + sat.clock_error_dot(time_arrival, range) * GPS_SpaceNode<float_t>::light_speed;
+          + sat.clock_error_dot(t_tx) * c;
 
       return res;
     }

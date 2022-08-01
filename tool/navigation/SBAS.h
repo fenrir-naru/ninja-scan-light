@@ -1769,10 +1769,10 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           }
 
           constellation_t constellation(
-              const gps_time_t &t_rx, const float_t &pseudo_range = 0,
+              const gps_time_t &t_tx, const float_t &dt_transit = 0,
               const bool &with_velocity = true) const {
 
-            float_t t_G(-t_rx.interval(WN, 0) - (pseudo_range / gps_space_node_t::light_speed));
+            float_t t_G(-t_tx.interval(WN, 0));
 
             float_t t(t_G - (a_Gf0 + a_Gf1 * (t_G - t_0))); // Eq.(A-45)
             float_t t_dot(1.0 - a_Gf1);
@@ -1783,15 +1783,19 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
               xyz_t(
                   x + dx * delta_t + ddx * delta_t2,
                   y + dy * delta_t + ddy * delta_t2,
-                  z + dz * delta_t + ddz * delta_t2), // Eq. (A-44)
+                  z + dz * delta_t + ddz * delta_t2).after(dt_transit), // Eq. (A-44)
               xyz_t(
                   (dx + ddx * delta_t) * t_dot,
                   (dy + ddy * delta_t) * t_dot,
-                  (dz + ddz * delta_t) * t_dot),
+                  (dz + ddz * delta_t) * t_dot).after(dt_transit),
             };
 
-            // Be careful, Sagnac correction must be performed before geometric distance calculation
-            // @see SBAS_SpaceNode::sagnac_correction
+            /* Sagnac correction, which is expected to perform before geometric distance calculation,
+             * can be skipped by using non-zero dt_transit.
+             * This is because the return values is corrected to be along with the coordinate
+             * at the reception time.
+             * @see SBAS_SpaceNode::sagnac_correction
+             */
 
             return res;
           }

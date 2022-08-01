@@ -460,15 +460,14 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
   MAKE_ACCESSOR(ddx, FloatT); MAKE_ACCESSOR(ddy, FloatT); MAKE_ACCESSOR(ddz, FloatT);
   MAKE_ACCESSOR(a_Gf0, FloatT);
   MAKE_ACCESSOR(a_Gf1, FloatT);
-  %apply GPS_Ephemeris::System_XYZ<FloatT, WGS84> & { System_XYZ<FloatT, WGS84> & }; // TODO ineffective?
-  void constellation(
-      System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
-      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0,
+  typename GPS_Ephemeris<FloatT>::constellation_res_t constellation(
+      const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit = 0,
       const bool &with_velocity = true) const {
-    typename SBAS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
-        self->constellation(t, pseudo_range, with_velocity));
-    position = res.position;
-    velocity = res.velocity;
+    typename SBAS_SpaceNode<FloatT>::SatelliteProperties::constellation_t pv(
+        self->constellation(t_tx, dt_transit, with_velocity));
+    typename GPS_Ephemeris<FloatT>::constellation_res_t res = {
+        pv.position, pv.velocity, 0, 0};
+    return res;
   }
 }
 
