@@ -129,8 +129,7 @@ class GLONASS_SinglePositioning : public SolverBaseT {
             return sat(ptr).clock_error(t_tx);
           }
           static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
-            // Clock rate error is already taken into account in constellation()
-            return 0;
+            return sat(ptr).clock_error_dot(t_tx);
           }
         };
         satellite_t res = {

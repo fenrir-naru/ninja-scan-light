@@ -1008,6 +1008,9 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           float_t clock_error(const float_t &t_depature_onboard) const {
             return calculate_clock_error(t_depature_onboard - Ephemeris::t_b);
           }
+          const float_t &clock_error_dot() const {
+            return Ephemeris::gamma_n;
+          }
           /**
            * Calculate absolute constellation(t) based on constellation(t_0).
            * t_0 is a time around t_b, and is used to calculate
@@ -1188,6 +1191,9 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
         float_t clock_error(const GPS_Time<float_t> &t_tx) const{
           return ephemeris().clock_error(t_tx);
+        }
+        float_t clock_error_dot(const GPS_Time<float_t> &t_tx) const{
+          return ephemeris().clock_error_dot();
         }
 
         typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t constellation(

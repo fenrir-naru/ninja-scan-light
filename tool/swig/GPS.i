@@ -548,7 +548,7 @@ struct GLONASS_Ephemeris
     typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t pv(
         self->constellation(t_tx, dt_transit));
     typename GPS_Ephemeris<FloatT>::constellation_res_t res = {
-        pv.position, pv.velocity, self->clock_error(t_tx), 0};
+        pv.position, pv.velocity, self->clock_error(t_tx), self->clock_error_dot()};
     return res;
   }
 #if defined(SWIGRUBY)
