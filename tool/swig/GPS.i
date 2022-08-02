@@ -543,23 +543,13 @@ struct GLONASS_Ephemeris
     self->has_string = has_string;
     return updated;
   }
-  FloatT clock_error(
-      const GPS_Time<FloatT> &t_arrival, const FloatT &pseudo_range = 0) const {
-    return self->clock_error(t_arrival, pseudo_range);
-  }
-  %typemap(in,numinputs=0) System_XYZ<FloatT, WGS84> & (System_XYZ<FloatT, WGS84> temp) %{
-    $1 = &temp;
-  %}
-  %typemap(argout) System_XYZ<FloatT, WGS84> & {
-    %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
-  }
-  void constellation(
-      System_XYZ<FloatT, WGS84> &position, System_XYZ<FloatT, WGS84> &velocity,
-      const GPS_Time<FloatT> &t, const FloatT &pseudo_range = 0) const {
-    typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t res(
-        self->constellation(t, pseudo_range));
-    position = res.position;
-    velocity = res.velocity;
+  typename GPS_Ephemeris<FloatT>::constellation_res_t constellation(
+      const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit = 0) const {
+    typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t pv(
+        self->constellation(t_tx, dt_transit));
+    typename GPS_Ephemeris<FloatT>::constellation_res_t res = {
+        pv.position, pv.velocity, self->clock_error(t_tx), 0};
+    return res;
   }
 #if defined(SWIGRUBY)
   %rename("consistent?") is_consistent;

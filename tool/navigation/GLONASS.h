@@ -998,17 +998,15 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           bool is_equivalent(const Ephemeris_with_Time &eph) const {
             return Ephemeris::is_equivalent(eph) && TimeProperties::is_equivalent(eph);
           }
-          float_t calculate_clock_error(float_t delta_t, const float_t &pseudo_range = 0) const {
-            delta_t -= pseudo_range / light_speed;
+          float_t calculate_clock_error(const float_t &delta_t) const {
             return -TimeProperties::tau_c - Ephemeris::tau_n + Ephemeris::gamma_n * delta_t;
           }
           /**
-           * @param t_arrival_onboard signal arrival time in onboard time scale,
+           * @param t_depature_onboard signal depature time in onboard time scale,
            * which is along to glonass time scale (UTC + 3 hr) but is shifted in gradually changing length.
            */
-          float_t clock_error(
-              const float_t &t_arrival_onboard, const float_t &pseudo_range = 0) const {
-            return calculate_clock_error(t_arrival_onboard - Ephemeris::t_b, pseudo_range);
+          float_t clock_error(const float_t &t_depature_onboard) const {
+            return calculate_clock_error(t_depature_onboard - Ephemeris::t_b);
           }
           /**
            * Calculate absolute constellation(t) based on constellation(t_0).
@@ -1064,23 +1062,22 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
            * @param pseudo_range measured pusedo_range to correct delta_t, default is 0.
            */
           constellation_t calculate_constellation(
-              const float_t &delta_t, const float_t &pseudo_range = 0) const {
+              const float_t &delta_t, const float_t &dt_transit = 0) const {
 
-            float_t delta_t_to_transmit(delta_t - pseudo_range / light_speed);
             constellation_t res(
-                constellation_abs(delta_t_to_transmit, xa_t_b, float_t(0)));
+                constellation_abs(delta_t, xa_t_b, float_t(0)));
 
             return res.rel_corrdinate(
-                sidereal_t_b_rad + (constellation_t::omega_E * delta_t)); // transform from abs to PZ-90.02
+                sidereal_t_b_rad + (constellation_t::omega_E * (delta_t + dt_transit))); // transform from abs to PZ-90.02
           }
           /**
-           * @param t_arrival_glonass signal arrival time in glonass time scale,
+           * @param t_depature_glonass signal depature time in glonass time scale,
            * which is the corrected onboard time by removing clock error.
            */
           constellation_t constellation(
-              const float_t &t_arrival_glonass, const float_t &pseudo_range = 0) const {
+              const float_t &t_depature_glonass, const float_t &dt_transit = 0) const {
             return calculate_constellation(
-                t_arrival_glonass - Ephemeris::t_b, pseudo_range); // measure in UTC + 3hr scale
+                t_depature_glonass - Ephemeris::t_b, dt_transit); // measure in UTC + 3hr scale
           }
         };
 
@@ -1107,14 +1104,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             return std::abs(t_b_gps.interval(t)) <= 60 * 60; // 1 hour
           }
           using Ephemeris_with_Time::clock_error;
-          float_t clock_error(
-              const GPS_Time<float_t> &t_arrival_onboard, const float_t &pseudo_range = 0) const {
-            return Ephemeris_with_Time::calculate_clock_error(t_arrival_onboard - t_b_gps, pseudo_range);
+          float_t clock_error(const GPS_Time<float_t> &t_depature_onboard) const {
+            return Ephemeris_with_Time::calculate_clock_error(t_depature_onboard - t_b_gps);
           }
           using Ephemeris_with_Time::constellation;
           typename Ephemeris_with_Time::constellation_t constellation(
-              const GPS_Time<float_t> &t_arrival_gps, const float_t &pseudo_range = 0) const {
-            return this->calculate_constellation(t_arrival_gps - t_b_gps, pseudo_range);
+              const GPS_Time<float_t> &t_depature_gps, const float_t &dt_transit = 0) const {
+            return this->calculate_constellation(t_depature_gps - t_b_gps, dt_transit);
           }
         };
     };
@@ -1130,25 +1126,25 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           eph_cached_t(const eph_t &eph) : eph_t(eph), xa_t_0(eph.xa_t_b), t_0_from_t_b(0) {}
           using eph_t::constellation;
           typename eph_t::constellation_t constellation(
-              const GPS_Time<float_t> &t_arrival_gps, const float_t &pseudo_range = 0) const {
-            float_t delta_t(t_arrival_gps - eph_t::t_b_gps);
-            float_t delta_t_transmit_from_t_0(delta_t - pseudo_range / light_speed - t_0_from_t_b);
+              const GPS_Time<float_t> &t_depature_gps, const float_t &dt_transit = 0) const {
+            float_t delta_t(t_depature_gps - eph_t::t_b_gps);
+            float_t delta_t_depature_from_t_0(delta_t - t_0_from_t_b);
 
-            float_t t_step_max(delta_t_transmit_from_t_0 >= 0
+            float_t t_step_max(delta_t_depature_from_t_0 >= 0
                 ? eph_t::time_step_max_per_one_integration
                 : -eph_t::time_step_max_per_one_integration);
 
-            int big_steps(std::floor(delta_t_transmit_from_t_0 / t_step_max));
+            int big_steps(std::floor(delta_t_depature_from_t_0 / t_step_max));
             if(big_steps > 0){ // perform integration and update cache
               xa_t_0 = eph_t::constellation_abs(t_step_max, big_steps, xa_t_0, t_0_from_t_b);
               float_t delta_t_updated(t_step_max * big_steps);
               t_0_from_t_b += delta_t_updated;
-              delta_t_transmit_from_t_0 -= delta_t_updated;
+              delta_t_depature_from_t_0 -= delta_t_updated;
             }
 
-            return eph_t::constellation_abs(delta_t_transmit_from_t_0, 1, xa_t_0, t_0_from_t_b)
-                .rel_corrdinate(
-                  eph_t::sidereal_t_b_rad + (eph_t::constellation_t::omega_E * delta_t)); // transform from abs to PZ-90.02
+            return eph_t::constellation_abs(delta_t_depature_from_t_0, 1, xa_t_0, t_0_from_t_b)
+                .rel_corrdinate( // transform from abs to PZ-90.02
+                  eph_t::sidereal_t_b_rad + (eph_t::constellation_t::omega_E * (delta_t + dt_transit)));
           }
         };
 
@@ -1190,22 +1186,22 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           return eph_history.select(target_time, &eph_t::is_valid);
         }
 
-        float_t clock_error(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const{
-          return ephemeris().clock_error(t, pseudo_range);
+        float_t clock_error(const GPS_Time<float_t> &t_tx) const{
+          return ephemeris().clock_error(t_tx);
         }
 
         typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t constellation(
-            const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
+            const GPS_Time<float_t> &t_tx, const float_t &dt_transit = 0) const {
           return (typename GPS_SpaceNode<float_t>::SatelliteProperties::constellation_t)(
-              eph_history.current().constellation(t, pseudo_range));
+              eph_history.current().constellation(t_tx, dt_transit));
         }
 
-        typename GPS_SpaceNode<float_t>::xyz_t position(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
-          return constellation(t, pseudo_range).position;
+        typename GPS_SpaceNode<float_t>::xyz_t position(const GPS_Time<float_t> &t_tx, const float_t &dt_transit= 0) const {
+          return constellation(t_tx, dt_transit).position;
         }
 
-        typename GPS_SpaceNode<float_t>::xyz_t velocity(const GPS_Time<float_t> &t, const float_t &pseudo_range = 0) const {
-          return constellation(t, pseudo_range).velocity;
+        typename GPS_SpaceNode<float_t>::xyz_t velocity(const GPS_Time<float_t> &t_tx, const float_t &dt_transit = 0) const {
+          return constellation(t_tx, dt_transit).velocity;
         }
     };
   public:

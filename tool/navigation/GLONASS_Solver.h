@@ -119,16 +119,16 @@ class GLONASS_SinglePositioning : public SolverBaseT {
           static inline const typename space_node_t::Satellite &sat(const void *ptr) {
             return *reinterpret_cast<const typename space_node_t::Satellite *>(ptr);
           }
-          static xyz_t position(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).constellation(t, pseudo_range).position;
+          static xyz_t position(const void *ptr, const gps_time_t &t_tx, const float_t &dt_transit) {
+            return sat(ptr).constellation(t_tx, dt_transit).position;
           }
-          static xyz_t velocity(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).constellation(t, pseudo_range).velocity;
+          static xyz_t velocity(const void *ptr, const gps_time_t &t_tx, const float_t &dt_transit) {
+            return sat(ptr).constellation(t_tx, dt_transit).velocity;
           }
-          static float_t clock_error(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
-            return sat(ptr).clock_error(t, pseudo_range);
+          static float_t clock_error(const void *ptr, const gps_time_t &t_tx) {
+            return sat(ptr).clock_error(t_tx);
           }
-          static float_t clock_error_dot(const void *ptr, const gps_time_t &t, const float_t &pseudo_range) {
+          static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
             // Clock rate error is already taken into account in constellation()
             return 0;
           }
@@ -250,16 +250,20 @@ class GLONASS_SinglePositioning : public SolverBaseT {
 
       range -= receiver_error;
 
+      static const float_t &c(space_node_t::light_speed);
+
       // Clock correction, which will be considered in the next constellation()
       // as extra transmission time by using extra psuedo range.
       if(range_error.unknown_flag & range_error_t::SATELLITE_CLOCK){
-        range += (sat.clock_error(time_arrival, range) * space_node_t::light_speed);
+        range += (sat.clock_error(time_arrival - range / c) * c);
       }else{
         range += range_error.value[range_error_t::SATELLITE_CLOCK];
       }
 
       // Calculate satellite position
-      xyz_t sat_pos(sat.position(time_arrival, range));
+      float_t dt_transit(range / c);
+      gps_time_t t_tx(time_arrival - dt_transit);
+      xyz_t sat_pos(sat.position(t_tx, dt_transit));
       float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
       // Calculate residual
@@ -307,12 +311,12 @@ class GLONASS_SinglePositioning : public SolverBaseT {
 
       res.range_corrected = range;
 
-      xyz_t rel_vel(sat.velocity(time_arrival, range) - usr_vel); // Calculate velocity
+      xyz_t rel_vel(sat.velocity(t_tx, dt_transit) - usr_vel); // Calculate velocity
 
       res.rate_relative_neg = res.los_neg[0] * rel_vel.x()
           + res.los_neg[1] * rel_vel.y()
           + res.los_neg[2] * rel_vel.z()
-          + sat.clock_error_dot(time_arrival, range) * space_node_t::light_speed;
+          + sat.clock_error_dot(t_tx) * c;
 
       return res;
     }
