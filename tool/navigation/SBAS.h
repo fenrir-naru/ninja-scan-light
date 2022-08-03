@@ -1768,16 +1768,20 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             return (delta_t < 0) || (delta_t > Timing::values[Timing::GEO_NAVIGATION_DATA].interval);
           }
 
+          float_t clock_error(const gps_time_t &t) const {
+            float_t t_G(-t.interval(WN, 0)); // t_0 is expected to be modified as time of week
+            return a_Gf0 + a_Gf1 * (t_G - t_0); // Eq.(A-45), delay is positive
+          }
+
+          float_t clock_error_dot(const gps_time_t &t) const {
+            return a_Gf1;
+          }
+
           constellation_t constellation(
               const gps_time_t &t_tx, const float_t &dt_transit = 0,
               const bool &with_velocity = true) const {
 
-            float_t t_G(-t_tx.interval(WN, 0));
-
-            float_t t(t_G - (a_Gf0 + a_Gf1 * (t_G - t_0))); // Eq.(A-45)
-            float_t t_dot(1.0 - a_Gf1);
-
-            float_t delta_t(t - t_0), delta_t2(delta_t * delta_t / 2);
+            float_t delta_t(-t_tx.interval(WN, t_0)), delta_t2(delta_t * delta_t / 2);
 
             constellation_t res = {
               xyz_t(
@@ -1785,9 +1789,9 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
                   y + dy * delta_t + ddy * delta_t2,
                   z + dz * delta_t + ddz * delta_t2).after(dt_transit), // Eq. (A-44)
               xyz_t(
-                  (dx + ddx * delta_t) * t_dot,
-                  (dy + ddy * delta_t) * t_dot,
-                  (dz + ddz * delta_t) * t_dot).after(dt_transit),
+                  dx + ddx * delta_t,
+                  dy + ddy * delta_t,
+                  dz + ddz * delta_t).after(dt_transit),
             };
 
             /* Sagnac correction, which is expected to perform before geometric distance calculation,

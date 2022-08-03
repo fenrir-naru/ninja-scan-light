@@ -121,12 +121,10 @@ class SBAS_SinglePositioning : public SolverBaseT {
             return sat(ptr).ephemeris().constellation(t_tx, dt_transit, true).velocity;
           }
           static float_t clock_error(const void *ptr, const gps_time_t &t_tx) {
-            // Clock correction is taken into account in position()
-            return 0;
+            return sat(ptr).ephemeris().clock_error(t_tx);
           }
           static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
-            // Clock rate error is taken in account in velocity()
-            return 0;
+            return sat(ptr).ephemeris().clock_error_dot(t_tx);
           }
         };
         satellite_t res = {

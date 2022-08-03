@@ -466,7 +466,7 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
     typename SBAS_SpaceNode<FloatT>::SatelliteProperties::constellation_t pv(
         self->constellation(t_tx, dt_transit, with_velocity));
     typename GPS_Ephemeris<FloatT>::constellation_res_t res = {
-        pv.position, pv.velocity, 0, 0};
+        pv.position, pv.velocity, self->clock_error(t_tx), self->clock_error_dot(t_tx)};
     return res;
   }
 }
