@@ -74,6 +74,7 @@ class RINEX_Reader {
         FTYPE_OBSERVATION,
         FTYPE_NAVIGATION,
         FTYPE_METEOROLOGICAL,
+        FTYPE_CLOCK,
       } file_type;
       enum sat_system_t {
         SYS_UNKNOWN = 0,
@@ -240,8 +241,11 @@ void RINEX_Reader<U>::version_type_t::parse(const std::string &buf){
         case 'O': file_type = FTYPE_OBSERVATION;    break;
         case 'N': file_type = FTYPE_NAVIGATION;     break;
         case 'M': file_type = FTYPE_METEOROLOGICAL; break;
+        case 'C': file_type = FTYPE_CLOCK;          break;
       }
-      if((file_type == FTYPE_OBSERVATION) || (file_type == FTYPE_NAVIGATION)){
+      if((file_type == FTYPE_OBSERVATION)
+          || (file_type == FTYPE_NAVIGATION)
+          || (file_type == FTYPE_CLOCK)){
         switch(buf[40]){
           case 'G': sat_system = SYS_GPS;     break;
           case 'R': sat_system = SYS_GLONASS; break;
@@ -951,6 +955,86 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
     }
 };
 
+template <class FloatT>
+struct RINEX_Clock {
+  struct record_t {
+    char type[2], name[4];
+    std::tm epoch;
+    int epoch_year4, epoch_mon12;
+    FloatT epoch_sec;
+    int items_followed;
+    bool valid[6];
+    union {
+      FloatT array[6];
+      struct {
+        FloatT bias, bias_sigma, rate, rate_sigma, acc, acc_sigma;
+      } v;
+    } values;
+  };
+};
+
+template <class FloatT = double>
+class RINEX_CLK_Reader : public RINEX_Reader<> {
+  protected:
+    typedef RINEX_Reader<> super_t;
+  public:
+    typedef typename RINEX_Clock<FloatT>::record_t record_t;
+    static const typename super_t::convert_item_t head_v3[7];
+
+  protected:
+    record_t record;
+
+  public:
+    void seek_next() {
+      super_t::_has_next = false;
+
+      char buf[1024];
+      std::string str;
+      while(true){
+        if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+        str.assign(buf);
+        if(str.size() < 37){continue;}
+        str.copy(record.type, 2);
+        if((std::memcmp(record.type, "AR", 2) == 0)
+            || (std::memcmp(record.type, "AS", 2) == 0)
+            || (std::memcmp(record.type, "CR", 2) == 0)
+            || (std::memcmp(record.type, "DR", 2) == 0)
+            || (std::memcmp(record.type, "MS", 2) == 0)){
+          break;
+        }
+      }
+      str.copy(record.name, 4, 3);
+      super_t::convert(head_v3, str, &record);
+      record.epoch.tm_year = record.epoch_year4 - 1900; // greater than 1980
+      record.epoch.tm_mon = record.epoch_mon12 - 1; // month [0, 11]
+      record.epoch.tm_sec = (int)record.epoch_sec;
+
+      for(int i(0), j(2); i < 6; ++i, ++j){
+        record.valid[i] = false;
+        if(i >= record.items_followed){continue;}
+        if(j % 4 == 0){
+          j = 0;
+          if(super_t::src.getline(buf, sizeof(buf)).fail()){break;}
+          str.assign(buf);
+        }
+        if(!super_t::template conv_t<FloatT>::e_dot_head(
+            str, 20 * j, 19, &record.values.array[i], 12)){break;}
+        record.valid[i] = true;
+      }
+
+      super_t::_has_next = true;
+    }
+
+    RINEX_CLK_Reader(std::istream &in) : super_t(in) {
+      seek_next();
+    }
+    ~RINEX_CLK_Reader(){}
+
+    void next() {
+      seek_next();
+    }
+};
+
 #define GEN_D(offset, length, container_type, container_member, value_type) \
     {super_t::template conv_t<value_type>::d, offset, length, \
       offsetof(container_type, container_member)}
@@ -1189,6 +1273,17 @@ const typename RINEX_OBS_Reader<FloatT>::convert_item_t RINEX_OBS_Reader<FloatT>
   GEN_F( 0, 14,  3, record_t, value),
   GEN_D(14,  1,     record_t, lli,      int),
   GEN_D(15,  1,     record_t, ss,       int),
+};
+
+template <class FloatT>
+const typename RINEX_CLK_Reader<FloatT>::convert_item_t RINEX_CLK_Reader<FloatT>::head_v3[] = {
+  GEN_I( 8,  4,     record_t, epoch_year4,    int),
+  GEN_I(13,  2,     record_t, epoch_mon12,    int),
+  GEN_I(16,  2,     record_t, epoch.tm_mday,  int),
+  GEN_I(19,  2,     record_t, epoch.tm_hour,  int),
+  GEN_I(22,  2,     record_t, epoch.tm_min,   int),
+  GEN_F(24, 10,  6, record_t, epoch_sec),
+  GEN_D(34,  3,     record_t, items_followed, int),
 };
 
 #undef GEN_D
