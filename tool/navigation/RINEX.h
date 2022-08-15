@@ -50,6 +50,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <cctype>
 #include <limits>
 
 #include "util/text_helper.h"
@@ -88,6 +89,19 @@ class RINEX_Reader {
         SYS_TRANSIT,
         SYS_MIXED,
       } sat_system;
+      static sat_system_t char2sys_v3(const char &c){
+        switch(c){
+          case 'G': return SYS_GPS;
+          case 'R': return SYS_GLONASS;
+          case 'E': return SYS_GALILEO;
+          case 'J': return SYS_QZSS;
+          case 'C': return SYS_BDS;
+          case 'I': return SYS_IRNSS;
+          case 'S': return SYS_SBAS;
+          case 'M': return SYS_MIXED;
+        }
+        return SYS_UNKNOWN;
+      }
       version_type_t(
           const int &ver = 0, const file_type_t &ftype = FTYPE_UNKNOWN, const sat_system_t &sys = SYS_UNKNOWN)
           : version(ver), file_type(ftype), sat_system(sys) {}
@@ -104,7 +118,7 @@ class RINEX_Reader {
         : src(in), _has_next(false),
         version_type() {
       if(src.fail()){return;}
-      
+
       char buf[256];
       
       // Read header
@@ -134,7 +148,13 @@ class RINEX_Reader {
         version_type.parse(it->second.front());
         break;
       }
-
+    }
+    RINEX_Reader(
+        std::istream &in,
+        void (RINEX_Reader::*read_header)())
+        : src(in), _has_next(false),
+        version_type() {
+      (this->*read_header)();
     }
     virtual ~RINEX_Reader(){_header.clear();}
     header_t &header() {return _header;}
@@ -246,16 +266,7 @@ void RINEX_Reader<U>::version_type_t::parse(const std::string &buf){
       if((file_type == FTYPE_OBSERVATION)
           || (file_type == FTYPE_NAVIGATION)
           || (file_type == FTYPE_CLOCK)){
-        switch(buf[40]){
-          case 'G': sat_system = SYS_GPS;     break;
-          case 'R': sat_system = SYS_GLONASS; break;
-          case 'E': sat_system = SYS_GALILEO; break;
-          case 'J': sat_system = SYS_QZSS;    break;
-          case 'C': sat_system = SYS_BDS;     break;
-          case 'I': sat_system = SYS_IRNSS;   break;
-          case 'S': sat_system = SYS_SBAS;    break;
-          case 'M': sat_system = SYS_MIXED;   break;
-        }
+        sat_system = char2sys_v3(buf[40]);
       }
       break;
   }
@@ -958,7 +969,7 @@ class RINEX_OBS_Reader : public RINEX_Reader<> {
 template <class FloatT>
 struct RINEX_Clock {
   struct record_t {
-    char type[2], name[4];
+    char type[2], name[9];
     std::tm epoch;
     int epoch_year4, epoch_mon12;
     FloatT epoch_sec;
@@ -970,6 +981,31 @@ struct RINEX_Clock {
         FloatT bias, bias_sigma, rate, rate_sigma, acc, acc_sigma;
       } v;
     } values;
+
+    GPS_Time<FloatT> get_epoch() const {
+      return GPS_Time<FloatT>(epoch) + (epoch_sec - epoch.tm_sec);
+    }
+    record_t &set_epoch(const GPS_Time<FloatT> &t){
+      epoch = t.c_tm();
+      epoch_year4 = epoch.tm_year + 1900;
+      epoch_mon12 = epoch.tm_mon + 1;
+      epoch_sec = std::fmod(t.seconds, 60);
+      return *this;
+    }
+
+    std::string get_name() const {
+      std::string res;
+      for(int i(0); i < sizeof(name); ++i){
+        if(!std::isgraph(name[i])){break;}
+        res.push_back(name[i]);
+      }
+      return res;
+    }
+    record_t &set_name(const std::string &str){
+      std::memset(name, ' ', sizeof(name));
+      str.copy(name, str.size() > sizeof(name) ? sizeof(name) : str.size());
+      return *this;
+    }
   };
 };
 
@@ -980,9 +1016,59 @@ class RINEX_CLK_Reader : public RINEX_Reader<> {
   public:
     typedef typename RINEX_Clock<FloatT>::record_t record_t;
     static const typename super_t::convert_item_t head_v3[7];
+    static const typename super_t::convert_item_t head_v304[7];
 
   protected:
     record_t record;
+
+    void read_header(){
+      if(src.fail()){return;}
+
+      char buf[256];
+      int label_offset(60);
+
+      // Read header
+      for(int line(0); !src.eof(); ++line){
+        src.getline(buf, sizeof(buf));
+
+        std::string content(buf);
+
+        if(line == 0){ // Check version and type extraction
+          switch(content.find("RINEX VERSION / TYPE")){
+            case 60:
+              super_t::version_type.parse(content);
+              break;
+            case 65: {
+              double temp(0);
+              super_t::conv_t<double>::f(content, 0, 4, &temp, 2);
+              super_t::version_type.version = (int)(temp * 100);
+              if(super_t::version_type.version != 304){return;}
+              if(content[21] != 'C'){return;}
+              super_t::version_type.file_type
+                  = super_t::version_type_t::FTYPE_CLOCK;
+              super_t::version_type.sat_system
+                  = super_t::version_type_t::char2sys_v3(content[42]);
+              label_offset = 65;
+              break;
+            }
+            default: // includes std::string::npos:
+              return;
+          }
+        }
+
+        std::string label(content, label_offset, 20);
+        {
+          int real_length(label.find_last_not_of(' ') + 1);
+          if(real_length < (int)label.length()){
+            label = label.substr(0, real_length);
+          }
+        }
+
+        if(label.find("END OF HEADER") == 0){break;}
+
+        _header[label].push_back(content.substr(0, label_offset));
+      }
+    }
 
   public:
     void seek_next() {
@@ -990,10 +1076,11 @@ class RINEX_CLK_Reader : public RINEX_Reader<> {
 
       char buf[1024];
       std::string str;
+      bool v304(super_t::version_type.version == 304);
       while(true){
         if(super_t::src.getline(buf, sizeof(buf)).fail()){return;}
         str.assign(buf);
-        if(str.size() < 37){continue;}
+        if(str.size() < (v304 ? 45 : 37)){continue;}
         str.copy(record.type, 2);
         if((std::memcmp(record.type, "AR", 2) == 0)
             || (std::memcmp(record.type, "AS", 2) == 0)
@@ -1003,29 +1090,32 @@ class RINEX_CLK_Reader : public RINEX_Reader<> {
           break;
         }
       }
-      str.copy(record.name, 4, 3);
-      super_t::convert(head_v3, str, &record);
+      std::memset(record.name, ' ', sizeof(record.name));
+      str.copy(record.name, v304 ? 9 : 4, 3);
+      v304 ? super_t::convert(head_v304, str, &record) : super_t::convert(head_v3, str, &record);
       record.epoch.tm_year = record.epoch_year4 - 1900; // greater than 1980
       record.epoch.tm_mon = record.epoch_mon12 - 1; // month [0, 11]
       record.epoch.tm_sec = (int)record.epoch_sec;
 
-      for(int i(0), j(2); i < 6; ++i, ++j){
+      for(int i(0), j(2), k(v304 ? 45 : 40); i < 6; ++i, ++j, k += (v304 ? 21 : 20)){
         record.valid[i] = false;
         if(i >= record.items_followed){continue;}
         if(j % 4 == 0){
-          j = 0;
+          j = 0; k = 3;
           if(super_t::src.getline(buf, sizeof(buf)).fail()){break;}
           str.assign(buf);
         }
         if(!super_t::template conv_t<FloatT>::e_dot_head(
-            str, 20 * j, 19, &record.values.array[i], 12)){break;}
+            str, k, 19, &record.values.array[i], 12)){break;}
         record.valid[i] = true;
       }
 
       super_t::_has_next = true;
     }
 
-    RINEX_CLK_Reader(std::istream &in) : super_t(in) {
+    RINEX_CLK_Reader(std::istream &in)
+        : super_t(in, static_cast<void(super_t::*)()>(
+            &RINEX_CLK_Reader::read_header)) {
       seek_next();
     }
     ~RINEX_CLK_Reader(){}
@@ -1284,6 +1374,17 @@ const typename RINEX_CLK_Reader<FloatT>::convert_item_t RINEX_CLK_Reader<FloatT>
   GEN_I(22,  2,     record_t, epoch.tm_min,   int),
   GEN_F(24, 10,  6, record_t, epoch_sec),
   GEN_D(34,  3,     record_t, items_followed, int),
+};
+
+template <class FloatT>
+const typename RINEX_CLK_Reader<FloatT>::convert_item_t RINEX_CLK_Reader<FloatT>::head_v304[] = {
+  GEN_I(13,  4,     record_t, epoch_year4,    int),
+  GEN_I(18,  2,     record_t, epoch_mon12,    int),
+  GEN_I(21,  2,     record_t, epoch.tm_mday,  int),
+  GEN_I(24,  2,     record_t, epoch.tm_hour,  int),
+  GEN_I(27,  2,     record_t, epoch.tm_min,   int),
+  GEN_F(29,  9,  6, record_t, epoch_sec),
+  GEN_D(40,  2,     record_t, items_followed, int),
 };
 
 #undef GEN_D
