@@ -633,7 +633,7 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3_2){
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
   typedef RINEX_OBS_Reader<fnum_t> reader_t;
-  typedef RINEX_OBS_Writer<fnum_t> writer_t;
+  //typedef RINEX_OBS_Writer<fnum_t> writer_t;
 
   check_reader_versatility_to_input<reader_t>(src);
 }
@@ -679,6 +679,15 @@ BOOST_AUTO_TEST_CASE(clk_GPS_v3){
   typedef RINEX_CLK_Reader<fnum_t> reader_t;
 
   check_reader_versatility_to_input<reader_t>(src);
+
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    RINEX_Clock<fnum_t>::collection_t collection;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in, collection), 5);
+    RINEX_Clock<fnum_t>::satellites_t sats;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in.seekg(0), sats), 1);
+  }
 }
 
 BOOST_AUTO_TEST_CASE(clk_GPS_v304){
@@ -722,6 +731,15 @@ BOOST_AUTO_TEST_CASE(clk_GPS_v304){
   typedef RINEX_CLK_Reader<fnum_t> reader_t;
 
   check_reader_versatility_to_input<reader_t>(src);
+
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    RINEX_Clock<fnum_t>::collection_t collection;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in, collection), 5);
+    RINEX_Clock<fnum_t>::satellites_t sats;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in.seekg(0), sats), 1);
+  }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

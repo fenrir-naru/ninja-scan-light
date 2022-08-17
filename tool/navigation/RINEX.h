@@ -55,6 +55,7 @@
 
 #include "util/text_helper.h"
 #include "GPS.h"
+#include "algorithm/interpolate.h"
 
 template <class U = void>
 class RINEX_Reader {
@@ -995,7 +996,7 @@ struct RINEX_Clock {
 
     std::string get_name() const {
       std::string res;
-      for(int i(0); i < sizeof(name); ++i){
+      for(std::size_t i(0); i < sizeof(name); ++i){
         if(!std::isgraph(name[i])){break;}
         res.push_back(name[i]);
       }
@@ -1007,6 +1008,25 @@ struct RINEX_Clock {
       return *this;
     }
   };
+
+  struct per_node_t {
+    std::map<GPS_Time<FloatT>, FloatT> bias;
+    mutable struct {
+      typedef InterpolatableSet<GPS_Time<FloatT>, FloatT, FloatT> item_t;
+      item_t bias;
+      typename item_t::condition_t cnd;
+    } subset;
+    FloatT clock_error(const GPS_Time<FloatT> &t) const {
+      return subset.bias.update(t, bias, subset.cnd).interpolate(t);
+    }
+    FloatT clock_error_dot(const GPS_Time<FloatT> &t) const {
+      FloatT res;
+      subset.bias.update(t, bias, subset.cnd).interpolate(t, &res);
+      return res;
+    }
+  };
+  typedef std::map<int, per_node_t> satellites_t; // prn => per_node_t
+  typedef std::map<std::string, per_node_t> collection_t; // satellites + receivers, name => per_node_t
 };
 
 template <class FloatT = double>
@@ -1122,6 +1142,68 @@ class RINEX_CLK_Reader : public RINEX_Reader<> {
 
     void next() {
       seek_next();
+    }
+
+  protected:
+    static int read_all(
+        std::istream &in,
+        void *buf, bool (*callback)(void *, const record_t &)){
+      RINEX_CLK_Reader reader(in);
+      if(reader.version_type.file_type != version_type_t::FTYPE_CLOCK){
+        return -1;
+      }
+      int res(0);
+      for(; reader.has_next(); reader.next()){
+        if(!reader.record.valid[0]){continue;}
+        if(!callback(buf, reader.record)){continue;}
+        ++res;
+      }
+      return res;
+    }
+
+  public:
+    static int read_all(
+        std::istream &in,
+        typename RINEX_Clock<FloatT>::satellites_t &buf){
+      struct func_t {
+        static bool add(void *ptr, const record_t &record){
+          typename RINEX_Clock<FloatT>::satellites_t &buf(
+              *reinterpret_cast<typename RINEX_Clock<FloatT>::satellites_t *>(ptr));
+          if((record.type[0] != 'A') || (record.type[1] != 'S')){return false;}
+          int offset(0);
+          char sys(record.name[0]);
+          switch(sys){
+            case 'G': break; // GPS
+            case 'R': offset = (int)'R' << 8; break; // GLONASS
+            case 'E': offset = (int)'E' << 8; break; // Galileo
+            case 'C': offset = (int)'C' << 8; break; // BeiDou
+            case 'J': offset = 192; break; // QZSS
+            case 'S': offset = 100; break; // SBAS
+            case 'I': offset = (int)'I' << 8; break; // IRNSS
+            default: return false;
+          }
+          if(record.name[1] < '0' || record.name[1] > '9'
+              || record.name[2] < '0' || record.name[2] > '9'){return false;}
+          int idx((record.name[1] - '0') * 10 + (record.name[2] - '0') + offset);
+          buf[idx].bias[record.get_epoch()] = record.values.v.bias;
+          return true;
+        }
+      };
+      return read_all(in, &buf, func_t::add);
+    }
+
+    static int read_all(
+        std::istream &in,
+        typename RINEX_Clock<FloatT>::collection_t &buf){
+      struct func_t {
+        static bool add(void *ptr, const record_t &record){
+          typename RINEX_Clock<FloatT>::collection_t &buf(
+              *reinterpret_cast<typename RINEX_Clock<FloatT>::collection_t *>(ptr));
+          buf[record.get_name()].bias[record.get_epoch()] = record.values.v.bias;
+          return true;
+        }
+      };
+      return read_all(in, &buf, func_t::add);
     }
 };
 
