@@ -400,8 +400,8 @@ class GPS_Receiver
           ['', "IGP broadcasted by PRN#{prn} @ #{Time::utc(*t_meas.c_tm)}",
               @solver.sbas_space_node.ionospheric_grid_points(prn)].each{|str|
             $stderr.puts str
-          } if @debug[:SBAS_IGP] 
-        end
+          } if @debug[:SBAS_IGP]
+        end if t_meas
       end
     }
   }.call
