@@ -66,7 +66,7 @@ class NTCM_GL_Generic {
       return cos_Chi_star3
           + (C[0] * std::cos(v_D)
             + C[1] * std::cos(v_SD) + C[2] * std::sin(v_SD)
-            + C[3] * std::cos(v_TD) + C[4] * std::sin(v_TD)) * cos_Chi_star;
+            + C[3] * std::cos(v_TD) + C[4] * std::sin(v_TD)) * cos_Chi_star2;
     }
 
     static const float_t doy_A, doy_SA;
