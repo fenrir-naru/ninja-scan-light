@@ -34,6 +34,7 @@
 
 #include <cstddef>
 #include <vector>
+#include <map>
 #include <algorithm>
 #include <stdexcept>
 
@@ -129,38 +130,36 @@ struct InterpolatableSet {
 
   typedef typename std::vector<std::pair<Tx, Ty> > buffer_t;
   buffer_t buf;
-  Tx x0;
+  Tx x0, x_lower, x_upper;
   std::vector<Tx_delta> dx;
   bool ready;
 
-  InterpolatableSet() : x0(), ready(false) {}
+  InterpolatableSet() : x0(), dx(), ready(false) {}
 
   /**
    * update interpolation source
    * @param force_update If true, update is forcibly performed irrespective of current state
    * @param cnd condition for source data selection
    */
-  template <class Ty_Array>
   InterpolatableSet &update(
-      const Tx &x, const Ty_Array &y_array,
+      const Tx &x, const std::map<Tx, Ty> &xy_table,
       const condition_t &cnd,
       const bool &force_update = false){
 
     do{
       if(force_update){break;}
-      if(dx.size() < 2){break;}
-      Tx_delta x_diff(x0 - x);
-      if(std::abs(x_diff + dx[0]) <= std::abs(x_diff + dx[1])){
-        return *this;
-      }
+      if(dx.size() <= 2){break;}
+      if(x < x_lower){break;}
+      if(x > x_upper){break;}
+      return *this;
     }while(false);
 
     // If the 1st and 2nd nearest items are changed, then recalculate interpolation targets.
     struct {
       const Tx &x_base;
       bool operator()(
-          const typename Ty_Array::value_type &rhs,
-          const typename Ty_Array::value_type &lhs) const {
+          const typename std::map<Tx, Ty>::value_type &rhs,
+          const typename std::map<Tx, Ty>::value_type &lhs) const {
         return std::abs(rhs.first - x_base) < std::abs(lhs.first - x_base);
       }
     } cmp = {(x0 = x)};
@@ -171,11 +170,24 @@ struct InterpolatableSet {
     for(typename buffer_t::const_iterator
           it(buf.begin()),
           it_end(std::partial_sort_copy(
-            y_array.lower_bound(x - cnd.max_dx_range),
-            y_array.upper_bound(x + cnd.max_dx_range),
+            xy_table.lower_bound(x - cnd.max_dx_range),
+            xy_table.upper_bound(x + cnd.max_dx_range),
             buf.begin(), buf.end(), cmp));
         it != it_end; ++it){
       dx.push_back(it->first - x0);
+    }
+    if(dx.size() >= 2){ // calculate a necessary condition to update samples for new x
+      // According to Nth nearest points, x range in which the order of extracted samples
+      // is retained can be calculated.
+      bool ascending(buf[0].first <= buf[1].first);
+      Tx &xa(ascending ? x_lower : x_upper), &xb(ascending ? x_upper : x_lower);
+      xa = x0;
+      for(std::size_t i(2); i < buf.size(); ++i){
+        if(ascending ? (dx[1] <= dx[i]) : (dx[1] >= dx[i])){continue;}
+        xa = x0 + (dx[1] + dx[i]) / 2;
+        break;
+      }
+      xb = x0 + (dx[0] + dx[1]) / 2;
     }
     ready = (dx.size() >= cnd.max_x_size);
 
