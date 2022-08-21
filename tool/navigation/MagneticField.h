@@ -143,16 +143,17 @@ class MagneticFieldGeneric {
       field_components_res_t res;
       
       // @see http://mooring.ucsd.edu/software/matlab/mfiles/toolbox/geo/IGRF/geomag60.c
+      // @see https://web.archive.org/web/20171008182325/http://mooring.ucsd.edu/software/matlab/mfiles/toolbox/geo/IGRF/geomag60.c
 
-      const FloatT slat(sin_geocentric_latitude);
-      const FloatT clat(cos_geocentric_latitude);
+      const FloatT &slat(sin_geocentric_latitude);
+      const FloatT &clat(cos_geocentric_latitude);
 
       FloatT sl[13] = {sin(longitude_rad)};
       FloatT cl[13] = {cos(longitude_rad)};
       
       res.north = res.east = res.down = 0;
       
-      FloatT aa, bb, cc, rr;
+      FloatT aa, bb, cc, rr(0); // rr(0) for suppression of warning of use of uninitialized variable
       
       aa = sqrt(3.0);
       FloatT p[118] = {
