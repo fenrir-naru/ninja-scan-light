@@ -592,7 +592,6 @@ struct MatrixUtil {
       }
       static VALUE read(
           const VALUE &v, const unsigned int &row = 0, const unsigned int &column = 0) {
-        int state;
         VALUE values[3] = {v, UINT2NUM(row), UINT2NUM(column)};
         return funcall_throw_if_error(run, reinterpret_cast<VALUE>(values));
       }
@@ -865,7 +864,7 @@ struct MatrixUtil {
         static const ID with_index[] = {
             rb_intern("map_with_index"), rb_intern("map_with_index!"), 
             rb_intern("collect_with_index"), rb_intern("collect_with_index!")};
-        for(int i(0); i < sizeof(with_index) / sizeof(with_index[0]); ++i){
+        for(std::size_t i(0); i < sizeof(with_index) / sizeof(with_index[0]); ++i){
           if(id_callee == with_index[i]){
             return matrix_yield_get_with_index;
           }

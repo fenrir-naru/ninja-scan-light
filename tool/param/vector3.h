@@ -133,7 +133,7 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
      * @param v ƒRƒs[Œ³
      */
     Vector3Data(const self_t &v){
-      if(storage = v.storage){(storage->ref)++;}
+      if((storage = v.storage)){(storage->ref)++;}
     }
     
     /**
@@ -146,7 +146,7 @@ class Vector3Data : public Vector3DataProperty<FloatT> {
     self_t &operator=(const self_t &v){
       if(this == &v){return *this;}
       if(storage && ((--(storage->ref)) <= 0)){delete storage;}
-      if(storage = v.storage){(storage->ref)++;}
+      if((storage = v.storage)){(storage->ref)++;}
       return *this;
     }
     
