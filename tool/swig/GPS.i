@@ -223,12 +223,10 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
 %}
 %extend GPS_Ionospheric_UTC_Parameters {
   %fragment(SWIG_Traits_frag(FloatT));
-  %typemap(in,numinputs=0) FloatT values[4] (FloatT temp[4]) %{
-    $1 = temp;
-  %}
-  %typemap(argout) FloatT values[4] {
+  %typemap(in,numinputs=0) const FloatT *values[4] (FloatT *temp) "$1 = &temp;"
+  %typemap(argout) const FloatT *values[4] {
     for(int i(0); i < 4; ++i){
-      %append_output(swig::from($1[i]));
+      %append_output(swig::from((*$1)[i]));
     }
   }
   MAKE_ARRAY_INPUT(const FloatT, values, swig::asval);
@@ -240,11 +238,7 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
     } 
   }
   %rename("alpha") get_alpha;
-  void get_alpha(FloatT values[4]) const {
-    for(int i(0); i < 4; ++i){
-      values[i] = self->alpha[i];
-    }
-  }
+  void get_alpha(const FloatT *values[4]) const {*values = self->alpha;}
   %rename("beta=") set_beta;
   void set_beta(const FloatT values[4]){
     for(int i(0); i < 4; ++i){
@@ -252,11 +246,7 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
     }
   }
   %rename("beta") get_beta;
-  void get_beta(FloatT values[4]) const {
-    for(int i(0); i < 4; ++i){
-      values[i] = self->beta[i];
-    }
-  }
+  void get_beta(const FloatT *values[4]) const {*values = self->beta;}
   MAKE_ACCESSOR(A1, FloatT);
   MAKE_ACCESSOR(A0, FloatT);
   MAKE_ACCESSOR(t_ot, unsigned int);
@@ -787,6 +777,7 @@ const type &get_ ## name () const {
 %inline %{
 template <class FloatT>
 struct GPS_SolverOptions_Common {
+  virtual ~GPS_SolverOptions_Common() {}
   virtual GPS_Solver_GeneralOptions<FloatT> *cast_general() = 0;
   virtual const GPS_Solver_GeneralOptions<FloatT> *cast_general() const = 0;
 };
