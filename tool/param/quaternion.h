@@ -130,7 +130,7 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
      * @param q ƒRƒs[Œ³
      */
     QuaternionData(const self_t &q){
-      if(storage = q.storage){(storage->ref)++;}
+      if((storage = q.storage)){(storage->ref)++;}
     }
     
     /**
@@ -143,7 +143,7 @@ class QuaternionData : public QuaternionDataProperty<FloatT> {
     self_t &operator=(const self_t &q){
       if(this == &q){return *this;}
       if(storage && ((--(storage->ref)) <= 0)){delete storage;}
-      if(storage = q.storage){(storage->ref)++;}
+      if((storage = q.storage)){(storage->ref)++;}
       return *this;
     }
     
