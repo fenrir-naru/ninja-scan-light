@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "navigation/RINEX.h"
+#include "navigation/RINEX_Clock.h"
 #include "navigation/GPS.h"
 
 #include <boost/random.hpp>
@@ -683,9 +684,9 @@ BOOST_AUTO_TEST_CASE(clk_GPS_v3){
   {
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
-    RINEX_Clock<fnum_t>::collection_t collection;
+    RINEX_CLK<fnum_t>::collection_t collection;
     BOOST_CHECK_EQUAL(reader_t::read_all(in, collection), 5);
-    RINEX_Clock<fnum_t>::satellites_t sats;
+    RINEX_CLK<fnum_t>::satellites_t sats;
     BOOST_CHECK_EQUAL(reader_t::read_all(in.seekg(0), sats), 1);
   }
 }
@@ -735,9 +736,9 @@ BOOST_AUTO_TEST_CASE(clk_GPS_v304){
   {
     std::stringbuf sbuf(src);
     std::istream in(&sbuf);
-    RINEX_Clock<fnum_t>::collection_t collection;
+    RINEX_CLK<fnum_t>::collection_t collection;
     BOOST_CHECK_EQUAL(reader_t::read_all(in, collection), 5);
-    RINEX_Clock<fnum_t>::satellites_t sats;
+    RINEX_CLK<fnum_t>::satellites_t sats;
     BOOST_CHECK_EQUAL(reader_t::read_all(in.seekg(0), sats), 1);
   }
 }
