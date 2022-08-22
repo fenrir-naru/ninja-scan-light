@@ -258,19 +258,20 @@ struct SP3_Product {
     SYSTEM_IRNSS    = (int)'I' << 8,
   };
 
-#define gen_func(sys) \
-static typename GPS_Solver_Base<FloatT>::satellite_t select_ ## sys( \
-    const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){ \
-  return reinterpret_cast<const SP3_Product<FloatT> *>(ptr) \
-      ->select(prn + SYSTEM_ ## sys, receiver_time); \
-}
-  gen_func(GPS);
-  gen_func(GLONASS);
-  gen_func(LEO);
-  gen_func(GALILEO);
-  gen_func(BEIDOU);
-  gen_func(IRNSS);
-#undef gen_fun
+  protected:
+
+  mutable struct per_system_t {
+    const SP3_Product<FloatT> *product;
+    system_t sys;
+  } per_system[6];
+
+  static typename GPS_Solver_Base<FloatT>::satellite_t select(
+      const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
+    const per_system_t *ptr_impl(reinterpret_cast<const per_system_t *>(ptr));
+    return ptr_impl->product->select((prn & 0xFF) + ptr_impl->sys, receiver_time);
+  }
+
+  public:
 
   /**
    * push SP3 product to satellite selector
@@ -281,19 +282,23 @@ static typename GPS_Solver_Base<FloatT>::satellite_t select_ ## sys( \
    */
   template <class SelectorT>
   bool push(SelectorT &slct, const system_t &sys = SYSTEM_GPS) const {
+    int sys_idx(0);
     switch(sys){
       case SYSTEM_GPS: // SBAS and QZSS are identically treated as GPS.
       //case SYSTEM_SBAS:
       //case SYSTEM_QZSS:
-        slct.impl_select = select_GPS; break;
-      case SYSTEM_GLONASS:  slct.impl_select = select_GLONASS;  break;
-      case SYSTEM_LEO:      slct.impl_select = select_LEO;      break;
-      case SYSTEM_GALILEO:  slct.impl_select = select_GALILEO;  break;
-      case SYSTEM_BEIDOU:   slct.impl_select = select_BEIDOU;   break;
-      case SYSTEM_IRNSS:    slct.impl_select = select_IRNSS;    break;
+        break;
+      case SYSTEM_GLONASS:  sys_idx = 1; break;
+      case SYSTEM_LEO:      sys_idx = 2; break;
+      case SYSTEM_GALILEO:  sys_idx = 3; break;
+      case SYSTEM_BEIDOU:   sys_idx = 4; break;
+      case SYSTEM_IRNSS:    sys_idx = 5; break;
       default: return false;
     }
-    slct.impl = this;
+    per_system[sys_idx].product = this;
+    per_system[sys_idx].sys = sys;
+    slct.impl_select = select;
+    slct.impl = &per_system[sys_idx];
     return true;
   }
 
