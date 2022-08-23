@@ -253,6 +253,7 @@ void RINEX_Reader<U>::version_type_t::parse(const std::string &buf){
         case 'H': file_type = FTYPE_NAVIGATION;
           sat_system = SYS_SBAS; // TODO: Is geostational as SBAS?
           break;
+        case 'C': file_type = FTYPE_CLOCK; break;
       }
       break;
     case 3:
