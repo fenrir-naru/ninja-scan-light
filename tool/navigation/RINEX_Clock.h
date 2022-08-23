@@ -89,23 +89,126 @@ struct RINEX_CLK {
 
   struct per_node_t {
     std::map<GPS_Time<FloatT>, FloatT> bias;
+    typedef InterpolatableSet<GPS_Time<FloatT>, FloatT, FloatT> interpolator_t;
+    static const typename interpolator_t::condition_t interpolator_cnd_default;
     mutable struct {
-      typedef InterpolatableSet<GPS_Time<FloatT>, FloatT, FloatT> item_t;
-      item_t bias;
-      typename item_t::condition_t cnd;
+      interpolator_t bias;
     } subset;
+    bool precheck(const GPS_Time<FloatT> &t) const {
+      subset.bias.update(t, bias, interpolator_cnd_default);
+      return subset.bias.ready;
+    }
     FloatT clock_error(const GPS_Time<FloatT> &t) const {
-      return subset.bias.update(t, bias, subset.cnd).interpolate(t);
+      return subset.bias.update(t, bias, interpolator_cnd_default).interpolate(t);
     }
     FloatT clock_error_dot(const GPS_Time<FloatT> &t) const {
       FloatT res;
-      subset.bias.update(t, bias, subset.cnd).interpolate(t, &res);
+      subset.bias.update(t, bias, interpolator_cnd_default).interpolate(t, &res);
       return res;
     }
   };
-  typedef std::map<int, per_node_t> satellites_t; // prn => per_node_t
+  struct satellites_t {
+    typedef std::map<int, per_node_t> buf_t; // prn => per_node_t
+    buf_t buf;
+
+    protected:
+
+    typedef typename GPS_Solver_Base<FloatT>::satellite_t sat_t;
+
+    mutable struct per_system_t {
+      struct {
+        const satellites_t *sats;
+        int offset;
+      } clk_rate;
+      struct {
+        const void *impl;
+        sat_t (*impl_select)(const void *, const int &, const GPS_Time<FloatT> &);
+      } pos_vel;
+      struct sat_buf_t {
+        sat_t pos_vel;
+        const per_node_t *clk_rate;
+      };
+      std::map<int, sat_buf_t> sat_buf;
+    } per_system[5];
+
+    static sat_t select(
+        const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
+      const per_system_t *ptr_sys(reinterpret_cast<const per_system_t *>(ptr));
+
+      // check position/velocity availability
+      sat_t sat_pos_vel(
+          ptr_sys->pos_vel.impl_select(ptr_sys->pos_vel.impl, prn, receiver_time));
+      if(!sat_pos_vel.is_available()){return sat_t::unavailable();}
+
+      int sat_id((prn & 0xFF) + ptr_sys->clk_rate.offset);
+
+      // check clock_error/clock_error_dot availability
+      typename buf_t::const_iterator it(ptr_sys->clk_rate.sats->buf.find(sat_id));
+      if((it == ptr_sys->clk_rate.sats->buf.end()) || !it->second.precheck(receiver_time)){
+        return sat_t::unavailable();
+      }
+
+      struct impl_t {
+        static inline const typename per_system_t::sat_buf_t &sat(const void *ptr) {
+          return *reinterpret_cast<const typename per_system_t::sat_buf_t *>(ptr);
+        }
+        static typename GPS_Solver_Base<FloatT>::xyz_t position(
+            const void *ptr, const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit) {
+          return sat(ptr).pos_vel.position(t_tx, dt_transit);
+        }
+        static typename GPS_Solver_Base<FloatT>::xyz_t velocity(
+            const void *ptr, const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit) {
+          return sat(ptr).pos_vel.velocity(t_tx, dt_transit);
+        }
+        static typename GPS_Solver_Base<FloatT>::float_t clock_error(
+            const void *ptr, const GPS_Time<FloatT> &t_tx) {
+          return sat(ptr).clk_rate->clock_error(t_tx);
+        }
+        static typename GPS_Solver_Base<FloatT>::float_t clock_error_dot(
+            const void *ptr, const GPS_Time<FloatT> &t_tx) {
+          return sat(ptr).clk_rate->clock_error_dot(t_tx);
+        }
+      };
+      typename per_system_t::sat_buf_t impl = {sat_pos_vel, &(it->second)};
+      sat_t res = {
+          &(const_cast<per_system_t *>(ptr_sys)->sat_buf[sat_id] = impl),
+          impl_t::position, impl_t::velocity, impl_t::clock_error, impl_t::clock_error_dot};
+      return res;
+    }
+
+    public:
+
+    template <class SelectorT>
+    bool push(SelectorT &slct, const char &sys = 'G') const {
+      int sys_idx(0), offset(0);
+      switch(sys){
+        case 'G': case 'J': case 'S': break; // GPS, QZSS, SBAS
+        case 'R': offset = (int)'R' << 8; sys_idx = 1; break; // GLONASS
+        case 'E': offset = (int)'E' << 8; sys_idx = 2; break; // Galileo
+        case 'C': offset = (int)'C' << 8; sys_idx = 3; break; // BeiDou
+        case 'I': offset = (int)'I' << 8; sys_idx = 4; break; // IRNSS
+        default: return false;
+      }
+      per_system[sys_idx].clk_rate.sats = this;
+      per_system[sys_idx].clk_rate.offset = offset;
+      if(slct.impl_select != select){
+        per_system[sys_idx].pos_vel.impl = slct.impl;
+        per_system[sys_idx].pos_vel.impl_select = slct.impl_select;
+      }
+      slct.impl_select = select;
+      slct.impl = &per_system[sys_idx];
+      return true;
+    }
+  };
   typedef std::map<std::string, per_node_t> collection_t; // satellites + receivers, name => per_node_t
 };
+
+template <class FloatT>
+const typename RINEX_CLK<FloatT>::per_node_t::interpolator_t::condition_t
+    RINEX_CLK<FloatT>::per_node_t::interpolator_cnd_default = {
+      5, // max_x_size
+      60 * 60 * 2, // subset.cnd.max_dx_range
+    };
 
 template <class FloatT = double>
 class RINEX_CLK_Reader : public RINEX_Reader<> {
@@ -263,7 +366,7 @@ class RINEX_CLK_Reader : public RINEX_Reader<> {
           if(record.name[1] < '0' || record.name[1] > '9'
               || record.name[2] < '0' || record.name[2] > '9'){return false;}
           int idx((record.name[1] - '0') * 10 + (record.name[2] - '0') + offset);
-          dst[idx].bias[record.get_epoch()] = record.values.v.bias;
+          dst.buf[idx].bias[record.get_epoch()] = record.values.v.bias;
           return true;
         }
       };

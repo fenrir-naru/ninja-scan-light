@@ -18,6 +18,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/RINEX.h"
+#include "navigation/RINEX_Clock.h"
 #include "navigation/SP3.h"
 #include "navigation/ANTEX.h"
 
@@ -1400,6 +1401,64 @@ struct SP3 : public SP3_Product<FloatT> {
 };
 }
 
+%inline {
+template <class FloatT>
+struct RINEX_Clock : public RINEX_CLK<FloatT>::satellites_t {
+  typedef typename RINEX_CLK<FloatT>::satellites_t super_t;
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    return RINEX_CLK_Reader<FloatT>::read_all(fin, *this);
+  }
+  enum system_t {
+    SYS_GPS,
+    SYS_SBAS,
+    SYS_QZSS,
+    SYS_GLONASS,
+    SYS_GALILEO,
+    SYS_BEIDOU,
+    SYS_SYSTEMS,
+  };
+  bool push(GPS_Solver<FloatT> &solver, const system_t &sys) const {
+    switch(sys){
+      case SYS_GPS:
+        return RINEX_CLK<FloatT>::satellites_t::push(solver.gps.solver.satellites, 'G');
+      case SYS_SBAS:
+      case SYS_QZSS:
+      case SYS_GLONASS:
+      case SYS_GALILEO:
+      case SYS_BEIDOU:
+      default:
+        break;
+    }
+    return false;
+  }
+  bool push(GPS_Solver<FloatT> &solver) const {
+    system_t target[] = {
+      SYS_GPS,
+      //SYS_SBAS,
+      //SYS_QZSS,
+      //SYS_GLONASS,
+      //SYS_GALILEO,
+      //SYS_BEIDOU,
+    };
+    for(std::size_t i(0); i < sizeof(target) / sizeof(target[0]); ++i){
+      if(!push(solver, target[i])){return false;}
+    }
+    return true;
+  }
+  FloatT clock_error(const int &sat_id, const GPS_Time<FloatT> &t) const {
+    typename super_t::buf_t::const_iterator it(this->buf.find(sat_id));
+    if(it == this->buf.end()){return super_t::sat_t::unavailable().clock_error(t);}
+    return it->second.clock_error(t);
+  }
+  FloatT clock_error_dot(const int &sat_id, const GPS_Time<FloatT> &t) const {
+    typename super_t::buf_t::const_iterator it(this->buf.find(sat_id));
+    if(it == this->buf.end()){return super_t::sat_t::unavailable().clock_error(t);}
+    return it->second.clock_error_dot(t);
+  }
+};
+}
+
 #undef MAKE_ACCESSOR
 #undef MAKE_VECTOR2ARRAY
 #undef MAKE_ARRAY_INPUT
@@ -1420,6 +1479,7 @@ struct SP3 : public SP3_Product<FloatT> {
 
 %template(RINEX_Observation) RINEX_Observation<type>;
 %template(SP3) SP3<type>;
+%template(RINEX_Clock) RINEX_Clock<type>;
 %enddef
 
 CONCRETIZE(double);

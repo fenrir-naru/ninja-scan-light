@@ -588,6 +588,21 @@ class GPS_Receiver
     raise "Format error! (Not ANTEX) #{fname}" unless applied_items >= 0
     $stderr.puts "SP3 correction with ANTEX file (%s): %d items have been processed."%[fname, applied_items]
   end
+  
+  def attach_rinex_clk(fname)
+    @clk ||= GPS::RINEX_Clock::new
+    read_items = @clk.read(fname)
+    raise "Format error! (Not RINEX clock) #{fname}" if read_items < 0
+    $stderr.puts "Read RINEX clock file (%s): %d items."%[fname, read_items]
+    #sats = @clk.satellites
+    @clk.class.constants.each{|sys|
+      next unless /^SYS_(?!SYSTEMS)(.*)/ =~ sys.to_s
+      idx, sys_name = [@clk.class.const_get(sys), $1]
+      #next unless sats[idx] > 0
+      next unless @clk.push(@solver, idx)
+      $stderr.puts "Change clock error source of #{sys_name} to RINEX clock" 
+    }
+  end
 end
 
 if __FILE__ == $0 then
@@ -598,7 +613,7 @@ if __FILE__ == $0 then
   files = ARGV.collect{|arg|
     next [arg, nil] unless arg =~ /^--([^=]+)=?/
     k, v = [$1.downcase.to_sym, $']
-    next [v, k] if [:rinex_nav, :rinex_obs, :ubx, :sp3, :antex].include?(k) # file type
+    next [v, k] if [:rinex_nav, :rinex_obs, :ubx, :sp3, :antex, :rinex_clk].include?(k) # file type
     options << [$1.to_sym, $']
     nil
   }.compact
@@ -646,6 +661,7 @@ if __FILE__ == $0 then
     when /\.ubx$/; :ubx
     when /\.sp3$/; :sp3
     when /\.atx$/; :antex
+    when /\.clk$/; :rinex_clk
     else
       raise "Format cannot be guessed, use --(format, ex. rinex_nav)=#{fname}"
     end
@@ -690,6 +706,7 @@ if __FILE__ == $0 then
     when :rinex_nav; rcv.parse_rinex_nav(fname)
     when :sp3; rcv.attach_sp3(fname)
     when :antex; rcv.attach_antex(fname)
+    when :rinex_clk; rcv.attach_rinex_clk(fname)
     end
   }
   
