@@ -144,6 +144,8 @@
  *      This option is active when the integration method is other than "--loosely".
  *   --rinex_nav=file
  *      assists built-in GNSS solver by using ephemeris data in the specified file.
+ *   --rinex_clk=file
+ *      assists built-in GNSS solver by using precise clock data in the specified file.
  *   --sp3=file
  *      assists built-in GNSS solver by using precise ephemeris data in the specified file.
  *   --GNSS_elv_mask_deg=(angle [deg])

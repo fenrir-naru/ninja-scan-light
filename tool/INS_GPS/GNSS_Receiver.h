@@ -60,6 +60,10 @@
 #include "navigation/ANTEX.h"
 #endif
 
+#if !defined(BUILD_WITHOUT_RINEX_CLK)
+#include "navigation/RINEX_Clock.h"
+#endif
+
 template <class FloatT>
 struct GNSS_Receiver {
   typedef GPS_SpaceNode<FloatT> gps_space_node_t;
@@ -95,6 +99,10 @@ struct GNSS_Receiver {
 #if !defined(BUILD_WITHOUT_SP3)
     typedef SP3_Product<FloatT> sp3_t;
     sp3_t sp3;
+#endif
+#if !defined(BUILD_WITHOUT_RINEX_CLK)
+    typedef typename RINEX_CLK<FloatT>::satellites_t clk_t;
+    clk_t clk;
 #endif
     data_t() : gps(), out_rinex_nav(NULL) {}
     ~data_t(){
@@ -161,6 +169,11 @@ struct GNSS_Receiver {
 #if !defined(BUILD_WITHOUT_SP3)
       typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
       if(cnt.gps > 0){data.sp3.push(gps.satellites, SP3_Product<FloatT>::SYSTEM_GPS);}
+#endif
+#if !defined(BUILD_WITHOUT_RINEX_CLK)
+      // RINEX clock has higher priority to be applied than SP3
+      typename data_t::clk_t::count_t cnt2(data.clk.count());
+      if(cnt2.gps > 0){data.clk.push(gps.satellites, data_t::clk_t::SYSTEM_GPS);}
 #endif
     }
   } solver_GNSS;
@@ -384,6 +397,25 @@ struct GNSS_Receiver {
         int moved(atx.move_to_antenna_position(data.sp3));
         std::cerr << "Moved SP3 positions: " << moved << std::endl;
       }
+      return true;
+    }
+#endif
+
+#if !defined(BUILD_WITHOUT_RINEX_CLK)
+    if(value = runtime_opt_t::get_value(spec, "rinex_clk", false)){
+      if(dry_run){return true;}
+      std::cerr << "RINEX clock file (" << value << ") reading..." << std::endl;
+      std::istream &in(options.spec2istream(value));
+      int entries(RINEX_CLK_Reader<FloatT>::read_all(in, data.clk));
+      if(entries < 0){
+        std::cerr << "(error!) Invalid format!" << std::endl;
+        return false;
+      }else{
+        std::cerr << "rinex_clk: " << entries << " items captured." << std::endl;
+        typename data_t::clk_t::count_t cnt(data.clk.count());
+        if(cnt.gps > 0){std::cerr << "RINEX clock GPS satellites: " << cnt.gps << std::endl;}
+      }
+      solver_GNSS.update_ephemeris_source(data);
       return true;
     }
 #endif
