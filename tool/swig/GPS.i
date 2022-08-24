@@ -1374,7 +1374,7 @@ struct PushableData {
     %append_output(SWIG_From(int)($1.galileo));
     %append_output(SWIG_From(int)($1.beidou));
   }
-} 
+}
 %inline {
 template <class FloatT>
 struct SP3 : public SP3_Product<FloatT>, PushableData {
@@ -1417,6 +1417,16 @@ struct SP3 : public SP3_Product<FloatT>, PushableData {
 };
 }
 
+%extend RINEX_Clock {
+  %typemap(out) typename RINEX_CLK<FloatT>::satellites_t::count_t {
+    %append_output(SWIG_From(int)($1.gps));
+    %append_output(SWIG_From(int)($1.sbas));
+    %append_output(SWIG_From(int)($1.qzss));
+    %append_output(SWIG_From(int)($1.glonass));
+    %append_output(SWIG_From(int)($1.galileo));
+    %append_output(SWIG_From(int)($1.beidou));
+  }
+}
 %inline {
 template <class FloatT>
 struct RINEX_Clock : public RINEX_CLK<FloatT>::satellites_t, PushableData {
@@ -1424,6 +1434,9 @@ struct RINEX_Clock : public RINEX_CLK<FloatT>::satellites_t, PushableData {
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     return RINEX_CLK_Reader<FloatT>::read_all(fin, *this);
+  }
+  typename RINEX_CLK<FloatT>::satellites_t::count_t satellites() const {
+    return RINEX_CLK<FloatT>::satellites_t::count();
   }
   bool push(GPS_Solver<FloatT> &solver, const PushableData::system_t &sys) const {
     return PushableData::push((typename RINEX_CLK<FloatT>::satellites_t &)*this, solver, sys);

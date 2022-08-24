@@ -194,6 +194,31 @@ struct RINEX_CLK {
       slct.impl = &per_system[sys];
       return true;
     }
+
+    struct count_t {
+      int gps, sbas, qzss, glonass, galileo, beidou, irnss, unknown;
+    };
+    count_t count() const {
+      count_t res = {0};
+      for(typename buf_t::const_iterator it(buf.begin()), it_end(buf.end());
+          it != it_end; ++it){
+        switch((char)(it->first >> 8)){
+          case '\0': {
+            int id(it->first & 0xFF);
+            if(id < 100){++res.gps;}
+            else if(id < 192){++res.sbas;}
+            else{++res.qzss;}
+            break;
+          }
+          case 'R': ++res.glonass;  break;
+          case 'E': ++res.galileo;  break;
+          case 'C': ++res.beidou;   break;
+          case 'I': ++res.irnss;    break;
+          default: ++res.unknown; break;
+        }
+      }
+      return res;
+    }
   };
   typedef std::map<std::string, per_node_t> collection_t; // satellites + receivers, name => per_node_t
 };
