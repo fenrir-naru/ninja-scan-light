@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "navigation/RINEX.h"
+#include "navigation/RINEX_Clock.h"
 #include "navigation/GPS.h"
 
 #include <boost/random.hpp>
@@ -633,9 +634,113 @@ BOOST_AUTO_TEST_CASE(obs_GPS_v3_2){
      //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
 
   typedef RINEX_OBS_Reader<fnum_t> reader_t;
-  typedef RINEX_OBS_Writer<fnum_t> writer_t;
+  //typedef RINEX_OBS_Writer<fnum_t> writer_t;
 
   check_reader_versatility_to_input<reader_t>(src);
+}
+
+BOOST_AUTO_TEST_CASE(clk_GPS_v3){
+  const char *src = \
+      "     3.00           CLOCK DATA          GPS                 RINEX VERSION / TYPE\n"
+      "TORINEXC V9.9       USNO                19960403 001000 UTC PGM / RUN BY / DATE \n"
+      "EXAMPLE OF A CLOCK DATA ANALYSIS FILE                       COMMENT             \n"
+      "IN THIS CASE ANALYSIS RESULTS FROM GPS ONLY ARE INCLUDED    COMMENT             \n"
+      "No re-alignment of the clocks has been applied.             COMMENT             \n"
+      "G    4 C1W L1W C2W L2W                                      SYS / # / OBS TYPES \n"
+      "   GPS                                                      TIME SYSTEM ID      \n"
+      "    10                                                      LEAP SECONDS        \n"
+      "G CC2NONCC          p1c1bias.hist @ goby.nrl.navy.mil       SYS / DCBS APPLIED  \n"
+      "G PAGES             igs05.atx @ igscb.jpl.nasa.gov          SYS / PCVS APPLIED  \n"
+      "     2    AS    AR                                          # / TYPES OF DATA   \n"
+      "USN  USNO USING GIPSY/OASIS-II                              ANALYSIS CENTER     \n"
+      "     1 1994 07 14  0  0  0.000000 1994 07 14 20 59  0.000000# OF CLK REF        \n"
+      "USNO 40451S003                           -.123456789012E+00 ANALYSIS CLK REF    \n"
+      "     1 1994 07 14 21  0  0.000000 1994 07 14 21 59  0.000000# OF CLK REF        \n"
+      "TIDB 50103M108                          -0.123456789012E+00 ANALYSIS CLK REF    \n"
+      "     4    ITRF96                                            # OF SOLN STA / TRF \n"
+      "GOLD 40405S031            1234567890 -1234567890 -1234567890SOLN STA NAME / NUM \n"
+      "AREQ 42202M005           -1234567890  1234567890 -1234567890SOLN STA NAME / NUM \n"
+      "TIDB 50103M108            1234567890 -1234567890  1234567890SOLN STA NAME / NUM \n"
+      "HARK 30302M007           -1234567890  1234567890 -1234567890SOLN STA NAME / NUM \n"
+      "USNO 40451S003            1234567890 -1234567890 -1234567890SOLN STA NAME / NUM \n"
+      "    27                                                      # OF SOLN SATS      \n"
+      "G01 G02 G03 G04 G05 G06 G07 G08 G09 G10 G13 G14 G15 G16 G17 PRN LIST            \n"
+      "G18 G19 G21 G22 G23 G24 G25 G26 G27 G29 G30 G31             PRN LIST            \n"
+      "                                                            END OF HEADER       \n"
+      "AR AREQ 1994 07 14 20 59  0.000000  6   -0.123456789012E+00 -0.123456789012E+01 \n"
+      "-0.123456789012E+02 -0.123456789012E+03 -0.123456789012E+04 -0.123456789012E+05 \n"
+      "AS G16  1994 07 14 20 59  0.000000  2    -.123456789012E+00  -.123456789012E-01 \n"
+      "AR GOLD 1994 07 14 20 59  0.000000  4    -.123456789012E-01  -.123456789012E-02 \n"
+      " -.123456789012E-03  -.123456789012E-04                                         \n"
+      "AR HARK 1994 07 14 20 59  0.000000  2     .123456789012E+00   .123456789012E+00 \n"
+      "AR TIDB 1994 07 14 20 59  0.000000  6     .123456789012E+00   .123456789012E+00 \n"
+      "  .123456789012E+00   .123456789012E+00   .123456789012E+00   .123456789012E+00 \n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_CLK_Reader<fnum_t> reader_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
+
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    RINEX_CLK<fnum_t>::collection_t collection;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in, collection), 5);
+    RINEX_CLK<fnum_t>::satellites_t sats;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in.seekg(0), sats), 1);
+  }
+}
+
+BOOST_AUTO_TEST_CASE(clk_GPS_v304){
+  const char *src = \
+      "3.04                 C                    G                      RINEX VERSION / TYPE\n"
+      "TORINEXC V9.9        USNO                 19960403  001000 UTC   PGM / RUN BY / DATE\n"
+      "EXAMPLE OF A CLOCK DATA ANALYSIS FILE                            COMMENT\n"
+      "IN THIS CASE ANALYSIS RESULTS FROM GPS ONLY ARE INCLUDED         COMMENT\n"
+      "No re-alignment of the clocks has been applied.                  COMMENT\n"
+      "G    4  C1W L1W C2W L2W                                          SYS / # / OBS TYPES\n"
+      "   GPS                                                           TIME SYSTEM ID\n"
+      "    10                                                           LEAP SECONDS\n"
+      "G CC2NONCC          p1c1bias.hist @ goby.nrl.navy.mil            SYS / DCBS APPLIED\n"
+      "G PAGES             igs05.atx @ igscb.jpl.nasa.gov               SYS / PCVS APPLIED \n"
+      "     2    AS    AR                                               # / TYPES OF DATA\n"
+      "USN  USNO USING GIPSY/OASIS-II                                   ANALYSIS CENTER\n"
+      "     1 1994 07 14  0  0  0.000000 1994 07 14 20 59  0.000000     # OF CLK REF\n"
+      "USNO      40451S003                           -.123456789012E+00 ANALYSIS CLK REF\n"
+      "     1 1994 07 14 21  0  0.000000 1994 07 14 21 59  0.000000     # OF CLK REF\n"
+      "TIDB      50103M108                          -0.123456789012E+00 ANALYSIS CLK REF\n"
+      "     4    ITRF96                                                 # OF SOLN STA / TRF\n"
+      "GOLD      40405S031            1234567890 -1234567890 -1234567890SOLN STA NAME / NUM\n"
+      "AREQ      42202M005           -1234567890  1234567890 -1234567890SOLN STA NAME / NUM\n"
+      "TIDB      50103M108            1234567890 -1234567890  1234567890SOLN STA NAME / NUM\n"
+      "HARK      30302M007           -1234567890  1234567890 -1234567890SOLN STA NAME / NUM\n"
+      "USNO      40451S003            1234567890 -1234567890 -1234567890SOLN STA NAME / NUM\n"
+      "    27                                                           # OF SOLN SATS \n"
+      "G01 G02 G03 G04 G05 G06 G07 G08 G09 G10 G13 G14 G15 G16 G17 G18  PRN LIST\n"
+      "G19 G21 G22 G23 G24 G25 G26 G27 G29 G30 G31                      PRN LIST\n"
+      "                                                                 END OF HEADER\n"
+      "AR AREQ00USA 1994 07 14 20 59  0.000000  6   -0.123456789012E+00  -0.123456789012E+01\n"
+      "   -0.123456789012E+02  -0.123456789012E+03  -0.123456789012E+04  -0.123456789012E+05\n"
+      "AS G16       1994 07 14 20 59  0.000000  2   -0.123456789012E+00  -0.123456789012E-01\n"
+      "AR GOLD      1994 07 14 20 59  0.000000  4   -0.123456789012E-01  -0.123456789012E-02\n"
+      "   -0.123456789012E-03  -0.123456789012E-04\n"
+      "AR HARK      1994 07 14 20 59  0.000000  2    0.123456789012E+00   0.123456789012E+00\n"
+      "AR TIDB      1994 07 14 20 59  0.000000  6    0.123456789012E+00   0.123456789012E+00\n"
+      "    0.123456789012E+00   0.123456789012E+00   0.123456789012E+00   0.123456789012E+00\n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_CLK_Reader<fnum_t> reader_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
+
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    RINEX_CLK<fnum_t>::collection_t collection;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in, collection), 5);
+    RINEX_CLK<fnum_t>::satellites_t sats;
+    BOOST_CHECK_EQUAL(reader_t::read_all(in.seekg(0), sats), 1);
+  }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -74,6 +74,7 @@ class RINEX_Reader {
         FTYPE_OBSERVATION,
         FTYPE_NAVIGATION,
         FTYPE_METEOROLOGICAL,
+        FTYPE_CLOCK,
       } file_type;
       enum sat_system_t {
         SYS_UNKNOWN = 0,
@@ -87,6 +88,19 @@ class RINEX_Reader {
         SYS_TRANSIT,
         SYS_MIXED,
       } sat_system;
+      static sat_system_t char2sys_v3(const char &c){
+        switch(c){
+          case 'G': return SYS_GPS;
+          case 'R': return SYS_GLONASS;
+          case 'E': return SYS_GALILEO;
+          case 'J': return SYS_QZSS;
+          case 'C': return SYS_BDS;
+          case 'I': return SYS_IRNSS;
+          case 'S': return SYS_SBAS;
+          case 'M': return SYS_MIXED;
+        }
+        return SYS_UNKNOWN;
+      }
       version_type_t(
           const int &ver = 0, const file_type_t &ftype = FTYPE_UNKNOWN, const sat_system_t &sys = SYS_UNKNOWN)
           : version(ver), file_type(ftype), sat_system(sys) {}
@@ -103,7 +117,7 @@ class RINEX_Reader {
         : src(in), _has_next(false),
         version_type() {
       if(src.fail()){return;}
-      
+
       char buf[256];
       
       // Read header
@@ -133,7 +147,13 @@ class RINEX_Reader {
         version_type.parse(it->second.front());
         break;
       }
-
+    }
+    RINEX_Reader(
+        std::istream &in,
+        void (RINEX_Reader::*read_header)())
+        : src(in), _has_next(false),
+        version_type() {
+      (this->*read_header)();
     }
     virtual ~RINEX_Reader(){_header.clear();}
     header_t &header() {return _header;}
@@ -233,6 +253,7 @@ void RINEX_Reader<U>::version_type_t::parse(const std::string &buf){
         case 'H': file_type = FTYPE_NAVIGATION;
           sat_system = SYS_SBAS; // TODO: Is geostational as SBAS?
           break;
+        case 'C': file_type = FTYPE_CLOCK; break;
       }
       break;
     case 3:
@@ -240,18 +261,12 @@ void RINEX_Reader<U>::version_type_t::parse(const std::string &buf){
         case 'O': file_type = FTYPE_OBSERVATION;    break;
         case 'N': file_type = FTYPE_NAVIGATION;     break;
         case 'M': file_type = FTYPE_METEOROLOGICAL; break;
+        case 'C': file_type = FTYPE_CLOCK;          break;
       }
-      if((file_type == FTYPE_OBSERVATION) || (file_type == FTYPE_NAVIGATION)){
-        switch(buf[40]){
-          case 'G': sat_system = SYS_GPS;     break;
-          case 'R': sat_system = SYS_GLONASS; break;
-          case 'E': sat_system = SYS_GALILEO; break;
-          case 'J': sat_system = SYS_QZSS;    break;
-          case 'C': sat_system = SYS_BDS;     break;
-          case 'I': sat_system = SYS_IRNSS;   break;
-          case 'S': sat_system = SYS_SBAS;    break;
-          case 'M': sat_system = SYS_MIXED;   break;
-        }
+      if((file_type == FTYPE_OBSERVATION)
+          || (file_type == FTYPE_NAVIGATION)
+          || (file_type == FTYPE_CLOCK)){
+        sat_system = char2sys_v3(buf[40]);
       }
       break;
   }
@@ -304,7 +319,7 @@ void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
       switch(sat_system){
         case SYS_GPS:     sys_str = "G: GPS";     break;
         case SYS_GLONASS: sys_str = "R: GLONASS"; break;
-        case SYS_GALILEO: sys_str = "G: GALILEO"; break;
+        case SYS_GALILEO: sys_str = "E: GALILEO"; break;
         case SYS_QZSS:    sys_str = "Q: QZSS";    break;
         case SYS_BDS:     sys_str = "B: BDS";     break;
         case SYS_IRNSS:   sys_str = "I: IRNSS";   break;

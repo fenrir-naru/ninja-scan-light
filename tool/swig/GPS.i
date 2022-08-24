@@ -18,6 +18,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/RINEX.h"
+#include "navigation/RINEX_Clock.h"
 #include "navigation/SP3.h"
 #include "navigation/ANTEX.h"
 
@@ -936,7 +937,10 @@ struct GPS_RangeCorrector
       if(!res.is_available()){
         static const VALUE key(ID2SYM(rb_intern("relative_property")));
         VALUE hook(rb_hash_lookup(hooks, key));
-        if(!NIL_P(hook)){res.impl = this;}
+        if(!NIL_P(hook)){
+          if(!res.impl_xyz){res.impl_xyz = this;}
+          if(!res.impl_t){res.impl_t = this;}
+        }
       }
 #endif
       return res;
@@ -1316,23 +1320,8 @@ template <class FloatT>
 struct RINEX_Observation {};
 }
 
-%extend SP3 {
-  %typemap(out) typename SP3_Product<FloatT>::satellite_count_t {
-    %append_output(SWIG_From(int)($1.gps));
-    %append_output(SWIG_From(int)($1.sbas));
-    %append_output(SWIG_From(int)($1.qzss));
-    %append_output(SWIG_From(int)($1.glonass));
-    %append_output(SWIG_From(int)($1.galileo));
-    %append_output(SWIG_From(int)($1.beidou));
-  }
-} 
 %inline {
-template <class FloatT>
-struct SP3 : public SP3_Product<FloatT> {
-  int read(const char *fname) {
-    std::fstream fin(fname, std::ios::in | std::ios::binary);
-    return SP3_Reader<FloatT>::read_all(fin, *this);
-  }
+struct PushableData {
   enum system_t {
     SYS_GPS,
     SYS_SBAS,
@@ -1342,14 +1331,12 @@ struct SP3 : public SP3_Product<FloatT> {
     SYS_BEIDOU,
     SYS_SYSTEMS,
   };
-  typename SP3_Product<FloatT>::satellite_count_t satellites() const {
-    return SP3_Product<FloatT>::satellite_count();
-  }
-  bool push(GPS_Solver<FloatT> &solver, const system_t &sys) const {
+  template <class DataT, class FloatT>
+  static bool push(DataT &data, GPS_Solver<FloatT> &solver, const system_t &sys){
     switch(sys){
       case SYS_GPS:
-        return SP3_Product<FloatT>::push(
-            solver.gps.solver.satellites, SP3_Product<FloatT>::SYSTEM_GPS);
+        return data.push(
+            solver.gps.solver.satellites, DataT::SYSTEM_GPS);
       case SYS_SBAS:
       case SYS_QZSS:
       case SYS_GLONASS:
@@ -1360,7 +1347,8 @@ struct SP3 : public SP3_Product<FloatT> {
     }
     return false;
   }
-  bool push(GPS_Solver<FloatT> &solver) const {
+  template <class DataT, class FloatT>
+  static bool push(DataT &data, GPS_Solver<FloatT> &solver){
     system_t target[] = {
       SYS_GPS,
       //SYS_SBAS,
@@ -1370,9 +1358,38 @@ struct SP3 : public SP3_Product<FloatT> {
       //SYS_BEIDOU,
     };
     for(std::size_t i(0); i < sizeof(target) / sizeof(target[0]); ++i){
-      if(!push(solver, target[i])){return false;}
+      if(!push(data, solver, target[i])){return false;}
     }
     return true;
+  }
+};
+}
+
+%extend SP3 {
+  %typemap(out) typename SP3_Product<FloatT>::satellite_count_t {
+    %append_output(SWIG_From(int)($1.gps));
+    %append_output(SWIG_From(int)($1.sbas));
+    %append_output(SWIG_From(int)($1.qzss));
+    %append_output(SWIG_From(int)($1.glonass));
+    %append_output(SWIG_From(int)($1.galileo));
+    %append_output(SWIG_From(int)($1.beidou));
+  }
+}
+%inline {
+template <class FloatT>
+struct SP3 : public SP3_Product<FloatT>, PushableData {
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    return SP3_Reader<FloatT>::read_all(fin, *this);
+  }
+  typename SP3_Product<FloatT>::satellite_count_t satellites() const {
+    return SP3_Product<FloatT>::satellite_count();
+  }
+  bool push(GPS_Solver<FloatT> &solver, const PushableData::system_t &sys) const {
+    return PushableData::push((SP3_Product<FloatT> &)*this, solver, sys);
+  }
+  bool push(GPS_Solver<FloatT> &solver) const {
+    return PushableData::push((SP3_Product<FloatT> &)*this, solver);
   }
   System_XYZ<FloatT, WGS84> position(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
@@ -1400,6 +1417,46 @@ struct SP3 : public SP3_Product<FloatT> {
 };
 }
 
+%extend RINEX_Clock {
+  %typemap(out) typename RINEX_CLK<FloatT>::satellites_t::count_t {
+    %append_output(SWIG_From(int)($1.gps));
+    %append_output(SWIG_From(int)($1.sbas));
+    %append_output(SWIG_From(int)($1.qzss));
+    %append_output(SWIG_From(int)($1.glonass));
+    %append_output(SWIG_From(int)($1.galileo));
+    %append_output(SWIG_From(int)($1.beidou));
+  }
+}
+%inline {
+template <class FloatT>
+struct RINEX_Clock : public RINEX_CLK<FloatT>::satellites_t, PushableData {
+  typedef typename RINEX_CLK<FloatT>::satellites_t super_t;
+  int read(const char *fname) {
+    std::fstream fin(fname, std::ios::in | std::ios::binary);
+    return RINEX_CLK_Reader<FloatT>::read_all(fin, *this);
+  }
+  typename RINEX_CLK<FloatT>::satellites_t::count_t satellites() const {
+    return RINEX_CLK<FloatT>::satellites_t::count();
+  }
+  bool push(GPS_Solver<FloatT> &solver, const PushableData::system_t &sys) const {
+    return PushableData::push((typename RINEX_CLK<FloatT>::satellites_t &)*this, solver, sys);
+  }
+  bool push(GPS_Solver<FloatT> &solver) const {
+    return PushableData::push((typename RINEX_CLK<FloatT>::satellites_t &)*this, solver);
+  }
+  FloatT clock_error(const int &sat_id, const GPS_Time<FloatT> &t) const {
+    typename super_t::buf_t::const_iterator it(this->buf.find(sat_id));
+    if(it == this->buf.end()){return super_t::sat_t::unavailable().clock_error(t);}
+    return it->second.clock_error(t);
+  }
+  FloatT clock_error_dot(const int &sat_id, const GPS_Time<FloatT> &t) const {
+    typename super_t::buf_t::const_iterator it(this->buf.find(sat_id));
+    if(it == this->buf.end()){return super_t::sat_t::unavailable().clock_error(t);}
+    return it->second.clock_error_dot(t);
+  }
+};
+}
+
 #undef MAKE_ACCESSOR
 #undef MAKE_VECTOR2ARRAY
 #undef MAKE_ARRAY_INPUT
@@ -1420,6 +1477,7 @@ struct SP3 : public SP3_Product<FloatT> {
 
 %template(RINEX_Observation) RINEX_Observation<type>;
 %template(SP3) SP3<type>;
+%template(RINEX_Clock) RINEX_Clock<type>;
 %enddef
 
 CONCRETIZE(double);
