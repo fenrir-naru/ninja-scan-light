@@ -1320,6 +1320,51 @@ template <class FloatT>
 struct RINEX_Observation {};
 }
 
+%inline {
+struct PushableData {
+  enum system_t {
+    SYS_GPS,
+    SYS_SBAS,
+    SYS_QZSS,
+    SYS_GLONASS,
+    SYS_GALILEO,
+    SYS_BEIDOU,
+    SYS_SYSTEMS,
+  };
+  template <class DataT, class FloatT>
+  static bool push(DataT &data, GPS_Solver<FloatT> &solver, const system_t &sys){
+    switch(sys){
+      case SYS_GPS:
+        return data.push(
+            solver.gps.solver.satellites, DataT::SYSTEM_GPS);
+      case SYS_SBAS:
+      case SYS_QZSS:
+      case SYS_GLONASS:
+      case SYS_GALILEO:
+      case SYS_BEIDOU:
+      default:
+        break;
+    }
+    return false;
+  }
+  template <class DataT, class FloatT>
+  static bool push(DataT &data, GPS_Solver<FloatT> &solver){
+    system_t target[] = {
+      SYS_GPS,
+      //SYS_SBAS,
+      //SYS_QZSS,
+      //SYS_GLONASS,
+      //SYS_GALILEO,
+      //SYS_BEIDOU,
+    };
+    for(std::size_t i(0); i < sizeof(target) / sizeof(target[0]); ++i){
+      if(!push(data, solver, target[i])){return false;}
+    }
+    return true;
+  }
+};
+}
+
 %extend SP3 {
   %typemap(out) typename SP3_Product<FloatT>::satellite_count_t {
     %append_output(SWIG_From(int)($1.gps));
@@ -1332,51 +1377,19 @@ struct RINEX_Observation {};
 } 
 %inline {
 template <class FloatT>
-struct SP3 : public SP3_Product<FloatT> {
+struct SP3 : public SP3_Product<FloatT>, PushableData {
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     return SP3_Reader<FloatT>::read_all(fin, *this);
   }
-  enum system_t {
-    SYS_GPS,
-    SYS_SBAS,
-    SYS_QZSS,
-    SYS_GLONASS,
-    SYS_GALILEO,
-    SYS_BEIDOU,
-    SYS_SYSTEMS,
-  };
   typename SP3_Product<FloatT>::satellite_count_t satellites() const {
     return SP3_Product<FloatT>::satellite_count();
   }
-  bool push(GPS_Solver<FloatT> &solver, const system_t &sys) const {
-    switch(sys){
-      case SYS_GPS:
-        return SP3_Product<FloatT>::push(
-            solver.gps.solver.satellites, SP3_Product<FloatT>::SYSTEM_GPS);
-      case SYS_SBAS:
-      case SYS_QZSS:
-      case SYS_GLONASS:
-      case SYS_GALILEO:
-      case SYS_BEIDOU:
-      default:
-        break;
-    }
-    return false;
+  bool push(GPS_Solver<FloatT> &solver, const PushableData::system_t &sys) const {
+    return PushableData::push((SP3_Product<FloatT> &)*this, solver, sys);
   }
   bool push(GPS_Solver<FloatT> &solver) const {
-    system_t target[] = {
-      SYS_GPS,
-      //SYS_SBAS,
-      //SYS_QZSS,
-      //SYS_GLONASS,
-      //SYS_GALILEO,
-      //SYS_BEIDOU,
-    };
-    for(std::size_t i(0); i < sizeof(target) / sizeof(target[0]); ++i){
-      if(!push(solver, target[i])){return false;}
-    }
-    return true;
+    return PushableData::push((SP3_Product<FloatT> &)*this, solver);
   }
   System_XYZ<FloatT, WGS84> position(
       const int &sat_id, const GPS_Time<FloatT> &t) const {
@@ -1406,48 +1419,17 @@ struct SP3 : public SP3_Product<FloatT> {
 
 %inline {
 template <class FloatT>
-struct RINEX_Clock : public RINEX_CLK<FloatT>::satellites_t {
+struct RINEX_Clock : public RINEX_CLK<FloatT>::satellites_t, PushableData {
   typedef typename RINEX_CLK<FloatT>::satellites_t super_t;
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     return RINEX_CLK_Reader<FloatT>::read_all(fin, *this);
   }
-  enum system_t {
-    SYS_GPS,
-    SYS_SBAS,
-    SYS_QZSS,
-    SYS_GLONASS,
-    SYS_GALILEO,
-    SYS_BEIDOU,
-    SYS_SYSTEMS,
-  };
-  bool push(GPS_Solver<FloatT> &solver, const system_t &sys) const {
-    switch(sys){
-      case SYS_GPS:
-        return RINEX_CLK<FloatT>::satellites_t::push(solver.gps.solver.satellites, 'G');
-      case SYS_SBAS:
-      case SYS_QZSS:
-      case SYS_GLONASS:
-      case SYS_GALILEO:
-      case SYS_BEIDOU:
-      default:
-        break;
-    }
-    return false;
+  bool push(GPS_Solver<FloatT> &solver, const PushableData::system_t &sys) const {
+    return PushableData::push((typename RINEX_CLK<FloatT>::satellites_t &)*this, solver, sys);
   }
   bool push(GPS_Solver<FloatT> &solver) const {
-    system_t target[] = {
-      SYS_GPS,
-      //SYS_SBAS,
-      //SYS_QZSS,
-      //SYS_GLONASS,
-      //SYS_GALILEO,
-      //SYS_BEIDOU,
-    };
-    for(std::size_t i(0); i < sizeof(target) / sizeof(target[0]); ++i){
-      if(!push(solver, target[i])){return false;}
-    }
-    return true;
+    return PushableData::push((typename RINEX_CLK<FloatT>::satellites_t &)*this, solver);
   }
   FloatT clock_error(const int &sat_id, const GPS_Time<FloatT> &t) const {
     typename super_t::buf_t::const_iterator it(this->buf.find(sat_id));

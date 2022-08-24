@@ -111,6 +111,19 @@ struct RINEX_CLK {
     typedef std::map<int, per_node_t> buf_t; // prn => per_node_t
     buf_t buf;
 
+    enum system_t {
+      SYSTEM_GPS,
+      SYSTEM_SBAS,
+      SYSTEM_QZSS,
+      SYSTEM_GLONASS,
+      SYSTEM_GALILEO,
+      SYSTEM_BEIDOU,
+      SYSTEM_IRNSS,
+      NUM_OF_SYSTEMS,
+    };
+
+    static const int offset_list[NUM_OF_SYSTEMS];
+
     protected:
 
     typedef typename GPS_Solver_Base<FloatT>::satellite_t sat_t;
@@ -118,13 +131,13 @@ struct RINEX_CLK {
     mutable struct per_system_t {
       struct {
         const satellites_t *sats;
-        int offset;
       } clk_rate;
       struct {
         const void *impl;
         sat_t (*impl_select)(const void *, const int &, const GPS_Time<FloatT> &);
       } pos_vel;
-    } per_system[5];
+      system_t sys;
+    } per_system[NUM_OF_SYSTEMS];
 
     static sat_t select(
         const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
@@ -134,7 +147,7 @@ struct RINEX_CLK {
       sat_t res(
           ptr_sys->pos_vel.impl_select(ptr_sys->pos_vel.impl, prn, receiver_time));
 
-      int sat_id((prn & 0xFF) + ptr_sys->clk_rate.offset);
+      int sat_id((prn & 0xFF) + offset_list[ptr_sys->sys]);
 
       // check clock_error/clock_error_dot availability
       typename buf_t::const_iterator it(ptr_sys->clk_rate.sats->buf.find(sat_id));
@@ -169,24 +182,16 @@ struct RINEX_CLK {
     public:
 
     template <class SelectorT>
-    bool push(SelectorT &slct, const char &sys = 'G') const {
-      int sys_idx(0), offset(0);
-      switch(sys){
-        case 'G': case 'J': case 'S': break; // GPS, QZSS, SBAS
-        case 'R': offset = (int)'R' << 8; sys_idx = 1; break; // GLONASS
-        case 'E': offset = (int)'E' << 8; sys_idx = 2; break; // Galileo
-        case 'C': offset = (int)'C' << 8; sys_idx = 3; break; // BeiDou
-        case 'I': offset = (int)'I' << 8; sys_idx = 4; break; // IRNSS
-        default: return false;
-      }
-      per_system[sys_idx].clk_rate.sats = this;
-      per_system[sys_idx].clk_rate.offset = offset;
+    bool push(SelectorT &slct, const system_t &sys = SYSTEM_GPS) const {
+      if(sys >= NUM_OF_SYSTEMS){return false;}
+      per_system[sys].clk_rate.sats = this;
+      per_system[sys].sys = sys;
       if(slct.impl_select != select){
-        per_system[sys_idx].pos_vel.impl = slct.impl;
-        per_system[sys_idx].pos_vel.impl_select = slct.impl_select;
+        per_system[sys].pos_vel.impl = slct.impl;
+        per_system[sys].pos_vel.impl_select = slct.impl_select;
       }
       slct.impl_select = select;
-      slct.impl = &per_system[sys_idx];
+      slct.impl = &per_system[sys];
       return true;
     }
   };
@@ -199,6 +204,15 @@ const typename RINEX_CLK<FloatT>::per_node_t::interpolator_t::condition_t
       5, // max_x_size
       60 * 60 * 2, // subset.cnd.max_dx_range
     };
+
+template <class FloatT>
+const int RINEX_CLK<FloatT>::satellites_t::offset_list[NUM_OF_SYSTEMS] = {
+  0, 0, 0, // GPS, SBAS, QZSS
+  (int)'R' << 8, // GLONASS
+  (int)'E' << 8, // GALILEO
+  (int)'C' << 8, // BEIDOU
+  (int)'I' << 8, // IRNSS,
+};
 
 template <class FloatT = double>
 class RINEX_CLK_Reader : public RINEX_Reader<> {
