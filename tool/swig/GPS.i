@@ -1317,22 +1317,14 @@ struct RINEX_Observation {};
 }
 
 %extend SP3 {
-  %typemap(in,numinputs=0) int count[ANY] (int temp[$1_dim0]) "$1 = temp;"
-  %typemap(argout) int count[ANY] {
-    for(int i(0); i < $1_dim0; ++i){
-      %append_output(SWIG_From(int)($1[i]));
-    }
+  %typemap(out) typename SP3_Product<FloatT>::satellite_count_t {
+    %append_output(SWIG_From(int)($1.gps));
+    %append_output(SWIG_From(int)($1.sbas));
+    %append_output(SWIG_From(int)($1.qzss));
+    %append_output(SWIG_From(int)($1.glonass));
+    %append_output(SWIG_From(int)($1.galileo));
+    %append_output(SWIG_From(int)($1.beidou));
   }
-  void satellites(int count[SP3::SYS_SYSTEMS]) const {
-    typename SP3_Product<FloatT>::satellite_count_t x(self->satellite_count());
-    count[SP3<FloatT>::SYS_GPS] = x.gps;
-    count[SP3<FloatT>::SYS_SBAS] = x.sbas;
-    count[SP3<FloatT>::SYS_QZSS] = x.qzss;
-    count[SP3<FloatT>::SYS_GLONASS] = x.glonass;
-    count[SP3<FloatT>::SYS_GALILEO] = x.galileo;
-    count[SP3<FloatT>::SYS_BEIDOU] = x.beidou;
-  }
-
 } 
 %inline {
 template <class FloatT>
@@ -1350,6 +1342,9 @@ struct SP3 : public SP3_Product<FloatT> {
     SYS_BEIDOU,
     SYS_SYSTEMS,
   };
+  typename SP3_Product<FloatT>::satellite_count_t satellites() const {
+    return SP3_Product<FloatT>::satellite_count();
+  }
   bool push(GPS_Solver<FloatT> &solver, const system_t &sys) const {
     switch(sys){
       case SYS_GPS:

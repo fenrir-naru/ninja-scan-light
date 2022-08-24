@@ -248,27 +248,30 @@ struct SP3_Product {
   }
 
   enum system_t {
-    SYSTEM_GPS      = (int)'\0' << 8,
-    SYSTEM_SBAS     = SYSTEM_GPS,
-    SYSTEM_QZSS     = SYSTEM_GPS,
-    SYSTEM_GLONASS  = (int)'R' << 8,
-    SYSTEM_LEO      = (int)'L' << 8,
-    SYSTEM_GALILEO  = (int)'E' << 8,
-    SYSTEM_BEIDOU   = (int)'C' << 8,
-    SYSTEM_IRNSS    = (int)'I' << 8,
+    SYSTEM_GPS,
+    SYSTEM_SBAS,
+    SYSTEM_QZSS,
+    SYSTEM_GLONASS,
+    SYSTEM_LEO,
+    SYSTEM_GALILEO,
+    SYSTEM_BEIDOU,
+    SYSTEM_IRNSS,
+    NUM_OF_SYSTEMS,
   };
+
+  static const int offset_list[NUM_OF_SYSTEMS];
 
   protected:
 
   mutable struct per_system_t {
     const SP3_Product<FloatT> *product;
     system_t sys;
-  } per_system[6];
+  } per_system[NUM_OF_SYSTEMS];
 
   static typename GPS_Solver_Base<FloatT>::satellite_t select(
       const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
     const per_system_t *ptr_impl(reinterpret_cast<const per_system_t *>(ptr));
-    return ptr_impl->product->select((prn & 0xFF) + ptr_impl->sys, receiver_time);
+    return ptr_impl->product->select((prn & 0xFF) + offset_list[ptr_impl->sys], receiver_time);
   }
 
   public:
@@ -282,23 +285,11 @@ struct SP3_Product {
    */
   template <class SelectorT>
   bool push(SelectorT &slct, const system_t &sys = SYSTEM_GPS) const {
-    int sys_idx(0);
-    switch(sys){
-      case SYSTEM_GPS: // SBAS and QZSS are identically treated as GPS.
-      //case SYSTEM_SBAS:
-      //case SYSTEM_QZSS:
-        break;
-      case SYSTEM_GLONASS:  sys_idx = 1; break;
-      case SYSTEM_LEO:      sys_idx = 2; break;
-      case SYSTEM_GALILEO:  sys_idx = 3; break;
-      case SYSTEM_BEIDOU:   sys_idx = 4; break;
-      case SYSTEM_IRNSS:    sys_idx = 5; break;
-      default: return false;
-    }
-    per_system[sys_idx].product = this;
-    per_system[sys_idx].sys = sys;
+    if(sys >= NUM_OF_SYSTEMS){return false;}
+    per_system[sys].product = this;
+    per_system[sys].sys = sys;
     slct.impl_select = select;
-    slct.impl = &per_system[sys_idx];
+    slct.impl = &per_system[sys];
     return true;
   }
 
@@ -310,19 +301,19 @@ struct SP3_Product {
     for(typename satellites_t::const_iterator
           it(satellites.begin()), it_end(satellites.end());
         it != it_end; ++it){
-      switch(it->first & 0xFF00){
-        case SYSTEM_GPS: {
+      switch((char)(it->first >> 8)){
+        case '\0': {
           int id(it->first & 0xFF);
           if(id < 100){++res.gps;}
           else if(id < 192){++res.sbas;}
           else{++res.qzss;}
           break;
         }
-        case SYSTEM_GLONASS:  ++res.glonass;  break;
-        case SYSTEM_LEO:      ++res.leo;      break;
-        case SYSTEM_GALILEO:  ++res.galileo;  break;
-        case SYSTEM_BEIDOU:   ++res.beidou;   break;
-        case SYSTEM_IRNSS:    ++res.irnss;    break;
+        case 'R': ++res.glonass;  break;
+        case 'L': ++res.leo;      break;
+        case 'E': ++res.galileo;  break;
+        case 'C': ++res.beidou;   break;
+        case 'I': ++res.irnss;    break;
         default: ++res.unknown; break;
       }
     }
@@ -339,6 +330,17 @@ const typename SP3_Product<FloatT>::per_satellite_t::interpolate_cnd_t
    */
   60 * 60 * 2,
 };
+
+template <class FloatT>
+const int SP3_Product<FloatT>::offset_list[NUM_OF_SYSTEMS] = {
+  0, 0, 0, // GPS, SBAS, QZSS
+  ((int)'R' << 8), // GLONASS
+  ((int)'L' << 8), // LEO
+  ((int)'E' << 8), // GALILEO
+  ((int)'C' << 8), // BEIDOU
+  ((int)'I' << 8), // IRNSS
+};
+
 
 template <class FloatT>
 class SP3_Reader {
