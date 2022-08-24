@@ -937,7 +937,10 @@ struct GPS_RangeCorrector
       if(!res.is_available()){
         static const VALUE key(ID2SYM(rb_intern("relative_property")));
         VALUE hook(rb_hash_lookup(hooks, key));
-        if(!NIL_P(hook)){res.impl = this;}
+        if(!NIL_P(hook)){
+          if(!res.impl_xyz){res.impl_xyz = this;}
+          if(!res.impl_t){res.impl_t = this;}
+        }
       }
 #endif
       return res;

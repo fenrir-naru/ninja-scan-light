@@ -124,55 +124,45 @@ struct RINEX_CLK {
         const void *impl;
         sat_t (*impl_select)(const void *, const int &, const GPS_Time<FloatT> &);
       } pos_vel;
-      struct sat_buf_t {
-        sat_t pos_vel;
-        const per_node_t *clk_rate;
-      };
-      std::map<int, sat_buf_t> sat_buf;
     } per_system[5];
 
     static sat_t select(
         const void *ptr, const int &prn, const GPS_Time<FloatT> &receiver_time){
       const per_system_t *ptr_sys(reinterpret_cast<const per_system_t *>(ptr));
 
-      // check position/velocity availability
-      sat_t sat_pos_vel(
+      // retrieve position/velocity supplier
+      sat_t res(
           ptr_sys->pos_vel.impl_select(ptr_sys->pos_vel.impl, prn, receiver_time));
-      if(!sat_pos_vel.is_available()){return sat_t::unavailable();}
 
       int sat_id((prn & 0xFF) + ptr_sys->clk_rate.offset);
 
       // check clock_error/clock_error_dot availability
       typename buf_t::const_iterator it(ptr_sys->clk_rate.sats->buf.find(sat_id));
       if((it == ptr_sys->clk_rate.sats->buf.end()) || !it->second.precheck(receiver_time)){
-        return sat_t::unavailable();
+        // unavailable case
+        static const sat_t &unavailable(sat_t::unavailable());
+        res.impl_t = unavailable.impl_t;
+        res.impl_clock_error = unavailable.impl_clock_error;
+        res.impl_clock_error_dot = unavailable.impl_clock_error_dot;
+        return res;
       }
 
       struct impl_t {
-        static inline const typename per_system_t::sat_buf_t &sat(const void *ptr) {
-          return *reinterpret_cast<const typename per_system_t::sat_buf_t *>(ptr);
-        }
-        static typename GPS_Solver_Base<FloatT>::xyz_t position(
-            const void *ptr, const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit) {
-          return sat(ptr).pos_vel.position(t_tx, dt_transit);
-        }
-        static typename GPS_Solver_Base<FloatT>::xyz_t velocity(
-            const void *ptr, const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit) {
-          return sat(ptr).pos_vel.velocity(t_tx, dt_transit);
+        static inline const per_node_t &sat(const void *ptr) {
+          return *reinterpret_cast<const per_node_t *>(ptr);
         }
         static typename GPS_Solver_Base<FloatT>::float_t clock_error(
             const void *ptr, const GPS_Time<FloatT> &t_tx) {
-          return sat(ptr).clk_rate->clock_error(t_tx);
+          return sat(ptr).clock_error(t_tx);
         }
         static typename GPS_Solver_Base<FloatT>::float_t clock_error_dot(
             const void *ptr, const GPS_Time<FloatT> &t_tx) {
-          return sat(ptr).clk_rate->clock_error_dot(t_tx);
+          return sat(ptr).clock_error_dot(t_tx);
         }
       };
-      typename per_system_t::sat_buf_t impl = {sat_pos_vel, &(it->second)};
-      sat_t res = {
-          &(const_cast<per_system_t *>(ptr_sys)->sat_buf[sat_id] = impl),
-          impl_t::position, impl_t::velocity, impl_t::clock_error, impl_t::clock_error_dot};
+      res.impl_t = &(it->second);
+      res.impl_clock_error = impl_t::clock_error;
+      res.impl_clock_error_dot = impl_t::clock_error_dot;
       return res;
     }
 

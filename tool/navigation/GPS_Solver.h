@@ -157,7 +157,7 @@ class GPS_SinglePositioning : public SolverBaseT {
           }
         };
         satellite_t res = {
-            &(it_sat->second),
+            &(it_sat->second), &(it_sat->second),
             impl_t::position, impl_t::velocity,
             impl_t::clock_error, impl_t::clock_error_dot};
         return res;
