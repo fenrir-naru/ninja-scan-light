@@ -1478,8 +1478,8 @@ struct PushableData {
         return data.push(
             solver.gps.solver.satellites, DataT::SYSTEM_GPS);
       case SYS_SBAS:
-        return SP3_Product<FloatT>::push(
-            solver.sbas.solver.satellites, SP3_Product<FloatT>::SYSTEM_SBAS);
+        return data.push(
+            solver.sbas.solver.satellites, DataT::SYSTEM_SBAS);
       case SYS_QZSS:
       case SYS_GLONASS:
       case SYS_GALILEO:
