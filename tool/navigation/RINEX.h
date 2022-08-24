@@ -319,7 +319,7 @@ void RINEX_Reader<U>::version_type_t::dump(std::string &buf) const {
       switch(sat_system){
         case SYS_GPS:     sys_str = "G: GPS";     break;
         case SYS_GLONASS: sys_str = "R: GLONASS"; break;
-        case SYS_GALILEO: sys_str = "G: GALILEO"; break;
+        case SYS_GALILEO: sys_str = "E: GALILEO"; break;
         case SYS_QZSS:    sys_str = "Q: QZSS";    break;
         case SYS_BDS:     sys_str = "B: BDS";     break;
         case SYS_IRNSS:   sys_str = "I: IRNSS";   break;
