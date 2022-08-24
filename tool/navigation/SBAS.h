@@ -1387,16 +1387,16 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
 
           // the first line
           out << "     ";
-          for(int j(0); j < sizeof(igp.properties[0]) / sizeof(igp.properties[0][0]); ++j){
+          for(std::size_t j(0); j < sizeof(igp.properties[0]) / sizeof(igp.properties[0][0]); ++j){
             int lng(position_index_t::idx2lng(j));
             out << (lng == 0 ? '0' : (lng % 90 == 0 ? '|' : (lng % 30 == 0 ? '+' : ' ')));
           }
           out << std::endl;
 
-          for(int i(0); i < sizeof(igp.properties) / sizeof(igp.properties[0]); ++i){
+          for(std::size_t i(0); i < sizeof(igp.properties) / sizeof(igp.properties[0]); ++i){
             out.width(4);
             out << position_index_t::idx2lat(i) << ' ';
-            for(int j(0); j < sizeof(igp.properties[0]) / sizeof(igp.properties[0][0]); ++j){
+            for(std::size_t j(0); j < sizeof(igp.properties[0]) / sizeof(igp.properties[0][0]); ++j){
               if(!igp.properties[i][j].is_available()){
                 out << ' ';
               }else{
