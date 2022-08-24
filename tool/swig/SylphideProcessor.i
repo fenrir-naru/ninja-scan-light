@@ -42,80 +42,50 @@ OBSERVER_COMMON_PREPROCESS(P);
 OBSERVER_COMMON_PREPROCESS(M);
 OBSERVER_COMMON_PREPROCESS(N);
 
-%extend UINT_8elm{
-  %alias get "[]"
+%fragment(SWIG_From_frag(short));
+%fragment(SWIG_From_frag(unsigned short));
+%fragment(SWIG_From_frag(unsigned int));
+%header {
+namespace swig {
+  SWIG_Object from(const short &v) {return SWIG_From(short)(v);}
+  SWIG_Object from(const unsigned short &v) {return SWIG_From(unsigned short)(v);}
+  SWIG_Object from(const unsigned int &v) {return SWIG_From(unsigned int)(v);}
+};
 }
-%extend USHORT_4elm{
-  %alias get "[]"
-}
-%extend SHORT_4elm{
-  %alias get "[]"
+
+%extend array_t {
+  %typemap(in,numinputs=0) const T **array_values (T *temp) "$1 = &temp;"
+  %typemap(argout) const T **array_values {
+    for(std::size_t i(0); i < N; ++i){
+      %append_output(swig::from((*$1)[i]));
+    }
+  }
 }
 %inline %{
-struct UINT_8elm {
+template <class T, std::size_t N>
+struct array_t {
   private:
-    unsigned int values[8];
+    const T (&ref)[N];
   public:
-    VALUE to_a() const {
-      static const int size(sizeof(values) / sizeof(unsigned int));
-      VALUE ary = rb_ary_new2(size);
-  	  for(int i(0); i < size; ++i){
-  	    rb_ary_push(ary, INT2FIX(values[i]));
-  	  }
-  	  return ary;
-    }
-    VALUE get(unsigned i) const{
-      return INT2FIX(values[i]);
-    }
-};
-struct USHORT_4elm {
-  private:
-    unsigned short values[4];
-  public:
-    VALUE to_a() const {
-      static const int size(sizeof(values) / sizeof(unsigned short));
-      VALUE ary = rb_ary_new2(size);
-  	  for(int i(0); i < size; ++i){
-  	    rb_ary_push(ary, INT2FIX((unsigned int)values[i]));
-  	  }
-  	  return ary;
-    }
-    VALUE get(unsigned i) const{
-      return INT2FIX((int)values[i]);
-    }
-};
-struct SHORT_4elm {
-  private:
-    short values[4];
-  public:
-    VALUE to_a() const {
-      static const int size(sizeof(values) / sizeof(short));
-      VALUE ary = rb_ary_new2(size);
-      for(int i(0); i < size; ++i){
-        rb_ary_push(ary, INT2FIX((int)values[i]));
-      }
-      return ary;
-    }
-    VALUE get(unsigned i) const{
-      return INT2FIX((int)values[i]);
+    array_t(const T (&ref_)[N]) : ref(ref_) {}
+    T __getitem__(const unsigned &i) const {return ref[i];}
+    void to_a(const T **array_values) const {
+      *array_values = ref;
     }
 };
 %}
 
-%inline %{
-#define MAKE_FORCE_CONVERT_FUNC(name, type) \
-type &name(){ \
-  return *reinterpret_cast<type *>(_ ## name); \
-}
-%}
+%template(SHORT_4elm) array_t<short, 4>;
+%template(USHORT_4elm) array_t<unsigned short, 4>;
+%template(UINT_8elm) array_t<unsigned int, 8>;
 
 %inline %{
 struct A_values_t {
   private:
-    unsigned int _values[8]; 
+    unsigned int _values[8];
   public:
     unsigned short temperature;
-    MAKE_FORCE_CONVERT_FUNC(values, UINT_8elm);
+    array_t<unsigned int, 8> values() const {return array_t<unsigned int, 8>(_values);}
 };
 %}
 %extend A_Packet_Observer{
@@ -126,11 +96,10 @@ struct A_values_t {
 %inline %{
 struct F_values_t {
   private:
-    unsigned int _servo_in[8];
-    unsigned int _servo_out[8];
+    unsigned int _servo_in[8], _servo_out[8];
   public:
-    MAKE_FORCE_CONVERT_FUNC(servo_in, UINT_8elm);
-    MAKE_FORCE_CONVERT_FUNC(servo_out, UINT_8elm);
+    array_t<unsigned int, 8> servo_in() const {return array_t<unsigned int, 8>(_servo_in);}
+    array_t<unsigned int, 8> servo_out() const {return array_t<unsigned int, 8>(_servo_out);}
 };
 %}
 %extend F_Packet_Observer{
@@ -141,13 +110,11 @@ struct F_values_t {
 %inline %{
 struct P_values_t {
   private:
-    unsigned short _air_speed[4];
-    unsigned short _air_alpha[4];
-    unsigned short _air_beta[4];
+    unsigned short _air_speed[4], _air_alpha[4], _air_beta[4];
   public:
-    MAKE_FORCE_CONVERT_FUNC(air_speed, USHORT_4elm);
-    MAKE_FORCE_CONVERT_FUNC(air_alpha, USHORT_4elm);
-    MAKE_FORCE_CONVERT_FUNC(air_beta, USHORT_4elm);
+    array_t<unsigned short, 4> air_speed() const {return array_t<unsigned short, 4>(_air_speed);}
+    array_t<unsigned short, 4> air_alpha() const {return array_t<unsigned short, 4>(_air_alpha);}
+    array_t<unsigned short, 4> air_beta() const {return array_t<unsigned short, 4>(_air_beta);}
 };
 %}
 %extend P_Packet_Observer{
@@ -157,13 +124,11 @@ struct P_values_t {
 %inline %{
 struct M_values_t {
   private:
-    short _x[4];
-    short _y[4];
-    short _z[4];
+    short _x[4], _y[4], _z[4];
   public:
-    MAKE_FORCE_CONVERT_FUNC(x, SHORT_4elm);
-    MAKE_FORCE_CONVERT_FUNC(y, SHORT_4elm);
-    MAKE_FORCE_CONVERT_FUNC(z, SHORT_4elm);
+    array_t<short, 4> x() const {return array_t<short, 4>(_x);}
+    array_t<short, 4> y() const {return array_t<short, 4>(_y);}
+    array_t<short, 4> z() const {return array_t<short, 4>(_z);}
 };
 %}
 %extend M_Packet_Observer{
@@ -345,8 +310,11 @@ struct N_navdata_t {
 %define PROXY_TO_FUNC_WITH_NESTED_STRUCT(prefix, s_old, s_new, f_old, f_new)
 %extend prefix ## _Packet_Observer{
   s_new f_new() const {
-    prefix ## _Packet_Observer<FloatType>::s_old res(self->f_old());
-    return *reinterpret_cast<s_new *>(&res);
+    union {
+      prefix ## _Packet_Observer<FloatType>::s_old in;
+      s_new out;
+    } buf = {self->f_old()};
+    return buf.out;
   }
 }
 %enddef
@@ -368,12 +336,18 @@ PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, ephemeris_t, G_ephemeris_t<FloatType>, fetch
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, health_utc_iono_t, G_health_utc_iono_t<FloatType>, fetch_health_utc_iono, health_utc_iono);
 %extend G_Packet_Observer{
   G_svinfo_t<FloatType> svinfo(unsigned int chn) const {
-    G_Packet_Observer<FloatType>::svinfo_t res(self->fetch_svinfo(chn));
-    return *reinterpret_cast<G_svinfo_t<FloatType> *>(&res);
+    union {
+      G_Packet_Observer<FloatType>::svinfo_t in;
+      G_svinfo_t<FloatType> out;
+    } buf = {self->fetch_svinfo(chn)};
+    return buf.out;
   }
   G_raw_measurement_t<FloatType> raw(unsigned int index) const {
-    G_Packet_Observer<FloatType>::raw_measurement_t res(self->fetch_raw(index));
-    return *reinterpret_cast<G_raw_measurement_t<FloatType> *>(&res);
+    union {
+      G_Packet_Observer<FloatType>::raw_measurement_t in;
+      G_raw_measurement_t<FloatType> out;
+    } buf = {self->fetch_raw(index)};
+    return buf.out;
   }
   const unsigned int ubx_class() const {
     return self->operator[](2);
@@ -390,7 +364,7 @@ PROXY_TO_FUNC_WITH_NESTED_STRUCT(G, health_utc_iono_t, G_health_utc_iono_t<Float
 }
 PROXY_TO_FUNC_WITH_NESTED_STRUCT(N, navdata_t, N_navdata_t<FloatType>, fetch_navdata, navdata);
 
-%extend SylphideProcessor{
+%extend SylphideProcessor{  
   %exception SylphideProcessor{
     $action
     result->set_a_handler(handler_A);
@@ -408,15 +382,13 @@ PROXY_TO_FUNC_WITH_NESTED_STRUCT(N, navdata_t, N_navdata_t<FloatType>, fetch_nav
 
 %define CONCRETIZE_OBSERVER(type, prefix)
 %template(prefix ## PacketObserver) prefix ## _Packet_Observer<type>;
-%{
-static void handler_ ## prefix(const prefix ## _Packet_Observer<type> &obs){
-#if SWIG_VERSION > 0x010329
-  rb_yield(SWIG_NewPointerObj((void *)(&obs), SWIGTYPE_p_ ## prefix ## _Packet_ObserverT_ ## type ## _t, 0));
-#else
-  rb_yield(SWIG_NewPointerObj((void *)(&obs), SWIGTYPE_p_ ## prefix ## _Packet_ObserverT ## type ## _t, 0));
-#endif
+%fragment("handler"{prefix ## _Packet_Observer<type>}, "header") {
+  static void handler_ ## prefix(const prefix ## _Packet_Observer<type> &obs){
+    rb_yield(SWIG_NewPointerObj((void *)(&obs),
+        $descriptor(prefix ## _Packet_Observer<type> &), 0));
+  }
 }
-%}
+%fragment("handler"{prefix ## _Packet_Observer<type>});
 %enddef
 
 %define CONCRETIZE_PROCESSOR(type)
@@ -438,7 +410,7 @@ CONCRETIZE_OBSERVER(type, F);
 %template(GIono) G_iono_t<type>;
 %template(GHUI) G_health_utc_iono_t<type>;
 CONCRETIZE_OBSERVER(type, G);
-CONCRETIZE_OBSERVER(type, Data24Bytes);
+//CONCRETIZE_OBSERVER(type, Data24Bytes);
 CONCRETIZE_OBSERVER(type, P);
 CONCRETIZE_OBSERVER(type, M);
 %template(NNAV) N_navdata_t<type>;
@@ -448,3 +420,6 @@ CONCRETIZE_OBSERVER(type, N);
 %enddef
 
 CONCRETIZE_PROCESSOR(double);
+
+#undef CONCRETIZE_PROCESSOR
+#undef CONCRETIZE_OBSERVER

@@ -34,13 +34,6 @@
 
 #include <cstring>
 
-#ifndef min_macro
-#define min_macro(a, b) ((a < b) ? (a) : (b))
-#endif
-#ifndef max_macro
-#define max_macro(a, b) ((a > b) ? (a) : (b))
-#endif
-
 template <typename StorageT>
 struct FIFO_Duplicator {
   struct memcpy_t {
@@ -127,7 +120,7 @@ class FIFO {
       unsigned int _size;
       StorageT *prius_next;
       if(values == NULL){return 0;}
-      size = min_macro(margin(), (int)size);
+      if((_size = margin()) <= size){size = _size;}
       _size = storage + capacity - prius;
       if(_size <= size){
         DuplicatorT(values, prius, _size);
@@ -173,7 +166,7 @@ class FIFO {
     unsigned int skip(unsigned int size){
       unsigned int _size;
       StorageT *follower_next;
-      size = min_macro(stored(), (int)size);
+      if((_size = stored()) <= size){size = _size;}
       _size = storage + capacity - follower;
       if(_size <= size){
         follower_next = storage;
@@ -200,7 +193,7 @@ class FIFO {
       unsigned int _size;
       StorageT *follower_next;
       if(buffer == NULL){return 0;}
-      size = min_macro(stored(), (int)size);
+      if((_size = stored()) <= size){size = _size;}
       _size = storage + capacity - follower;
       if(_size <= size){
         DuplicatorT(follower, buffer, _size);
@@ -284,8 +277,8 @@ class FIFO {
       unsigned int _size;
       StorageT *follower2;
       if(buffer == NULL){return 0;}
-      if(stored() <= (int)offset){return 0;}
-      size = min_macro(stored() - offset, (int)size);
+      if((_size = stored()) <= offset){return 0;}
+      if((_size -= offset) <= size){size = _size;}
       if((follower2 = follower + offset) >= (storage + capacity)){
         follower2 -= capacity;
       }

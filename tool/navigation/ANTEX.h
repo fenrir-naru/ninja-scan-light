@@ -604,7 +604,7 @@ class ANTEX_Reader {
       typedef typename ANTEX_Product<FloatT>::antenna_t antenna_t;
       antenna_t *antenna;
       typedef typename ANTEX_Product<FloatT>::per_freq_t per_freq_t;
-      per_freq_t *per_freq;
+      per_freq_t *per_freq(NULL); // NULL fot suppression of GCC uninitialized variable warning
 
       while(src.has_next()){
         parsed_t parsed(src.parse_line());

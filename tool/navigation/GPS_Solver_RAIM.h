@@ -60,6 +60,12 @@ struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
   } FDE_min, FDE_2nd; ///< Fault exclusion
 };
 
+template <class FloatT>
+struct GPS_Solver_RAIM_LSR_Options {
+  bool skip_exclusion;
+  GPS_Solver_RAIM_LSR_Options() : skip_exclusion(false) {}
+};
+
 /*
  * Comment on implementation of protection level (PL) calculation
  *
@@ -95,6 +101,27 @@ struct GPS_Solver_RAIM_LSR : public SolverBaseT {
   inheritate_type(geometric_matrices_t);
   inheritate_type(measurement2_t);
 #undef inheritate_type
+
+  typedef typename GPS_Solver_Base<float_t>::options_t::template merge_t<
+      GPS_Solver_RAIM_LSR_Options<float_t>, super_t> options_t;
+
+protected:
+  GPS_Solver_RAIM_LSR_Options<float_t> _options;
+
+public:
+  options_t available_options() const {
+    return options_t(super_t::available_options(), _options);
+  }
+
+  options_t available_options(const options_t &opt_wish) const {
+    GPS_Solver_RAIM_LSR_Options<float_t> opt(opt_wish);
+    return options_t(super_t::available_options(opt_wish), opt);
+  }
+
+  options_t update_options(const options_t &opt_wish){
+    _options = opt_wish;
+    return options_t(super_t::update_options(opt_wish), _options);
+  }
 
   typedef GPS_PVT_RAIM_LSR<float_t, typename super_t::user_pvt_t> user_pvt_t;
 
@@ -155,7 +182,8 @@ protected:
         user_position_init, receiver_error_init,
         opt);
 
-    if(!pvt.position_solved()
+    if(_options.skip_exclusion
+        || !pvt.position_solved()
         || (!pvt.FD.valid)
         || (pvt.used_satellites < 6)){return;}
 

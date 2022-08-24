@@ -227,13 +227,13 @@ struct GPS_Solver_Base {
   }
 
   struct satellite_t {
-    const void *impl;
+    const void *impl_xyz, *impl_t; ///< pointer to actual implementation to return position and clock error
     xyz_t (*impl_position)(const void *, const gps_time_t &, const float_t &);
     xyz_t (*impl_velocity)(const void *, const gps_time_t &, const float_t &);
     float_t (*impl_clock_error)(const void *, const gps_time_t &);
     float_t (*impl_clock_error_dot)(const void *, const gps_time_t &);
     inline bool is_available() const {
-      return impl != NULL;
+      return (impl_xyz != NULL) && (impl_t != NULL);
     }
     /**
      * Return satellite position at the transmission time in EFEC.
@@ -244,28 +244,28 @@ struct GPS_Solver_Base {
      * that is, the transmission time added by the transit time.
      */
     inline xyz_t position(const gps_time_t &t_tx, const float_t &dt_transit = 0) const {
-      return impl_position(impl, t_tx, dt_transit);
+      return impl_position(impl_xyz, t_tx, dt_transit);
     }
     /**
      * Return satellite velocity at the transmission time in EFEC.
      * @see position
      */
     inline xyz_t velocity(const gps_time_t &t_tx, const float_t &dt_transit = 0) const {
-      return impl_velocity(impl, t_tx, dt_transit);
+      return impl_velocity(impl_xyz, t_tx, dt_transit);
     }
     /**
      * Return satellite clock error [s] at the transmission time.
      * @param t_tx transmission time
      */
     inline float_t clock_error(const gps_time_t &t_tx) const {
-      return impl_clock_error(impl, t_tx);
+      return impl_clock_error(impl_t, t_tx);
     }
     /**
      * Return satellite clock error derivative [s/s] at the transmission time.
      * @param t_tx transmission time
      */
     inline float_t clock_error_dot(const gps_time_t &t_tx) const {
-      return impl_clock_error_dot(impl, t_tx);
+      return impl_clock_error_dot(impl_t, t_tx);
     }
     static const satellite_t &unavailable() {
       struct impl_t {
@@ -276,7 +276,7 @@ struct GPS_Solver_Base {
           return float_t(0);
         }
       };
-      static const satellite_t res = {NULL, impl_t::v3, impl_t::v3, impl_t::v, impl_t::v};
+      static const satellite_t res = {NULL, NULL, impl_t::v3, impl_t::v3, impl_t::v, impl_t::v};
       return res;
     }
   };
@@ -474,12 +474,7 @@ struct GPS_Solver_Base {
       using super_t::reset;
       void reset(const int &prn) {set(prn, false);}
       std::vector<int> excluded() const {
-        std::vector<int> res(super_t::indices_one());
-        for(std::vector<int>::iterator it(res.begin()), it_end(res.end());
-            it != it_end; ++it){
-          *it += prn_begin;
-        }
-        return res;
+        return super_t::indices_one(prn_begin);
       }
     };
   };

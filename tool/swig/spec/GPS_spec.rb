@@ -658,6 +658,73 @@ __ANTEX_TEXT__
       # https://files.igs.org/pub/station/general/igs14.atx
       f.path
     },
+    :rinex_clk => Tempfile::open{|f|
+      f.write(<<-__RINEX_CLK_TEXT__)
+     3.00           C                                       RINEX VERSION / TYPE
+CCLOCK              IGSACC @ NOAA NGS                       PGM / RUN BY / DATE 
+GPS week: 1849   Day: 2   MJD: 57189                        COMMENT             
+THE COMBINED CLOCKS ARE A WEIGHTED AVERAGE OF:              COMMENT             
+  cod emr esa gfz grg jpl                                   COMMENT             
+THE FOLLOWING REFERENCE CLOCKS WERE USED BY ACs:            COMMENT             
+  WSRT AMC2 BRUX HRAO                                       COMMENT             
+THE COMBINED CLOCKS ARE ALIGNED TO GPS TIME                 COMMENT             
+USING THE SATELLITE BROADCAST EPHEMERIDES                   COMMENT             
+All clocks have been re-aligned to the IGS time scale: IGST COMMENT             
+    16                                                      LEAP SECONDS        
+     1    AS                                                # / TYPES OF DATA   
+IGS  IGSACC @ NOAA NGS                                      ANALYSIS CENTER     
+     6                                                      # OF SOLN SATS      
+G12 G18 G24 G25 G29 G31                                     PRN LIST            
+G                   igs08_1848.atx                          SYS / PCVS APPLIED  
+                                                            END OF HEADER       
+AS G12  2015 06 15 23 45  0.000000  2    3.017937472687e-04  1.069824072610e-11
+AS G18  2015 06 15 23 45  0.000000  2    4.096815344517e-04  9.225410060960e-12
+AS G24  2015 06 15 23 45  0.000000  2   -4.998574751545e-05  2.372704308220e-11
+AS G25  2015 06 15 23 45  0.000000  2   -2.290169594092e-06  1.683218228880e-11
+AS G29  2015 06 15 23 45  0.000000  2    6.168866864097e-04  1.206217360840e-11
+AS G31  2015 06 15 23 45  0.000000  2    3.128244102077e-04  2.173867579920e-11
+AS G12  2015 06 15 23 50  0.000000  2    3.017948525918e-04  1.300769315700e-11
+AS G18  2015 06 15 23 50  0.000000  2    4.096823340968e-04  8.242414325510e-12
+AS G24  2015 06 15 23 50  0.000000  2   -4.998578937856e-05  3.095238106380e-11
+AS G25  2015 06 15 23 50  0.000000  2   -2.291410963946e-06  2.242880773880e-11
+AS G29  2015 06 15 23 50  0.000000  2    6.168873857128e-04  1.695910016600e-11
+AS G31  2015 06 15 23 50  0.000000  2    3.128241216228e-04  1.904362802980e-11
+AS G12  2015 06 15 23 55  0.000000  2    3.017958412577e-04  1.171495359430e-11
+AS G18  2015 06 15 23 55  0.000000  2    4.096833491457e-04  1.008770038860e-11
+AS G24  2015 06 15 23 55  0.000000  2   -4.998596967628e-05  2.600074192880e-11
+AS G25  2015 06 15 23 55  0.000000  2   -2.292650290468e-06  2.671557682290e-11
+AS G29  2015 06 15 23 55  0.000000  2    6.168880208367e-04  1.729095211710e-11
+AS G31  2015 06 15 23 55  0.000000  2    3.128236493567e-04  1.807462018720e-11
+AS G12  2015 06 16 00 00  0.000000  2    3.017967728708e-04  1.000801049580e-11
+AS G18  2015 06 16 00 00  0.000000  2    4.096840539308e-04  1.041670195750e-11
+AS G24  2015 06 16 00 00  0.000000  2   -4.998614775959e-05  1.699628132880e-11
+AS G25  2015 06 16 00 00  0.000000  2   -2.293760646361e-06  1.805118466830e-11
+AS G29  2015 06 16 00 00  0.000000  2    6.168886213338e-04  2.220055594770e-11
+AS G31  2015 06 16 00 00  0.000000  2    3.128233311248e-04  1.215284180360e-11
+AS G12  2015 06 16 00 05  0.000000  2    3.017980078016e-04  1.152529430320e-11
+AS G18  2015 06 16 00 05  0.000000  2    4.096851745816e-04  1.517949585220e-11
+AS G24  2015 06 16 00 05  0.000000  2   -4.998569129850e-05  1.987308774570e-11
+AS G25  2015 06 16 00 05  0.000000  2   -2.295014987154e-06  1.568891027900e-11
+AS G29  2015 06 16 00 05  0.000000  2    6.168894672506e-04  1.906237292480e-11
+AS G31  2015 06 16 00 05  0.000000  2    3.128231387506e-04  1.007829428500e-11
+AS G12  2015 06 16 00 10  0.000000  2    3.017987334831e-04  8.726251168980e-12
+AS G18  2015 06 16 00 10  0.000000  2    4.096859333261e-04  1.403166740100e-11
+AS G24  2015 06 16 00 10  0.000000  2   -4.998597422529e-05  1.727695888430e-11
+AS G25  2015 06 16 00 10  0.000000  2   -2.296262879345e-06  1.460867818340e-11
+AS G29  2015 06 16 00 10  0.000000  2    6.168900483001e-04  1.556536485070e-11
+AS G31  2015 06 16 00 10  0.000000  2    3.128226535741e-04  1.258498073020e-11
+AS G12  2015 06 16 00 15  0.000000  2    3.017999301583e-04  1.006627990480e-11
+AS G18  2015 06 16 00 15  0.000000  2    4.096864636193e-04  1.460541676660e-11
+AS G24  2015 06 16 00 15  0.000000  2   -4.998605241609e-05  1.970841363000e-11
+AS G25  2015 06 16 00 15  0.000000  2   -2.297477664413e-06  1.598459869060e-11
+AS G29  2015 06 16 00 15  0.000000  2    6.168906691983e-04  1.729396319140e-11
+AS G31  2015 06 16 00 15  0.000000  2    3.128222195893e-04  1.358710059900e-11
+__RINEX_CLK_TEXT__
+      # modified version. original data are
+      # https://cddis.nasa.gov/archive/gnss/products/1849/igs1849[12].clk.Z
+      # mirrored: ftp://garner.ucsd.edu/pub/products/1849/igs1849[12].clk.Z
+      f.path
+    },
   }}
   let(:solver){
     res = GPS::Solver::new
@@ -778,6 +845,10 @@ __ANTEX_TEXT__
     
     it 'can be modified through hooks' do
       sn = solver.gps_space_node
+      expect(solver.options).to be_a_kind_of(Hash)
+      expect(solver.options.keys).to include(:skip_exclusion)
+      expect{solver.options = {:skip_exclusion => true}}.not_to raise_error
+      expect(solver.options[:skip_exclusion]).to eq(true)
       expect(solver.correction[:gps_ionospheric]).to include(:klobuchar)
       expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
       expect{solver.correction = nil}.to raise_error(RuntimeError)
@@ -935,6 +1006,56 @@ __ANTEX_TEXT__
           expect(a).to be_within(1E+2).of(b) # 10 m
         }
         puts ([:lat, :lng].collect{|f| pvt.llh.send(f) / Math::PI * 180} + [pvt.llh.alt]).inspect
+      }
+    end
+    it 'calculates satellite clock error based on RINEX clock' do
+      clk, sn = [GPS::RINEX_Clock::new, solver.gps_space_node]
+      expect(clk.read(input[:rinex_clk])).to eq(6 * 7)
+      proc{|sats|
+        expect(sats.kind_of?(Array)).to eq(true) 
+        expect(sats[clk.class::SYS_GPS]).to eq(6)
+      }.call(clk.satellites)
+      sn.read(input[:rinex_nav])
+      t0 = GPS::Time::new(1849, 172800)
+      sn.update_all_ephemeris(t0)
+      (-5..5).step(1){|dt_min|
+        t = t0 + (dt_min * 60)
+        [12, 18, 24, 25, 29, 31].each{|sat_id|
+          eph = sn.ephemeris(sat_id).constellation(t)
+          expect(clk.clock_error(sat_id, t)).to be_within(1E-7).of(eph[2]) # 100 ns
+          expect(clk.clock_error_dot(sat_id, t)).to be_within(1E-10).of(eph[3]) # 100 ps
+        }
+      }
+    end
+    it 'calculates position without any error with RINEX NAV and CLK' do
+      sn = solver.gps_space_node
+      sn.read(input[:rinex_nav])
+      clk = GPS::RINEX_Clock::new
+      clk.read(input[:rinex_clk])
+      expect(clk.push(solver, clk.class::SYS_GPS)).to eq(true)
+      GPS::RINEX_Observation::read(input[:rinex_obs]){|item|
+        t_meas = item[:time]
+        sn.update_all_ephemeris(t_meas)
+        meas = GPS::Measurement::new
+        types = (item[:meas_types]['G'] || item[:meas_types][' ']).collect.with_index{|type_, i|
+          type_ = {
+            "C1" => :L1_PSEUDORANGE,
+            "D1" => :L1_RANGE_RATE,
+          }[type_]
+          type_ && [i, GPS::Measurement::const_get(type_)]
+        }.compact
+        item[:meas].each{|k, v|
+          sys, prn = k
+          next unless sys == 'G' # GPS only
+          types.each{|i, type_|
+            meas.add(prn, type_, v[i][0]) if v[i]
+          }
+        }
+        pvt = solver.solve(meas, t_meas)
+        expect(pvt.position_solved?).to eq(true)
+        [-3952590.4754, 3360273.8926, 3697987.2632].zip(pvt.xyz.to_a).each{|a, b|
+          expect(a).to be_within(1E+2).of(b) # 10 m
+        }
       }
     end
   end

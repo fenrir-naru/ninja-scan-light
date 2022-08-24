@@ -87,13 +87,13 @@ class A_Packet_Observer : public Packet_Observer<>{
     }
     ~A_Packet_Observer(){}
     bool ready() const {
-      return (Packet_Observer<>::stored() >= a_packet_size);
+      return (Packet_Observer<>::stored() >= (int)a_packet_size);
     }
     bool validate() const {
       return true;
     }
     bool seek_next(){
-      if(Packet_Observer<>::stored() < a_packet_size){return false;}
+      if(Packet_Observer<>::stored() < (int)a_packet_size){return false;}
       Packet_Observer<>::skip(a_packet_size);
       return true;
     }
@@ -154,13 +154,13 @@ class F_Packet_Observer : public Packet_Observer<>{
     }
     ~F_Packet_Observer(){}
     bool ready() const {
-      return (Packet_Observer<>::stored() >= f_packet_size);
+      return (Packet_Observer<>::stored() >= (int)f_packet_size);
     }
     bool validate() const {
       return true;
     }
     bool seek_next(){
-      if(Packet_Observer<>::stored() < f_packet_size){return false;}
+      if(Packet_Observer<>::stored() < (int)f_packet_size){return false;}
       Packet_Observer<>::skip(f_packet_size);
       return true;
     }
@@ -211,13 +211,13 @@ class Data24Bytes_Packet_Observer : public Packet_Observer<>{
     }
     ~Data24Bytes_Packet_Observer(){}
     bool ready() const {
-      return (Packet_Observer<>::stored() >= packet_size);
+      return (Packet_Observer<>::stored() >= (int)packet_size);
     }
     bool validate() const {
       return true;
     }
     bool seek_next(){
-      if(Packet_Observer<>::stored() < packet_size){return false;}
+      if(Packet_Observer<>::stored() < (int)packet_size){return false;}
       Packet_Observer<>::skip(packet_size);
       return true;
     }
@@ -323,10 +323,10 @@ class G_Packet_Observer : public Packet_Observer<>{
     unsigned int current_packet_size() const {
       v8_t buf[2];
       this->inspect(buf, 2, 4);
-      return min_macro(
-          (unsigned int)le_char2_2_num<u16_t>(*buf) + 8,
-          (this->capacity / 2)
-        );
+      unsigned int res[2] = {
+          8U + le_char2_2_num<u16_t>(*buf),
+          (this->capacity / 2)};
+      return (res[0] <= res[1]) ? res[0] : res[1];
     }
   protected:
     mutable bool validate_skippable;
@@ -1119,7 +1119,7 @@ class G_Packet_Observer : public Packet_Observer<>{
       health_utc_iono_t health_utc_iono;
       
       { // Valid flag
-        v8_t buf;
+        v8_t buf(0);
         this->inspect(&buf, 1, 6 + 68);
         health_utc_iono.health.valid = ((u8_t)buf & 0x01);
         health_utc_iono.utc.valid = ((u8_t)buf & 0x02);
@@ -1176,13 +1176,13 @@ class N_Packet_Observer : public Packet_Observer<>{
     }
     ~N_Packet_Observer(){}
     bool ready() const {
-      return (Packet_Observer<>::stored() >= n_packet_size);
+      return (Packet_Observer<>::stored() >= (int)n_packet_size);
     }
     bool validate() const {
       return true;
     }
     bool seek_next(){
-      if(Packet_Observer<>::stored() < n_packet_size){return false;}
+      if(Packet_Observer<>::stored() < (int)n_packet_size){return false;}
       Packet_Observer<>::skip(n_packet_size);
       return true;
     }

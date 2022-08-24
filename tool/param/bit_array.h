@@ -125,9 +125,9 @@ struct BitArray {
       return (unsigned int)res;
     }
   }
-  std::vector<int> indices_one() const {
+  std::vector<int> indices_one(const int &offset = 0) const {
     std::vector<int> res;
-    int idx(0);
+    int idx(offset);
     static const const_div_t<bits_per_addr> qr(MAX_SIZE);
     int rem(qr.rem), i(0);
     for(; i < qr.quot; ++i, idx += bits_per_addr){
