@@ -1547,8 +1547,8 @@ struct PushableData {
       case SYS_QZSS:
         break;
       case SYS_GLONASS:
-        return SP3_Product<FloatT>::push(
-            solver.glonass.solver.satellites, SP3_Product<FloatT>::SYSTEM_GLONASS);
+        return data.push(
+            solver.glonass.solver.satellites, DataT::SYSTEM_GLONASS);
       case SYS_GALILEO:
       case SYS_BEIDOU:
       default:

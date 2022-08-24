@@ -193,6 +193,7 @@ struct GNSS_Receiver {
       // RINEX clock has higher priority to be applied than SP3
       typename data_t::clk_t::count_t cnt2(data.clk.count());
       if(cnt2.gps > 0){data.clk.push(gps.satellites, data_t::clk_t::SYSTEM_GPS);}
+      if(cnt2.glonass > 0){data.clk.push(glonass.satellites, data_t::clk_t::SYSTEM_GLONASS);}
 #endif
     }
   } solver_GNSS;
@@ -440,6 +441,7 @@ struct GNSS_Receiver {
         std::cerr << "rinex_clk: " << entries << " items captured." << std::endl;
         typename data_t::clk_t::count_t cnt(data.clk.count());
         if(cnt.gps > 0){std::cerr << "RINEX clock GPS satellites: " << cnt.gps << std::endl;}
+        if(cnt.glonass > 0){std::cerr << "RINEX clock GLONASS satellites: " << cnt.glonass << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
