@@ -1089,6 +1089,28 @@ struct GPS_RangeCorrector
     return self->update_correction(true, hash);
   }
 #endif
+#ifdef SWIGRUBY
+  %typemap(out) typename super_t::options_t {
+    VALUE res(rb_hash_new());
+    rb_hash_aset(res, ID2SYM(rb_intern("skip_exclusion")), SWIG_From(bool)($1.skip_exclusion));
+    %set_output(res);
+  }
+#endif
+  %rename("options") get_options;
+  typename super_t::options_t get_options() const {
+    return self->available_options();
+  }
+  %rename("options=") set_options;
+  typename super_t::options_t set_options(SWIG_Object obj) {
+    GPS_Solver<FloatT>::super_t::options_t opt(self->available_options());
+#ifdef SWIGRUBY
+    if(!RB_TYPE_P(obj, T_HASH)){SWIG_exception(SWIG_TypeError, "Hash is expected");}
+    SWIG_AsVal(bool)(
+        rb_hash_lookup(obj, ID2SYM(rb_intern("skip_exclusion"))),
+        &opt.skip_exclusion);
+#endif
+    return self->update_options(opt);
+  }
 }
 %inline {
 template <class FloatT>

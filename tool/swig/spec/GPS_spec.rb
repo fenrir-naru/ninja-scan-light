@@ -845,6 +845,10 @@ __RINEX_CLK_TEXT__
     
     it 'can be modified through hooks' do
       sn = solver.gps_space_node
+      expect(solver.options).to be_a_kind_of(Hash)
+      expect(solver.options.keys).to include(:skip_exclusion)
+      expect{solver.options = {:skip_exclusion => true}}.not_to raise_error
+      expect(solver.options[:skip_exclusion]).to eq(true)
       expect(solver.correction[:gps_ionospheric]).to include(:klobuchar)
       expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
       expect{solver.correction = nil}.to raise_error(RuntimeError)
