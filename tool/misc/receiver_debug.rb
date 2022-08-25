@@ -24,6 +24,7 @@ class GPS_Receiver
     opt = {
       :system => [[:GPS, 1..32]],
       :satellites => (1..32).to_a,
+      :FDE => true,
     }.merge(opt)
     [[
       [:week, :itow_rcv, :year, :month, :mday, :hour, :min, :sec_rcv_UTC],
@@ -111,7 +112,7 @@ class GPS_Receiver
         el_deg = [4, 6].collect{|i| pvt.elevation[fd[i]] / Math::PI * 180}
         fd[0..4] + [el_deg[0]] + fd[5..6] + [el_deg[1]]
       }
-    ]] + [[
+    ]] + (opt[:FDE] ? [[
       [:wssr_FDE_min, :wssr_FDE_min_PRN, :wssr_FDE_2nd, :wssr_FDE_2nd_PRN],
       proc{|pvt|
         [:fde_min, :fde_2nd].collect{|f|
@@ -120,7 +121,7 @@ class GPS_Receiver
           [info[0], info[-3]] 
         }.flatten
       }
-    ]]
+    ]] : [])
   end
 
   def self.meas_items(opt = {})
@@ -158,6 +159,9 @@ class GPS_Receiver
       rel_prop[0] = 1 if rel_prop[0] > 0 # weight = 1
       rel_prop
     }
+    @solver.options = {
+      :skip_exclusion => true, # default is to skip fault exclusion calculation
+    }
     @debug = {}
     solver_opts = [:gps_options].collect{|target|
       @solver.send(target)
@@ -170,8 +174,10 @@ class GPS_Receiver
     output_options = {
       :system => [[:GPS, 1..32]],
       :satellites => (1..32).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
+      :FDE => false,
     }
     options = options.reject{|k, v|
+      def v.to_b; !(self =~ /^(?:false|0|f|off)$/i); end
       case k
       when :debug
         v = v.split(/,/)
@@ -273,6 +279,9 @@ class GPS_Receiver
           end
           $stderr.puts "#{mode.capitalize} satellite: #{[sys, svid].compact.join(':')}"
         }
+        next true
+      when :fault_exclusion
+        @solver.options = {:skip_exclusion => !(output_options[:FDE] = v.to_b)}
         next true
       end
       false
