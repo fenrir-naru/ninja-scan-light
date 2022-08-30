@@ -359,7 +359,7 @@ struct GPS_Solver_Base {
   }
 
   struct relative_property_t {
-    float_t weight; ///< How useful this information is. square value is required; thus, only positive value activates the other values.
+    float_t range_sigma; ///< Standard deviation of pseudorange; If zero or negative, other values are invalid.
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
     float_t range_residual; ///< residual range
     float_t rate_relative_neg; /// relative rate
@@ -804,14 +804,14 @@ protected:
             res.receiver_error, time_arrival,
             res.user_position, zero));
 
-        if(prop.weight <= 0){
+        if(prop.range_sigma <= 0){
           continue; // intentionally excluded satellite
         }else{
           res.used_satellite_mask.set(it->prn);
         }
 
         if(coarse_estimation){
-          prop.weight = 1;
+          prop.range_sigma = 1;
         }else{
           idx_rate_rel.push_back(std::make_pair(i_measurement, prop.rate_relative_neg));
         }
@@ -820,7 +820,7 @@ protected:
         geomat.G(i_row, 0) = prop.los_neg[0];
         geomat.G(i_row, 1) = prop.los_neg[1];
         geomat.G(i_row, 2) = prop.los_neg[2];
-        geomat.W(i_row, i_row) = prop.weight;
+        geomat.W(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
 
         ++i_row;
       }

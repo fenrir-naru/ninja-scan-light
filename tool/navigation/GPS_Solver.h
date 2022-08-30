@@ -248,7 +248,7 @@ class GPS_SinglePositioning : public SolverBaseT {
       float_t &los_neg_x;
       float_t &los_neg_y;
       float_t &los_neg_z;
-      float_t &weight;
+      float_t &range_sigma;
     };
 
     /**
@@ -258,8 +258,8 @@ class GPS_SinglePositioning : public SolverBaseT {
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
      * @param time_arrival time when signal arrive at receiver
      * @param usr_pos (temporal solution of) user position
-     * @param residual calculated residual with line of site vector, and weight;
-     * When weight is equal to or less than zero, the calculated results should not be used.
+     * @param residual calculated residual with line of site vector, and pseudorange standard deviation (sigma);
+     * When sigma is equal to or less than zero, the calculated results should not be used.
      * @param error Some correction can be overwritten. If its unknown_flag is zero,
      * corrections will be skipped as possible. @see range_errors_t
      * @return (float_t) corrected range just including delay, and excluding receiver/satellite error.
@@ -305,25 +305,30 @@ class GPS_SinglePositioning : public SolverBaseT {
           ? tropospheric_correction(time_arrival, usr_pos, relative_pos)
           : error.value[range_error_t::TROPOSPHERIC];
 
-      // Setup weight
-      if(std::abs(residual.residual) > _options.residual_mask){
-        // If residual is too big, gently exclude it by decreasing its weight.
-        residual.weight = 1E-8;
-      }else{
+      // Setup range standard deviation, whose reciprocal square is used as weight
+      residual.range_sigma = 1E+4; // sufficiently big value, 1E4 [m]
+      do{
+        // If residual is too big, gently exclude it.
+        if(std::abs(residual.residual) > _options.residual_mask){break;}
 
         float_t elv(relative_pos.elevation());
         if(elv < _options.elevation_mask){
-          residual.weight = 0; // exclude it when elevation is less than threshold
-        }else{
-          /* elevation weight based on "GPS実用プログラミング"
-           * elevation[deg] :   90    53    45    30    15    10    5
-           * sigma(s)       :   0.80  1.00  1.13  1.60  3.09  4.61  9.18
-           * weight(s^-2)   :   1.56  1.00  0.78  0.39  0.10  0.05  0.01
-           */
-          residual.weight = std::pow(sin(elv)/0.8, 2); // weight=1 @ elv=53[deg]
-          if(residual.weight < 1E-3){residual.weight = 1E-3;}
+          residual.range_sigma = 0; // exclude it when elevation is less than threshold
+          break;
         }
-      }
+
+        residual.range_sigma = 3.5; // 7.0 [m] of 95% (2-sigma) URE in Sec. 3.4.1 of April 2020 GPS SPS PS
+
+        /* elevation weight based on "GPS実用プログラミング"
+         * elevation[deg] :   90    53    45    30    15    10    5
+         * sf_sigma(k)    :   0.80  1.00  1.13  1.60  3.09  4.61  9.18
+         * weight(k^-2)   :   1.56  1.00  0.78  0.39  0.10  0.05  0.01
+         */
+        static const float_t max_sf(10);
+        static const float_t elv_limit(std::asin(0.8/max_sf)); // limit
+        residual.range_sigma *= (elv > elv_limit) ? (0.8 / sin(elv)) : max_sf;
+      }while(false);
+
 
       return range;
     }
@@ -396,16 +401,16 @@ class GPS_SinglePositioning : public SolverBaseT {
       float_t range;
       range_error_t range_error;
       if(!this->range(measurement, range, &range_error)){
-        return res; // If no range entry, return with weight = 0
+        return res; // If no range entry, return with range_sigma = 0
       }
 
       satellite_t sat(select_satellite(prn, time_arrival));
-      if(!sat.is_available()){return res;} // If satellite is unavailable, return with weight = 0
+      if(!sat.is_available()){return res;} // If satellite is unavailable, return with range_sigma = 0
 
       residual_t residual = {
         res.range_residual,
         res.los_neg[0], res.los_neg[1], res.los_neg[2],
-        res.weight,
+        res.range_sigma,
       };
 
       res.range_corrected = range_corrected(
@@ -414,8 +419,15 @@ class GPS_SinglePositioning : public SolverBaseT {
       res.rate_relative_neg = rate_relative_neg(sat, res.range_corrected, time_arrival, usr_vel,
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
 
-      return res;
+#if 0
+      // TODO consider case when standard deviation of pseudorange measurement is provided by receiver
+      if(!this->range_sigma(measurement, res.range_sigma)){
+        // If receiver's range variance is not provided
+        res.range_sigma = 1E0; // TODO range error variance [m]
+      }
+#endif
 
+      return res;
     }
 
     /**

@@ -465,9 +465,8 @@ class INS_GPS2_Tightly : public BaseFINS {
     }
 
     struct relative_property_t : public solver_t::relative_property_t {
-      float_t sigma_range;
       float_t rate_residual;
-      float_t sigma_rate;
+      float_t rate_sigma;
     };
 
     /**
@@ -486,18 +485,13 @@ class INS_GPS2_Tightly : public BaseFINS {
         const receiver_state_t &x) const {
 
       relative_property_t res;
-      res.sigma_range = res.sigma_rate = -1; // initialization with invalid value;
+      res.rate_sigma = -1; // initialization with invalid value;
 
       const solver_t &solver_selected(solver.select(prn));
       (typename solver_t::relative_property_t &)res = solver_selected.relative_property(
           prn, measurement, x.clock_error, x.t, x.pos, x.vel);
 
-      if(res.weight <= 0){return res;}
-
-      if(!solver_selected.range_sigma(measurement, res.sigma_range)){
-        // If receiver's range variance is not provided
-        res.sigma_range = 1.0 / (res.weight < 1E-1 ? 1E-1 : res.weight); // TODO range error variance [m]
-      }
+      if(res.range_sigma <= 0){return res;}
 
       do{
         float_t rate;
@@ -505,9 +499,9 @@ class INS_GPS2_Tightly : public BaseFINS {
         res.rate_residual = rate
             - super_t::m_clock_error_rate[x.clock_index] + res.rate_relative_neg;
 
-        if(!solver_selected.rate_sigma(measurement, res.sigma_rate)){
+        if(!solver_selected.rate_sigma(measurement, res.rate_sigma)){
           // If receiver's rate variance is not provided
-          res.sigma_rate = res.sigma_range * 1E-1; // TODO rate error variance [m/s]
+          res.rate_sigma = 0.003; // 0.006 [m/s] of 95% (2-sigma) URRE in Sec. 3.4.2 of April 2020 GPS SPS PS
         }
       }while(false);
 
@@ -585,7 +579,7 @@ class INS_GPS2_Tightly : public BaseFINS {
         const relative_property_t &prop(it->second);
 
         { // range
-          if(prop.sigma_range <= 0){continue;} // No measurement
+          if(prop.range_sigma <= 0){continue;} // No measurement
           for(int j(0); j < P_SIZE; ++j){buf.H[i_z][j] = 0;} // zero clear
 
           for(int j(0), k(3); j < sizeof(H_uh[0]) / sizeof(H_uh[0][0]); ++j, ++k){
@@ -596,12 +590,12 @@ class INS_GPS2_Tightly : public BaseFINS {
           buf.H[i_z][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2)] = -1; // polarity checked.
 
           buf.z[i_z] = prop.range_residual;
-          buf.R_diag[i_z] = std::pow(prop.sigma_range, 2);
+          buf.R_diag[i_z] = std::pow(prop.range_sigma, 2);
           ++i_z;
         }
 
         { // rate
-          if(prop.sigma_rate <= 0){continue;} // No rate measurement
+          if(prop.rate_sigma <= 0){continue;} // No rate measurement
           for(int j(0); j < P_SIZE; ++j){buf.H[i_z][j] = 0;} // zero clear
 
           { // velocity
@@ -620,7 +614,7 @@ class INS_GPS2_Tightly : public BaseFINS {
           buf.H[i_z][P_SIZE_WITHOUT_CLOCK_ERROR + (x.clock_index * 2) + 1] = -1; // polarity checked.
 
           buf.z[i_z] = prop.rate_residual;
-          buf.R_diag[i_z] = std::pow(prop.sigma_rate, 2);
+          buf.R_diag[i_z] = std::pow(prop.rate_sigma, 2);
           ++i_z;
         }
       }
@@ -660,12 +654,12 @@ class INS_GPS2_Tightly : public BaseFINS {
 
         const relative_property_t &prop(it->second);
 
-        if(prop.sigma_range <= 0){continue;} // No measurement
+        if(prop.range_sigma <= 0){continue;} // No measurement
         for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
           G_full(i_row, i) = prop.los_neg[i];
         }
         G_full(i_row, 3) = 1;
-        R_full(i_row, i_row) = std::pow(prop.sigma_range, 2);
+        R_full(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
         ++i_row;
       }
       if(i_row < 4){return NULL;}
