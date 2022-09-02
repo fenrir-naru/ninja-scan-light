@@ -1061,22 +1061,29 @@ static s ## bits ## _t name(const InputT *buf){ \
             return !((delta_t >= 0) && (delta_t < transmission_interval));
           }
           
-          static const float_t URA_limits[];
-          static const int URA_MAX_INDEX;
+          static const float_t URA_limits[15];
 
-          static float_t URA_meter(const int_t &index){
+          template <std::size_t N>
+          static float_t URA_meter(const int_t &index, const float_t (&table)[N]){
             if(index < 0){return -1;}
-            return (index < URA_MAX_INDEX)
-                ? URA_limits[index]
-                : URA_limits[URA_MAX_INDEX - 1] * 2;
+            return (index < N)
+                ? table[index]
+                : table[N - 1] * 2;
+          }
+          inline static float_t URA_meter(const int_t &index){
+            return URA_meter(index, URA_limits);
           }
 
-          static int_t URA_index(const float_t &meter){
+          template <std::size_t N>
+          static int_t URA_index(const float_t &meter, const float_t (&table)[N]){
             if(meter < 0){return -1;}
-            for(int i(0); i < URA_MAX_INDEX; ++i){
-              if(meter <= URA_limits[i]){return i;}
+            for(std::size_t i(0); i < N; ++i){
+              if(meter <= table[i]){return i;}
             }
-            return URA_MAX_INDEX;
+            return N;
+          }
+          inline static int_t URA_index(const float_t &meter){
+            return URA_index(meter, URA_limits);
           }
 
           float_t eccentric_anomaly(const float_t &period_from_toe) const {
@@ -2476,10 +2483,6 @@ const typename GPS_SpaceNode<FloatT>::float_t GPS_SpaceNode<FloatT>::SatellitePr
   3072.00,
   6144.00,
 };
-
-template <class FloatT>
-const int GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::URA_MAX_INDEX
-    = sizeof(URA_limits) / sizeof(URA_limits[0]);
 
 #ifdef POW2_ALREADY_DEFINED
 #undef POW2_ALREADY_DEFINED
