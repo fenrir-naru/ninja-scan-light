@@ -155,11 +155,15 @@ class GPS_SinglePositioning : public SolverBaseT {
           static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
             return sat(ptr).clock_error_dot(t_tx);
           }
+          static float_t range_sigma(const void *ptr, const gps_time_t &t_tx) {
+            return sat(ptr).ephemeris().URA;
+          }
         };
         satellite_t res = {
-            &(it_sat->second), &(it_sat->second),
+            &(it_sat->second), &(it_sat->second), // position, clock
             impl_t::position, impl_t::velocity,
-            impl_t::clock_error, impl_t::clock_error_dot};
+            impl_t::clock_error, impl_t::clock_error_dot,
+            &(it_sat->second), impl_t::range_sigma, NULL}; // error model
         return res;
       }
       satellites_t(const space_node_t &sn)
@@ -281,7 +285,8 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       // Calculate satellite position
       float_t dt_transit(range / c);
-      xyz_t sat_pos(sat.position(time_arrival - dt_transit, dt_transit));
+      gps_time_t time_depature(time_arrival - dt_transit);
+      xyz_t sat_pos(sat.position(time_depature, dt_transit));
       float_t geometric_range(usr_pos.xyz.dist(sat_pos));
 
       // Calculate residual
@@ -317,7 +322,7 @@ class GPS_SinglePositioning : public SolverBaseT {
           break;
         }
 
-        residual.range_sigma = 3.5; // 7.0 [m] of 95% (2-sigma) URE in Sec. 3.4.1 of April 2020 GPS SPS PS
+        residual.range_sigma = sat.range_sigma(time_depature);
 
         /* elevation weight based on "GPS実用プログラミング"
          * elevation[deg] :   90    53    45    30    15    10    5

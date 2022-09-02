@@ -501,7 +501,7 @@ class INS_GPS2_Tightly : public BaseFINS {
 
         if(!solver_selected.rate_sigma(measurement, res.rate_sigma)){
           // If receiver's rate variance is not provided
-          res.rate_sigma = 0.003; // 0.006 [m/s] of 95% (2-sigma) URRE in Sec. 3.4.2 of April 2020 GPS SPS PS
+          res.rate_sigma = solver_selected.select_satellite(prn, x.t).rate_sigma(x.t);
         }
       }while(false);
 

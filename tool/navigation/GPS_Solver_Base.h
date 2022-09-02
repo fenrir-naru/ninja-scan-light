@@ -232,6 +232,9 @@ struct GPS_Solver_Base {
     xyz_t (*impl_velocity)(const void *, const gps_time_t &, const float_t &);
     float_t (*impl_clock_error)(const void *, const gps_time_t &);
     float_t (*impl_clock_error_dot)(const void *, const gps_time_t &);
+    const void *impl_error; ///< pointer to actual implementation of error model
+    float_t (*impl_range_sigma)(const void *, const gps_time_t &);
+    float_t (*impl_rate_sigma)(const void *, const gps_time_t &);
     inline bool is_available() const {
       return (impl_xyz != NULL) && (impl_t != NULL);
     }
@@ -267,6 +270,26 @@ struct GPS_Solver_Base {
     inline float_t clock_error_dot(const gps_time_t &t_tx) const {
       return impl_clock_error_dot(impl_t, t_tx);
     }
+    /**
+     * Return expected user range accuracy (URA) in standard deviation (1-sigma)
+     * at the transmission time.
+     * @param t_tx transmission time
+     */
+    inline float_t range_sigma(const gps_time_t &t_tx) const {
+      return impl_range_sigma
+          ? impl_range_sigma(impl_error, t_tx)
+          : 3.5; // 7.0 [m] of 95% (2-sigma) URE in Sec. 3.4.1 of April 2020 GPS SPS PS;
+    }
+    /**
+     * Return expected user range rate accuracy (URRA) in standard deviation (1-sigma)
+     * at the transmission time.
+     * @param t_tx transmission time
+     */
+    inline float_t rate_sigma(const gps_time_t &t_tx) const {
+      return impl_rate_sigma
+          ? impl_rate_sigma(impl_error, t_tx)
+          : 0.003; // 0.006 [m/s] of 95% (2-sigma) URRE in Sec. 3.4.2 of April 2020 GPS SPS PS
+    }
     static const satellite_t &unavailable() {
       struct impl_t {
         static xyz_t v3(const void *, const gps_time_t &, const float_t &){
@@ -276,7 +299,9 @@ struct GPS_Solver_Base {
           return float_t(0);
         }
       };
-      static const satellite_t res = {NULL, NULL, impl_t::v3, impl_t::v3, impl_t::v, impl_t::v};
+      static const satellite_t res = {
+          NULL, NULL, impl_t::v3, impl_t::v3, impl_t::v, impl_t::v,
+          NULL, NULL, NULL};
       return res;
     }
   };
