@@ -1711,7 +1711,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
           uint_t WN;              ///< Week number
 
           float_t t_0;            ///< Time of applicability (s) <= time of a week
-          int_t URA;              ///< User range accuracy (index)
+          float_t URA;            ///< User range accuracy (m)
           float_t x, y, z;        ///< ECEF position (m)
           float_t dx, dy, dz;     ///< ECEF velocity (m/s)
           float_t ddx, ddy, ddz;  ///< ECEF acceleration (m/s^2)
@@ -1804,6 +1804,15 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
             return res;
           }
 
+          static const float_t URA_table[15];
+
+          inline static float_t URA_meter(const int_t &index){
+            return gps_space_node_t::SatelliteProperties::Ephemeris::URA_meter(index, URA_table);
+          }
+          inline static int_t URA_index(const float_t &meter){
+            return gps_space_node_t::SatelliteProperties::Ephemeris::URA_index(meter, URA_table);
+          }
+
           struct raw_t {
             u8_t  svid;           ///< Satellite number
 
@@ -1850,7 +1859,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
               converted.svid = svid;
               converted.WN = 0; // Week number (must be configured later) @see adjust_time
 
-              converted.URA = URA;
+              converted.URA = URA_meter(URA);
               CONVERT(t_0);     // Time of a day => time of a week (must be configured later) @see adjust_time
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
@@ -1869,7 +1878,7 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
 #define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
               svid = eph.svid;
 
-              URA = eph.URA;
+              URA = URA_index(eph.URA);
               CONVERT3(t_0, std::fmod(t_0, gps_time_t::seconds_day), t_0);
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
@@ -2349,5 +2358,24 @@ const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::UTC_Param
 };
 
 #undef POWER_2
+
+template <class FloatT>
+const typename SBAS_SpaceNode<FloatT>::float_t SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::URA_table[] = {
+  2,
+  2.8,
+  4,
+  5.7,
+  8,
+  11.3,
+  16,
+  32,
+  64,
+  128,
+  256,
+  512,
+  1024,
+  2048,
+  4096,
+};
 
 #endif /* __SBAS_H__ */
