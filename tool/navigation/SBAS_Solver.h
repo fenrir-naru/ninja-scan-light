@@ -126,11 +126,15 @@ class SBAS_SinglePositioning : public SolverBaseT {
           static float_t clock_error_dot(const void *ptr, const gps_time_t &t_tx) {
             return sat(ptr).ephemeris().clock_error_dot(t_tx);
           }
+          static float_t range_sigma(const void *ptr, const gps_time_t &t_tx) {
+            return sat(ptr).ephemeris().URA;
+          }
         };
         satellite_t res = {
-            &(it_sat->second), &(it_sat->second),
+            &(it_sat->second), &(it_sat->second), // position, time
             impl_t::position, impl_t::velocity,
-            impl_t::clock_error, impl_t::clock_error_dot};
+            impl_t::clock_error, impl_t::clock_error_dot,
+            &(it_sat->second), impl_t::range_sigma, NULL}; // error model
         return res;
       }
       satellites_t(const space_node_t &sn)
@@ -245,7 +249,7 @@ class SBAS_SinglePositioning : public SolverBaseT {
       float_t range;
       range_error_t range_error;
       if(!this->range(measurement, range, &range_error)){
-        return res; // If no range entry, return with weight = 0
+        return res; // If no range entry, return with sigma = 0
       }
 
       satellite_t sat(select_satellite(prn, time_arrival));
@@ -297,21 +301,29 @@ class SBAS_SinglePositioning : public SolverBaseT {
 
       // TODO Fast corrections (2.1.1.4.12)
 
-      // TODO Setup weight
-      if(std::abs(res.range_residual) > _options.residual_mask){
-        // If residual is too big, gently exclude it by decreasing its weight.
-        res.weight = 1E-8;
-      }else{
+      // Setup weight
+      res.range_sigma = 1E+4; // sufficiently big value, 1E4 [m]
+      do{
+        // If residual is too big, gently exclude it.
+        if(std::abs(res.range_residual) > _options.residual_mask){break;}
 
         float_t elv(relative_pos.elevation());
         if(elv < _options.elevation_mask){
-          res.weight = 0; // exclude it when elevation is less than threshold
-        }else{
-          // elevation weight based on "GPS実用プログラミング" @see GPS_Solver.h
-          res.weight = std::pow(sin(elv)/0.8, 2);
-          if(res.weight < 1E-3){res.weight = 1E-3;}
+          res.range_sigma = 0; // exclude it when elevation is less than threshold
+          break;
         }
-      }
+
+        res.range_sigma = sat.range_sigma(t_tx);
+
+        /* elevation weight based on "GPS実用プログラミング"
+         * elevation[deg] :   90    53    45    30    15    10    5
+         * sf_sigma(k)    :   0.80  1.00  1.13  1.60  3.09  4.61  9.18
+         * weight(k^-2)   :   1.56  1.00  0.78  0.39  0.10  0.05  0.01
+         */
+        static const float_t max_sf(10);
+        static const float_t elv_limit(std::asin(0.8/max_sf)); // limit
+        res.range_sigma *= (elv > elv_limit) ? (0.8 / sin(elv)) : max_sf;
+      }while(false);
 
       res.range_corrected = range;
 
