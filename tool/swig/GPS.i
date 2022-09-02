@@ -1030,10 +1030,13 @@ struct GPS_RangeCorrector
         static const int prop_items(sizeof(res.values) / sizeof(res.values[0]));
         VALUE hook(rb_hash_lookup(hooks, key));
         if(NIL_P(hook)){break;}
+        FloatT weight((res.prop.range_sigma > 0) 
+            ? (1. / std::pow(res.prop.range_sigma, 2)) // weight=1/(sigma^2)
+            : res.prop.range_sigma);
         VALUE values[] = {
             SWIG_From(int)(prn), // prn
             rb_ary_new_from_args(prop_items, // relative_property
-              swig::from(res.prop.weight),
+              swig::from(weight),
               swig::from(res.prop.range_corrected),
               swig::from(res.prop.range_residual),
               swig::from(res.prop.rate_relative_neg),
@@ -1064,6 +1067,9 @@ struct GPS_RangeCorrector
                   .append(inspect_str(v))
                   .append(" @ [").append(std::to_string(i)).append("]"));
           }
+        }
+        if(res.values[0] > 0){
+          res.values[0] = std::pow(1. / res.values[0], 0.5); // sigma=(1/weight)^0.5
         }
       }while(false);
 #endif

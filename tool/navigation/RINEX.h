@@ -352,7 +352,6 @@ struct RINEX_NAV {
     int t_oc_year4, t_oc_year2, t_oc_mon12;
     FloatT t_oc_sec;
     FloatT t_oe_WN;
-    FloatT ura_meter;
     FloatT t_ot;  ///< Transmitting time [s]
     FloatT fit_interval_hr;
     FloatT dummy;
@@ -366,7 +365,6 @@ struct RINEX_NAV {
         t_oc_mon12(t_oc_tm.tm_mon + 1),
         t_oc_sec(std::fmod(eph.t_oc, 60)),
         t_oe_WN(eph.WN),
-        ura_meter(ephemeris_t::URA_meter(eph.URA)),
         t_ot(0), // TODO
         fit_interval_hr(eph.fit_interval / (60 * 60)),
         dummy(0) {
@@ -376,8 +374,6 @@ struct RINEX_NAV {
       t_oc += (t_oc_sec - t_oc_tm.tm_sec);
       eph.WN = t_oc.week;
       eph.t_oc = t_oc.seconds;
-
-      eph.URA = ephemeris_t::URA_index(ura_meter); // meter to index
 
       /* @see ftp://igs.org/pub/data/format/rinex210.txt
        * 6.7 Satellite Health
@@ -1294,14 +1290,14 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
 
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v2[] = {
-  GEN_E ( 3, 19, 12, message_t, ura_meter),
+  GEN_E ( 3, 19, 12, message_t, eph.URA),
   GEN_E2(22, 19, 12, message_t, eph.SV_health, unsigned int),
   GEN_E (41, 19, 12, message_t, eph.t_GD),
   GEN_E2(60, 19, 12, message_t, eph.iodc, int),
 };
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph6_v3[] = {
-  GEN_E ( 4, 19, 12, message_t, ura_meter),
+  GEN_E ( 4, 19, 12, message_t, eph.URA),
   GEN_E2(23, 19, 12, message_t, eph.SV_health, unsigned int),
   GEN_E (42, 19, 12, message_t, eph.t_GD),
   GEN_E2(61, 19, 12, message_t, eph.iodc, int),
