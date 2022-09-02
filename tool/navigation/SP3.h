@@ -185,9 +185,10 @@ struct SP3_Product {
         }
       };
       typename GPS_Solver_Base<FloatT>::satellite_t res = {
-        this, this,
+        this, this, // position, time
         impl_t::position, impl_t::velocity,
-        impl_t::clock_error, impl_t::clock_error_dot
+        impl_t::clock_error, impl_t::clock_error_dot,
+        NULL, NULL, NULL, // TODO error model
       };
       return res;
     }

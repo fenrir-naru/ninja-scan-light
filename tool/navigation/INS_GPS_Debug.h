@@ -302,19 +302,19 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
 
         typename prop_list_t::const_iterator it(snapshot.props.begin() + (*it2));
         out << it->first << ','; // prn
-        if(it->second.sigma_range > 0){ // range (residual)
+        if(it->second.range_sigma > 0){ // range (residual)
           out << it->second.range_residual << ','
-              << it->second.sigma_range << ',';
+              << it->second.range_sigma << ',';
         }else{
           out << ",,";
         }
-        if(it->second.sigma_rate > 0){ // rate (residual)
+        if(it->second.rate_sigma > 0){ // rate (residual)
           out << it->second.rate_residual << ','
-              << it->second.sigma_rate << ',';
+              << it->second.rate_sigma << ',';
         }else{
           out << ",,";
         }
-        if(it->second.weight > 0){ // azimuth, elevation
+        if(it->second.range_sigma > 0){ // azimuth, elevation
           typename super_t::solver_t::xyz_t sat_los(
               -it->second.los_neg[0], -it->second.los_neg[1], -it->second.los_neg[2]);
           typename super_t::solver_t::enu_t enu_sat(
