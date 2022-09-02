@@ -990,7 +990,7 @@ static s ## bits ## _t name(const InputT *buf){ \
           
           // Subframe.1
           uint_t WN;          ///< Week number
-          int_t URA;          ///< User range accuracy (index)
+          float_t URA;          ///< User range accuracy (m)
           uint_t SV_health;   ///< Health status
           int_t iodc;         ///< Issue of clock data
           float_t t_GD;       ///< Group delay (s)
@@ -1399,7 +1399,7 @@ static s ## bits ## _t name(const InputT *buf){ \
               converted.svid = svid;
               
               converted.WN = WN;
-              converted.URA = URA;
+              converted.URA = URA_meter(URA);
               converted.SV_health = SV_health;
               converted.iodc = iodc;
               CONVERT(t_GD);
@@ -1438,7 +1438,7 @@ static s ## bits ## _t name(const InputT *buf){ \
               svid = eph.svid;
 
               WN = eph.WN;
-              URA = eph.URA;
+              URA = URA_index(eph.URA);
               SV_health = eph.SV_health;
               iodc = eph.iodc;
               CONVERT(t_GD);
@@ -1475,7 +1475,7 @@ static s ## bits ## _t name(const InputT *buf){ \
           bool is_equivalent(const Ephemeris &eph) const {
             do{
               if(WN != eph.WN){break;}
-              if(URA != eph.URA){break;}
+              if(URA_index(URA) != URA_index(eph.URA)){break;}
               if(SV_health != eph.SV_health){break;}
 
 #define CHECK(TARGET) \

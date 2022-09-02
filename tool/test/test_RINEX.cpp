@@ -236,7 +236,7 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
 
     BOOST_CHECK_SMALL(std::abs( .832177520677E-10 - eph.dot_i0), 1E-22);
 
-    BOOST_CHECK_EQUAL(0, eph.URA); // .200000000000E+01
+    BOOST_CHECK_SMALL(std::abs( .200000000000E+01 - eph.URA),  1E-12);
     BOOST_CHECK_EQUAL(0, eph.SV_health);
     BOOST_CHECK_SMALL(std::abs(-.838190317154E-08 - eph.t_GD), 1E-20);
     BOOST_CHECK_SMALL(std::abs( .921000000000E+03 - eph.iodc), 1E-9);
