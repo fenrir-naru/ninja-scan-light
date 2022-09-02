@@ -814,11 +814,8 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             static const float_t F_T_table[15]; ///< @see Table 4.4
 
             static const float_t F_T_value(const u8_t &F_T_){
-              if(F_T_ >= (sizeof(F_T_table) / sizeof(F_T_table[0]))){
-                return -1; // not used
-              }else{
-                return F_T_table[F_T_];
-              }
+              return GPS_SpaceNode<float_t>::SatelliteProperties::Ephemeris::URA_meter(
+                  F_T_, F_T_table);
             }
 
             static const uint_t P1_value(const u8_t &P1_){
@@ -1315,12 +1312,8 @@ typename GLONASS_SpaceNode<FloatT>::u8_t GLONASS_SpaceNode<FloatT>::SatellitePro
   if(F_T <= 0){ // invalid value
     return sizeof(raw_t::F_T_table) / sizeof(raw_t::F_T_table[0]);
   }
-  u8_t res(0);
-  while(res < (sizeof(raw_t::F_T_table) / sizeof(raw_t::F_T_table[0]))){
-    if(F_T <= raw_t::F_T_table[res]){break;}
-    ++res;
-  }
-  return res;
+  return (u8_t)GPS_SpaceNode<float_t>::SatelliteProperties::Ephemeris::URA_index(
+      F_T, raw_t::F_T_table);
 }
 
 template <class FloatT>

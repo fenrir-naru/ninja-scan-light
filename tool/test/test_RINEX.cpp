@@ -396,7 +396,7 @@ BOOST_AUTO_TEST_CASE(nav_GLONASS_v3){
     // default setting until ver.3.05
     BOOST_CHECK_EQUAL(1, eph.M); // GLONASS-M
     BOOST_CHECK_EQUAL(60 * 60, eph.P1); // 1 hour
-    BOOST_CHECK_EQUAL(-1, eph.F_T); // invalid range accuracy
+    BOOST_CHECK_EQUAL(1024, eph.F_T); // invalid range accuracy, thus max(512) * 2 = 1024 will be returned.
     BOOST_CHECK_EQUAL(0, eph.delta_tau_n);
   }
 
