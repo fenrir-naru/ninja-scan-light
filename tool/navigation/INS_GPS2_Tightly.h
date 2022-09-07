@@ -645,7 +645,7 @@ class INS_GPS2_Tightly : public BaseFINS {
         typename solver_t::user_pvt_t::dop_t &res) {
 
       mat_t G_full(props.size(), 4); // design matrix
-      mat_t R_full(props.size(), props.size());
+      //mat_t R_full(props.size(), props.size());
 
       // count up valid measurement
       int i_row(0);
@@ -659,13 +659,14 @@ class INS_GPS2_Tightly : public BaseFINS {
           G_full(i_row, i) = prop.los_neg[i];
         }
         G_full(i_row, 3) = 1;
-        R_full(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
+        //R_full(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
         ++i_row;
       }
       if(i_row < 4){return NULL;}
 
       typename mat_t::partial_offsetless_t G(G_full.partial(i_row, 4));
-      return &(res = solver_t::dop((G.transpose() * R_full.partial(i_row, i_row) * G).inverse(), x.pos));
+      return &(res = solver_t::dop(
+          (G.transpose() /* * R_full.partial(i_row, i_row)*/ * G).inverse(), x.pos));
     }
 
     /**

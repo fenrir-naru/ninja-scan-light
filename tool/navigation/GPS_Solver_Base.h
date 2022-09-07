@@ -539,6 +539,9 @@ protected:
      * @param G_ original design matrix
      * @param rotation_matrix 3 by 3 rotation matrix
      * @return transformed design matrix G'
+     * @see Eq.(3) and (10) in https://gssc.esa.int/navipedia/index.php/Positioning_Error,
+     * however, be careful that their R is used as both range error covariance in Eq.(1)
+     * and rotation matrix in Eq.(3).
      */
     static matrix_t rotate_G(const MatrixT &G_, const matrix_t &rotation_matrix){
       unsigned int r(G_.rows()), c(G_.columns()); // Normally c=4
@@ -554,17 +557,15 @@ protected:
     }
 
     /**
-     * Calculate C matrix, which is required to obtain DOP
-     * C = G^t * W * G
-     *
+     * Calculate C matrix, where C = G^t * G to be used for DOP calculation
      * @return C matrix
      */
     matrix_t C() const {
-      return (G.transpose() * W * G).inverse();
+      return (G.transpose() * G).inverse();
     }
     /**
-     * Transform coordinate of matrix C, which will be used to calculate HDOP/VDOP
-     * C' = (G * R^t)^t W * (G * R^t) = R * G^t * W * G * R^t = R * C * R^t,
+     * Transform coordinate of matrix C
+     * C' = (G * R^t)^t * (G * R^t) = R * G^t * G * R^t = R * C * R^t,
      * where R is a rotation matrix, for example, ECEF to ENU.
      *
      * @param rotation_matrix 3 by 3 rotation matrix
