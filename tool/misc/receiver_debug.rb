@@ -371,37 +371,35 @@ class GPS_Receiver
     }
   }
   
-  proc{
-    eph_list = Hash[*(1..32).collect{|prn|
+  def register_ephemeris(t_meas, sys, prn, bcast_data)
+    @eph_list ||= Hash[*(1..32).collect{|prn|
       eph = GPS::Ephemeris::new
       eph.svid = prn
       [prn, eph]
     }.flatten(1)]
-    define_method(:register_ephemeris){|t_meas, sys, prn, bcast_data|
-      case sys
-      when :GPS
-        next unless eph = eph_list[prn]
-        sn = @solver.gps_space_node
-        subframe, iodc_or_iode = eph.parse(bcast_data)
-        if iodc_or_iode < 0 then
-          begin
-            sn.update_iono_utc(
-                GPS::Ionospheric_UTC_Parameters::parse(bcast_data))
-            [:alpha, :beta].each{|k|
-              $stderr.puts "Iono #{k}: #{sn.iono_utc.send(k)}"
-            } if false
-          rescue
-          end
-          next
+    case sys
+    when :GPS
+      return unless eph = @eph_list[prn]
+      sn = @solver.gps_space_node
+      subframe, iodc_or_iode = eph.parse(bcast_data)
+      if iodc_or_iode < 0 then
+        begin
+          sn.update_iono_utc(
+              GPS::Ionospheric_UTC_Parameters::parse(bcast_data))
+          [:alpha, :beta].each{|k|
+            $stderr.puts "Iono #{k}: #{sn.iono_utc.send(k)}"
+          } if false
+        rescue
         end
-        if t_meas and eph.consistent? then
-          eph.WN = ((t_meas.week / 1024).to_i * 1024) + (eph.WN % 1024)
-          sn.register_ephemeris(prn, eph)
-          eph.invalidate
-        end
+        return
       end
-    }
-  }.call
+      if t_meas and eph.consistent? then
+        eph.WN = ((t_meas.week / 1024).to_i * 1024) + (eph.WN % 1024)
+        sn.register_ephemeris(prn, eph)
+        eph.invalidate
+      end
+    end
+  end
   
   def parse_ubx(ubx_fname, &b)
     $stderr.print "Reading UBX file (%s) "%[ubx_fname]
