@@ -159,6 +159,7 @@ class GPS_Receiver
       :skip_exclusion => true, # default is to skip fault exclusion calculation
     }
     @debug = {}
+    @semaphore = Mutex::new
     solver_opts = [:gps_options, :sbas_options].collect{|target|
       @solver.send(target)
     }
@@ -296,6 +297,24 @@ class GPS_Receiver
       :meas => GPS_Receiver::meas_items(output_options),
     }
   end
+  
+  def critical(&b)
+    begin
+      @semaphore.synchronize{b.call}
+    rescue ThreadError # recovery from deadlock
+      b.call
+    end
+  end
+  
+  class << self
+    def make_critical(fname)
+      f_orig = instance_method(fname)
+      define_method(fname){|*args, &b|
+        critical{f_orig.bind(self).call(*args, &b)}
+      }
+    end
+    private :make_critical
+  end
 
   GPS::Measurement.class_eval{
     proc{
@@ -328,7 +347,7 @@ class GPS_Receiver
 =end
 
     #@solver.gps_space_node.update_all_ephemeris(t_meas) # internally called in the following solver.solve
-    pvt = @solver.solve(meas, t_meas)
+    pvt = critical{@solver.solve(meas, t_meas)}
     pvt.define_singleton_method(:rel_ENU){
       Coordinate::ENU::relative(xyz, ref_pos)
     } if (ref_pos && pvt.position_solved?)
@@ -375,45 +394,44 @@ class GPS_Receiver
     }
   }
   
-  proc{
-    eph_list = Hash[*(1..32).collect{|prn|
+  def register_ephemeris(t_meas, sys, prn, bcast_data)
+    @eph_list ||= Hash[*(1..32).collect{|prn|
       eph = GPS::Ephemeris::new
       eph.svid = prn
       [prn, eph]
     }.flatten(1)]
-    define_method(:register_ephemeris){|t_meas, sys, prn, bcast_data|
-      case sys
-      when :GPS
-        next unless eph = eph_list[prn]
-        sn = @solver.gps_space_node
-        subframe, iodc_or_iode = eph.parse(bcast_data)
-        if iodc_or_iode < 0 then
-          begin
-            sn.update_iono_utc(
-                GPS::Ionospheric_UTC_Parameters::parse(bcast_data))
-            [:alpha, :beta].each{|k|
-              $stderr.puts "Iono #{k}: #{sn.iono_utc.send(k)}"
-            } if false
-          rescue
-          end
-          next
+    case sys
+    when :GPS
+      return unless eph = @eph_list[prn]
+      sn = @solver.gps_space_node
+      subframe, iodc_or_iode = eph.parse(bcast_data)
+      if iodc_or_iode < 0 then
+        begin
+          sn.update_iono_utc(
+              GPS::Ionospheric_UTC_Parameters::parse(bcast_data))
+          [:alpha, :beta].each{|k|
+            $stderr.puts "Iono #{k}: #{sn.iono_utc.send(k)}"
+          } if false
+        rescue
         end
-        if t_meas and eph.consistent? then
-          eph.WN = ((t_meas.week / 1024).to_i * 1024) + (eph.WN % 1024)
-          sn.register_ephemeris(prn, eph)
-          eph.invalidate
-        end
-      when :SBAS
-        case @solver.sbas_space_node.decode_message(bcast_data[0..7], prn, t_meas)
-        when 26
-          ['', "IGP broadcasted by PRN#{prn} @ #{Time::utc(*t_meas.c_tm)}",
-              @solver.sbas_space_node.ionospheric_grid_points(prn)].each{|str|
-            $stderr.puts str
-          } if @debug[:SBAS_IGP]
-        end if t_meas
+        return
       end
-    }
-  }.call
+      if t_meas and eph.consistent? then
+        eph.WN = ((t_meas.week / 1024).to_i * 1024) + (eph.WN % 1024)
+        sn.register_ephemeris(prn, eph)
+        eph.invalidate
+      end
+    when :SBAS
+      case @solver.sbas_space_node.decode_message(bcast_data[0..7], prn, t_meas)
+      when 26
+        ['', "IGP broadcasted by PRN#{prn} @ #{Time::utc(*t_meas.c_tm)}",
+            @solver.sbas_space_node.ionospheric_grid_points(prn)].each{|str|
+          $stderr.puts str
+        } if @debug[:SBAS_IGP]
+      end if t_meas
+    end
+  end
+  make_critical :register_ephemeris
   
   def parse_ubx(ubx_fname, &b)
     $stderr.print "Reading UBX file (%s) "%[ubx_fname]
@@ -538,7 +556,7 @@ class GPS_Receiver
       @solver.gps_space_node,
       @solver.sbas_space_node,
     ].inject(0){|res, sn|
-      loaded_items = sn.send(:read, fname)
+      loaded_items = critical{sn.send(:read, fname)}
       raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
       res + loaded_items
     }
@@ -600,14 +618,14 @@ class GPS_Receiver
       next unless /^SYS_(?!SYSTEMS)(.*)/ =~ sys.to_s
       idx, sys_name = [@sp3.class.const_get(sys), $1]
       next unless sats[idx] > 0
-      next unless @sp3.push(@solver, idx)
+      next unless critical{@sp3.push(@solver, idx)}
       $stderr.puts "Change ephemeris source of #{sys_name} to SP3" 
     }
   end
   
   def attach_antex(fname)
     raise "Specify SP3 before ANTEX application!" unless @sp3
-    applied_items = @sp3.apply_antex(fname)
+    applied_items = critical{@sp3.apply_antex(fname)}
     raise "Format error! (Not ANTEX) #{fname}" unless applied_items >= 0
     $stderr.puts "SP3 correction with ANTEX file (%s): %d items have been processed."%[fname, applied_items]
   end
@@ -622,7 +640,7 @@ class GPS_Receiver
       next unless /^SYS_(?!SYSTEMS)(.*)/ =~ sys.to_s
       idx, sys_name = [@clk.class.const_get(sys), $1]
       next unless sats[idx] > 0
-      next unless @clk.push(@solver, idx)
+      next unless critical{@clk.push(@solver, idx)}
       $stderr.puts "Change clock error source of #{sys_name} to RINEX clock" 
     }
   end
