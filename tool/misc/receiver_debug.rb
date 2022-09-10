@@ -159,6 +159,7 @@ class GPS_Receiver
       :skip_exclusion => true, # default is to skip fault exclusion calculation
     }
     @debug = {}
+    @semaphore = Mutex::new
     solver_opts = [:gps_options].collect{|target|
       @solver.send(target)
     }
@@ -292,6 +293,24 @@ class GPS_Receiver
       :meas => GPS_Receiver::meas_items(output_options),
     }
   end
+  
+  def critical(&b)
+    begin
+      @semaphore.synchronize{b.call}
+    rescue ThreadError # recovery from deadlock
+      b.call
+    end
+  end
+  
+  class << self
+    def make_critical(fname)
+      f_orig = instance_method(fname)
+      define_method(fname){|*args, &b|
+        critical{f_orig.bind(self).call(*args, &b)}
+      }
+    end
+    private :make_critical
+  end
 
   GPS::Measurement.class_eval{
     proc{
@@ -324,7 +343,7 @@ class GPS_Receiver
 =end
 
     #@solver.gps_space_node.update_all_ephemeris(t_meas) # internally called in the following solver.solve
-    pvt = @solver.solve(meas, t_meas)
+    pvt = critical{@solver.solve(meas, t_meas)}
     pvt.define_singleton_method(:rel_ENU){
       Coordinate::ENU::relative(xyz, ref_pos)
     } if (ref_pos && pvt.position_solved?)
@@ -400,6 +419,7 @@ class GPS_Receiver
       end
     end
   end
+  make_critical :register_ephemeris
   
   def parse_ubx(ubx_fname, &b)
     $stderr.print "Reading UBX file (%s) "%[ubx_fname]
@@ -523,7 +543,7 @@ class GPS_Receiver
     items = [
       @solver.gps_space_node,
     ].inject(0){|res, sn|
-      loaded_items = sn.send(:read, fname)
+      loaded_items = critical{sn.send(:read, fname)}
       raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
       res + loaded_items
     }
@@ -584,14 +604,14 @@ class GPS_Receiver
       next unless /^SYS_(?!SYSTEMS)(.*)/ =~ sys.to_s
       idx, sys_name = [@sp3.class.const_get(sys), $1]
       next unless sats[idx] > 0
-      next unless @sp3.push(@solver, idx)
+      next unless critical{@sp3.push(@solver, idx)}
       $stderr.puts "Change ephemeris source of #{sys_name} to SP3" 
     }
   end
   
   def attach_antex(fname)
     raise "Specify SP3 before ANTEX application!" unless @sp3
-    applied_items = @sp3.apply_antex(fname)
+    applied_items = critical{@sp3.apply_antex(fname)}
     raise "Format error! (Not ANTEX) #{fname}" unless applied_items >= 0
     $stderr.puts "SP3 correction with ANTEX file (%s): %d items have been processed."%[fname, applied_items]
   end
@@ -606,7 +626,7 @@ class GPS_Receiver
       next unless /^SYS_(?!SYSTEMS)(.*)/ =~ sys.to_s
       idx, sys_name = [@clk.class.const_get(sys), $1]
       next unless sats[idx] > 0
-      next unless @clk.push(@solver, idx)
+      next unless critical{@clk.push(@solver, idx)}
       $stderr.puts "Change clock error source of #{sys_name} to RINEX clock" 
     }
   end
