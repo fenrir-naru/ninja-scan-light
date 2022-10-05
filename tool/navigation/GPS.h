@@ -762,6 +762,43 @@ class GPS_SpaceNode {
               InputT>(buf, index)
             >> ((sizeof(OutputT) * CHAR_BIT) - length));
       }
+
+      template <class NumberT, class BufferT>
+      static void num2bits(
+          BufferT *dest, NumberT src, uint_t index, uint_t length,
+          const int &effective_bits_in_BufferT = sizeof(BufferT) * CHAR_BIT,
+          const int &padding_bits_in_BufferT_MSB = 0){
+        static const int buf_bits(sizeof(BufferT) * CHAR_BIT);
+        static const BufferT mask_msb_aligned( // "1.(effective).10..0"
+            (~(BufferT)0) << (buf_bits - effective_bits_in_BufferT));
+        static const BufferT mask_full_n( // "1.(padding).10.(effective).01..1"
+            ~(mask_msb_aligned >> padding_bits_in_BufferT_MSB));
+        BufferT buf, mask;
+        { // Lesat significant block
+          std::div_t align(std::div(index + length, effective_bits_in_BufferT));
+          dest += align.quot;
+          int len_last(align.rem);
+          if((int)length <= align.rem){len_last = length;}
+          int r_sfift(padding_bits_in_BufferT_MSB + align.rem - len_last);
+          buf = (BufferT)(src << (buf_bits - len_last)) >> r_sfift;
+          mask = (mask_msb_aligned << (effective_bits_in_BufferT - len_last)) >> r_sfift;
+          (*dest &= ~mask) |= buf;
+          src >>= len_last;
+          length -= len_last;
+        }
+        std::div_t qr(std::div(length, effective_bits_in_BufferT));
+        for(; qr.quot > 0; qr.quot--, src >>= effective_bits_in_BufferT){ // Middle
+          buf = (BufferT)(src << (buf_bits - effective_bits_in_BufferT))
+              >> padding_bits_in_BufferT_MSB;
+          (*(--dest) &= mask_full_n) |= buf;
+        }
+        if(qr.rem > 0){ // Most
+          int r_shift(padding_bits_in_BufferT_MSB + effective_bits_in_BufferT - qr.rem);
+          buf = (BufferT)(src << (buf_bits - qr.rem)) >> r_shift;
+          mask = (mask_msb_aligned << (effective_bits_in_BufferT - qr.rem)) >> r_shift;
+          (*(--dest) &= ~mask) |= buf;
+        }
+      }
     };
 
     template <class InputT,
@@ -773,6 +810,10 @@ static u ## bits ## _t name(const InputT *buf){ \
   return \
       DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
         buf, offset_bits, length); \
+} \
+static void name ## _set(InputT *dest, const u ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src, offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_s(bits, offset_bits, length, name) \
 static s ## bits ## _t name(const InputT *buf){ \
@@ -780,6 +821,10 @@ static s ## bits ## _t name(const InputT *buf){ \
       DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
         buf, offset_bits)) \
       >> (bits - length); \
+} \
+static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_u_2(bits, offset_bits1, length1, offset_bits2, length2, name) \
 static u ## bits ## _t name(const InputT *buf){ \
@@ -788,6 +833,12 @@ static u ## bits ## _t name(const InputT *buf){ \
         buf, offset_bits1, length1) << length2) \
       | DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
           buf, offset_bits2, length2); \
+} \
+static void name ## _set(InputT *dest, const u ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src >> length2, offset_bits1, length1, EffectiveBits, PaddingBits_MSB); \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src, offset_bits2, length2, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_s_2(bits, offset_bits1, length1, offset_bits2, length2, name) \
 static s ## bits ## _t name(const InputT *buf){ \
@@ -797,6 +848,12 @@ static s ## bits ## _t name(const InputT *buf){ \
         | (DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
             buf, offset_bits2, length2) << (bits - length1 - length2)))) \
       >> (bits - length1 - length2); \
+} \
+static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src) >> length2, offset_bits1, length1, EffectiveBits, PaddingBits_MSB); \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits2, length2, EffectiveBits, PaddingBits_MSB); \
 }
       convert_u( 8,  0,  8, preamble);
       convert_u(32, 30, 24, how);

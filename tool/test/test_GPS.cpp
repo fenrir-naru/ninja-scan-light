@@ -72,11 +72,11 @@ void fill_buffer(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
 }
 
 template <int PaddingMSB, int PaddingLSB,
-    size_t N_bitset, class BufferT>
-void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
+    size_t N_bitset, class BufferT, std::size_t N_buf>
+void check_parse(const bitset<N_bitset> &b, const BufferT (&buf)[N_buf]){
   typedef space_node_t::BroadcastedMessage<
       BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB, PaddingMSB> msg_t;
-
+  BufferT buf2[N_buf];
 #define each2(offset, bits, shift, func) { \
   boost::uint32_t res((boost::uint32_t)msg_t::func(buf)); \
   res >>= shift; \
@@ -85,7 +85,11 @@ void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
     BOOST_REQUIRE_EQUAL(b[j], ((res & 0x1) == 1)); \
   } \
 }
-#define each(offset, bits, func) each2(offset, bits, 0, func)
+#define each(offset, bits, func) { \
+  each2(offset, bits, 0, func); \
+  msg_t::func ## _set(buf2, msg_t::func(buf)); \
+  BOOST_REQUIRE_EQUAL(msg_t::func(buf), msg_t::func(buf2)); \
+}
   each(   0,  8, preamble);
   each(  30, 24, how);
   each(  49,  3, subframe_id);
