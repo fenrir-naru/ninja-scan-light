@@ -43,22 +43,23 @@
 
 #include <vector>
 
-template <int denom, int pow2 = 1, int log2 = 0, int rem2 = denom % pow2>
-struct const_div_t : public std::div_t {
-  const_div_t(const int &num) : std::div_t(std::div(num, denom)) {}
-};
-template <int denom, int pow2, int log2>
-struct const_div_t<denom, pow2, log2, 0> : public const_div_t<denom, (pow2 << 1), log2 + 1> {
-  const_div_t(const int &num) : const_div_t<denom, (pow2 << 1), log2 + 1>(num) {}
-};
-template <int denom, int log2>
-struct const_div_t<denom, denom, log2, 0> {
-  int quot, rem;
-  const_div_t(const int &num) : quot(num >> log2), rem(num & (denom - 1)) {}
-};
-
 template <int MAX_SIZE, class ContainerT = unsigned char>
 struct BitArray {
+
+  template <int denom, int pow2 = 1, int log2 = 0, int rem2 = denom % pow2>
+  struct const_div_t : public std::div_t {
+    const_div_t(const int &num) : std::div_t(std::div(num, denom)) {}
+  };
+  template <int denom, int pow2, int log2>
+  struct const_div_t<denom, pow2, log2, 0> : public const_div_t<denom, (pow2 << 1), log2 + 1> {
+    const_div_t(const int &num) : const_div_t<denom, (pow2 << 1), log2 + 1>(num) {}
+  };
+  template <int denom, int log2>
+  struct const_div_t<denom, denom, log2, 0> {
+    int quot, rem;
+    const_div_t(const int &num) : quot(num >> log2), rem(num & (denom - 1)) {}
+  };
+
   static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
   static const int max_size = MAX_SIZE;
   ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
