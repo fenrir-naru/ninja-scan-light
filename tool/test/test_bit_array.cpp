@@ -80,6 +80,8 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
 
       std::vector<int> ones2(bit_array.indices_one());
       BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
+      BOOST_REQUIRE_EQUAL(ones2.size(), bit_array.ones());
+      BOOST_REQUIRE_EQUAL(ones2.empty() ? 64 : ones2[0], bit_array.least_index_one());
     }
 
     {
@@ -93,6 +95,8 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
 
       std::vector<int> ones2(bit_array.indices_one());
       BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
+      BOOST_REQUIRE_EQUAL(ones2.size(), bit_array.ones());
+      BOOST_REQUIRE_EQUAL(ones2.empty() ? 64 : ones2[0], bit_array.least_index_one());
     }
 
     {
@@ -106,6 +110,8 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
 
       std::vector<int> ones2(bit_array.indices_one());
       BOOST_REQUIRE(std::equal(ones.begin(), ones.end(), ones2.begin()));
+      BOOST_REQUIRE_EQUAL(ones2.size(), bit_array.ones());
+      BOOST_REQUIRE_EQUAL(ones2.empty() ? 64 : ones2[0], bit_array.least_index_one());
     }
 
     {
@@ -132,6 +138,8 @@ BOOST_FIXTURE_TEST_CASE(bit_array, Fixture){
           std::remove_if(ones.begin(), ones.end(), predicate),
           ones2.begin()));
 #endif
+      BOOST_REQUIRE_EQUAL(ones2.size(), bit_array.ones());
+      BOOST_REQUIRE_EQUAL(ones2.empty() ? 24 : ones2[0], bit_array.least_index_one());
     }
   }
 }
