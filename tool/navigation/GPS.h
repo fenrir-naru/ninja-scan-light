@@ -774,9 +774,10 @@ class GPS_SpaceNode {
         static const BufferT mask_full_n( // "1.(padding).10.(effective).01..1"
             ~(mask_msb_aligned >> padding_bits_in_BufferT_MSB));
         BufferT buf, mask;
-        { // Lesat significant block
+        do{ // Lesat significant block
           std::div_t align(std::div(index + length, effective_bits_in_BufferT));
           dest += align.quot;
+          if(align.rem == 0){break;}
           int len_last(align.rem);
           if((int)length <= align.rem){len_last = length;}
           int r_sfift(padding_bits_in_BufferT_MSB + align.rem - len_last);
@@ -785,7 +786,7 @@ class GPS_SpaceNode {
           (*dest &= ~mask) |= buf;
           src >>= len_last;
           length -= len_last;
-        }
+        }while(false);
         std::div_t qr(std::div(length, effective_bits_in_BufferT));
         for(; qr.quot > 0; qr.quot--, src >>= effective_bits_in_BufferT){ // Middle
           buf = (BufferT)(src << (buf_bits - effective_bits_in_BufferT))
