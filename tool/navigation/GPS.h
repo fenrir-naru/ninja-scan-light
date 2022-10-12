@@ -51,6 +51,8 @@
 
 #include "coordinate.h"
 
+#include "util/bit_counter.h"
+
 #ifdef pow2
 #define POW2_ALREADY_DEFINED
 #else
@@ -859,6 +861,70 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
       convert_u( 8,  0,  8, preamble);
       convert_u(32, 30, 24, how);
       convert_u( 8, 49,  3, subframe_id);
+
+      /**
+       * update parity bits based on current buffer
+       * @param buf buffer
+       * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
+       * @see GPS ICD Table 20-XIV
+       */
+      static void parity_update(InputT *buf, const int &word_idx){
+        u32_t word(DataParser::template bits2num<u32_t, EffectiveBits, PaddingBits_MSB>(
+            buf, 30 * word_idx, 24));
+        u8_t parity;
+        parity  = (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0xEC7CD2) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0x763E69) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0xBB1F34) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0x5D8F9A) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0xAEC7CD) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0x2DEA27) & 0x1);
+        DataParser::template num2bits<u8_t, InputT>(
+            buf, parity, 30 * word_idx + 24, 6, EffectiveBits, PaddingBits_MSB);
+      }
+      /**
+       * update hand over word (HOW, 2nd word) based on current buffer
+       * @param buf buffer
+       * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
+       * @see GPS ICD Table 20-XIV
+       */
+      static void how_update(InputT *buf){
+        parity_update(buf, 1);
+        u8_t parity_with_23_24(DataParser::template bits2num<u8_t, EffectiveBits, PaddingBits_MSB>(
+            buf, 30 + 22, 8)); // [23, 30]
+        if(parity_with_23_24 & 0x02){ // bit 29 should be zero
+          parity_with_23_24 ^= (u8_t)0x43; // modify bit 24 & 29 & 30
+        }
+        if(parity_with_23_24 & 0x01){ // bit 30 should be zero
+          parity_with_23_24 ^= (u8_t)0x81; // modify bit 23 & 30
+        }
+        DataParser::template num2bits<u8_t, InputT>(
+            buf, parity_with_23_24, 30 + 22, 8, EffectiveBits, PaddingBits_MSB);
+      }
+
+      /**
+       * Get word data for transmission
+       * @param buf buffer
+       * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
+       * @param D29_star 29th bit of previous transmitted word
+       * @param D30_star 30th bit of previous transmitted word
+       * @return (u32_t) a word consisting of leading 2 padding bits and following 30 informative bits
+       * @see GPS ICD Table 20-XIV
+       */
+      static u32_t word_for_transmission(
+          const InputT *buf, const int &word_idx,
+          const bool &D29_star = false, const bool &D30_star = false){
+        u32_t word(DataParser::template bits2num<u32_t, EffectiveBits, PaddingBits_MSB>(
+            buf, 30 * word_idx, 30));
+        u32_t mask(0);
+        if(D29_star){
+          mask |= 0x29;
+        }
+        if(D30_star){
+          mask |= ((u32_t)0xFFFFFF << 6);
+          mask |= 0x16;
+        }
+        return word ^ mask;
+      }
 
       struct SubFrame1 {
         convert_u(16, 60, 10, WN);
