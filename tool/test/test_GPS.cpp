@@ -265,7 +265,7 @@ BOOST_FIXTURE_TEST_CASE(data_parse, Fixture){
 
 BOOST_AUTO_TEST_CASE(parity_calculation){
   typedef boost::uint32_t u32_t;
-  u32_t packet[][10] = {
+  static const u32_t packet[][10] = {
     // UBX 20210531/log.ubx
     {0x22c06f12, 0x96f4ab18, 0x000567ba, 0x8da593e4, 0x000a09e8, 0x1fae2945, 0x85f04883, 0x0f2a68f3, 0x3fea7f5c, 0x010910af},
     {0x22c06f12, 0x96f4ab18, 0x3ff9c815, 0x803a7f60, 0x3ff909f9, 0x8031c995, 0x88675bbe, 0xa80227e4, 0x3fe94d5d, 0x8fc19590},
@@ -278,7 +278,6 @@ BOOST_AUTO_TEST_CASE(parity_calculation){
     {0x22c06f12, 0x96f4ab18, 0x000032a7, 0x10172e7a, 0xbffcc9c7, 0x07385330, 0x08b9223a, 0xb348e024, 0x3fe98a8b, 0x0afd90cb},
     {0x22c06f12, 0x96f4ab18, 0x3fef1c3c, 0x23642bd4, 0x004e89c2, 0x80b73380, 0x05203447, 0x305bdde9, 0xbfea8c9b, 0x04bf1ae3},
     // UBX f9p_ppp_1224/rover.ubx
-    /*
     {0x22c0593c, 0x226aea68, 0x393f01c1, 0x0ce67a0e, 0x0a40fa3a, 0x3f22802d, 0x20ee0f0f, 0x03c82852, 0x03326c66, 0x19ed9f33},
     {0x22c0593c, 0x226aea68, 0x043efa55, 0x0d69c330, 0x0b6bd821, 0x3f084064, 0x02a67db6, 0x0391a845, 0x032eb57d, 0x19ed9f60},
     {0x22c0593c, 0x226aea68, 0x03823a77, 0x0c2d07d0, 0x2d867fb2, 0x021841b4, 0x06b84750, 0x02642871, 0x033f3474, 0x19ed9d0c},
@@ -289,7 +288,6 @@ BOOST_AUTO_TEST_CASE(parity_calculation){
     {0x22c0593c, 0x226aea68, 0x00814ad3, 0x0c7fa193, 0x307b3abb, 0x010c41cd, 0x1461038d, 0x057fe85c, 0x033ea986, 0x19ed47ff},
     {0x22c0593c, 0x226aea68, 0x0e803584, 0x0e4bf44d, 0x0f013410, 0x0037c0f8, 0x1f0267d9, 0x03c6a850, 0x034909ad, 0x19ed9f33},
     {0x22c0593c, 0x226b0b9c, 0x00054e8e, 0x1dc8b839, 0x3ffdc9f9, 0x06bd6b9a, 0x076fa0b1, 0x2fe67609, 0x3fe9dbc6, 0x393d9734},
-    */
     // UBX https://portal.u-blox.com/s/question/0D52p00008HKDgdCAH/gps-paritycheck-in-the-nav-messfrbxdoesnt-work-if-d301does-ucenter-change-anything-after-checking-parity-itself
     /*
     {0x22C17924, 0x0C4B09FC, 0x17940031, 0x3532C719, 0x396D6953, 0x06CFCAFA, 0x0CAA7AAF, 0x0836C543, 0x3FC001F7, 0x3F879C24},
@@ -311,10 +309,29 @@ BOOST_AUTO_TEST_CASE(parity_calculation){
        * @see https://portal.u-blox.com/s/question/0D52p00009HHGpXCAX/manipulated-parity-bits-in-the-gps-lnav-sfrbx
        * @see https://portal.u-blox.com/s/question/0D52p00008HKDgdCAH/gps-paritycheck-in-the-nav-messfrbxdoesnt-work-if-d301does-ucenter-change-anything-after-checking-parity-itself
        */
-      if(packet[i][j] & 0x80000000){copy[j] ^= 0x29;} // D29*; bit 29 of previous transmitted word
-      if(packet[i][j] & 0x40000000){copy[j] ^= 0x16;} // D30*; bit 30
-      BOOST_TEST_MESSAGE(format("0x%08X; 0x%02X <=> 0x%02X") % packet[i][j] % (packet[i][j] & 0x3F) % (copy[j] & 0x3F));
-      BOOST_REQUIRE_EQUAL(packet[i][j], copy[j]);
+      static const bool D29_30[][2] = { // check all candidates
+        {false, false}, {false, true}, {true, false}, {true, true}
+      };
+      {
+        std::size_t k(0);
+        for(; k < sizeof(D29_30) / sizeof(D29_30[0]); ++k){
+          u32_t copy2(copy[j]);
+          if(D29_30[k][0]){copy2 ^= 0x29;} // D29*; bit 29 of previous transmitted word
+          if(D29_30[k][1]){copy2 ^= 0x16;} // D30*; bit 30
+          BOOST_TEST_MESSAGE(
+              format("%d: 0x%08X; 0x%02X <=> 0x%02X (%d, %d)")
+                % j % packet[i][j] % (packet[i][j] & 0x3F) % (copy2 & 0x3F)
+                % (D29_30[k][0] ? 1 : 0) % (D29_30[k][1] ? 1 : 0));
+          if(packet[i][j] == copy2){break;}
+        }
+        if(k == sizeof(D29_30) / sizeof(D29_30[0])){
+          BOOST_FAIL("parity check failed.");
+        }
+        BOOST_WARN_MESSAGE(
+            (((packet[i][j] & 0x80000000) == (D29_30[k][0] ? 0x80000000 : 0))
+            && ((packet[i][j] & 0x40000000) == (D29_30[k][1] ? 0x40000000 : 0))),
+            "UBX-SFRBX problem of D29* or D30*?");
+      }
     }
   }
 }
