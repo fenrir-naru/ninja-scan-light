@@ -881,29 +881,10 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
         DataParser::template num2bits<u8_t, InputT>(
             buf, parity, 30 * word_idx + 24, 6, EffectiveBits, PaddingBits_MSB);
       }
-      /**
-       * update hand over word (HOW, 2nd word) based on current buffer
-       * @param buf buffer
-       * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
-       * @see GPS ICD Table 20-XIV
-       */
-      static void how_update(InputT *buf){
-        parity_update(buf, 1);
-        u8_t parity_with_23_24(DataParser::template bits2num<u8_t, EffectiveBits, PaddingBits_MSB>(
-            buf, 30 + 22, 8)); // [23, 30]
-        if(parity_with_23_24 & 0x02){ // bit 29 should be zero
-          parity_with_23_24 ^= (u8_t)0x43; // modify bit 24 & 29 & 30
-        }
-        if(parity_with_23_24 & 0x01){ // bit 30 should be zero
-          parity_with_23_24 ^= (u8_t)0x81; // modify bit 23 & 30
-        }
-        DataParser::template num2bits<u8_t, InputT>(
-            buf, parity_with_23_24, 30 + 22, 8, EffectiveBits, PaddingBits_MSB);
-      }
 
       /**
        * Get word data for transmission
-       * @param buf buffer
+       * @param buf buffer, whose parity is assumed to be already updated
        * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
        * @param D29_star 29th bit of previous transmitted word
        * @param D30_star 30th bit of previous transmitted word
@@ -923,7 +904,16 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
           mask |= ((u32_t)0xFFFFFF << 6);
           mask |= 0x16;
         }
-        return word ^ mask;
+        u32_t res(word ^ mask);
+        if(word_idx == 1){ // trailing 2 bits of HOW should be zeros
+          if(res & 0x02){ // bit 29 should be zero
+            res ^= (u8_t)0x43; // modify bit 24 & 29 & 30
+          }
+          if(res & 0x01){ // bit 30 should be zero
+            res ^= (u8_t)0x81; // modify bit 23 & 30
+          }
+        }
+        return res;
       }
 
       struct SubFrame1 {
