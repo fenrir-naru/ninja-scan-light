@@ -1059,10 +1059,9 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 
         operator Ionospheric_UTC_Parameters() const {
           Ionospheric_UTC_Parameters converted;
-#define CONVERT(TARGET) \
-{converted.TARGET = sf[SF_ ## TARGET] * TARGET;}
 #define CONVERT2(dst, src) \
 {converted.dst = sf[SF_ ## src] * src;}
+#define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
             CONVERT2(alpha[0], alpha0);
             CONVERT2(alpha[1], alpha1);
             CONVERT2(alpha[2], alpha2);
@@ -1083,6 +1082,31 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 #undef CONVERT2
           return converted;
         };
+
+        raw_t &operator=(const Ionospheric_UTC_Parameters &params) {
+#define CONVERT2(src, dst, type) \
+{dst = (type)((params.src + 0.5 * sf[SF_ ## dst]) / sf[SF_ ## dst]);}
+#define CONVERT(TARGET, type) CONVERT2(TARGET, TARGET, type)
+            CONVERT2(alpha[0], alpha0, s8_t);
+            CONVERT2(alpha[1], alpha1, s8_t);
+            CONVERT2(alpha[2], alpha2, s8_t);
+            CONVERT2(alpha[3], alpha3, s8_t);
+            CONVERT2(beta[0],  beta0,  s8_t);
+            CONVERT2(beta[1],  beta1,  s8_t);
+            CONVERT2(beta[2],  beta2,  s8_t);
+            CONVERT2(beta[3],  beta3,  s8_t);
+            CONVERT(A1, s32_t);
+            CONVERT(A0, s32_t);
+            t_ot = (u8_t)((t_ot >> 12) & 0xFF);
+            WN_t = (u8_t)(params.WN_t & 0xFF);
+            delta_t_LS = (s8_t)params.delta_t_LS;
+            WN_LSF = (u8_t)(params.WN_LSF & 0xFF);
+            DN = (u8_t)(params.DN & 0xFF);
+            delta_t_LSF = (s8_t)params.delta_t_LSF;
+#undef CONVERT
+#undef CONVERT2
+          return *this;
+        }
       };
     };
   public:
