@@ -1680,7 +1680,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           float_t a_f1;         ///< Clock correction parameter (s)
           
           /**
-           * Up-cast to ephemeris
+           * Upgrade to ephemeris
            * 
            */
           operator Ephemeris() const {
@@ -1792,6 +1792,25 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                 CONVERT(a_f1);
 #undef CONVERT
               return converted;
+            }
+
+            raw_t &operator=(const Almanac &alm) {
+#define CONVERT(type, key) \
+{key = (type)((alm.key + 0.5 * sf[SF_ ## key]) / sf[SF_ ## key]);}
+              svid = (u8_t)alm.svid;
+              CONVERT(u16_t, e);
+              CONVERT(u8_t,  t_oa);
+              CONVERT(s16_t, delta_i);
+              CONVERT(s16_t, dot_Omega0);
+              SV_health = (u8_t)alm.SV_health;
+              CONVERT(u32_t, sqrt_A);
+              CONVERT(u32_t, Omega0);
+              CONVERT(u32_t, omega);
+              CONVERT(u32_t, M0);
+              CONVERT(s16_t, a_f0);
+              CONVERT(s16_t, a_f1);
+#undef CONVERT
+              return *this;
             }
           };
         };
