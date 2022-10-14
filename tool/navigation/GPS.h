@@ -905,7 +905,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
           mask |= 0x16;
         }
         u32_t res(word ^ mask);
-        if(word_idx == 1){ // trailing 2 bits of HOW should be zeros
+        if((word_idx == 1) || (word_idx == 9)){ // trailing 2 bits of HOW(word 2) and word 10 should be zeros
           if(res & 0x02){ // bit 29 should be zero
             res ^= (u8_t)0x43; // modify bit 24 & 29 & 30
           }
