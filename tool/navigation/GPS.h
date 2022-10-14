@@ -859,6 +859,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
       dest, *(u ## bits ## _t *)(&src), offset_bits2, length2, EffectiveBits, PaddingBits_MSB); \
 }
       convert_u( 8,  0,  8, preamble);
+      static void preamble_set(InputT *dest){preamble_set(dest, (u8_t)0x8B);}
       convert_u(32, 30, 24, how);
       convert_u( 8, 49,  3, subframe_id);
 
