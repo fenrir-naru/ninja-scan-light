@@ -861,6 +861,9 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
       convert_u( 8,  0,  8, preamble);
       static void preamble_set(InputT *dest){preamble_set(dest, (u8_t)0x8B);}
       convert_u(32, 30, 24, how);
+      static void how_set(InputT *dest, const gps_time_t &t){
+        how_set(dest, ((u32_t)(t.seconds / 1.5) & 0x1FF) << 7);
+      }
       convert_u( 8, 49,  3, subframe_id);
 
       /**
@@ -954,6 +957,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
         convert_s(16, 278, 14, dot_i0);
       };
 
+      convert_u( 8,  60,  2, data_id);
       convert_u( 8,  62,  6, sv_page_id);
 
       struct SubFrame4_5_Alnamac {
@@ -1028,19 +1032,38 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
         u8_t  DN;           ///< Last leap second update day (days)
         s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
 
-#define fetch_item(name) name = BroadcastedMessage< \
-   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
-   :: SubFrame4_Page18 :: name (src)
         template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
         void update(const InputT *src){
+          typedef typename BroadcastedMessage<
+              InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+              ::SubFrame4_Page18 parse_t;
+#define fetch_item(name) name = parse_t::name(src)
           fetch_item(alpha0); fetch_item(alpha1); fetch_item(alpha2); fetch_item(alpha3);
           fetch_item(beta0);  fetch_item(beta1);  fetch_item(beta2);  fetch_item(beta3);
           fetch_item(A1);     fetch_item(A0);
           fetch_item(WN_t);   fetch_item(WN_LSF);
           fetch_item(t_ot);   fetch_item(delta_t_LS);   fetch_item(delta_t_LSF);
           fetch_item(DN);
-        }
 #undef fetch_item
+        }
+
+        template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+        void dump(BufferT *dst){
+          typedef BroadcastedMessage<
+              BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+              deparse_t;
+          deparse_t::preamble_set(dst);
+          deparse_t::subframe_id_set(dst, 4);
+          deparse_t::sv_page_id_set(dst, 56);
+#define dump_item(name) deparse_t::SubFrame4_Page18:: name ## _set(dst, name)
+          dump_item(alpha0); dump_item(alpha1); dump_item(alpha2); dump_item(alpha3);
+          dump_item(beta0);  dump_item(beta1);  dump_item(beta2);  dump_item(beta3);
+          dump_item(A1);     dump_item(A0);
+          dump_item(WN_t);   dump_item(WN_LSF);
+          dump_item(t_ot);   dump_item(delta_t_LS);   dump_item(delta_t_LSF);
+          dump_item(DN);
+#undef dump_item
+        }
         
         enum {
           SF_alpha0,
@@ -1479,6 +1502,37 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
               return iode;
             }
 #undef fetch_item
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+            void dump(BufferT *dst, const unsigned int &subframe){
+              typedef BroadcastedMessage<
+                  BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  deparse_t;
+#define dump_item(num, name) deparse_t::SubFrame ## num :: name ## _set(dst, name)
+              switch(subframe){
+                case 1:
+                  dump_item(1, WN);   dump_item(1, URA);  dump_item(1, SV_health);
+                  dump_item(1, iodc); dump_item(1, t_GD); dump_item(1, t_oc);
+                  dump_item(1, a_f2); dump_item(1, a_f1); dump_item(1, a_f0);
+                  break;
+                case 2: {
+                  dump_item(2, iode); dump_item(2, c_rs);   dump_item(2, delta_n);
+                  dump_item(2, M0);   dump_item(2, c_uc);   dump_item(2, e);
+                  dump_item(2, c_us); dump_item(2, sqrt_A); dump_item(2, t_oe);
+                  u8_t fit(fit_interval_flag ? 1 : 0); dump_item(2, fit);
+                  break;
+                }
+                case 3:
+                  dump_item(3, c_ic);       dump_item(3, Omega0); dump_item(3, c_is);
+                  dump_item(3, i0);         dump_item(3, c_rc);   dump_item(3, omega);
+                  dump_item(3, dot_Omega0); dump_item(3, dot_i0); dump_item(3, iode);
+                  break;
+                default:
+                  return;
+              }
+#undef dump_item
+              deparse_t::preamble_set(dst);
+              deparse_t::subframe_id_set(dst, subframe);
+            }
 
             static float_t fit_interval(const bool &_flag, const u16_t &_iodc){
               // Fit interval (ICD:20.3.4.4)
@@ -1724,6 +1778,19 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             
             return converted;
           }
+          /**
+           * downgrade from ephemeris
+           */
+          Almanac &operator=(const Ephemeris &eph) {
+#define copy_item(dst, src) dst = eph.src
+            copy_item(svid, svid);      copy_item(e, e);      copy_item(t_oa, t_oe);
+            copy_item(delta_i, i0);     copy_item(dot_Omega0, dot_Omega0);
+            copy_item(SV_health, SV_health);  copy_item(sqrt_A, sqrt_A);
+            copy_item(Omega0, Omega0);  copy_item(omega, omega);    copy_item(M0, M0);
+            copy_item(a_f0, a_f0);      copy_item(a_f1, a_f1);
+#undef copy_item
+            return *this;
+          }
           
           struct raw_t {
             u8_t  svid;         ///< Satellite number
@@ -1758,6 +1825,27 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               fetch_item(a_f1);
             }
 #undef fetch_item
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+            void dump(BufferT *dst){
+              typedef BroadcastedMessage<
+                  BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  deparse_t;
+#define dump_item(name) deparse_t::SubFrame4_5_Alnamac:: name ## _set(dst, name)
+              dump_item(e);           dump_item(t_oa);      dump_item(delta_i);
+              dump_item(dot_Omega0);  dump_item(SV_health); dump_item(sqrt_A);
+              dump_item(Omega0);      dump_item(omega);     dump_item(M0);
+              dump_item(a_f0);        dump_item(a_f1);
+#undef dump_item
+              deparse_t::preamble_set(dst);
+              deparse_t::data_id_set(dst, 1); // always "01" @see 20.3.3.5.1.1 Data ID and SV ID.
+              if(svid <= 24){
+                deparse_t::subframe_id_set(dst, 5);
+                deparse_t::sv_page_id_set(dst, svid);
+              }else{ // subframe 4 and page 2-5, 7-10
+                deparse_t::subframe_id_set(dst, 4);
+                deparse_t::sv_page_id_set(dst, svid);
+              }
+            }
 
             enum {
               SF_e,

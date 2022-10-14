@@ -268,6 +268,19 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
     (typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters &)res = raw;
     return res;
   }
+  %typemap(in,numinputs=0) unsigned int buf[10] (unsigned int temp[10]) "$1 = temp;"
+  %typemap(argout) unsigned int buf[10] {
+    for(int i(0); i < 10; ++i){
+      %append_output(SWIG_From(unsigned int)(($1)[i]));
+    }
+  }
+  void dump(unsigned int buf[10], const GPS_Time<FloatT> &t){
+    typedef typename GPS_SpaceNode<FloatT>
+        ::BroadcastedMessage<unsigned int, 30> dump_t;
+    dump_t::how_set(buf, t);
+    GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters::raw_t raw;
+    (raw = *self).dump<2, 0>(buf);
+  }
 }
 
 %inline %{
@@ -378,6 +391,30 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         self->dot_i0 = eph.dot_i0;
         break;
     }
+  }
+  %apply unsigned int buf[10] {
+      unsigned int sf1[10], unsigned int sf2[10], unsigned int sf3[10]};
+  void dump(
+      unsigned int sf1[10], unsigned int sf2[10], unsigned int sf3[10],
+      const GPS_Time<FloatT> &t){
+    typedef typename GPS_SpaceNode<FloatT>
+        ::BroadcastedMessage<unsigned int, 30> dump_t;
+    GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t raw;
+    raw = *self;
+    unsigned int *buf[10] = {sf1, sf2, sf3};
+    for(int i(0); i < 3; ++i){
+      dump_t::how_set(buf[i], t);
+      raw.dump<2, 0>(buf[i], i + 1);
+    }
+  }
+  void dump_alnamac(unsigned int buf[10], const GPS_Time<FloatT> &t){
+    typedef typename GPS_SpaceNode<FloatT>
+        ::BroadcastedMessage<unsigned int, 30> dump_t;
+    dump_t::how_set(buf, t);
+    typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
+    almanac_t almanac;
+    almanac_t::raw_t raw;
+    (raw = (almanac = *self)).dump<2, 0>(buf);
   }
   %typemap(out) constellation_res_t {
     %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
