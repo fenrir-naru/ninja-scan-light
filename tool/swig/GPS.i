@@ -311,7 +311,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   MAKE_ACCESSOR(svid, unsigned int);
           
   MAKE_ACCESSOR(WN, unsigned int);
-  MAKE_ACCESSOR(URA, int);
+  MAKE_ACCESSOR(URA, FloatT);
   MAKE_ACCESSOR(SV_health, unsigned int);
   MAKE_ACCESSOR(iodc, int);
   MAKE_ACCESSOR(t_GD, FloatT);
