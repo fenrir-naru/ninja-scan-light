@@ -1109,7 +1109,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 
         raw_t &operator=(const Ionospheric_UTC_Parameters &params) {
 #define CONVERT2(src, dst, type) \
-{dst = (type)((params.src + 0.5 * sf[SF_ ## dst]) / sf[SF_ ## dst]);}
+{dst = (type)(params.src / sf[SF_ ## dst] + 0.5);}
 #define CONVERT(TARGET, type) CONVERT2(TARGET, TARGET, type)
             CONVERT2(alpha[0], alpha0, s8_t);
             CONVERT2(alpha[1], alpha1, s8_t);
@@ -1633,38 +1633,38 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
             }
 
             raw_t &operator=(const Ephemeris &eph){
-#define CONVERT(TARGET) \
-{TARGET = (s32_t)((eph.TARGET + 0.5 * sf[SF_ ## TARGET]) / sf[SF_ ## TARGET]);}
+#define CONVERT(type, TARGET) \
+{TARGET = (type)(eph.TARGET / sf[SF_ ## TARGET] + 0.5);}
               svid = eph.svid;
 
               WN = eph.WN;
               URA = URA_index(eph.URA);
               SV_health = eph.SV_health;
               iodc = eph.iodc;
-              CONVERT(t_GD);
-              CONVERT(t_oc);
-              CONVERT(a_f0);
-              CONVERT(a_f1);
-              CONVERT(a_f2);
+              CONVERT(s8_t,  t_GD);
+              CONVERT(u16_t, t_oc);
+              CONVERT(s32_t, a_f0);
+              CONVERT(s16_t, a_f1);
+              CONVERT(s8_t,  a_f2);
 
               iode = eph.iode;
-              CONVERT(c_rs);
-              CONVERT(delta_n);
-              CONVERT(M0);
-              CONVERT(c_uc);
-              CONVERT(e);
-              CONVERT(c_us);
-              CONVERT(sqrt_A);
-              CONVERT(t_oe);
+              CONVERT(s16_t, c_rs);
+              CONVERT(s16_t, delta_n);
+              CONVERT(s32_t, M0);
+              CONVERT(s16_t, c_uc);
+              CONVERT(u32_t, e);
+              CONVERT(s16_t, c_us);
+              CONVERT(u32_t, sqrt_A);
+              CONVERT(u16_t, t_oe);
 
-              CONVERT(c_ic);
-              CONVERT(Omega0);
-              CONVERT(c_is);
-              CONVERT(i0);
-              CONVERT(c_rc);
-              CONVERT(omega);
-              CONVERT(dot_Omega0);
-              CONVERT(dot_i0);
+              CONVERT(s16_t, c_ic);
+              CONVERT(s32_t, Omega0);
+              CONVERT(s16_t, c_is);
+              CONVERT(s32_t, i0);
+              CONVERT(s16_t, c_rc);
+              CONVERT(s32_t, omega);
+              CONVERT(s32_t, dot_Omega0);
+              CONVERT(s16_t, dot_i0);
 #undef CONVERT
               fit_interval_flag = (eph.fit_interval > 5 * 60 * 60);
 
@@ -1885,7 +1885,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
             raw_t &operator=(const Almanac &alm) {
 #define CONVERT(type, key) \
-{key = (type)((alm.key + 0.5 * sf[SF_ ## key]) / sf[SF_ ## key]);}
+{key = (type)(alm.key  / sf[SF_ ## key] + 0.5);}
               svid = (u8_t)alm.svid;
               CONVERT(u16_t, e);
               CONVERT(u8_t,  t_oa);
