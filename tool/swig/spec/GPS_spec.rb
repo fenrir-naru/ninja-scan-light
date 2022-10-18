@@ -765,9 +765,69 @@ __RINEX_CLK_TEXT__
       [:alpha, :beta].each{|k|
         puts "Iono #{k}: #{sn.iono_utc.send(k)}"
       }
+      proc{|raw|
+        expect(raw.size).to eq(10)
+        puts "Raw(IONO): #{raw.collect{|v| "0x%08X" % [v]}.join(', ')}"
+        iono2 = GPS::Ionospheric_UTC_Parameters::parse(raw)
+        [:alpha, :beta].collect{|f|
+          sn.iono_utc.send(f).zip(iono2.send(f))
+        }.flatten(1).zip([-30, -27, -24, -24, 11, 14, 16, 16]).each{|(a, b), sf|
+          expect(a).to be_within((2 ** sf) * 2).of(b)
+        }
+        [
+          [:A1, 2 ** -50], [:A0, 2 ** -30],
+        ].each{|k, sf|
+          #p [k, sf.to_f, sn.iono_utc.send(k) - iono2.send(k), sn.iono_utc.send(k), iono2.send(k)]
+          expect(sn.iono_utc.send(k)).to be_within((sf || 1).to_f * 2).of(iono2.send(k))
+        }
+      }.call(sn.iono_utc.dump(t_meas))
       
       meas.each{|prn, k, v|
         eph = sn.ephemeris(prn)
+        sc2rad = 3.1415926535898
+        proc{|raw|
+          expect(raw.size).to eq(30)
+          eph2 = GPS::Ephemeris::new
+          raw.each_slice(10).with_index{|subframe, i|
+            puts "Raw(PRN:#{prn},SF:#{i+1}): #{subframe.collect{|v| "0x%08X" % [v]}.join(', ')}"
+            eph2.parse(subframe)
+          }
+          expect(eph.WN % 1024).to be(eph2.WN % 1024)
+          [
+            #:URA,
+            :SV_health, :iodc,
+            [:t_GD, 2 ** -31], [:t_oc, 2 ** 4], # SF1
+            [:a_f0, 2 ** -31], [:a_f1, 2 ** -43], [:a_f2, 2 ** -55], # SF1
+            :iode, # SF2
+            [:c_rs, 2 ** -5], [:delta_n, sc2rad * 2 ** -43], # SF2
+            [:M0, sc2rad * 2 ** -31], [:c_uc, 2 ** -29], [:e, 2 ** -33], # SF2
+            [:c_us, 2 ** -29], [:sqrt_A, 2 ** -19], [:t_oe, 2 ** 4], # SF2
+            :fit_interval, # SF2
+            [:c_ic, 2 ** -29], [:Omega0, sc2rad * 2 ** -31], [:c_is, 2 ** -29], # SF3
+            [:i0, sc2rad * 2 ** -31], [:c_rc, 2 ** -5], [:omega, sc2rad * 2 ** -31], # SF3
+            [:dot_Omega0, sc2rad * 2 ** -43], [:dot_i0, sc2rad * 2 ** -43], # SF3
+          ].each{|k, sf|
+            #p [k, sf.to_f, eph.send(k) - eph2.send(k), eph.send(k), eph2.send(k)]
+            expect(eph.send(k)).to be_within((sf || 1).to_f * 2).of(eph2.send(k))
+          }
+        }.call(eph.dump(t_meas))
+        proc{|raw| # Almanac -> Ephemeris
+          expect(raw.size).to eq(10)
+          puts "Raw(PRN:#{prn},Almanac): #{raw.collect{|v| "0x%08X" % [v]}.join(', ')}"
+          eph2 = GPS::Ephemeris::new
+          eph2.parse_almanac(raw)
+          [
+            :SV_health,
+            [:t_oc, 2 ** 12], [:a_f0, 2 ** -20], [:a_f1, 2 ** -38], 
+            [:M0, sc2rad * 2 ** -23], [:e, 2 ** -21],
+            [:sqrt_A, 2 ** -11], [:t_oe, 2 ** 12],
+            [:Omega0, sc2rad * 2 ** -23], [:i0, sc2rad * 2 ** -19],
+            [:omega, sc2rad * 2 ** -23], [:dot_Omega0, sc2rad * 2 ** -38],
+          ].each{|k, sf|
+            #p [k, sf.to_f, eph.send(k) - eph2.send(k), eph.send(k), eph2.send(k)]
+            expect(eph.send(k)).to be_within((sf || 1).to_f * 2).of(eph2.send(k))
+          }
+        }.call(eph.dump_almanac(t_meas))
         puts "XYZ(PRN:#{prn}): #{eph.constellation(t_meas)[0].to_a} (iodc: #{eph.iodc}, iode: #{eph.iode})"
       }
       

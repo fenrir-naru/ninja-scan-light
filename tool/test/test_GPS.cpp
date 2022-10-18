@@ -72,11 +72,11 @@ void fill_buffer(const bitset<N_bitset> &b, BufferT (&buf)[N_buf]){
 }
 
 template <int PaddingMSB, int PaddingLSB,
-    size_t N_bitset, class BufferT>
-void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
+    size_t N_bitset, class BufferT, std::size_t N_buf>
+void check_parse(const bitset<N_bitset> &b, const BufferT (&buf)[N_buf]){
   typedef space_node_t::BroadcastedMessage<
       BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingMSB - PaddingLSB, PaddingMSB> msg_t;
-
+  BufferT buf2[N_buf];
 #define each2(offset, bits, shift, func) { \
   boost::uint32_t res((boost::uint32_t)msg_t::func(buf)); \
   res >>= shift; \
@@ -85,7 +85,11 @@ void check_parse(const bitset<N_bitset> &b, const BufferT *buf){
     BOOST_REQUIRE_EQUAL(b[j], ((res & 0x1) == 1)); \
   } \
 }
-#define each(offset, bits, func) each2(offset, bits, 0, func)
+#define each(offset, bits, func) { \
+  each2(offset, bits, 0, func); \
+  msg_t::func ## _set(buf2, msg_t::func(buf)); \
+  BOOST_REQUIRE_EQUAL(msg_t::func(buf), msg_t::func(buf2)); \
+}
   each(   0,  8, preamble);
   each(  30, 24, how);
   each(  49,  3, subframe_id);
@@ -255,6 +259,79 @@ BOOST_FIXTURE_TEST_CASE(data_parse, Fixture){
       u32_t buf[(300 + u32_bits - 2 - 1) / (u32_bits - 2)];
       fill_buffer<8, -6>(b, buf);
       check_parse<8, -6>(b, buf);
+    }
+  }
+}
+
+BOOST_AUTO_TEST_CASE(parity_calculation){
+  typedef boost::uint32_t u32_t;
+  static const u32_t packet[][10] = {
+    // UBX 20210531/log.ubx
+    {0x22c06f12, 0x96f4ab18, 0x000567ba, 0x8da593e4, 0x000a09e8, 0x1fae2945, 0x85f04883, 0x0f2a68f3, 0x3fea7f5c, 0x010910af},
+    {0x22c06f12, 0x96f4ab18, 0x3ff9c815, 0x803a7f60, 0x3ff909f9, 0x8031c995, 0x88675bbe, 0xa80227e4, 0x3fe94d5d, 0x8fc19590},
+    {0x22c06f12, 0x96f4ab18, 0x002c92c3, 0x15fff712, 0x80184a3a, 0x8051194a, 0x8c60701e, 0x897ca876, 0xbfe9aa21, 0xa07cea48},
+    {0x22c06f12, 0x96f4ab18, 0x3fd6c8bd, 0x812a4a14, 0x003009c0, 0x28fc6911, 0x88eb726f, 0x06513976, 0xbfe981a6, 0x8cc1cd5b},
+    {0x22c06f12, 0x96f4ab18, 0x0002935e, 0x8bd07e54, 0x3fe4c9fc, 0x3c84d1c5, 0x8bea1297, 0x3e8dec39, 0xbfe8f2cc, 0x047c1d63},
+    {0x22c06f12, 0x96f4ab18, 0x3fe95cc1, 0xbd925a10, 0x3fee8a15, 0x87ba8819, 0x85bdc8a6, 0xa1efc191, 0xbfeb354a, 0x85bfb824},
+    {0x22c06f12, 0x96f4ab18, 0x000626bc, 0x0a58052c, 0x0016898e, 0x86188e34, 0x04e6f636, 0xa45e4fd5, 0xbfea0780, 0x0709df53},
+    {0x22c06f12, 0x96f4ab18, 0x3ffd9ccb, 0x28109433, 0x000a4a0d, 0x864db26e, 0x8623763e, 0xa3868c2e, 0xbfeb7fbd, 0x94c001b8},
+    {0x22c06f12, 0x96f4ab18, 0x000032a7, 0x10172e7a, 0xbffcc9c7, 0x07385330, 0x08b9223a, 0xb348e024, 0x3fe98a8b, 0x0afd90cb},
+    {0x22c06f12, 0x96f4ab18, 0x3fef1c3c, 0x23642bd4, 0x004e89c2, 0x80b73380, 0x05203447, 0x305bdde9, 0xbfea8c9b, 0x04bf1ae3},
+    // UBX f9p_ppp_1224/rover.ubx
+    {0x22c0593c, 0x226aea68, 0x393f01c1, 0x8ce67a0e, 0x8a40fa3a, 0xbf22802d, 0xa0ee0f0f, 0x03c82852, 0x83326c66, 0x99ed9f33},
+    {0x22c0593c, 0x226aea68, 0x043efa55, 0x8d69c330, 0x0b6bd821, 0xbf084064, 0x02a67db6, 0x8391a845, 0x832eb57d, 0x99ed9f60},
+    {0x22c0593c, 0x226aea68, 0x03823a77, 0x0c2d07d0, 0x2d867fb2, 0x821841b4, 0x06b84750, 0x02642871, 0x833f3474, 0x19ed9d0c},
+    {0x22c0593c, 0x226aea68, 0x1102a2e7, 0x0e21d1bc, 0x3a021ed0, 0x0263809c, 0x3432e07f, 0x0297e850, 0x0375ba33, 0x19ed9fbf},
+    {0x22c0593c, 0x226aea68, 0x1a001d7f, 0x0c0b9c5e, 0x919ff8f3, 0x001c4077, 0x2a88238b, 0x03a8e849, 0x835cb857, 0x19ed9fec},
+    {0x22c0593c, 0x226aea68, 0x16fe4a01, 0x8c40bf73, 0x2d5a7247, 0x3e6ec0cf, 0x0320988e, 0x8232a86c, 0x03890814, 0x19ed9fec},
+    {0x22c0593c, 0x226aea68, 0x09fe4c30, 0x0bf17eb2, 0xb67239b3, 0x3e830104, 0x1db8a628, 0x0247a86a, 0x835954a5, 0x99ed9f60},
+    {0x22c0593c, 0x226aea68, 0x00814ad3, 0x0c7fa193, 0x307b3abb, 0x010c41cd, 0x9461038d, 0x857fe85c, 0x033ea986, 0x99ed47ff},
+    {0x22c0593c, 0x226aea68, 0x0e803584, 0x0e4bf44d, 0x8f013410, 0x0037c0f8, 0x1f0267d9, 0x83c6a850, 0x034909ad, 0x99ed9f33},
+    {0x22c0593c, 0x226b0b9c, 0x00054e8e, 0x9dc8b839, 0xbffdc9f9, 0x86bd6b9a, 0x876fa0b1, 0xafe67609, 0xbfe9dbc6, 0xb93d9734},
+#if 0
+    // UBX https://portal.u-blox.com/s/question/0D52p00008HKDgdCAH/gps-paritycheck-in-the-nav-messfrbxdoesnt-work-if-d301does-ucenter-change-anything-after-checking-parity-itself
+    {0x22C17924, 0x0C4B09FC, 0x17940031, 0x3532C719, 0x396D6953, 0x06CFCAFA, 0x0CAA7AAF, 0x0836C543, 0x3FC001F7, 0x3F879C24},
+    {0x22C17924, 0x0C4B2A94, 0x37FE1361, 0x33C05CA8, 0x0F066CD1, 0x01B57E70, 0x02EA389B, 0x3B1257B7, 0x3CA0A933, 0x36C56404},
+    {0x22C17924, 0x0C4B4BE4, 0x00110F66, 0x1C6FB753, 0x0018760E, 0x0894420B, 0x39E396DC, 0x32D6F917, 0x00156E12, 0x37FF9990},
+    {0x22C17924, 0x0C4B6CA0, 0x1E4D24FA, 0x1E96DE7A, 0x28CD0852, 0x1E0D4400, 0x118653CB, 0x2434BF90, 0x010692AC, 0x2AAAAABC},
+    {0x22C17924, 0x0C4B8D9C, 0x12CCAE4C, 0x13B86A04, 0x3F43002F, 0x17BCBC05, 0x1D21EA30, 0x04335349, 0x05795D1A, 0x0BC001E0},
+    {0x22C17924, 0x0C4BA960, 0x17940031, 0x3532C719, 0x396D6953, 0x06CFCAFA, 0x0CAA7AAF, 0x0836C543, 0x3FC001F7, 0x3F879C24},
+#endif
+  };
+  for(std::size_t i(0); i < sizeof(packet) / sizeof(packet[0]); ++i){
+    typedef space_node_t::BroadcastedMessage<u32_t, 30> msg_t;
+    u32_t copy[10];
+    std::memcpy(copy, packet[i], sizeof(copy));
+    for(int j(0); j < 10; ++j){
+      msg_t::parity_update(copy, j);
+      /*
+       * UBX-SFRBX contains D29* and D30* in the leading two bits
+       * @see https://portal.u-blox.com/s/question/0D52p00009HHGpXCAX/manipulated-parity-bits-in-the-gps-lnav-sfrbx
+       * @see https://portal.u-blox.com/s/question/0D52p00008HKDgdCAH/gps-paritycheck-in-the-nav-messfrbxdoesnt-work-if-d301does-ucenter-change-anything-after-checking-parity-itself
+       */
+      static const bool D29_30[][2] = { // check all candidates
+        {false, false}, {false, true}, {true, false}, {true, true}
+      };
+      {
+        std::size_t k(0);
+        for(; k < sizeof(D29_30) / sizeof(D29_30[0]); ++k){
+          u32_t copy2(copy[j]);
+          if(D29_30[k][0]){copy2 ^= 0x29;} // D29*; bit 29 of previous transmitted word
+          if(D29_30[k][1]){copy2 ^= 0x16;} // D30*; bit 30
+          BOOST_TEST_MESSAGE(
+              format("%d: 0x%08X; 0x%02X <=> 0x%02X (%d, %d)")
+                % j % packet[i][j] % (packet[i][j] & 0x3F) % (copy2 & 0x3F)
+                % (D29_30[k][0] ? 1 : 0) % (D29_30[k][1] ? 1 : 0));
+          if(packet[i][j] == copy2){break;}
+        }
+        if(k == sizeof(D29_30) / sizeof(D29_30[0])){
+          BOOST_FAIL("parity check failed.");
+        }
+        BOOST_WARN_MESSAGE(
+            (((packet[i][j] & 0x80000000) == (D29_30[k][0] ? 0x80000000 : 0))
+            && ((packet[i][j] & 0x40000000) == (D29_30[k][1] ? 0x40000000 : 0))),
+            "UBX-SFRBX problem of D29* or D30*?");
+      }
     }
   }
 }

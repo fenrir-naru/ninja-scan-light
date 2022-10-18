@@ -51,6 +51,8 @@
 
 #include "coordinate.h"
 
+#include "util/bit_counter.h"
+
 #ifdef pow2
 #define POW2_ALREADY_DEFINED
 #else
@@ -762,6 +764,44 @@ class GPS_SpaceNode {
               InputT>(buf, index)
             >> ((sizeof(OutputT) * CHAR_BIT) - length));
       }
+
+      template <class NumberT, class BufferT>
+      static void num2bits(
+          BufferT *dest, NumberT src, const uint_t &index, uint_t length,
+          const int &effective_bits_in_BufferT = sizeof(BufferT) * CHAR_BIT,
+          const int &padding_bits_in_BufferT_MSB = 0){
+        static const int buf_bits(sizeof(BufferT) * CHAR_BIT);
+        static const BufferT mask_msb_aligned( // "1.(effective).10..0"
+            (~(BufferT)0) << (buf_bits - effective_bits_in_BufferT));
+        static const BufferT mask_full_n( // "1.(padding).10.(effective).01..1"
+            ~(mask_msb_aligned >> padding_bits_in_BufferT_MSB));
+        BufferT buf, mask;
+        do{ // Lesat significant block
+          std::div_t align(std::div(index + length, effective_bits_in_BufferT));
+          dest += align.quot;
+          if(align.rem == 0){break;}
+          int len_last(align.rem);
+          if((int)length <= align.rem){len_last = length;}
+          int r_sfift(padding_bits_in_BufferT_MSB + align.rem - len_last);
+          buf = (BufferT)(src << (buf_bits - len_last)) >> r_sfift;
+          mask = (mask_msb_aligned << (effective_bits_in_BufferT - len_last)) >> r_sfift;
+          (*dest &= ~mask) |= (buf & mask);
+          src >>= len_last;
+          length -= len_last;
+        }while(false);
+        std::div_t qr(std::div(length, effective_bits_in_BufferT));
+        for(; qr.quot > 0; qr.quot--, src >>= effective_bits_in_BufferT){ // Middle
+          buf = (BufferT)(src << (buf_bits - effective_bits_in_BufferT))
+              >> padding_bits_in_BufferT_MSB;
+          (*(--dest) &= mask_full_n) |= (buf & ~mask_full_n);
+        }
+        if(qr.rem > 0){ // Most
+          int r_shift(padding_bits_in_BufferT_MSB + effective_bits_in_BufferT - qr.rem);
+          buf = (BufferT)(src << (buf_bits - qr.rem)) >> r_shift;
+          mask = (mask_msb_aligned << (effective_bits_in_BufferT - qr.rem)) >> r_shift;
+          (*(--dest) &= ~mask) |= (buf & mask);
+        }
+      }
     };
 
     template <class InputT,
@@ -773,6 +813,10 @@ static u ## bits ## _t name(const InputT *buf){ \
   return \
       DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
         buf, offset_bits, length); \
+} \
+static void name ## _set(InputT *dest, const u ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src, offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_s(bits, offset_bits, length, name) \
 static s ## bits ## _t name(const InputT *buf){ \
@@ -780,6 +824,10 @@ static s ## bits ## _t name(const InputT *buf){ \
       DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
         buf, offset_bits)) \
       >> (bits - length); \
+} \
+static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_u_2(bits, offset_bits1, length1, offset_bits2, length2, name) \
 static u ## bits ## _t name(const InputT *buf){ \
@@ -788,6 +836,12 @@ static u ## bits ## _t name(const InputT *buf){ \
         buf, offset_bits1, length1) << length2) \
       | DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
           buf, offset_bits2, length2); \
+} \
+static void name ## _set(InputT *dest, const u ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src >> length2, offset_bits1, length1, EffectiveBits, PaddingBits_MSB); \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src, offset_bits2, length2, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_s_2(bits, offset_bits1, length1, offset_bits2, length2, name) \
 static s ## bits ## _t name(const InputT *buf){ \
@@ -797,10 +851,74 @@ static s ## bits ## _t name(const InputT *buf){ \
         | (DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
             buf, offset_bits2, length2) << (bits - length1 - length2)))) \
       >> (bits - length1 - length2); \
+} \
+static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src) >> length2, offset_bits1, length1, EffectiveBits, PaddingBits_MSB); \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits2, length2, EffectiveBits, PaddingBits_MSB); \
 }
       convert_u( 8,  0,  8, preamble);
+      static void preamble_set(InputT *dest){preamble_set(dest, (u8_t)0x8B);}
       convert_u(32, 30, 24, how);
+      static void how_set(InputT *dest, const gps_time_t &t){
+        how_set(dest, ((u32_t)(t.seconds / 1.5) & 0x1FF) << 7);
+      }
       convert_u( 8, 49,  3, subframe_id);
+
+      /**
+       * update parity bits based on current buffer
+       * @param buf buffer
+       * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
+       * @see GPS ICD Table 20-XIV
+       */
+      static void parity_update(InputT *buf, const int &word_idx){
+        u32_t word(DataParser::template bits2num<u32_t, EffectiveBits, PaddingBits_MSB>(
+            buf, 30 * word_idx, 24));
+        u8_t parity;
+        parity  = (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0xEC7CD2) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0x763E69) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0xBB1F34) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0x5D8F9A) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0xAEC7CD) & 0x1); parity <<= 1;
+        parity |= (u8_t)(BitCounter<u32_t>::count(word & (u32_t)0x2DEA27) & 0x1);
+        DataParser::template num2bits<u8_t, InputT>(
+            buf, parity, 30 * word_idx + 24, 6, EffectiveBits, PaddingBits_MSB);
+      }
+
+      /**
+       * Get word data for transmission
+       * @param buf buffer, whose parity is assumed to be already updated
+       * @param word_idx word index whose range is [0, 9] (0 means "Word 1")
+       * @param D29_star 29th bit of previous transmitted word
+       * @param D30_star 30th bit of previous transmitted word
+       * @return (u32_t) a word consisting of leading 2 padding bits and following 30 informative bits
+       * @see GPS ICD Table 20-XIV
+       */
+      static u32_t word_for_transmission(
+          const InputT *buf, const int &word_idx,
+          const bool &D29_star = false, const bool &D30_star = false){
+        u32_t word(DataParser::template bits2num<u32_t, EffectiveBits, PaddingBits_MSB>(
+            buf, 30 * word_idx, 30));
+        u32_t mask(0);
+        if(D29_star){
+          mask |= 0x29;
+        }
+        if(D30_star){
+          mask |= ((u32_t)0xFFFFFF << 6);
+          mask |= 0x16;
+        }
+        u32_t res(word ^ mask);
+        if((word_idx == 1) || (word_idx == 9)){ // trailing 2 bits of HOW(word 2) and word 10 should be zeros
+          if(res & 0x02){ // bit 29 should be zero
+            res ^= (u8_t)0x43; // modify bit 24 & 29 & 30
+          }
+          if(res & 0x01){ // bit 30 should be zero
+            res ^= (u8_t)0x81; // modify bit 23 & 30
+          }
+        }
+        return res;
+      }
 
       struct SubFrame1 {
         convert_u(16, 60, 10, WN);
@@ -839,6 +957,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         convert_s(16, 278, 14, dot_i0);
       };
 
+      convert_u( 8,  60,  2, data_id);
       convert_u( 8,  62,  6, sv_page_id);
 
       struct SubFrame4_5_Alnamac {
@@ -846,7 +965,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         convert_u( 8,  90,  8, t_oa);
         convert_s(16,  98, 16, delta_i);
         convert_s(16, 120, 16, dot_Omega0);
-        convert_u( 8, 128,  8, SV_health);
+        convert_u( 8, 136,  8, SV_health);
         convert_u(32, 150, 24, sqrt_A);
         convert_s(32, 180, 24, Omega0);
         convert_s(32, 210, 24, omega);
@@ -913,19 +1032,38 @@ static s ## bits ## _t name(const InputT *buf){ \
         u8_t  DN;           ///< Last leap second update day (days)
         s8_t  delta_t_LSF;  ///< Updated leap seconds (s)
 
-#define fetch_item(name) name = BroadcastedMessage< \
-   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
-   :: SubFrame4_Page18 :: name (src)
         template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
         void update(const InputT *src){
+          typedef typename BroadcastedMessage<
+              InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+              ::SubFrame4_Page18 parse_t;
+#define fetch_item(name) name = parse_t::name(src)
           fetch_item(alpha0); fetch_item(alpha1); fetch_item(alpha2); fetch_item(alpha3);
           fetch_item(beta0);  fetch_item(beta1);  fetch_item(beta2);  fetch_item(beta3);
           fetch_item(A1);     fetch_item(A0);
           fetch_item(WN_t);   fetch_item(WN_LSF);
           fetch_item(t_ot);   fetch_item(delta_t_LS);   fetch_item(delta_t_LSF);
           fetch_item(DN);
-        }
 #undef fetch_item
+        }
+
+        template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+        void dump(BufferT *dst){
+          typedef BroadcastedMessage<
+              BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+              deparse_t;
+          deparse_t::preamble_set(dst);
+          deparse_t::subframe_id_set(dst, 4);
+          deparse_t::sv_page_id_set(dst, 56);
+#define dump_item(name) deparse_t::SubFrame4_Page18:: name ## _set(dst, name)
+          dump_item(alpha0); dump_item(alpha1); dump_item(alpha2); dump_item(alpha3);
+          dump_item(beta0);  dump_item(beta1);  dump_item(beta2);  dump_item(beta3);
+          dump_item(A1);     dump_item(A0);
+          dump_item(WN_t);   dump_item(WN_LSF);
+          dump_item(t_ot);   dump_item(delta_t_LS);   dump_item(delta_t_LSF);
+          dump_item(DN);
+#undef dump_item
+        }
         
         enum {
           SF_alpha0,
@@ -945,10 +1083,9 @@ static s ## bits ## _t name(const InputT *buf){ \
 
         operator Ionospheric_UTC_Parameters() const {
           Ionospheric_UTC_Parameters converted;
-#define CONVERT(TARGET) \
-{converted.TARGET = sf[SF_ ## TARGET] * TARGET;}
 #define CONVERT2(dst, src) \
 {converted.dst = sf[SF_ ## src] * src;}
+#define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
             CONVERT2(alpha[0], alpha0);
             CONVERT2(alpha[1], alpha1);
             CONVERT2(alpha[2], alpha2);
@@ -969,6 +1106,31 @@ static s ## bits ## _t name(const InputT *buf){ \
 #undef CONVERT2
           return converted;
         };
+
+        raw_t &operator=(const Ionospheric_UTC_Parameters &params) {
+#define CONVERT2(src, dst, type) \
+{dst = (type)(params.src / sf[SF_ ## dst] + 0.5);}
+#define CONVERT(TARGET, type) CONVERT2(TARGET, TARGET, type)
+            CONVERT2(alpha[0], alpha0, s8_t);
+            CONVERT2(alpha[1], alpha1, s8_t);
+            CONVERT2(alpha[2], alpha2, s8_t);
+            CONVERT2(alpha[3], alpha3, s8_t);
+            CONVERT2(beta[0],  beta0,  s8_t);
+            CONVERT2(beta[1],  beta1,  s8_t);
+            CONVERT2(beta[2],  beta2,  s8_t);
+            CONVERT2(beta[3],  beta3,  s8_t);
+            CONVERT(A1, s32_t);
+            CONVERT(A0, s32_t);
+            t_ot = (u8_t)((t_ot >> 12) & 0xFF);
+            WN_t = (u8_t)(params.WN_t & 0xFF);
+            delta_t_LS = (s8_t)params.delta_t_LS;
+            WN_LSF = (u8_t)(params.WN_LSF & 0xFF);
+            DN = (u8_t)(params.DN & 0xFF);
+            delta_t_LSF = (s8_t)params.delta_t_LSF;
+#undef CONVERT
+#undef CONVERT2
+          return *this;
+        }
       };
     };
   public:
@@ -1340,6 +1502,37 @@ static s ## bits ## _t name(const InputT *buf){ \
               return iode;
             }
 #undef fetch_item
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+            void dump(BufferT *dst, const unsigned int &subframe){
+              typedef BroadcastedMessage<
+                  BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  deparse_t;
+#define dump_item(num, name) deparse_t::SubFrame ## num :: name ## _set(dst, name)
+              switch(subframe){
+                case 1:
+                  dump_item(1, WN);   dump_item(1, URA);  dump_item(1, SV_health);
+                  dump_item(1, iodc); dump_item(1, t_GD); dump_item(1, t_oc);
+                  dump_item(1, a_f2); dump_item(1, a_f1); dump_item(1, a_f0);
+                  break;
+                case 2: {
+                  dump_item(2, iode); dump_item(2, c_rs);   dump_item(2, delta_n);
+                  dump_item(2, M0);   dump_item(2, c_uc);   dump_item(2, e);
+                  dump_item(2, c_us); dump_item(2, sqrt_A); dump_item(2, t_oe);
+                  u8_t fit(fit_interval_flag ? 1 : 0); dump_item(2, fit);
+                  break;
+                }
+                case 3:
+                  dump_item(3, c_ic);       dump_item(3, Omega0); dump_item(3, c_is);
+                  dump_item(3, i0);         dump_item(3, c_rc);   dump_item(3, omega);
+                  dump_item(3, dot_Omega0); dump_item(3, dot_i0); dump_item(3, iode);
+                  break;
+                default:
+                  return;
+              }
+#undef dump_item
+              deparse_t::preamble_set(dst);
+              deparse_t::subframe_id_set(dst, subframe);
+            }
 
             static float_t fit_interval(const bool &_flag, const u16_t &_iodc){
               // Fit interval (ICD:20.3.4.4)
@@ -1440,38 +1633,38 @@ static s ## bits ## _t name(const InputT *buf){ \
             }
 
             raw_t &operator=(const Ephemeris &eph){
-#define CONVERT(TARGET) \
-{TARGET = (s32_t)((eph.TARGET + 0.5 * sf[SF_ ## TARGET]) / sf[SF_ ## TARGET]);}
+#define CONVERT(type, TARGET) \
+{TARGET = (type)(eph.TARGET / sf[SF_ ## TARGET] + 0.5);}
               svid = eph.svid;
 
               WN = eph.WN;
               URA = URA_index(eph.URA);
               SV_health = eph.SV_health;
               iodc = eph.iodc;
-              CONVERT(t_GD);
-              CONVERT(t_oc);
-              CONVERT(a_f0);
-              CONVERT(a_f1);
-              CONVERT(a_f2);
+              CONVERT(s8_t,  t_GD);
+              CONVERT(u16_t, t_oc);
+              CONVERT(s32_t, a_f0);
+              CONVERT(s16_t, a_f1);
+              CONVERT(s8_t,  a_f2);
 
               iode = eph.iode;
-              CONVERT(c_rs);
-              CONVERT(delta_n);
-              CONVERT(M0);
-              CONVERT(c_uc);
-              CONVERT(e);
-              CONVERT(c_us);
-              CONVERT(sqrt_A);
-              CONVERT(t_oe);
+              CONVERT(s16_t, c_rs);
+              CONVERT(s16_t, delta_n);
+              CONVERT(s32_t, M0);
+              CONVERT(s16_t, c_uc);
+              CONVERT(u32_t, e);
+              CONVERT(s16_t, c_us);
+              CONVERT(u32_t, sqrt_A);
+              CONVERT(u16_t, t_oe);
 
-              CONVERT(c_ic);
-              CONVERT(Omega0);
-              CONVERT(c_is);
-              CONVERT(i0);
-              CONVERT(c_rc);
-              CONVERT(omega);
-              CONVERT(dot_Omega0);
-              CONVERT(dot_i0);
+              CONVERT(s16_t, c_ic);
+              CONVERT(s32_t, Omega0);
+              CONVERT(s16_t, c_is);
+              CONVERT(s32_t, i0);
+              CONVERT(s16_t, c_rc);
+              CONVERT(s32_t, omega);
+              CONVERT(s32_t, dot_Omega0);
+              CONVERT(s16_t, dot_i0);
 #undef CONVERT
               fit_interval_flag = (eph.fit_interval > 5 * 60 * 60);
 
@@ -1542,7 +1735,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           float_t a_f1;         ///< Clock correction parameter (s)
           
           /**
-           * Up-cast to ephemeris
+           * Upgrade to ephemeris
            * 
            */
           operator Ephemeris() const {
@@ -1577,13 +1770,27 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             converted.c_ic          = 0;          // Cosine correction, inclination (rad)
             converted.Omega0        = Omega0;     // Longitude of ascending node (rad)
             converted.c_is          = 0;          // Sine correction, inclination (rad)
-            converted.i0            = delta_i;    // Inclination angle (rad)
+            converted.i0            = delta_i + SC2RAD * 0.3; // Inclination angle (rad)
             converted.c_rc          = 0;          // Cosine correction, orbit (m)
             converted.omega         = omega;      // Argument of perigee (rad)
             converted.dot_Omega0    = dot_Omega0; // Rate of right ascension (rad/s)
             converted.dot_i0        = 0;          // Rate of inclination angle (rad/s)
             
             return converted;
+          }
+          /**
+           * downgrade from ephemeris
+           */
+          Almanac &operator=(const Ephemeris &eph) {
+#define copy_item(dst, src) dst = eph.src
+            copy_item(svid, svid);      copy_item(e, e);      copy_item(t_oa, t_oe);
+            copy_item(delta_i, i0);     copy_item(dot_Omega0, dot_Omega0);
+            copy_item(SV_health, SV_health);  copy_item(sqrt_A, sqrt_A);
+            copy_item(Omega0, Omega0);  copy_item(omega, omega);    copy_item(M0, M0);
+            copy_item(a_f0, a_f0);      copy_item(a_f1, a_f1);
+#undef copy_item
+            delta_i -= SC2RAD * 0.3;
+            return *this;
           }
           
           struct raw_t {
@@ -1601,11 +1808,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             s16_t a_f0;         ///< Clock corr. param. (-20, s)
             s16_t a_f1;         ///< Clock corr. param. (-38, s)
             
-#define fetch_item(name) name = BroadcastedMessage< \
-   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
-   :: SubFrame4_5_Alnamac :: name (src)
             template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
             void update(const InputT *src){
+              typedef BroadcastedMessage<
+                  InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  parse_t;
+#define fetch_item(name) name = parse_t::SubFrame4_5_Alnamac:: name (src)
+              svid = parse_t::sv_page_id(src);
               fetch_item(e);
               fetch_item(t_oa);
               fetch_item(delta_i);
@@ -1617,8 +1826,29 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               fetch_item(M0);
               fetch_item(a_f0);
               fetch_item(a_f1);
-            }
 #undef fetch_item
+            }
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+            void dump(BufferT *dst){
+              typedef BroadcastedMessage<
+                  BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  deparse_t;
+#define dump_item(name) deparse_t::SubFrame4_5_Alnamac:: name ## _set(dst, name)
+              dump_item(e);           dump_item(t_oa);      dump_item(delta_i);
+              dump_item(dot_Omega0);  dump_item(SV_health); dump_item(sqrt_A);
+              dump_item(Omega0);      dump_item(omega);     dump_item(M0);
+              dump_item(a_f0);        dump_item(a_f1);
+#undef dump_item
+              deparse_t::preamble_set(dst);
+              deparse_t::data_id_set(dst, 1); // always "01" @see 20.3.3.5.1.1 Data ID and SV ID.
+              if(svid <= 24){
+                deparse_t::subframe_id_set(dst, 5);
+                deparse_t::sv_page_id_set(dst, svid);
+              }else{ // subframe 4 and page 2-5, 7-10
+                deparse_t::subframe_id_set(dst, 4);
+                deparse_t::sv_page_id_set(dst, svid);
+              }
+            }
 
             enum {
               SF_e,
@@ -1640,20 +1870,39 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               Almanac converted;
 #define CONVERT(TARGET) \
 {converted.TARGET = sf[SF_ ## TARGET] * TARGET;}
-                converted.svid = svid;
-                CONVERT(e);
-                CONVERT(t_oa);
-                CONVERT(delta_i);
-                CONVERT(dot_Omega0);
-                converted.SV_health = SV_health;
-                CONVERT(sqrt_A);
-                CONVERT(Omega0);
-                CONVERT(omega);
-                CONVERT(M0);
-                CONVERT(a_f0);
-                CONVERT(a_f1);
+              converted.svid = svid;
+              CONVERT(e);
+              CONVERT(t_oa);
+              CONVERT(delta_i);
+              CONVERT(dot_Omega0);
+              converted.SV_health = SV_health;
+              CONVERT(sqrt_A);
+              CONVERT(Omega0);
+              CONVERT(omega);
+              CONVERT(M0);
+              CONVERT(a_f0);
+              CONVERT(a_f1);
 #undef CONVERT
               return converted;
+            }
+
+            raw_t &operator=(const Almanac &alm) {
+#define CONVERT(type, key) \
+{key = (type)(alm.key  / sf[SF_ ## key] + 0.5);}
+              svid = (u8_t)alm.svid;
+              CONVERT(u16_t, e);
+              CONVERT(u8_t,  t_oa);
+              CONVERT(s16_t, delta_i);
+              CONVERT(s16_t, dot_Omega0);
+              SV_health = (u8_t)alm.SV_health;
+              CONVERT(u32_t, sqrt_A);
+              CONVERT(u32_t, Omega0);
+              CONVERT(u32_t, omega);
+              CONVERT(u32_t, M0);
+              CONVERT(s16_t, a_f0);
+              CONVERT(s16_t, a_f1);
+#undef CONVERT
+              return *this;
             }
           };
         };
