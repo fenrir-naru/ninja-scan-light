@@ -43,25 +43,31 @@
 
 #include <vector>
 
-template <int denom, int pow2 = 1, int log2 = 0, int rem2 = denom % pow2>
-struct const_div_t : public std::div_t {
-  const_div_t(const int &num) : std::div_t(std::div(num, denom)) {}
-};
-template <int denom, int pow2, int log2>
-struct const_div_t<denom, pow2, log2, 0> : public const_div_t<denom, (pow2 << 1), log2 + 1> {
-  const_div_t(const int &num) : const_div_t<denom, (pow2 << 1), log2 + 1>(num) {}
-};
-template <int denom, int log2>
-struct const_div_t<denom, denom, log2, 0> {
-  int quot, rem;
-  const_div_t(const int &num) : quot(num >> log2), rem(num & (denom - 1)) {}
-};
+#include "util/bit_counter.h"
 
 template <int MAX_SIZE, class ContainerT = unsigned char>
 struct BitArray {
+
+  template <int denom, int pow2 = 1, int log2 = 0, int rem2 = denom % pow2>
+  struct const_div_t : public std::div_t {
+    const_div_t(const int &num) : std::div_t(std::div(num, denom)) {}
+  };
+  template <int denom, int pow2, int log2>
+  struct const_div_t<denom, pow2, log2, 0> : public const_div_t<denom, (pow2 << 1), log2 + 1> {
+    const_div_t(const int &num) : const_div_t<denom, (pow2 << 1), log2 + 1>(num) {}
+  };
+  template <int denom, int log2>
+  struct const_div_t<denom, denom, log2, 0> {
+    int quot, rem;
+    const_div_t(const int &num) : quot(num >> log2), rem(num & (denom - 1)) {}
+  };
+
   static const int bits_per_addr = (int)sizeof(ContainerT) * CHAR_BIT;
   static const int max_size = MAX_SIZE;
+  static const const_div_t<bits_per_addr> prop;
   ContainerT buf[(MAX_SIZE + bits_per_addr - 1) / bits_per_addr];
+  static const ContainerT mask_rem;
+
   void set(const bool &new_bit = false) {
     std::memset(buf, (new_bit ? (~0) : 0), sizeof(buf));
   }
@@ -125,12 +131,35 @@ struct BitArray {
       return (unsigned int)res;
     }
   }
+  int ones() const {
+    int res(0);
+    for(int i(0); i < prop.quot; ++i){
+      res += BitCounter<ContainerT>::count(buf[i]);
+    }
+    if(prop.rem){
+      res += BitCounter<ContainerT>::count(
+          buf[(sizeof(buf) / sizeof(buf[0])) - 1] & mask_rem);
+    }
+    return res;
+  }
+  int least_index_one() const {
+    int res(0);
+    for(int i(0); prop.quot; ++i){
+      int ntz(BitCounter<ContainerT>::ntz(buf[i]));
+      res += ntz;
+      if(ntz < bits_per_addr){return res;}
+    }
+    if(prop.rem){
+      res += BitCounter<ContainerT>::ntz(
+          buf[(sizeof(buf) / sizeof(buf[0])) - 1] & mask_rem);
+    }
+    return res;
+  }
   std::vector<int> indices_one(const int &offset = 0) const {
     std::vector<int> res;
     int idx(offset);
-    static const const_div_t<bits_per_addr> qr(MAX_SIZE);
-    int rem(qr.rem), i(0);
-    for(; i < qr.quot; ++i, idx += bits_per_addr){
+    int rem(prop.rem), i(0);
+    for(; i < prop.quot; ++i, idx += bits_per_addr){
       int idx2(idx);
       for(ContainerT temp(buf[i]); temp > 0; temp >>= 1, ++idx2){
         if(temp & 0x1){res.push_back(idx2);}
@@ -142,5 +171,13 @@ struct BitArray {
     return res;
   }
 };
+
+template <int MAX_SIZE, class ContainerT>
+const typename BitArray<MAX_SIZE, ContainerT>::template const_div_t<BitArray<MAX_SIZE, ContainerT>::bits_per_addr>
+    BitArray<MAX_SIZE, ContainerT>::prop
+      = typename BitArray<MAX_SIZE, ContainerT>::template const_div_t<BitArray<MAX_SIZE, ContainerT>::bits_per_addr>(MAX_SIZE);
+
+template <int MAX_SIZE, class ContainerT>
+const ContainerT BitArray<MAX_SIZE, ContainerT>::mask_rem = ((ContainerT)0x1 << prop.rem) - 1;
 
 #endif /* __BIT_ARRAY_H__ */
