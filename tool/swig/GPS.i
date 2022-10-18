@@ -421,13 +421,29 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
       raw.dump<2, 0>(buf[i], i + 1);
     }
   }
+  int parse_almanac(const unsigned int buf[10]){
+    typedef GPS_SpaceNode<FloatT>::BroadcastedMessage<unsigned int, 30> parse_t;
+    switch(parse_t::subframe_id(buf)){
+      case 4:
+      case 5:
+        break;
+      default: return -1;
+    }
+    typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
+    almanac_t::raw_t raw;
+    raw.update<2, 0>(buf);
+    if((raw.svid < 1) || (raw.svid > 32)){return -1;}
+    almanac_t almanac;
+    *self = (GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris)(almanac = raw);
+    return self->svid;
+  }
   /**
    * Return broadcasted raw data of almanac data.
    * @param buf pointer to store raw data of subframe 4 or 5.
    * Each 30bit length word is stored in each successive address of the pointer.
    * @param t GPS time at broadcasting
    */
-  void dump_alnamac(unsigned int buf[10], const GPS_Time<FloatT> &t){
+  void dump_almanac(unsigned int buf[10], const GPS_Time<FloatT> &t){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
     dump_t::how_set(buf, t);

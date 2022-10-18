@@ -767,7 +767,7 @@ class GPS_SpaceNode {
 
       template <class NumberT, class BufferT>
       static void num2bits(
-          BufferT *dest, NumberT src, uint_t index, uint_t length,
+          BufferT *dest, NumberT src, const uint_t &index, uint_t length,
           const int &effective_bits_in_BufferT = sizeof(BufferT) * CHAR_BIT,
           const int &padding_bits_in_BufferT_MSB = 0){
         static const int buf_bits(sizeof(BufferT) * CHAR_BIT);
@@ -785,7 +785,7 @@ class GPS_SpaceNode {
           int r_sfift(padding_bits_in_BufferT_MSB + align.rem - len_last);
           buf = (BufferT)(src << (buf_bits - len_last)) >> r_sfift;
           mask = (mask_msb_aligned << (effective_bits_in_BufferT - len_last)) >> r_sfift;
-          (*dest &= ~mask) |= buf;
+          (*dest &= ~mask) |= (buf & mask);
           src >>= len_last;
           length -= len_last;
         }while(false);
@@ -793,13 +793,13 @@ class GPS_SpaceNode {
         for(; qr.quot > 0; qr.quot--, src >>= effective_bits_in_BufferT){ // Middle
           buf = (BufferT)(src << (buf_bits - effective_bits_in_BufferT))
               >> padding_bits_in_BufferT_MSB;
-          (*(--dest) &= mask_full_n) |= buf;
+          (*(--dest) &= mask_full_n) |= (buf & ~mask_full_n);
         }
         if(qr.rem > 0){ // Most
           int r_shift(padding_bits_in_BufferT_MSB + effective_bits_in_BufferT - qr.rem);
           buf = (BufferT)(src << (buf_bits - qr.rem)) >> r_shift;
           mask = (mask_msb_aligned << (effective_bits_in_BufferT - qr.rem)) >> r_shift;
-          (*(--dest) &= ~mask) |= buf;
+          (*(--dest) &= ~mask) |= (buf & mask);
         }
       }
     };
@@ -965,7 +965,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
         convert_u( 8,  90,  8, t_oa);
         convert_s(16,  98, 16, delta_i);
         convert_s(16, 120, 16, dot_Omega0);
-        convert_u( 8, 128,  8, SV_health);
+        convert_u( 8, 136,  8, SV_health);
         convert_u(32, 150, 24, sqrt_A);
         convert_s(32, 180, 24, Omega0);
         convert_s(32, 210, 24, omega);
@@ -1770,7 +1770,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             converted.c_ic          = 0;          // Cosine correction, inclination (rad)
             converted.Omega0        = Omega0;     // Longitude of ascending node (rad)
             converted.c_is          = 0;          // Sine correction, inclination (rad)
-            converted.i0            = delta_i;    // Inclination angle (rad)
+            converted.i0            = delta_i + SC2RAD * 0.3; // Inclination angle (rad)
             converted.c_rc          = 0;          // Cosine correction, orbit (m)
             converted.omega         = omega;      // Argument of perigee (rad)
             converted.dot_Omega0    = dot_Omega0; // Rate of right ascension (rad/s)
@@ -1789,6 +1789,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             copy_item(Omega0, Omega0);  copy_item(omega, omega);    copy_item(M0, M0);
             copy_item(a_f0, a_f0);      copy_item(a_f1, a_f1);
 #undef copy_item
+            delta_i -= SC2RAD * 0.3;
             return *this;
           }
           
@@ -1807,11 +1808,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             s16_t a_f0;         ///< Clock corr. param. (-20, s)
             s16_t a_f1;         ///< Clock corr. param. (-38, s)
             
-#define fetch_item(name) name = BroadcastedMessage< \
-   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
-   :: SubFrame4_5_Alnamac :: name (src)
             template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
             void update(const InputT *src){
+              typedef BroadcastedMessage<
+                  InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  parse_t;
+#define fetch_item(name) name = parse_t::SubFrame4_5_Alnamac:: name (src)
+              svid = parse_t::sv_page_id(src);
               fetch_item(e);
               fetch_item(t_oa);
               fetch_item(delta_i);
@@ -1823,8 +1826,8 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               fetch_item(M0);
               fetch_item(a_f0);
               fetch_item(a_f1);
-            }
 #undef fetch_item
+            }
             template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
             void dump(BufferT *dst){
               typedef BroadcastedMessage<
@@ -1867,18 +1870,18 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               Almanac converted;
 #define CONVERT(TARGET) \
 {converted.TARGET = sf[SF_ ## TARGET] * TARGET;}
-                converted.svid = svid;
-                CONVERT(e);
-                CONVERT(t_oa);
-                CONVERT(delta_i);
-                CONVERT(dot_Omega0);
-                converted.SV_health = SV_health;
-                CONVERT(sqrt_A);
-                CONVERT(Omega0);
-                CONVERT(omega);
-                CONVERT(M0);
-                CONVERT(a_f0);
-                CONVERT(a_f1);
+              converted.svid = svid;
+              CONVERT(e);
+              CONVERT(t_oa);
+              CONVERT(delta_i);
+              CONVERT(dot_Omega0);
+              converted.SV_health = SV_health;
+              CONVERT(sqrt_A);
+              CONVERT(Omega0);
+              CONVERT(omega);
+              CONVERT(M0);
+              CONVERT(a_f0);
+              CONVERT(a_f1);
 #undef CONVERT
               return converted;
             }

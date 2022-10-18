@@ -784,6 +784,7 @@ __RINEX_CLK_TEXT__
       
       meas.each{|prn, k, v|
         eph = sn.ephemeris(prn)
+        sc2rad = 3.1415926535898
         proc{|raw|
           expect(raw.size).to eq(30)
           eph2 = GPS::Ephemeris::new
@@ -792,7 +793,6 @@ __RINEX_CLK_TEXT__
             eph2.parse(subframe)
           }
           expect(eph.WN % 1024).to be(eph2.WN % 1024)
-          sc2rad = 3.1415926535898
           [
             #:URA,
             :SV_health, :iodc,
@@ -811,6 +811,23 @@ __RINEX_CLK_TEXT__
             expect(eph.send(k)).to be_within((sf || 1).to_f * 2).of(eph2.send(k))
           }
         }.call(eph.dump(t_meas))
+        proc{|raw| # Almanac -> Ephemeris
+          expect(raw.size).to eq(10)
+          puts "Raw(PRN:#{prn},Almanac): #{raw.collect{|v| "0x%08X" % [v]}.join(', ')}"
+          eph2 = GPS::Ephemeris::new
+          eph2.parse_almanac(raw)
+          [
+            :SV_health,
+            [:t_oc, 2 ** 12], [:a_f0, 2 ** -20], [:a_f1, 2 ** -38], 
+            [:M0, sc2rad * 2 ** -23], [:e, 2 ** -21],
+            [:sqrt_A, 2 ** -11], [:t_oe, 2 ** 12],
+            [:Omega0, sc2rad * 2 ** -23], [:i0, sc2rad * 2 ** -19],
+            [:omega, sc2rad * 2 ** -23], [:dot_Omega0, sc2rad * 2 ** -38],
+          ].each{|k, sf|
+            #p [k, sf.to_f, eph.send(k) - eph2.send(k), eph.send(k), eph2.send(k)]
+            expect(eph.send(k)).to be_within((sf || 1).to_f * 2).of(eph2.send(k))
+          }
+        }.call(eph.dump_almanac(t_meas))
         puts "XYZ(PRN:#{prn}): #{eph.constellation(t_meas)[0].to_a} (iodc: #{eph.iodc}, iode: #{eph.iode})"
       }
       
