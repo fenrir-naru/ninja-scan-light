@@ -274,6 +274,12 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
       %append_output(SWIG_From(unsigned int)(($1)[i]));
     }
   }
+  /**
+   * Return broadcasted raw data related to ionospheric and UTC parameters.
+   * @param buf pointer to store raw data of subframe 4 page 18.
+   * Each 30bit length word is stored in each successive address of the pointer.
+   * @param t GPS time at broadcasting
+   */
   void dump(unsigned int buf[10], const GPS_Time<FloatT> &t){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
@@ -394,6 +400,14 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   }
   %apply unsigned int buf[10] {
       unsigned int sf1[10], unsigned int sf2[10], unsigned int sf3[10]};
+  /**
+   * Return broadcasted raw data of ephemeris data.
+   * @param sf1 pointer to store raw data of subframe 1.
+   * Each 30bit length word is stored in each successive address of the pointer.
+   * @param sf2 pointer to store raw data of subframe 2. Its structue is same as sf1.
+   * @param sf3 pointer to store raw data of subframe 3. Its structue is same as sf1.
+   * @param t GPS time at broadcasting
+   */
   void dump(
       unsigned int sf1[10], unsigned int sf2[10], unsigned int sf3[10],
       const GPS_Time<FloatT> &t){
@@ -407,6 +421,12 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
       raw.dump<2, 0>(buf[i], i + 1);
     }
   }
+  /**
+   * Return broadcasted raw data of almanac data.
+   * @param buf pointer to store raw data of subframe 4 or 5.
+   * Each 30bit length word is stored in each successive address of the pointer.
+   * @param t GPS time at broadcasting
+   */
   void dump_alnamac(unsigned int buf[10], const GPS_Time<FloatT> &t){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
