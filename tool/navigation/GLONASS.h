@@ -46,6 +46,7 @@
 
 #include "GPS.h"
 #include "algorithm/integral.h"
+#include "util/bit_counter.h"
 
 template <class FloatT = double>
 class GLONASS_SpaceNode {
@@ -89,6 +90,10 @@ static u ## bits ## _t name(const InputT *buf){ \
   return \
       DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
         buf, offset_bits, length); \
+} \
+static void name ## _set(InputT *dest, const u ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, src, offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
 #define convert_s(bits, offset_bits, length, name) \
 static s ## bits ## _t name(const InputT *buf){ \
@@ -97,9 +102,67 @@ static s ## bits ## _t name(const InputT *buf){ \
         buf, offset_bits, length)); \
   static const u ## bits ## _t mask((u ## bits ## _t)1 << (length - 1)); /* MSB is sign bit */ \
   return (temp & mask) ? ((s ## bits ## _t)-1 * (temp & (mask - 1))) : temp; \
+} \
+static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
+  DataParser::template num2bits<u ## bits ## _t, InputT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
+      convert_u( 8,  0,  1, idle);
+      static void idle_set(InputT *dest){idle_set(dest, 0);}
       convert_u( 8,  1,  4, m);
       convert_u( 8, 77,  8, KX);
+      static void KX_set(InputT *dest){
+#if 0
+        mask_bits = 32
+        mask_str = "0x%0#{mask_bits / 4}X"
+        [
+          [9, 10, 12, 13, 15, 17, 19, 20, 22, 24, 26, 28, 30, 32, 34, 35, 37, 39, 41, 43,
+              45, 47, 49, 51, 53, 55, 57, 59, 61, 63, 65, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84],
+          [9, 11, 12, 14, 15, 18, 19, 21, 22, 25, 26, 29, 30, 33, 34, 36, 37, 40, 41, 44,
+              45, 48, 49, 52, 53, 56, 57, 60, 61, 64, 65, 67, 68, 71, 72, 75, 76, 79, 80, 83, 84],
+          [10..12, 16..19, 23..26, 31..34, 38..41, 46..49, 54..57, 62..65, 69..72, 77..80, 85],
+          [13..19, 27..34, 42..49, 58..65, 73..80],
+          [20..34, 50..65, 81..85],
+          [35..65],
+          [66..85],
+        ].collect{|pat|
+          pat.collect{|idx| idx.to_a rescue idx}.flatten \
+              .collect{|i| 85 - i}.sort.chunk{|i| i / mask_bits} \
+              .collect{|quot, i_s|
+                mask = eval("0b#{i_s.inject("0" * mask_bits){|res, i| res[i % mask_bits] = '1'; res}}")
+                #mask = [mask_be].pack("N").unpack("L")[0] # endianess correction
+                [quot, mask] # endianess correction
+              }.inject([mask_str % [0]] * (77.0 / mask_bits).ceil){|res, (i, mask)|
+                res[i] = (mask_str % [mask]); res
+              }
+        }.transpose # => [
+          ["0x55555AAA", "0x66666CCC", "0x87878F0F", "0x07F80FF0", "0xF8000FFF", "0x00000FFF", "0xFFFFF000"],
+          ["0xAAAAB555", "0xCCCCD999", "0x0F0F1E1E", "0x0FF01FE0", "0xF0001FFF", "0xFFFFE000", "0x00000000"],
+          ["0x6AD80000", "0xB3680000", "0x3C700000", "0x3F800000", "0xC0000000", "0x00000000", "0x00000000"]
+        ]
+#endif
+        u8_t hamming(0);
+        static const struct {
+          uint_t idx, len;
+          u32_t mask[8];
+        } prop[] = {
+          { 0, 32, {0x55555AAAu, 0x66666CCCu, 0x87878F0Fu, 0x07F80FF0u, 0xF8000FFFu, 0x00000FFFu, 0xFFFFF000u, ~0u}},
+          {32, 32, {0xAAAAB555u, 0xCCCCD999u, 0x0F0F1E1Eu, 0x0FF01FE0u, 0xF0001FFFu, 0xFFFFE000u, 0, ~0u}},
+          {64, 13, {0x6AD80000u >> 19, 0xB3680000u >> 19, 0x3C700000u >> 19, 0x3F800000u >> 19, 0xC0000000u >> 19, 0, 0, ~0u}},
+        };
+        for(std::size_t j(0); j < sizeof(prop) / sizeof(prop[0]); ++j){
+          u8_t check_bit(1);
+          u32_t v(DataParser::template bits2num<u32_t, EffectiveBits, PaddingBits_MSB>(dest, prop[j].idx, prop[j].len));
+          for(int i(0); i < 8; ++i, check_bit <<= 1){
+            if(BitCounter<u32_t>::count(v & prop[j].mask[i]) % 2 == 0){continue;}
+            hamming ^= check_bit;
+          }
+        }
+        if(BitCounter<u8_t>::count(hamming & 0x7F) % 2 == 1){
+          hamming ^= 0x80;
+        }
+        KX_set(dest, hamming);
+      }
 
       struct String1 {
         convert_u( 8,  7,  2, P1);

@@ -44,6 +44,93 @@ struct Fixture {
   }
 };
 
+struct rtklib_t {
+  // https://github.com/tomojitakasu/RTKLIB/blob/03fb5a2da9ad4294a262b6ed8c4287dafdef4a74/src/rcvraw.c#L405
+  static int test_glostr(const unsigned char *buff){
+    static const unsigned char xor_8bit[256]={ /* xor of 8 bits */
+      0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,
+      1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,
+      1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,
+      0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,
+      1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,
+      0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,
+      0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0,1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,
+      1,0,0,1,0,1,1,0,0,1,1,0,1,0,0,1,0,1,1,0,1,0,0,1,1,0,0,1,0,1,1,0
+    };
+    static const unsigned char mask_hamming[][11]={ /* mask of hamming codes */
+      {0x55,0x55,0x5A,0xAA,0xAA,0xAA,0xB5,0x55,0x6A,0xD8,0x08},
+      {0x66,0x66,0x6C,0xCC,0xCC,0xCC,0xD9,0x99,0xB3,0x68,0x10},
+      {0x87,0x87,0x8F,0x0F,0x0F,0x0F,0x1E,0x1E,0x3C,0x70,0x20},
+      {0x07,0xF8,0x0F,0xF0,0x0F,0xF0,0x1F,0xE0,0x3F,0x80,0x40},
+      {0xF8,0x00,0x0F,0xFF,0xF0,0x00,0x1F,0xFF,0xC0,0x00,0x80},
+      {0x00,0x00,0x0F,0xFF,0xFF,0xFF,0xE0,0x00,0x00,0x01,0x00},
+      {0xFF,0xFF,0xF0,0x00,0x00,0x00,0x00,0x00,0x00,0x02,0x00},
+      {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xF8}
+    };
+    unsigned char cs; /* checksum */
+    int i,j,n=0;
+    for (i=0;i<8;i++) {
+      for (j=0,cs=0;j<11;j++) {
+        cs^=xor_8bit[buff[j]&mask_hamming[i][j]];
+      }
+      if (cs) n++;
+    }
+    return n==0||(n==2&&cs);
+  }
+  template <std::size_t N>
+  static bool test_glostr(const boost::uint32_t (&buff)[N]){
+    unsigned char temp[4 * N];
+    for(std::size_t i(0), j(0); i < N; ++i){
+      temp[j++] = (buff[i] >> 24) & 0xFF;
+      temp[j++] = (buff[i] >> 16) & 0xFF;
+      temp[j++] = (buff[i] >> 8) & 0xFF;
+      temp[j++] = buff[i] & 0xFF;
+    }
+    return test_glostr(temp) != 0;
+  }
+};
+
+BOOST_AUTO_TEST_CASE(parity_calculation){
+  typedef boost::uint32_t u32_t;
+  static const u32_t packet[][4] = {
+    // UBX 20210531/log.ubx
+    {0x7839e8b8, 0x0d34c028, 0x97930800, 0x07a10002},
+    {0x7839e8b8, 0x0d34c028, 0x979f1000, 0x07a10002},
+    {0x08255533, 0x9cd061d6, 0x45355000, 0x07a10003},
+    {0x082550fd, 0xd9f0f3cc, 0xf9511000, 0x07a10003},
+    {0x08255521, 0x19e8af12, 0x4845b800, 0x07a10003},
+    {0x08255400, 0x5c0136ff, 0x29fd9000, 0x07a10003},
+    {0x08255407, 0x34d00255, 0x00ac6800, 0x07a10003},
+    {0x08255023, 0x619865f3, 0xc02d0800, 0x07a10003},
+    {0x10a500c4, 0x4111d648, 0xa8abe000, 0x07a10003},
+    {0x10a504d0, 0xf090a084, 0x008eb000, 0x07a10003},
+    {0x10a50016, 0xe050499e, 0x57b3c800, 0x07a10003},
+    // UBX f9p_ppp_1224/rover.ubx
+    {0x654c07e3, 0xc5804cec, 0x2ed2f000, 0x0b4c0002},
+    {0x654c09e3, 0xc5804cec, 0x2ed71000, 0x0b4c0002},
+    {0x6f7c185c, 0xf774bf87, 0xc9e0c000, 0x0b4c0002},
+    {0x755022ff, 0x49008c38, 0x36413000, 0x0b4c0002},
+    {0x783990f3, 0xeb34bfe9, 0xcb95b800, 0x0b4c0002},
+    {0x0801cc1b, 0x240c273a, 0x659d1000, 0x0b4c0003},
+    {0x0801c954, 0xaf28622b, 0x0e39a800, 0x0b4c0003},
+    {0x0801c8a3, 0xe6e470fb, 0xb1206800, 0x0b4c0003},
+    {0x0801cc10, 0xb5342aa5, 0xc960f000, 0x0b4c0003},
+    {0x0801cc12, 0xdfc80221, 0x76ec1000, 0x0b4c0003},
+    {0x0801cd02, 0x905912b3, 0x78748000, 0x0b4c0003},
+  };
+  for(std::size_t i(0); i < sizeof(packet) / sizeof(packet[0]); ++i){
+    bool res_rtklib(rtklib_t::test_glostr(packet[i]));
+    BOOST_CHECK(res_rtklib);
+
+    typedef space_node_t::BroadcastedMessage<u32_t> msg_t;
+    u32_t copy[4];
+    std::memcpy(copy, packet[i], sizeof(copy));
+    msg_t::KX_set(copy, 0);
+    msg_t::KX_set(copy);
+    BOOST_CHECK_EQUAL(msg_t::KX(packet[i]), msg_t::KX(copy));
+  }
+}
+
 BOOST_AUTO_TEST_CASE(ICD_CDMA_2016_Appendix_K){
   space_node_t::TimeProperties::raw_t raw = {0};
   raw.N_4 = 5;
