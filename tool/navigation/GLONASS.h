@@ -135,7 +135,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         convert_u( 8, 70,  5, n);
         convert_u( 8, 75,  2, M);
       };
-      struct String5_Alnamac {
+      struct String5_Almanac {
         convert_u(16,  5, 11, NA);
         convert_s(32, 16, 32, tau_c);
         convert_u( 8, 49,  5, N_4);
@@ -143,7 +143,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         convert_u( 8, 76,  1, l_n);
       };
 
-      struct String6_Alnamac { // String 6; same as 8, 10, 12, 14
+      struct String6_Almanac { // String 6; same as 8, 10, 12, 14
         convert_u( 8,  5,  1, C_n);
         convert_u( 8,  6,  2, M_n);
         convert_u( 8,  8,  5, nA);
@@ -152,7 +152,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         convert_s(32, 44, 18, delta_iA_n);
         convert_u(16, 62, 15, epsilonA_n);
       };
-      struct String7_Alnamac { // String 7; same as 9, 11, 13, 15
+      struct String7_Almanac { // String 7; same as 9, 11, 13, 15
         convert_s(16,  5, 16, omegaA_n);
         convert_u(32, 21, 21, tA_lambda_n);
         convert_s(32, 42, 22, delta_TA_n);
@@ -257,7 +257,7 @@ static s ## bits ## _t name(const InputT *buf){ \
         bool l_n;
 #define fetch_item(name) name = BroadcastedMessage< \
    InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB> \
-   :: String5_Alnamac :: name (src)
+   :: String5_Almanac :: name (src)
         template <int PaddingBits_MSB, int PaddingBits_LSB, class InputT>
         void update_string5(const InputT *src){
           fetch_item(tau_c);
@@ -364,7 +364,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           uint_t E_n; // [days]
           uint_t P1; // [s] time interval of two adjacent t_b; 0 - 0, 1 - 30, 2 - 45, 3 - 60 mins
           bool P2;
-          //bool P3; // flag for alnamac; 1 - five, 0 - four
+          //bool P3; // flag for almanac; 1 - five, 0 - four
           bool P4; // flag for ephemeris; 1 - uploaded by the control segment
           bool l_n; // health flag; 0 - healthy, 1 - malfunction
 

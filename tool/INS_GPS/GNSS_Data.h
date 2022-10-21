@@ -218,7 +218,7 @@ struct GNSS_Data {
           eph.has_string = 0;
         }
         return true;
-      }else{ // non-immediate info. except for time info. (alnamac)
+      }else{ // non-immediate info. except for time info. (almanac)
 
       }
       return false;
