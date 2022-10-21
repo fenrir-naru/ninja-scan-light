@@ -960,7 +960,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
       convert_u( 8,  60,  2, data_id);
       convert_u( 8,  62,  6, sv_page_id);
 
-      struct SubFrame4_5_Alnamac {
+      struct SubFrame4_5_Almanac {
         convert_u(16,  68, 16, e);
         convert_u( 8,  90,  8, t_oa);
         convert_s(16,  98, 16, delta_i);
@@ -1813,7 +1813,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               typedef BroadcastedMessage<
                   InputT, (int)sizeof(InputT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
                   parse_t;
-#define fetch_item(name) name = parse_t::SubFrame4_5_Alnamac:: name (src)
+#define fetch_item(name) name = parse_t::SubFrame4_5_Almanac:: name (src)
               svid = parse_t::sv_page_id(src);
               fetch_item(e);
               fetch_item(t_oa);
@@ -1833,7 +1833,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               typedef BroadcastedMessage<
                   BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
                   deparse_t;
-#define dump_item(name) deparse_t::SubFrame4_5_Alnamac:: name ## _set(dst, name)
+#define dump_item(name) deparse_t::SubFrame4_5_Almanac:: name ## _set(dst, name)
               dump_item(e);           dump_item(t_oa);      dump_item(delta_i);
               dump_item(dot_Omega0);  dump_item(SV_health); dump_item(sqrt_A);
               dump_item(Omega0);      dump_item(omega);     dump_item(M0);
