@@ -619,6 +619,31 @@ struct GLONASS_Ephemeris
     self->has_string = has_string;
     return updated;
   }
+  %apply unsigned int buf_brdc[ANY] {
+      unsigned int buf_str1[3], unsigned int buf_str2[3], unsigned int buf_str3[3],
+      unsigned int buf_str4[3], unsigned int buf_str5[3]};
+  /**
+   * Return broadcasted raw data of GLONASS ephemeris data.
+   * @param buf_str1 pointer to store raw data of string 1.
+   * 85bit length data (LSB 11 bits are padding) is stored in successive address of the pointer.
+   * @param buf_str2 pointer to store raw data of string 2. Its structue is same as str1.
+   * @param buf_str3 pointer to store raw data of string 3. Its structue is same as str1.
+   * @param buf_str4 pointer to store raw data of string 4. Its structue is same as str1.
+   * @param buf_str5 pointer to store raw data of string 5. Its structue is same as str1.
+   * @param t GPS time at broadcasting
+   */
+  void dump(
+      unsigned int buf_str1[3], unsigned int buf_str2[3], unsigned int buf_str3[3],
+      unsigned int buf_str4[3], unsigned int buf_str5[3],
+      const GPS_Time<FloatT> &t){
+    typename GLONASS_Ephemeris<FloatT>::eph_t::raw_t raw;
+    raw = *self;
+    unsigned int *buf[4] = {buf_str1, buf_str2, buf_str3, buf_str4};
+    for(int i(0); i < 4; ++i){
+      raw.GLONASS_Ephemeris<FloatT>::Ephemeris::raw_t::dump<0, 0>(buf[i], i + 1);
+    }
+    raw.GLONASS_Ephemeris<FloatT>::TimeProperties::raw_t::dump<0, 0>(buf_str5);
+  }
   typename GPS_Ephemeris<FloatT>::constellation_res_t constellation(
       const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit = 0) const {
     typename GPS_SpaceNode<FloatT>::SatelliteProperties::constellation_t pv(

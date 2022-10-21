@@ -113,6 +113,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
       convert_u( 8, 77,  8, KX);
       static void KX_set(InputT *dest){
 #if 0
+        // mask generation with Ruby
         mask_bits = 32
         mask_str = "0x%0#{mask_bits / 4}X"
         [
@@ -135,11 +136,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
               }.inject([mask_str % [0]] * (77.0 / mask_bits).ceil){|res, (i, mask)|
                 res[i] = (mask_str % [mask]); res
               }
-        }.transpose # => [
-          ["0x55555AAA", "0x66666CCC", "0x87878F0F", "0x07F80FF0", "0xF8000FFF", "0x00000FFF", "0xFFFFF000"],
-          ["0xAAAAB555", "0xCCCCD999", "0x0F0F1E1E", "0x0FF01FE0", "0xF0001FFF", "0xFFFFE000", "0x00000000"],
-          ["0x6AD80000", "0xB3680000", "0x3C700000", "0x3F800000", "0xC0000000", "0x00000000", "0x00000000"]
-        ]
+        }.transpose
 #endif
         u8_t hamming(0);
         static const struct {
@@ -330,6 +327,22 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
           fetch_item(l_n);
         }
 #undef fetch_item
+        template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+        void dump(BufferT *dst){
+          typedef BroadcastedMessage<
+              BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+              deparse_t;
+#define dump_item(name) deparse_t::String5_Almanac:: name ## _set(dst, name)
+          dump_item(tau_c);
+          dump_item(tau_GPS);
+          dump_item(N_4);
+          dump_item(NA);
+          dump_item(l_n);
+#undef dump_item
+          deparse_t::m_set(dst, 5);
+          deparse_t::idle_set(dst);
+          deparse_t::KX_set(dst);
+        }
 
         enum {
           SF_tau_c, SF_tau_GPS,
@@ -861,6 +874,55 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               fetch_item(4, M);
             }
 #undef fetch_item
+            template <int PaddingBits_MSB, int PaddingBits_LSB, class BufferT>
+            void dump(BufferT *dst, const unsigned int &str){
+              typedef BroadcastedMessage<
+                  BufferT, (int)sizeof(BufferT) * CHAR_BIT - PaddingBits_MSB - PaddingBits_LSB, PaddingBits_MSB>
+                  deparse_t;
+#define dump_item(num, name) deparse_t::String ## num :: name ## _set(dst, name)
+              switch(str){
+                case 1:
+                  dump_item(1, P1);
+                  dump_item(1, t_k);
+                  dump_item(1, xn_dot);
+                  dump_item(1, xn_ddot);
+                  dump_item(1, xn);
+                  break;
+                case 2: {
+                  dump_item(2, B_n);
+                  dump_item(2, P2);
+                  dump_item(2, t_b);
+                  dump_item(2, yn_dot);
+                  dump_item(2, yn_ddot);
+                  dump_item(2, yn);
+                  break;
+                }
+                case 3:
+                  dump_item(3, P3);
+                  dump_item(3, gamma_n);
+                  dump_item(3, p);
+                  dump_item(3, l_n);
+                  dump_item(3, zn_dot);
+                  dump_item(3, zn_ddot);
+                  dump_item(3, zn);
+                  break;
+                case 4:
+                  dump_item(4, tau_n);
+                  dump_item(4, delta_tau_n);
+                  dump_item(4, E_n);
+                  dump_item(4, P4);
+                  dump_item(4, F_T);
+                  dump_item(4, N_T);
+                  dump_item(4, n);
+                  dump_item(4, M);
+                default:
+                  return;
+              }
+#undef dump_item
+              deparse_t::m_set(dst, str);
+              deparse_t::idle_set(dst);
+              deparse_t::KX_set(dst);
+            }
 
             enum {
               SF_xn,       SF_yn = SF_xn,            SF_zn = SF_xn,
