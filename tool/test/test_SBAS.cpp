@@ -582,6 +582,12 @@ namespace wikipedia {
 // @see https://en.wikipedia.org/wiki/Cyclic_redundancy_check
 const unsigned int poly = 0x1864CFBu; /* 1100001100100110011111011 */
 unsigned int crc24q(const unsigned char *buf, const int &bits, unsigned int crc = 0){
+  if(crc != 0){
+    for(int i(0); i < 24; i++){ // invert operation for padding
+      if(crc & 0x1){crc ^= poly;}
+      crc >>= 1;
+    }
+  }
   unsigned char mask(0x80);
   for(int i(0), buf_idx(0); i < bits; i++, mask >>= 1){
     if(mask == 0){
@@ -598,47 +604,45 @@ unsigned int crc24q(const unsigned char *buf, const int &bits, unsigned int crc 
   }
   return crc;
 }
-unsigned int crc24q2(const unsigned char *buf, const int &bits, unsigned int crc){
-  for(int i(0); i < 24; i++){ // invert operation for padding
-    if(crc & 0x1){crc ^= poly;}
-    crc >>= 1;
-  }
-  return crc24q(buf, bits, crc);
-}
-
-const struct tbl_t {
-  unsigned int fw[0x100], bk[0x100];
-  void gen_forward() {
-    for(int i(0); i < 0x100; ++i){
-      fw[i] = i << 16;
-      for(int j(0); j < 8; ++j){
-        fw[i] <<= 1;
-        if(fw[i] & 0x1000000u){fw[i] ^= poly;}
-      }
-    }
-  }
-  void gen_backward() {
-    for(int i(0); i < 0x100; ++i){
-      bk[i] = i;
-      for(int j(0); j < 8; ++j){
-        if(bk[i] & 0x1){bk[i] ^= poly;}
-        bk[i] >>= 1;
-      }
-    }
-  }
-  tbl_t() {
-    gen_forward();
-    gen_backward();
-  }
-} tbl;
 
 unsigned int crc24q_tbl(const unsigned char *buf, const int &bits, unsigned int crc = 0){
-  unsigned char mask(0x80);
-  for(int i(0), buf_idx(0); i < bits; i++, mask >>= 1){
-    if(mask == 0){
-      mask = 0x80;
-      ++buf_idx;
+  static const struct tbl_t {
+    unsigned int fw[0x100], bk[0x100];
+    void gen_forward() {
+      for(int i(0); i < 0x100; ++i){
+        fw[i] = i << 16;
+        for(int j(0); j < 8; ++j){
+          fw[i] <<= 1;
+          if(fw[i] & 0x1000000u){fw[i] ^= poly;}
+        }
+      }
     }
+    void gen_backward() {
+      for(int i(0); i < 0x100; ++i){
+        bk[i] = i;
+        for(int j(0); j < 8; ++j){
+          if(bk[i] & 0x1){bk[i] ^= poly;}
+          bk[i] >>= 1;
+        }
+      }
+    }
+    tbl_t() {
+      gen_forward();
+      gen_backward();
+    }
+  } tbl;
+
+  if(crc != 0){
+    for(int i(0); i < 3; i++){ // invert operation for padding
+      unsigned int cache(tbl.bk[crc & 0xFF]);
+      crc = (cache & 0xFF0000) | ((cache & 0xFFFF) ^ (crc >> 8));
+    }
+  }
+  int bit_idx(0), buf_idx(0);
+  for(int bytes(bits >> 3); buf_idx < bytes; ++buf_idx, bit_idx += 8){
+    crc = (((crc << 8) & 0xFFFF00) | buf[buf_idx]) ^ tbl.fw[(crc >> 16) & 0xFF];
+  }
+  for(unsigned char mask(0x80); bit_idx < bits; bit_idx++, mask >>= 1){
     crc <<= 1;
     if(buf[buf_idx] & mask){crc |= 1;}
     if(crc & 0x1000000u){crc ^= poly;}
@@ -648,13 +652,6 @@ unsigned int crc24q_tbl(const unsigned char *buf, const int &bits, unsigned int 
     crc = (((crc << 8) ^ cache) & 0xFFFF00) | (cache & 0xFF);
   }
   return crc;
-}
-unsigned int crc24q2_tbl(const unsigned char *buf, const int &bits, unsigned int crc){
-  for(int i(0); i < 3; i++){ // invert operation for padding
-    unsigned int cache(tbl.bk[crc & 0xFF]);
-    crc = (cache & 0xFF0000) | ((cache & 0xFFFF) ^ (crc >> 8));
-  }
-  return crc24q_tbl(buf, bits, crc);
 }
 }
 
@@ -775,12 +772,10 @@ BOOST_AUTO_TEST_CASE(parity_calculation){
     BOOST_CHECK_EQUAL(rtklib::crc24q(temp, 28), gpsd::crc24q_hash(&temp[27], 1, gpsd::crc24q_hash(temp, 27)));
     BOOST_CHECK_EQUAL(wikipedia::crc24q(temp, 224), gpsd::crc24q_hash(temp, 28));
     BOOST_CHECK_EQUAL(wikipedia::crc24q_tbl(temp, 224), gpsd::crc24q_hash(temp, 28));
-    BOOST_CHECK_EQUAL(wikipedia::crc24q2(&temp[27], 8, wikipedia::crc24q(temp, 216)), wikipedia::crc24q(temp, 224));
-    BOOST_CHECK_EQUAL(wikipedia::crc24q2_tbl(&temp[27], 8, wikipedia::crc24q(temp, 216)), wikipedia::crc24q(temp, 224));
 
     BOOST_CHECK_EQUAL(wikipedia::crc24q(temp, 226), (packet[i][7] & 0x3FFFFFC0) >> 6);
-    BOOST_CHECK_EQUAL(wikipedia::crc24q2(&temp[28], 2, gpsd::crc24q_hash(temp, 28)), (packet[i][7] & 0x3FFFFFC0) >> 6);
-    BOOST_CHECK_EQUAL(wikipedia::crc24q2_tbl(&temp[28], 2, gpsd::crc24q_hash(temp, 28)), (packet[i][7] & 0x3FFFFFC0) >> 6);
+    BOOST_CHECK_EQUAL(wikipedia::crc24q_tbl(&temp[28], 2, gpsd::crc24q_hash(temp, 28)), (packet[i][7] & 0x3FFFFFC0) >> 6);
+    BOOST_CHECK_EQUAL(wikipedia::crc24q_tbl(temp, 226), (packet[i][7] & 0x3FFFFFC0) >> 6);
   }
 }
 
