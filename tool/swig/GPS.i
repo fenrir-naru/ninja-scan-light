@@ -536,6 +536,18 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
   MAKE_ACCESSOR(ddx, FloatT); MAKE_ACCESSOR(ddy, FloatT); MAKE_ACCESSOR(ddz, FloatT);
   MAKE_ACCESSOR(a_Gf0, FloatT);
   MAKE_ACCESSOR(a_Gf1, FloatT);
+  /**
+   * Return broadcasted raw data of SBAS ephemeris
+   * @param buf_brdc pointer to store raw data of Type 9 message.
+   * 250 of 256 bits are effective, LSB 6 bits of last word are padding.
+   * @param preamble_idx index of preamble, 0(0x53), 1(0x9A), or 2(0xC6)
+   */
+  void dump(unsigned int buf_brdc[8], const unsigned int &preamble_idx = 0){
+    SBAS_SpaceNode<FloatT>::DataBlock::preamble_set2(buf_brdc, preamble_idx);
+    SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t raw;
+    (raw = *self).dump(buf_brdc);
+    SBAS_SpaceNode<FloatT>::DataBlock::parity_set(buf_brdc);
+  }
   typename GPS_Ephemeris<FloatT>::constellation_res_t constellation(
       const GPS_Time<FloatT> &t_tx, const FloatT &dt_transit = 0,
       const bool &with_velocity = true) const {

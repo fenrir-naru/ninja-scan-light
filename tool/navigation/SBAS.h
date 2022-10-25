@@ -201,6 +201,11 @@ template <class InputT> \
 static u ## bits ## _t name(const InputT *buf){ \
   return parser_t::template bits2num<u ## bits ## _t, InputT>( \
       buf, offset_bits, length); \
+} \
+template <class BufferT> \
+static void name ## _set(BufferT *dest, const u ## bits ## _t &src){ \
+  parser_t::template num2bits<u ## bits ## _t, BufferT>( \
+      dest, src, offset_bits, length); \
 }
 #define convert_s(bits, offset_bits, length, name) \
 template <class InputT> \
@@ -208,12 +213,22 @@ static s ## bits ## _t name(const InputT *buf){ \
   return (s ## bits ## _t)parser_t::template bits2num<u ## bits ## _t, InputT>( \
         buf, offset_bits) \
       >> (bits - length); \
+} \
+template <class BufferT> \
+static void name ## _set(BufferT *dest, const s ## bits ## _t &src){ \
+  parser_t::template num2bits<u ## bits ## _t, BufferT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits, length); \
 }
 #define convert_u_ch(bits, offset_bits, length, bits_per_ch, name) \
 template <class InputT> \
 static u ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
   return parser_t::template bits2num<u ## bits ## _t>( \
       buf, offset_bits + (bits_per_ch * ch), length); \
+} \
+template <class BufferT> \
+static void name ## _set(BufferT *dest, const uint_t &ch, const u ## bits ## _t &src){ \
+  parser_t::template num2bits<u ## bits ## _t, BufferT>( \
+      dest, src, offset_bits + (bits_per_ch * ch), length); \
 }
 #define convert_s_ch(bits, offset_bits, length, bits_per_ch, name) \
 template <class InputT> \
@@ -221,6 +236,11 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
   return (s ## bits ## _t)parser_t::template bits2num<u ## bits ## _t>( \
         buf, offset_bits + (bits_per_ch * ch)) \
       >> (bits - length); \
+} \
+template <class BufferT> \
+static void name ## _set(BufferT *dest, const uint_t &ch, const s ## bits ## _t &src){ \
+  parser_t::template num2bits<u ## bits ## _t, BufferT>( \
+      dest, *(u ## bits ## _t *)(&src), offset_bits + (bits_per_ch * ch), length); \
 }
 
       /**
@@ -254,7 +274,54 @@ static s ## bits ## _t name(const InputT *buf, const uint_t &ch){ \
       }
 
       convert_u(8, 0, 8, preamble);
+      template <class BufferT>
+      static void preamble_set2(BufferT *dest, const unsigned int &index = 0){
+        static const u8_t preamble_list[] = {0x53, 0x9A, 0xC6};
+        preamble_set(dest, preamble_list[index % 3]);
+      }
       convert_u(8, 8, 6, message_type);
+
+      convert_u(32, 226, 24, parity);
+      /**
+       * update parity bits based on current buffer
+       * @param buf buffer
+       * @see SBAS MOPS (DO-229) A.4.3.3
+       */
+      template <class BufferT>
+      static void parity_set(BufferT *dst){
+        // CRC-24Q
+        static const u32_t poly(0x1864CFBu);
+        static const struct tbl_t {
+          u32_t fw[0x100];
+          tbl_t() {
+            for(int i(0); i < 0x100; ++i){
+              fw[i] = i << 16;
+              for(int j(0); j < 8; ++j){
+                fw[i] <<= 1;
+                if(fw[i] & 0x1000000u){fw[i] ^= poly;}
+              }
+            }
+          }
+        } tbl;
+        u32_t crc(0);
+        u8_t buf;
+        int bit_idx(0);
+        for(int bytes(226 / 8); bytes > 0; bytes--, bit_idx += 8){
+          buf = parser_t::template bits2num<u8_t, BufferT>(dst, bit_idx, 8);
+          crc = (((crc << 8) & 0xFFFF00) | buf) ^ tbl.fw[(crc >> 16) & 0xFF];
+        }
+        buf = parser_t::template bits2num<u8_t, BufferT>(dst, bit_idx, 8);
+        for(unsigned char mask(0x80); bit_idx < 226; bit_idx++, mask >>= 1){
+          crc <<= 1;
+          if(buf & mask){crc |= 1;}
+          if(crc & 0x1000000u){crc ^= poly;}
+        }
+        for(int i(0); i < 3; i++){ // forward operation for padding
+          unsigned int cache(tbl.fw[(crc >> 16) & 0xFF]);
+          crc = (((crc << 8) ^ cache) & 0xFFFF00) | (cache & 0xFF);
+        }
+        parity_set(dst, crc);
+      }
 
       struct Type1 { ///< @see Fig. A-6 PRN_MASK
         struct mask_t {
@@ -1838,6 +1905,18 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
               };
               return res;
             }
+            template <class BufferT>
+            void dump(BufferT *dst){
+              typedef typename DataBlock::Type9 msg_t;
+#define dump_item(name) msg_t:: name ## _set(dst, name)
+              DataBlock::message_type_set(dst, 9);
+              msg_t::t0_set(dst, t_0);  msg_t::ura_set(dst, URA);
+              dump_item(x);   dump_item(y);   dump_item(z);
+              dump_item(dx);  dump_item(dy);  dump_item(dz);
+              dump_item(ddx); dump_item(ddy); dump_item(ddz);
+              dump_item(a_Gf0); dump_item(a_Gf1);
+#undef dump_item
+            }
 
             enum {
               SF_t_0,
@@ -1873,13 +1952,13 @@ sf[SF_ ## TARGET] * msg_t::TARGET(buf)
 
             raw_t &operator=(const Ephemeris &eph){
 #define CONVERT3(TARGET_DST, TARGET_SRC, TARGET_SF) \
-{TARGET_DST = (s32_t)((TARGET_SRC + 0.5 * sf[SF_ ## TARGET_SF]) / sf[SF_ ## TARGET_SF]);}
-#define CONVERT2(TARGET, TARGET_SF) CONVERT3(eph.TARGET, eph.TARGET, TARGET_SF)
+{TARGET_DST = std::floor((TARGET_SRC / sf[SF_ ## TARGET_SF]) + 0.5);}
+#define CONVERT2(TARGET, TARGET_SF) CONVERT3(TARGET, eph.TARGET, TARGET_SF)
 #define CONVERT(TARGET) CONVERT2(TARGET, TARGET)
               svid = eph.svid;
 
               URA = URA_index(eph.URA);
-              CONVERT3(t_0, std::fmod(t_0, gps_time_t::seconds_day), t_0);
+              CONVERT3(t_0, std::fmod(eph.t_0, gps_time_t::seconds_day), t_0);
               CONVERT2(x, xy);      CONVERT2(y, xy);      CONVERT(z);
               CONVERT2(dx, dxy);    CONVERT2(dy, dxy);    CONVERT(dz);
               CONVERT2(ddx, ddxy);  CONVERT2(ddy, ddxy);  CONVERT(ddz);
@@ -1992,7 +2071,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
           float_t dx, dy, dz; ///< ECEF velocity (m/s)
           float_t t_0;        ///< Time of applicability (s)
 
-          ///< Up-cast to ephemeris
+          ///< Upgrade to ephemeris
           operator Ephemeris() const {
             Ephemeris converted = {
               prn,        // Satellite number
@@ -2005,6 +2084,14 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
               0,          // Clock correction parameter (s/s)
             };
             return converted;
+          }
+          ///< Downgrade from ephemeris
+          Almanac &operator=(const Ephemeris &eph) {
+            prn = eph.svid;
+            t_0 = eph.t_0;
+            x = eph.x; y = eph.y; z = eph.z;
+            dx = eph.dx; dy = eph.dy; dz = eph.dz;
+            return *this;
           }
 
           struct raw_t {
@@ -2027,6 +2114,21 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET_SF]){break;}
                 msg_t::t0(buf), // t_0
               };
               return res;
+            }
+            template <class BufferT>
+            void dump(BufferT *dst, const uint_t &ch = 0){
+              typedef typename DataBlock::Type17 msg_t;
+#define dump_item(name) msg_t:: name ## _set(dst, ch, name)
+              if(ch == 0){
+                DataBlock::message_type_set(dst, 17);
+                msg_t::t0_set(dst, t_0);
+              }
+              msg_t::id_set(dst, ch, data_id);
+              dump_item(prn);
+              msg_t::health_status_set(dst, ch, SV_health);
+              dump_item(x);   dump_item(y);   dump_item(z);
+              dump_item(dx);  dump_item(dy);  dump_item(dz);
+#undef dump_item
             }
 
             enum {
