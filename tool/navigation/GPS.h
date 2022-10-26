@@ -1840,14 +1840,16 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               dump_item(a_f0);        dump_item(a_f1);
 #undef dump_item
               deparse_t::preamble_set(dst);
-              deparse_t::data_id_set(dst, 1); // always "01" @see 20.3.3.5.1.1 Data ID and SV ID.
-              if(svid <= 24){
+              if((svid >= 1) && (svid <= 24)){
                 deparse_t::subframe_id_set(dst, 5);
                 deparse_t::sv_page_id_set(dst, svid);
-              }else{ // subframe 4 and page 2-5, 7-10
+              }else if((svid >= 25) && (svid <= 32)){ // subframe 4 and page 2-5, 7-10
                 deparse_t::subframe_id_set(dst, 4);
                 deparse_t::sv_page_id_set(dst, svid);
+              }else{ // provision for other systems (ex. QZSS)
+                return;
               }
+              deparse_t::data_id_set(dst, 1); // always "01" @see 20.3.3.5.1.1 Data ID and SV ID.
             }
 
             enum {
