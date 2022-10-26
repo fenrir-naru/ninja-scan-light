@@ -1109,7 +1109,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 
         raw_t &operator=(const Ionospheric_UTC_Parameters &params) {
 #define CONVERT2(src, dst, type) \
-{dst = (type)(params.src / sf[SF_ ## dst] + 0.5);}
+{dst = (type)std::floor(params.src / sf[SF_ ## dst] + 0.5);}
 #define CONVERT(TARGET, type) CONVERT2(TARGET, TARGET, type)
             CONVERT2(alpha[0], alpha0, s8_t);
             CONVERT2(alpha[1], alpha1, s8_t);
@@ -1634,7 +1634,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 
             raw_t &operator=(const Ephemeris &eph){
 #define CONVERT(type, TARGET) \
-{TARGET = (type)(eph.TARGET / sf[SF_ ## TARGET] + 0.5);}
+{TARGET = (type)std::floor(eph.TARGET / sf[SF_ ## TARGET] + 0.5);}
               svid = eph.svid;
 
               WN = eph.WN;
@@ -1888,7 +1888,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
 
             raw_t &operator=(const Almanac &alm) {
 #define CONVERT(type, key) \
-{key = (type)(alm.key  / sf[SF_ ## key] + 0.5);}
+{key = (type)std::floor(alm.key  / sf[SF_ ## key] + 0.5);}
               svid = (u8_t)alm.svid;
               CONVERT(u16_t, e);
               CONVERT(u8_t,  t_oa);
