@@ -71,7 +71,9 @@ struct GNSS_Data {
           : super_t(), set_iodc(false), iode_subframe2(-1), iode_subframe3(-1), is_qzss(false) {}
       operator gps_ephemeris_t() const {
         return is_qzss
-            ? (gps_ephemeris_t)(reinterpret_cast<const QZSS_LNAV_Ephemeris_Raw<FloatT> &>(*this))
+            ? (gps_ephemeris_t)(
+              reinterpret_cast<
+                const typename QZSS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t &>(*this))
             : super_t::operator gps_ephemeris_t();
       }
     } gps_ephemeris[32], qzss_ephemeris[10];
