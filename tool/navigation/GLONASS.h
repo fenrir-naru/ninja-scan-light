@@ -383,7 +383,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 
         raw_t &operator=(const TimeProperties &t){
 #define CONVERT(TARGET) \
-{TARGET = (s32_t)((t.TARGET + 0.5 * sf[SF_ ## TARGET]) / sf[SF_ ## TARGET]);}
+{TARGET = (s32_t)std::floor(t.TARGET / sf[SF_ ## TARGET] + 0.5);}
           CONVERT(tau_c);
           CONVERT(tau_GPS);
           std::div_t divmod(std::div(t.date.year - 1996, 4));
@@ -984,9 +984,8 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
               return res;
             }
             raw_t &operator=(const Ephemeris &eph){
-              // TODO: m?
 #define CONVERT(TARGET) \
-{TARGET = (s32_t)((eph.TARGET + 0.5 * sf[SF_ ## TARGET]) / sf[SF_ ## TARGET]);}
+{TARGET = (s32_t)std::floor(eph.TARGET / sf[SF_ ## TARGET] + 0.5);}
               svid = eph.svid;
               { // t_k
                 std::div_t minutes(div(eph.t_k, 60));
