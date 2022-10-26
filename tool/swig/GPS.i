@@ -431,8 +431,14 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     }
     typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
     almanac_t::raw_t raw;
-    raw.update<2, 0>(buf);
-    if((raw.svid < 1) || (raw.svid > 32)){return -1;}
+    switch(parse_t::data_id(buf)){
+      case 1:
+        raw.update<2, 0>(buf);
+        if((raw.svid < 1) || (raw.svid > 32)){return -1;}
+        break;
+      default:
+        return -1;
+    }
     almanac_t almanac;
     *self = (GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris)(almanac = raw);
     return self->svid;
