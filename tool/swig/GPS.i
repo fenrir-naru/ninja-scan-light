@@ -268,7 +268,7 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
     (typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters &)res = raw;
     return res;
   }
-  %typemap(in,numinputs=0) unsigned int buf[10] (unsigned int temp[10]) "$1 = temp;"
+  %typemap(in,numinputs=0) unsigned int buf[10] (unsigned int temp[10] = {0}) "$1 = temp;"
   %typemap(argout) unsigned int buf[10] {
     for(int i(0); i < 10; ++i){
       %append_output(SWIG_From(unsigned int)(($1)[i]));
