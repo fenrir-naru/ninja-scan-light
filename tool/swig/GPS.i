@@ -506,9 +506,14 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
     almanac_t::raw_t raw;
     switch(parse_t::data_id(buf)){
-      case 1:
+      case 1: // GPS
         raw.update<2, 0>(buf);
         if((raw.svid < 1) || (raw.svid > 32)){return -1;}
+        break;
+      case 3: // QZSS
+        reinterpret_cast<QZSS_SpaceNode<FloatT>::SatelliteProperties::Almanac::raw_t &>(raw)
+            .update<2, 0>(buf);
+        if((raw.svid < 193) || (raw.svid > 202)){return -1;}
         break;
       default:
         return -1;
@@ -522,15 +527,27 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
    * @param buf_brdc pointer to store raw data of subframe 4 or 5.
    * Each 30bit (MSB 2 bits are padding) length word is stored in each successive address of the pointer.
    * @param t GPS time at broadcasting
+   * @param qzss_subframe if 4 or 5, this ephemeris is treated as QZSS, otherwise GPS (default).
    */
-  void dump_almanac(unsigned int buf_brdc[10], const GPS_Time<FloatT> &t){
+  void dump_almanac(
+      unsigned int buf_brdc[10], const GPS_Time<FloatT> &t,
+      const unsigned int &qzss_subframe = 0){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
     dump_t::how_set(buf_brdc, t);
     typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
     almanac_t almanac;
     almanac_t::raw_t raw;
-    (raw = (almanac = *self)).dump<2, 0>(buf_brdc);
+    raw = (almanac = *self);
+    switch(qzss_subframe){
+      case 4:
+      case 5:
+        reinterpret_cast<QZSS_SpaceNode<FloatT>::SatelliteProperties::Almanac::raw_t &>(raw)
+            .dump<2, 0>(buf_brdc, qzss_subframe);
+        break;
+      default:
+        raw.dump<2, 0>(buf_brdc);
+    }
   }
   %typemap(out) constellation_res_t {
     %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
