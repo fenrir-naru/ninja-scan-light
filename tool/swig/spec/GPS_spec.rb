@@ -784,6 +784,7 @@ __RINEX_CLK_TEXT__
       
       meas.each{|prn, k, v|
         eph = sn.ephemeris(prn)
+        expect(eph.valid?(t_meas)).to eq(true)
         sc2rad = 3.1415926535898
         proc{|raw|
           expect(raw.size).to eq(30)

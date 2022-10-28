@@ -301,6 +301,11 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         || (this->iode != this->iode_subframe3)
         || ((this->iodc & 0xFF) != this->iode));
   }
+  bool is_valid(const GPS_Time<FloatT> &t) const {
+    return is_consistent() && GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::is_valid(t);
+  }
+  GPS_Time<FloatT> t_clock() const {return GPS_Time<FloatT>(this->WN, this->t_oc);}
+  GPS_Time<FloatT> t_ephemeris() const {return GPS_Time<FloatT>(this->WN, this->t_oe);}
   GPS_Ephemeris() : GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris() {
     invalidate();
   }
@@ -476,6 +481,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   }
 #if defined(SWIGRUBY)
   %rename("consistent?") is_consistent;
+  %rename("valid?") is_valid;
 #endif
 }
 
