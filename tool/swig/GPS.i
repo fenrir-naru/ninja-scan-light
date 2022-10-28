@@ -523,6 +523,10 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
   SBAS_Ephemeris() : SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris() {}
   SBAS_Ephemeris(const typename SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris &eph) 
       : SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris(eph) {}
+  bool is_valid(const GPS_Time<FloatT> &t) const {
+    return SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::is_valid(t);
+  }
+  GPS_Time<FloatT> t_applicable() const {return GPS_Time<FloatT>(this->WN, this->t_0);}
 };
 %}
 %extend SBAS_Ephemeris {
@@ -557,6 +561,9 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
         pv.position, pv.velocity, self->clock_error(t_tx), self->clock_error_dot(t_tx)};
     return res;
   }
+#if defined(SWIGRUBY)
+  %rename("valid?") is_valid;
+#endif
 }
 
 %extend SBAS_SpaceNode {
