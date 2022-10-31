@@ -268,24 +268,24 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
     (typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters &)res = raw;
     return res;
   }
-  %typemap(in,numinputs=0) unsigned int buf[10] (unsigned int temp[10] = {0}) "$1 = temp;"
-  %typemap(argout) unsigned int buf[10] {
-    for(int i(0); i < 10; ++i){
+  %typemap(in,numinputs=0) unsigned int buf_brdc[ANY] (unsigned int temp[$1_dim0] = {0}) "$1 = temp;"
+  %typemap(argout) unsigned int buf_brdc[ANY] {
+    for(int i(0); i < $1_dim0; ++i){
       %append_output(SWIG_From(unsigned int)(($1)[i]));
     }
   }
   /**
    * Return broadcasted raw data related to ionospheric and UTC parameters.
-   * @param buf pointer to store raw data of subframe 4 page 18.
-   * Each 30bit length word is stored in each successive address of the pointer.
+   * @param buf_brdc pointer to store raw data of subframe 4 page 18.
+   * Each 30bit length word (MSB 2 bits are padding) is stored in each successive address of the pointer.
    * @param t GPS time at broadcasting
    */
-  void dump(unsigned int buf[10], const GPS_Time<FloatT> &t){
+  void dump(unsigned int buf_brdc[10], const GPS_Time<FloatT> &t){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
-    dump_t::how_set(buf, t);
+    dump_t::how_set(buf_brdc, t);
     GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters::raw_t raw;
-    (raw = *self).dump<2, 0>(buf);
+    (raw = *self).dump<2, 0>(buf_brdc);
   }
 }
 
@@ -403,24 +403,24 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         break;
     }
   }
-  %apply unsigned int buf[10] {
-      unsigned int sf1[10], unsigned int sf2[10], unsigned int sf3[10]};
+  %apply unsigned int buf_brdc[ANY] {
+      unsigned int buf_sf1[10], unsigned int buf_sf2[10], unsigned int buf_sf3[10]};
   /**
    * Return broadcasted raw data of ephemeris data.
-   * @param sf1 pointer to store raw data of subframe 1.
-   * Each 30bit length word is stored in each successive address of the pointer.
-   * @param sf2 pointer to store raw data of subframe 2. Its structue is same as sf1.
-   * @param sf3 pointer to store raw data of subframe 3. Its structue is same as sf1.
+   * @param buf_sf1 pointer to store raw data of subframe 1.
+   * Each 30bit length word (MSB 2 bits are padding) is stored in each successive address of the pointer.
+   * @param buf_sf2 pointer to store raw data of subframe 2. Its structue is same as sf1.
+   * @param buf_sf3 pointer to store raw data of subframe 3. Its structue is same as sf1.
    * @param t GPS time at broadcasting
    */
   void dump(
-      unsigned int sf1[10], unsigned int sf2[10], unsigned int sf3[10],
+      unsigned int buf_sf1[10], unsigned int buf_sf2[10], unsigned int buf_sf3[10],
       const GPS_Time<FloatT> &t){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
     GPS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::raw_t raw;
     raw = *self;
-    unsigned int *buf[10] = {sf1, sf2, sf3};
+    unsigned int *buf[10] = {buf_sf1, buf_sf2, buf_sf3};
     for(int i(0); i < 3; ++i){
       dump_t::how_set(buf[i], t);
       raw.dump<2, 0>(buf[i], i + 1);
@@ -450,18 +450,18 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   }
   /**
    * Return broadcasted raw data of almanac data.
-   * @param buf pointer to store raw data of subframe 4 or 5.
-   * Each 30bit length word is stored in each successive address of the pointer.
+   * @param buf_brdc pointer to store raw data of subframe 4 or 5.
+   * Each 30bit (MSB 2 bits are padding) length word is stored in each successive address of the pointer.
    * @param t GPS time at broadcasting
    */
-  void dump_almanac(unsigned int buf[10], const GPS_Time<FloatT> &t){
+  void dump_almanac(unsigned int buf_brdc[10], const GPS_Time<FloatT> &t){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
-    dump_t::how_set(buf, t);
+    dump_t::how_set(buf_brdc, t);
     typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
     almanac_t almanac;
     almanac_t::raw_t raw;
-    (raw = (almanac = *self)).dump<2, 0>(buf);
+    (raw = (almanac = *self)).dump<2, 0>(buf_brdc);
   }
   %typemap(out) constellation_res_t {
     %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
