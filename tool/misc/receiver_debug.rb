@@ -522,18 +522,19 @@ class GPS_Receiver
         register_ephemeris(
             t_meas,
             sys, svid,
-            packet.slice(6 + 2, 40).each_slice(4).collect{|v|
-              res = v.pack("C*").unpack("V")[0]
-              (sys == :GPS) ? ((res & 0xFFFFFF) << 6) : res
-            })
+            proc{|data|
+              case sys # adjust padding
+              when :GPS; data.collect!{|v| (v & 0xFFFFFF) << 6}
+              when :SBAS; data[7] <<= 6
+              end
+              data
+            }.call(packet.slice(6 + 2, 40).pack("C*").unpack("V*")))
       when [0x02, 0x13] # RXM-SFRBX
         sys, svid = gnss_serial.call(packet[6 + 1], packet[6])
         register_ephemeris(
             t_meas,
             sys, svid,
-            packet.slice(6 + 8, 4 * packet[6 + 4]).each_slice(4).collect{|v|
-              v.pack("C*").unpack("V")[0]
-            })
+            packet.slice(6 + 8, 4 * packet[6 + 4]).pack("C*").unpack("V*"))
       end
     }
     $stderr.puts ", found packets are %s"%[ubx_kind.inspect]
