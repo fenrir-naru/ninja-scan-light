@@ -862,7 +862,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
       static void preamble_set(InputT *dest){preamble_set(dest, (u8_t)0x8B);}
       convert_u(32, 30, 24, how);
       static void how_set(InputT *dest, const gps_time_t &t){
-        how_set(dest, ((u32_t)(t.seconds / 1.5) & 0x1FF) << 7);
+        how_set(dest, ((u32_t)(t.seconds / 1.5) & 0x1FFFF) << 7);
       }
       convert_u( 8, 49,  3, subframe_id);
 
