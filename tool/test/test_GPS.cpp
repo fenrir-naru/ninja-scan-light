@@ -138,7 +138,7 @@ void check_parse(const bitset<N_bitset> &b, const BufferT (&buf)[N_buf]){
   each(  90,  8, SubFrame4_5_Almanac::t_oa);
   each(  98, 16, SubFrame4_5_Almanac::delta_i);
   each( 120, 16, SubFrame4_5_Almanac::dot_Omega0);
-  each( 128,  8, SubFrame4_5_Almanac::SV_health);
+  each( 136,  8, SubFrame4_5_Almanac::SV_health);
   each( 150, 24, SubFrame4_5_Almanac::sqrt_A);
   each( 180, 24, SubFrame4_5_Almanac::Omega0);
   each( 210, 24, SubFrame4_5_Almanac::omega);
