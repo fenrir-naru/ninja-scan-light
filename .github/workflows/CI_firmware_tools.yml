@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-18.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: before_setup
       env:
         SDCC_DIR: /tmp/sdcc-${{env.SDCC}}
@@ -19,7 +19,7 @@ jobs:
         echo "DEPLOY_MESSAGE=\"build by Github actions, `ruby -e 'require "time"; print Time::parse(\`git log --format="%cd" -n 1\`.chomp).strftime("%Y%m%d_%H%M%S")'`\"" >> $GITHUB_ENV
         sudo apt-get update && sudo apt-get install -yq gcc-5 g++-5 libboost-all-dev g++-arm-linux-gnueabihf
     - name: cache
-      uses: actions/cache@v2.1.3
+      uses: actions/cache@v3
       with:
         path: ${{env.SDCC_DIR}}
         key: sdcc-${{env.SDCC}}
@@ -36,7 +36,7 @@ jobs:
         (cd ./tool && make clean all && (cd build_GCC && touch ${GITHUB_SHA}.commit && tar zvcf ubuntu.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
         (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all && (cd build_GCC_ARM && touch ${GITHUB_SHA}.commit && tar zvcf raspi.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
     - name: upload_artifact
-      uses: actions/upload-artifact@v2.2.4
+      uses: actions/upload-artifact@v3
       with:
         path: |
           tool/build_*/*.tar.gz
