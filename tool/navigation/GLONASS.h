@@ -915,6 +915,7 @@ if(std::abs(TARGET - t.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
                   dump_item(4, N_T);
                   dump_item(4, n);
                   dump_item(4, M);
+                  break;
                 default:
                   return;
               }
