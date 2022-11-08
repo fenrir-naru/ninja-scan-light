@@ -100,12 +100,15 @@ static s ## bits ## _t name(const InputT *buf){ \
   u ## bits ## _t temp( \
       DataParser::template bits2num<u ## bits ## _t, EffectiveBits, PaddingBits_MSB>( \
         buf, offset_bits, length)); \
-  static const u ## bits ## _t mask((u ## bits ## _t)1 << (length - 1)); /* MSB is sign bit */ \
+  /* MSB is sign bit (Not equal to two's complement?) */ \
+  static const u ## bits ## _t mask((u ## bits ## _t)1 << (length - 1)); \
   return (temp & mask) ? ((s ## bits ## _t)-1 * (temp & (mask - 1))) : temp; \
 } \
 static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
+  static const u ## bits ## _t mask((u ## bits ## _t)1 << (length - 1)); \
+  u ## bits ## _t src2((src < 0) ? ((-src) | mask) : src); \
   DataParser::template num2bits<u ## bits ## _t, InputT>( \
-      dest, *(u ## bits ## _t *)(&src), offset_bits, length, EffectiveBits, PaddingBits_MSB); \
+      dest, src2, offset_bits, length, EffectiveBits, PaddingBits_MSB); \
 }
       convert_u( 8,  0,  1, idle);
       static void idle_set(InputT *dest){idle_set(dest, 0);}

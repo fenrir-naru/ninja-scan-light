@@ -90,7 +90,7 @@ struct rtklib_t {
   }
 };
 
-BOOST_AUTO_TEST_CASE(parity_calculation){
+BOOST_AUTO_TEST_CASE(dump_with_parity_check){
   typedef boost::uint32_t u32_t;
   static const u32_t packet[][4] = {
     // UBX 20210531/log.ubx
@@ -125,6 +125,56 @@ BOOST_AUTO_TEST_CASE(parity_calculation){
     typedef space_node_t::BroadcastedMessage<u32_t> msg_t;
     u32_t copy[4];
     std::memcpy(copy, packet[i], sizeof(copy));
+#define pingpong(str_num, key) { \
+  u32_t copy2[4] = {0}; \
+  msg_t::String ## str_num::key ## _set(copy2, msg_t::String ## str_num::key(copy)); \
+  BOOST_REQUIRE_EQUAL(msg_t::String ## str_num::key(copy), msg_t::String ## str_num::key(copy2)); \
+}
+    pingpong(1, P1);
+    pingpong(1, t_k);
+    pingpong(1, xn_dot);
+    pingpong(1, xn_ddot);
+    pingpong(1, xn);
+    pingpong(2, B_n);
+    pingpong(2, P2);
+    pingpong(2, t_b);
+    pingpong(2, yn_dot);
+    pingpong(2, yn_ddot);
+    pingpong(2, yn);
+    pingpong(3, P3);
+    pingpong(3, gamma_n);
+    pingpong(3, p);
+    pingpong(3, l_n);
+    pingpong(3, zn_dot);
+    pingpong(3, zn_ddot);
+    pingpong(3, zn);
+    pingpong(4, tau_n);
+    pingpong(4, delta_tau_n);
+    pingpong(4, E_n);
+    pingpong(4, P4);
+    pingpong(4, F_T);
+    pingpong(4, N_T);
+    pingpong(4, n);
+    pingpong(4, M);
+    pingpong(5_Almanac, NA);
+    pingpong(5_Almanac, tau_c);
+    pingpong(5_Almanac, N_4);
+    pingpong(5_Almanac, tau_GPS);
+    pingpong(5_Almanac, l_n);
+    pingpong(6_Almanac, C_n);
+    pingpong(6_Almanac, M_n);
+    pingpong(6_Almanac, nA);
+    pingpong(6_Almanac, tauA_n);
+    pingpong(6_Almanac, lambdaA_n);
+    pingpong(6_Almanac, delta_iA_n);
+    pingpong(6_Almanac, epsilonA_n);
+    pingpong(7_Almanac, omegaA_n);
+    pingpong(7_Almanac, tA_lambda_n);
+    pingpong(7_Almanac, delta_TA_n);
+    pingpong(7_Almanac, delta_TA_dot_n);
+    pingpong(7_Almanac, HA_n);
+    pingpong(7_Almanac, l_n);
+#undef pingpong
     msg_t::KX_set(copy, 0);
     msg_t::KX_set(copy);
     BOOST_CHECK_EQUAL(msg_t::KX(packet[i]), msg_t::KX(copy));
