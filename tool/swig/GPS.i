@@ -1103,6 +1103,43 @@ struct GPS_RangeCorrector
 };
 }
 
+%{
+template <class BaseT, class HookT>
+struct HookableSolver : public BaseT {
+  typedef BaseT base_t;
+  HookT *hook;
+  HookableSolver(const BaseT &base) : BaseT(base), hook(NULL) {}
+  virtual typename base_t::relative_property_t relative_property(
+      const typename base_t::prn_t &prn,
+      const typename base_t::measurement_t::mapped_type &measurement,
+      const typename base_t::float_t &receiver_error,
+      const typename base_t::gps_time_t &time_arrival,
+      const typename base_t::pos_t &usr_pos,
+      const typename base_t::xyz_t &usr_vel) const {
+    typename base_t::relative_property_t res(
+        base_t::relative_property(
+          prn, measurement, receiver_error, time_arrival,
+          usr_pos, usr_vel));
+    if(hook){
+      res = hook->relative_property(
+          prn, measurement, receiver_error, time_arrival,
+          usr_pos, usr_vel,
+          res);
+    }
+    return res;
+  }
+  virtual typename base_t::satellite_t select_satellite(
+      const typename base_t::prn_t &prn,
+      const typename base_t::gps_time_t &time) const {
+    typename base_t::satellite_t res(base_t::select_satellite(prn, time));
+    if(hook){
+      res = hook->select_satellite(prn, time, res);
+    }
+    return res;
+  }
+};
+%}
+
 %extend GPS_Solver {
   %ignore super_t;
   %ignore base_t;
@@ -1110,7 +1147,7 @@ struct GPS_RangeCorrector
   %ignore gps;
   %ignore glonass_t;
   %ignore glonass;
-  %ignore select_solver;
+  %ignore select;
   %ignore relative_property;
   %ignore select_satellite;
   %ignore update_position_solution;
@@ -1130,14 +1167,12 @@ struct GPS_RangeCorrector
           const GPS_Solver<FloatT>::base_t::float_t &receiver_error,
           const GPS_Solver<FloatT>::base_t::gps_time_t &time_arrival,
           const GPS_Solver<FloatT>::base_t::pos_t &usr_pos,
-          const GPS_Solver<FloatT>::base_t::xyz_t &usr_vel) const {
+          const GPS_Solver<FloatT>::base_t::xyz_t &usr_vel,
+          const GPS_Solver<FloatT>::base_t::relative_property_t &res_orig) const {
       union {
         base_t::relative_property_t prop;
         FloatT values[7];
-      } res = {
-          select_solver(prn).relative_property(
-            prn, measurement, receiver_error, time_arrival,
-            usr_pos, usr_vel)};
+      } res = {res_orig};
 #ifdef SWIGRUBY
       do{
         static const VALUE key(ID2SYM(rb_intern("relative_property")));
@@ -1217,9 +1252,9 @@ struct GPS_RangeCorrector
     template <>
     GPS_Solver<FloatT>::base_t::satellite_t GPS_Solver<FloatT>::select_satellite(
         const GPS_Solver<FloatT>::base_t::prn_t &prn,
-        const GPS_Solver<FloatT>::base_t::gps_time_t &time) const {
-      GPS_Solver<FloatT>::base_t::satellite_t res(
-          select_solver(prn).select_satellite(prn, time));
+        const GPS_Solver<FloatT>::base_t::gps_time_t &time,
+        const GPS_Solver<FloatT>::base_t::satellite_t &res_orig) const {
+      GPS_Solver<FloatT>::base_t::satellite_t res(res_orig);
 #ifdef SWIGRUBY
       if(!res.is_available()){
         static const VALUE key(ID2SYM(rb_intern("relative_property")));
@@ -1412,14 +1447,14 @@ struct GPS_Solver
   struct gps_t {
     GPS_SpaceNode<FloatT> space_node;
     GPS_SolverOptions<FloatT> options;
-    GPS_SinglePositioning<FloatT> solver;
-    gps_t() : space_node(), options(), solver(space_node) {}
+    HookableSolver<GPS_SinglePositioning<FloatT>, GPS_Solver<FloatT> > solver;
+    gps_t() : space_node(), options(), solver(GPS_SinglePositioning<FloatT>(space_node)) {}
   } gps;
   struct glonass_t {
     GLONASS_SpaceNode<FloatT> space_node;
     GLONASS_SolverOptions<FloatT> options;
-    GLONASS_SinglePositioning<FloatT> solver;
-    glonass_t() : space_node(), options(), solver(space_node) {}
+    HookableSolver<GLONASS_SinglePositioning<FloatT>, GPS_Solver<FloatT> > solver;
+    glonass_t() : space_node(), options(), solver(GLONASS_SinglePositioning<FloatT>(space_node)) {}
   } glonass;
   SWIG_Object hooks;
   typedef std::vector<GPS_RangeCorrector<FloatT> > user_correctors_t;
@@ -1443,31 +1478,49 @@ struct GPS_Solver
 #endif
     glonass.solver.ionospheric_correction.add(gps.solver.ionospheric_correction);
     glonass.solver.tropospheric_correction.add(gps.solver.tropospheric_correction);
+    gps.solver.hook = this;
+    glonass.solver.hook = this;
   }
   GPS_SpaceNode<FloatT> &gps_space_node() {return gps.space_node;}
   GPS_SolverOptions<FloatT> &gps_options() {return gps.options;}
   GLONASS_SpaceNode<FloatT> &glonass_space_node() {return glonass.space_node;}
   GLONASS_SolverOptions<FloatT> &glonass_options() {return glonass.options;}
-  const base_t &select_solver(
+  const base_t &select(
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
     if(prn > 0x100 && prn <= (0x100 + 24)){return glonass.solver;}
-    // call order: base_t::solve => this returned by select() 
-    //     => relative_property() => select_solver()
-    // For not supported satellite, call loop prevention is required.
-    static const base_t dummy; 
-    return dummy;
+    return *this;
   }
+  // proxy of virtual functions
+  typename base_t::relative_property_t relative_property(
+      const typename base_t::prn_t &prn,
+      const typename base_t::measurement_t::mapped_type &measurement,
+      const typename base_t::float_t &receiver_error,
+      const typename base_t::gps_time_t &time_arrival,
+      const typename base_t::pos_t &usr_pos,
+      const typename base_t::xyz_t &usr_vel,
+      const typename base_t::relative_property_t &orig) const;
   virtual typename base_t::relative_property_t relative_property(
       const typename base_t::prn_t &prn,
       const typename base_t::measurement_t::mapped_type &measurement,
       const typename base_t::float_t &receiver_error,
       const typename base_t::gps_time_t &time_arrival,
       const typename base_t::pos_t &usr_pos,
-      const typename base_t::xyz_t &usr_vel) const;
+      const typename base_t::xyz_t &usr_vel) const {
+    return relative_property(
+        prn, measurement, receiver_error, time_arrival, usr_pos, usr_vel,
+        super_t::relative_property(
+          prn, measurement, receiver_error, time_arrival, usr_pos, usr_vel));
+  }
+  typename base_t::satellite_t select_satellite(
+      const typename base_t::prn_t &prn,
+      const typename base_t::gps_time_t &time,
+      const typename base_t::satellite_t &orig) const;
   virtual typename base_t::satellite_t select_satellite(
       const typename base_t::prn_t &prn,
-      const typename base_t::gps_time_t &time) const;
+      const typename base_t::gps_time_t &time) const {
+    return select_satellite(prn, time, super_t::select_satellite(prn, time));
+  }
   virtual bool update_position_solution(
       const typename base_t::geometric_matrices_t &geomat,
       typename base_t::user_pvt_t &res) const;
