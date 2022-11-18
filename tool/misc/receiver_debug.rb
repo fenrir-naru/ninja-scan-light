@@ -284,6 +284,11 @@ class GPS_Receiver
       when :fault_exclusion
         @solver.options = {:skip_exclusion => !(output_options[:FDE] = v.to_b)}
         next true
+      when :use_signal
+        {
+          :GPS_L2C => proc{@solver.gps_options.exclude_L2C = false},
+        }[v.to_sym].call rescue next false
+        next true
       end
       false
     }
@@ -565,18 +570,19 @@ class GPS_Receiver
 
       types ||= Hash[*(item[:meas_types].collect{|sys, values|
         [sys, values.collect.with_index{|type_, i|
-          case type_
-          when "C1", "C1C"
-            [i, :L1_PSEUDORANGE]
-          when "L1", "L1C"
-            [i, :L1_CARRIER_PHASE]
-          when "D1", "D1C"
-            [i, :L1_DOPPLER]
-          when "S1", "S1C"
-            [i, :L1_SIGNAL_STRENGTH_dBHz]
-          else
-            nil 
-          end
+          sig_obs_type = [case type_[1..-1]
+            when /^1C?$/; :L1
+            when /^2[XL]$/; :L2CL
+            when /^2S$/; :L2CM
+            else; nil
+          end, {
+            'C' => :PSEUDORANGE,
+            'L' => :CARRIER_PHASE,
+            'D' => :DOPPLER,
+            'S' => :SIGNAL_STRENGTH_dBHz,
+          }[type_[0]]]
+          next nil unless sig_obs_type.all?
+          [i, sig_obs_type.join('_').to_sym]
         }.compact]
       }.flatten(1))]
 

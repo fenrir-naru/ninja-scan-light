@@ -25,6 +25,7 @@
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/GPS_Solver_RAIM.h"
+#include "navigation/GPS_Solver_MultiFrequency.h"
 
 #if defined(__cplusplus) && (__cplusplus < 201103L)
 #include <sstream>
@@ -835,6 +836,16 @@ struct GPS_Measurement {
     L1_SIGNAL_STRENGTH_dBHz,
     L1_LOCK_SEC,
     L1_FREQUENCY,
+#define make_entry(key) L2CM_ ## key, L2CL_ ## key
+#define make_entry2(key) make_entry(key), make_entry(key ## _SIGMA)
+    make_entry2(PSEUDORANGE),
+    make_entry2(CARRIER_PHASE),
+    make_entry2(DOPPLER),
+    make_entry2(RANGE_RATE),
+    make_entry(SIGNAL_STRENGTH_dBHz),
+    make_entry(LOCK_SEC),
+#undef make_entry2
+#undef make_entry
     ITEMS_PREDEFINED,
   };
   void add(const int &prn, const int &key, const FloatT &value){
@@ -858,7 +869,7 @@ const type &get_ ## name () const {
   MAKE_ACCESSOR2(residual_mask, FloatT);
 #undef MAKE_ACCESSOR2
   MAKE_VECTOR2ARRAY(int);
-  %ignore cast_base;
+  %ignore cast_general;
 }
 %inline %{
 template <class FloatT>
@@ -872,17 +883,23 @@ struct GPS_SolverOptions_Common {
 %extend GPS_SolverOptions {
   %ignore base_t;
   %ignore cast_general;
+#ifdef SWIGRUBY
+  %rename("exclude_L2C?") get_exclude_L2C;
+  %rename("exclude_L2C=") set_exclude_L2C;
+#endif
   MAKE_VECTOR2ARRAY(int);
 }
 %inline %{
 template <class FloatT>
 struct GPS_SolverOptions 
-    : public GPS_SinglePositioning<FloatT>::options_t, 
+    : public GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >::options_t, 
     GPS_SolverOptions_Common<FloatT> {
-  typedef typename GPS_SinglePositioning<FloatT>::options_t base_t;
+  typedef typename GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >::options_t base_t;
   void exclude(const int &prn){base_t::exclude_prn.set(prn);}
   void include(const int &prn){base_t::exclude_prn.reset(prn);}
   std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+  bool get_exclude_L2C() {return base_t::exclude_L2C;}
+  bool set_exclude_L2C(const bool &b) {return base_t::exclude_L2C = b;}
   GPS_Solver_GeneralOptions<FloatT> *cast_general(){return this;}
   const GPS_Solver_GeneralOptions<FloatT> *cast_general() const {return this;}
 };
@@ -965,9 +982,11 @@ struct HookableSolver : public BaseT {
       fragment=SWIG_Traits_frag(FloatT),
       fragment=SWIG_Traits_frag(GPS_Measurement<FloatT>)){
     template <> template <>
-    HookableSolver<GPS_SinglePositioning<FloatT>, GPS_Solver<FloatT> >
+    HookableSolver<
+          GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
+          GPS_Solver<FloatT> >
         ::HookableSolver<GPS_SpaceNode<FloatT> >(const GPS_SpaceNode<FloatT> &sn)
-          : GPS_SinglePositioning<FloatT>(sn), hook(NULL) {}
+          : GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >(sn), hook(NULL) {}
     template <>
     GPS_Solver<FloatT>::base_t::relative_property_t
         GPS_Solver<FloatT>::relative_property(
@@ -1254,8 +1273,12 @@ struct GPS_Solver
   struct gps_t {
     GPS_SpaceNode<FloatT> space_node;
     GPS_SolverOptions<FloatT> options;
-    HookableSolver<GPS_SinglePositioning<FloatT>, GPS_Solver<FloatT> > solver;
-    gps_t() : space_node(), options(), solver(space_node) {}
+    HookableSolver<
+        GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
+        GPS_Solver<FloatT> > solver;
+    gps_t() : space_node(), options(), solver(space_node) {
+      options.exclude_L2C = true;
+    }
   } gps;
   SWIG_Object hooks;
   typedef std::vector<GPS_RangeCorrector<FloatT> > user_correctors_t;

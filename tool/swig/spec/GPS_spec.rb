@@ -924,6 +924,9 @@ __RINEX_CLK_TEXT__
       }}.not_to raise_error
       expect(solver.correction[:gps_ionospheric]).to include(:no_correction)
       expect(solver.correction[:options][:f_10_7]).to eq(10)
+      expect(solver.gps_options.exclude_L2C?).to eq(true) #default
+      solver.gps_options.exclude_L2C = false
+      expect(solver.gps_options.exclude_L2C?).to eq(false)
       sn.read(input[:rinex_nav])
       t_meas = GPS::Time::new(1849, 172413)
       sn.update_all_ephemeris(t_meas)
