@@ -52,6 +52,7 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
     typedef BaseSolver super_t;
   private:
     self_t &operator=(const self_t &);
+    GPS_Solver_MultiFrequency(const self_t &);
   public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename super_t::x x;

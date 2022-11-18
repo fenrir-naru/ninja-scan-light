@@ -914,7 +914,8 @@ template <class BaseT, class HookT>
 struct HookableSolver : public BaseT {
   typedef BaseT base_t;
   HookT *hook;
-  HookableSolver(const BaseT &base) : BaseT(base), hook(NULL) {}
+  template <class ArgT>
+  HookableSolver(const ArgT &);
   virtual typename base_t::relative_property_t relative_property(
       const typename base_t::prn_t &prn,
       const typename base_t::measurement_t::mapped_type &measurement,
@@ -963,6 +964,10 @@ struct HookableSolver : public BaseT {
       fragment=SWIG_From_frag(int),
       fragment=SWIG_Traits_frag(FloatT),
       fragment=SWIG_Traits_frag(GPS_Measurement<FloatT>)){
+    template <> template <>
+    HookableSolver<GPS_SinglePositioning<FloatT>, GPS_Solver<FloatT> >
+        ::HookableSolver<GPS_SpaceNode<FloatT> >(const GPS_SpaceNode<FloatT> &sn)
+          : GPS_SinglePositioning<FloatT>(sn), hook(NULL) {}
     template <>
     GPS_Solver<FloatT>::base_t::relative_property_t
         GPS_Solver<FloatT>::relative_property(
@@ -1250,7 +1255,7 @@ struct GPS_Solver
     GPS_SpaceNode<FloatT> space_node;
     GPS_SolverOptions<FloatT> options;
     HookableSolver<GPS_SinglePositioning<FloatT>, GPS_Solver<FloatT> > solver;
-    gps_t() : space_node(), options(), solver(GPS_SinglePositioning<FloatT>(space_node)) {}
+    gps_t() : space_node(), options(), solver(space_node) {}
   } gps;
   SWIG_Object hooks;
   typedef std::vector<GPS_RangeCorrector<FloatT> > user_correctors_t;
