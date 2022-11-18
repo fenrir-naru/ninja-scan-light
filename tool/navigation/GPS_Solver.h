@@ -77,12 +77,14 @@ struct GPS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<FloatT> 
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
 class GPS_SinglePositioning : public SolverBaseT {
-  private:
-    GPS_SinglePositioning<FloatT> &operator=(const GPS_SinglePositioning<FloatT> &);
   public:
-    typedef GPS_SinglePositioning<FloatT> self_t;
+    typedef GPS_SinglePositioning<FloatT, SolverBaseT> self_t;
     typedef SolverBaseT base_t;
+  private:
+    self_t &operator=(const self_t &);
+    GPS_SinglePositioning(const self_t &);
 
+  public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename base_t::x x;
 #else

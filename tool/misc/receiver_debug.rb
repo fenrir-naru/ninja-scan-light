@@ -288,6 +288,11 @@ class GPS_Receiver
       when :fault_exclusion
         @solver.options = {:skip_exclusion => !(output_options[:FDE] = v.to_b)}
         next true
+      when :use_signal
+        {
+          :GPS_L2C => proc{@solver.gps_options.exclude_L2C = false},
+        }[v.to_sym].call rescue next false
+        next true
       end
       false
     }
@@ -332,9 +337,9 @@ class GPS_Receiver
         }.flatten(1))]
       }
     }.call
-    alias_method(:add_orig, :add)
+    add_orig = instance_method(:add)
     define_method(:add){|prn, key, value|
-      add_orig(prn, key.kind_of?(Symbol) ? GPS::Measurement.const_get(key) : key, value)
+      add_orig.bind(self).call(prn, key.kind_of?(Symbol) ? GPS::Measurement.const_get(key) : key, value)
     }
   }
 
@@ -505,27 +510,32 @@ class GPS_Receiver
             v
           }
           sys, svid = gnss_serial.call(*loader.call(36, 2).reverse)
+          sigid = (packet[6 + 13] != 0) ? loader.call(38, 1, "C") : 0 # sigID if version(>0); @see UBX-18010854 
           case sys
-          when :GPS, :SBAS;
+          when :GPS 
+            sigid = {0 => :L1, 3 => :L2CL, 4 => :L2CM}[sigid]
+          when :SBAS
+            sigid = :L1
           else; next
           end
+          next unless sigid
           trk_stat = loader.call(46, 1)[0]
           {
-            :L1_PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
-            :L1_PSEUDORANGE_SIGMA => [43, 1, nil, proc{|v|
+            :PSEUDORANGE => [16, 8, "E", proc{|v| (trk_stat & 0x1 == 0x1) ? v : nil}],
+            :PSEUDORANGE_SIGMA => [43, 1, nil, proc{|v|
               (trk_stat & 0x1 == 0x1) ? (1E-2 * (1 << (v[0] & 0xF))) : nil
             }],
-            :L1_DOPPLER => [32, 4, "e"],
-            :L1_DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (1 << (v[0] & 0xF))}],
-            :L1_CARRIER_PHASE => [24, 8, "E", proc{|v| (trk_stat & 0x2 == 0x2) ? v : nil}],
-            :L1_CARRIER_PHASE_SIGMA => [44, 1, nil, proc{|v|
+            :DOPPLER => [32, 4, "e"],
+            :DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (1 << (v[0] & 0xF))}],
+            :CARRIER_PHASE => [24, 8, "E", proc{|v| (trk_stat & 0x2 == 0x2) ? v : nil}],
+            :CARRIER_PHASE_SIGMA => [44, 1, nil, proc{|v|
               (trk_stat & 0x2 == 0x2) ? (0.004 * (v[0] & 0xF)) : nil
             }],
-            :L1_SIGNAL_STRENGTH_dBHz => [42, 1, "C"],
-            :L1_LOCK_SEC => [40, 2, "v", proc{|v| 1E-3 * v}],
+            :SIGNAL_STRENGTH_dBHz => [42, 1, "C"],
+            :LOCK_SEC => [40, 2, "v", proc{|v| 1E-3 * v}],
           }.each{|k, prop|
             next unless v = loader.call(*prop)
-            meas.add(svid, k, v)
+            meas.add(svid, "#{sigid}_#{k}".to_sym, v) rescue nil # unsupported signal
           }
         }
         after_run.call(run(meas, t_meas), [meas, t_meas])
@@ -575,18 +585,19 @@ class GPS_Receiver
 
       types ||= Hash[*(item[:meas_types].collect{|sys, values|
         [sys, values.collect.with_index{|type_, i|
-          case type_
-          when "C1", "C1C"
-            [i, :L1_PSEUDORANGE]
-          when "L1", "L1C"
-            [i, :L1_CARRIER_PHASE]
-          when "D1", "D1C"
-            [i, :L1_DOPPLER]
-          when "S1", "S1C"
-            [i, :L1_SIGNAL_STRENGTH_dBHz]
-          else
-            nil 
-          end
+          sig_obs_type = [case type_[1..-1]
+            when /^1C?$/; :L1
+            when /^2[XL]$/; :L2CL
+            when /^2S$/; :L2CM
+            else; nil
+          end, {
+            'C' => :PSEUDORANGE,
+            'L' => :CARRIER_PHASE,
+            'D' => :DOPPLER,
+            'S' => :SIGNAL_STRENGTH_dBHz,
+          }[type_[0]]]
+          next nil unless sig_obs_type.all?
+          [i, sig_obs_type.join('_').to_sym]
         }.compact]
       }.flatten(1))]
 

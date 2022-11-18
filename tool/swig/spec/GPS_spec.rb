@@ -759,6 +759,10 @@ __RINEX_CLK_TEXT__
       puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %02d:%02d:%02d UTC"%[*t_meas.c_tm]})"
       expect(t_meas.c_tm).to eq([2015, 6, 15, 23, 53, 33])
       expect(GPS::Time::new(0, t_meas.serialize)).to eq(t_meas)
+      expect(t_meas.leap_seconds).to eq(sn.iono_utc.delta_t_LS)
+      expect(GPS::Time::leap_second_events.select{|wn, sec, leap|
+        t_meas >= GPS::Time::new(wn, sec)
+      }[0][2]).to eq(sn.iono_utc.delta_t_LS)
       
       sn.update_all_ephemeris(t_meas)
       
@@ -902,6 +906,8 @@ __RINEX_CLK_TEXT__
         }
         puts
       }
+      expect(solver.gps_options.elevation_mask).to eq(0)
+      expect(solver.gps_options.residual_mask).to be > 0
     end
     
     it 'can be modified through hooks' do
@@ -924,6 +930,9 @@ __RINEX_CLK_TEXT__
       }}.not_to raise_error
       expect(solver.correction[:gps_ionospheric]).to include(:no_correction)
       expect(solver.correction[:options][:f_10_7]).to eq(10)
+      expect(solver.gps_options.exclude_L2C?).to eq(true) #default
+      solver.gps_options.exclude_L2C = false
+      expect(solver.gps_options.exclude_L2C?).to eq(false)
       sn.read(input[:rinex_nav])
       t_meas = GPS::Time::new(1849, 172413)
       sn.update_all_ephemeris(t_meas)
