@@ -57,13 +57,15 @@ struct GLONASS_SinglePositioning_Options : public GPS_Solver_GeneralOptions<Floa
 
 template <class FloatT, class SolverBaseT = GPS_Solver_Base<FloatT> >
 class GLONASS_SinglePositioning : public SolverBaseT {
-  private:
-    GLONASS_SinglePositioning<FloatT> &operator=(const GLONASS_SinglePositioning<FloatT> &);
   public:
-    typedef GLONASS_SinglePositioning<FloatT> self_t;
+    typedef GLONASS_SinglePositioning<FloatT, SolverBaseT> self_t;
     typedef SolverBaseT base_t;
     typedef SolverBaseT super_t;
+  private:
+    self_t &operator=(const self_t &);
+    GLONASS_SinglePositioning(const self_t &);
 
+  public:
 #if defined(__GNUC__) && (__GNUC__ < 5)
 #define inheritate_type(x) typedef typename base_t::x x;
 #else
