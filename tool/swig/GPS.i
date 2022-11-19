@@ -26,6 +26,7 @@
 #include "navigation/GPS_Solver_Base.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/GPS_Solver_RAIM.h"
+#include "navigation/GPS_Solver_MultiFrequency.h"
 #include "navigation/GLONASS_Solver.h"
 
 #if defined(__cplusplus) && (__cplusplus < 201103L)
@@ -154,6 +155,16 @@ static std::string inspect_str(const VALUE &v){
   %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const std::tm & {
     $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
   }
+  %typemap(varout,fragment="SWIG_Traits_frag(FloatT)") leap_second_event_t [] {
+    $result = rb_ary_new2(sizeof($1) / sizeof($1[0]));
+    for(std::size_t i(0); i < sizeof($1) / sizeof($1[0]); ++i){
+      rb_ary_push($result,
+          rb_ary_new3(3,
+            SWIG_From(int)($1[i].corrected.week),
+            swig::from($1[i].corrected.seconds),
+            SWIG_From(int)($1[i].leap_seconds)));
+    }
+  }
 #endif
   %ignore canonicalize();
   %ignore GPS_Time(const int &_week, const float_t &_seconds);
@@ -177,15 +188,18 @@ static std::string inspect_str(const VALUE &v){
 #endif
 }
 
+%define MAKE_ACCESSOR2(func_name, target, type)
+%rename(%str(func_name ## =)) set_ ## func_name;
+type set_ ## func_name (const type &v) {
+  return self->target= v;
+}
+%rename(%str(func_name)) get_ ## func_name;
+const type &get_ ## func_name () const {
+  return self->target;
+}
+%enddef
 %define MAKE_ACCESSOR(name, type)
-%rename(%str(name ## =)) set_ ## name;
-type set_ ## name (const type &v) {
-  return self->name = v;
-}
-%rename(%str(name)) get_ ## name;
-const type &get_ ## name () const {
-  return self->name;
-}
+MAKE_ACCESSOR2(name, name, type)
 %enddef
 
 %define MAKE_VECTOR2ARRAY(type)
@@ -1010,6 +1024,16 @@ struct GPS_Measurement {
     L1_SIGNAL_STRENGTH_dBHz,
     L1_LOCK_SEC,
     L1_FREQUENCY,
+#define make_entry(key) L2CM_ ## key, L2CL_ ## key
+#define make_entry2(key) make_entry(key), make_entry(key ## _SIGMA)
+    make_entry2(PSEUDORANGE),
+    make_entry2(CARRIER_PHASE),
+    make_entry2(DOPPLER),
+    make_entry2(RANGE_RATE),
+    make_entry(SIGNAL_STRENGTH_dBHz),
+    make_entry(LOCK_SEC),
+#undef make_entry2
+#undef make_entry
     ITEMS_PREDEFINED,
   };
   void add(const int &prn, const int &key, const FloatT &value){
@@ -1019,21 +1043,10 @@ struct GPS_Measurement {
 }
 
 %extend GPS_SolverOptions_Common {
-%define MAKE_ACCESSOR2(name, type)
-%rename(%str(name ## =)) set_ ## name;
-type set_ ## name (const type &v) {
-  return self->cast_general()->name = v;
-}
-%rename(%str(name)) get_ ## name;
-const type &get_ ## name () const {
-  return self->cast_general()->name;
-}
-%enddef
-  MAKE_ACCESSOR2(elevation_mask, FloatT);
-  MAKE_ACCESSOR2(residual_mask, FloatT);
-#undef MAKE_ACCESSOR2
+  MAKE_ACCESSOR2(elevation_mask, cast_general()->elevation_mask, FloatT);
+  MAKE_ACCESSOR2(residual_mask, cast_general()->residual_mask, FloatT);
   MAKE_VECTOR2ARRAY(int);
-  %ignore cast_base;
+  %ignore cast_general;
 }
 %inline %{
 template <class FloatT>
@@ -1047,17 +1060,23 @@ struct GPS_SolverOptions_Common {
 %extend GPS_SolverOptions {
   %ignore base_t;
   %ignore cast_general;
+#ifdef SWIGRUBY
+  %rename("exclude_L2C?") get_exclude_L2C;
+  %rename("exclude_L2C=") set_exclude_L2C;
+#endif
   MAKE_VECTOR2ARRAY(int);
 }
 %inline %{
 template <class FloatT>
 struct GPS_SolverOptions 
-    : public GPS_SinglePositioning<FloatT>::options_t, 
+    : public GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >::options_t, 
     GPS_SolverOptions_Common<FloatT> {
-  typedef typename GPS_SinglePositioning<FloatT>::options_t base_t;
+  typedef typename GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >::options_t base_t;
   void exclude(const int &prn){base_t::exclude_prn.set(prn);}
   void include(const int &prn){base_t::exclude_prn.reset(prn);}
   std::vector<int> excluded() const {return base_t::exclude_prn.excluded();}
+  bool get_exclude_L2C() {return base_t::exclude_L2C;}
+  bool set_exclude_L2C(const bool &b) {return base_t::exclude_L2C = b;}
   GPS_Solver_GeneralOptions<FloatT> *cast_general(){return this;}
   const GPS_Solver_GeneralOptions<FloatT> *cast_general() const {return this;}
 };
@@ -1108,7 +1127,8 @@ template <class BaseT, class HookT>
 struct HookableSolver : public BaseT {
   typedef BaseT base_t;
   HookT *hook;
-  HookableSolver(const BaseT &base) : BaseT(base), hook(NULL) {}
+  template <class ArgT>
+  HookableSolver(const ArgT &);
   virtual typename base_t::relative_property_t relative_property(
       const typename base_t::prn_t &prn,
       const typename base_t::measurement_t::mapped_type &measurement,
@@ -1159,6 +1179,16 @@ struct HookableSolver : public BaseT {
       fragment=SWIG_From_frag(int),
       fragment=SWIG_Traits_frag(FloatT),
       fragment=SWIG_Traits_frag(GPS_Measurement<FloatT>)){
+    template <> template <>
+    HookableSolver<
+          GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
+          GPS_Solver<FloatT> >
+        ::HookableSolver<GPS_SpaceNode<FloatT> >(const GPS_SpaceNode<FloatT> &sn)
+          : GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >(sn), hook(NULL) {}
+    template <> template <>
+    HookableSolver<GLONASS_SinglePositioning<FloatT>, GPS_Solver<FloatT> >
+        ::HookableSolver<GLONASS_SpaceNode<FloatT> >(const GLONASS_SpaceNode<FloatT> &sn)
+          : GLONASS_SinglePositioning<FloatT>(sn), hook(NULL) {}
     template <>
     GPS_Solver<FloatT>::base_t::relative_property_t
         GPS_Solver<FloatT>::relative_property(
@@ -1447,14 +1477,18 @@ struct GPS_Solver
   struct gps_t {
     GPS_SpaceNode<FloatT> space_node;
     GPS_SolverOptions<FloatT> options;
-    HookableSolver<GPS_SinglePositioning<FloatT>, GPS_Solver<FloatT> > solver;
-    gps_t() : space_node(), options(), solver(GPS_SinglePositioning<FloatT>(space_node)) {}
+    HookableSolver<
+        GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
+        GPS_Solver<FloatT> > solver;
+    gps_t() : space_node(), options(), solver(space_node) {
+      options.exclude_L2C = true;
+    }
   } gps;
   struct glonass_t {
     GLONASS_SpaceNode<FloatT> space_node;
     GLONASS_SolverOptions<FloatT> options;
     HookableSolver<GLONASS_SinglePositioning<FloatT>, GPS_Solver<FloatT> > solver;
-    glonass_t() : space_node(), options(), solver(GLONASS_SinglePositioning<FloatT>(space_node)) {}
+    glonass_t() : space_node(), options(), solver(space_node) {}
   } glonass;
   SWIG_Object hooks;
   typedef std::vector<GPS_RangeCorrector<FloatT> > user_correctors_t;

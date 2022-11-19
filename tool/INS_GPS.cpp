@@ -1731,6 +1731,12 @@ class StreamProcessor
       }
       ~GHandler(){}
 
+      void update_week_number(const int &wn) {
+        week_number = wn;
+        if(status.time_stamp == status_t::TIME_STAMP_INVALID){
+          status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
+        }
+      }
       template <class GHandler_Packet>
       void update(const GHandler_Packet &packet){
         switch(status.time_stamp){
@@ -1826,10 +1832,7 @@ class StreamProcessor
           case 0x06: { // NAV-SOL
             G_Observer_t::solution_t solution(observer.fetch_solution());
             if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
-              week_number = solution.week;
-              if(status.time_stamp == status_t::TIME_STAMP_INVALID){
-                status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
-              }
+              update_week_number(solution.week);
             }
             return;
           }
@@ -1865,7 +1868,7 @@ class StreamProcessor
             observer.inspect(buf, sizeof(buf), 6 + 8);
             if(packet.valid_week_num = ((unsigned char)buf[3] & 0x02)){
               // valid week number
-              packet.week_num = le_char2_2_num<unsigned short>(*buf);
+              update_week_number(packet.week_num = le_char2_2_num<unsigned short>(*buf));
               if(packet.valid_leap_sec = ((unsigned char)buf[3] & 0x04)){
                 // valid UTC (leap seconds)
                 packet.leap_sec = (char)(buf[2]);
@@ -1991,12 +1994,9 @@ class StreamProcessor
               current = raw_data_t::gps_time_t(
                   le_char2_2_num<G_Observer_t::u16_t>(*(buf + 8)), le_char8_2_num<double>(*buf));
 
-              if(status.time_stamp == status_t::TIME_STAMP_INVALID){
-                status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
-              }
               if(observer[6 + 12] & 0x01){ // recStat.leapSec
                 TimePacket packet_time;
-                packet_time.week_num = current.week;
+                update_week_number(packet_time.week_num = current.week);
                 packet_time.itow = current.seconds;
                 packet_time.leap_sec = (G_Observer_t::s8_t)(observer[6 + 10]);
                 packet_time.valid_week_num = packet_time.valid_leap_sec = true;
