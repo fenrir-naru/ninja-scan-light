@@ -759,6 +759,10 @@ __RINEX_CLK_TEXT__
       puts "Measurement time: #{t_meas.to_a} (a.k.a #{"%d/%d/%d %02d:%02d:%02d UTC"%[*t_meas.c_tm]})"
       expect(t_meas.c_tm).to eq([2015, 6, 15, 23, 53, 33])
       expect(GPS::Time::new(0, t_meas.serialize)).to eq(t_meas)
+      expect(t_meas.leap_seconds).to eq(sn.iono_utc.delta_t_LS)
+      expect(GPS::Time::leap_second_events.select{|wn, sec, leap|
+        t_meas >= GPS::Time::new(wn, sec)
+      }[0][2]).to eq(sn.iono_utc.delta_t_LS)
       
       sn.update_all_ephemeris(t_meas)
       

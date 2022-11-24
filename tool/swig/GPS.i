@@ -153,6 +153,16 @@ static std::string inspect_str(const VALUE &v){
   %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const std::tm & {
     $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
   }
+  %typemap(varout,fragment="SWIG_Traits_frag(FloatT)") leap_second_event_t [] {
+    $result = rb_ary_new2(sizeof($1) / sizeof($1[0]));
+    for(std::size_t i(0); i < sizeof($1) / sizeof($1[0]); ++i){
+      rb_ary_push($result,
+          rb_ary_new3(3,
+            SWIG_From(int)($1[i].corrected.week),
+            swig::from($1[i].corrected.seconds),
+            SWIG_From(int)($1[i].leap_seconds)));
+    }
+  }
 #endif
   %ignore canonicalize();
   %ignore GPS_Time(const int &_week, const float_t &_seconds);
