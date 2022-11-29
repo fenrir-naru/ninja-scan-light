@@ -1441,6 +1441,12 @@ class StreamProcessor
       }
       ~GHandler(){}
 
+      void update_week_number(const int &wn) {
+        week_number = wn;
+        if(status.time_stamp == status_t::TIME_STAMP_INVALID){
+          status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
+        }
+      }
       template <class GHandler_Packet>
       void update(const GHandler_Packet &packet){
         switch(status.time_stamp){
@@ -1536,10 +1542,7 @@ class StreamProcessor
           case 0x06: { // NAV-SOL
             G_Observer_t::solution_t solution(observer.fetch_solution());
             if(solution.status_flags & G_Observer_t::solution_t::WN_VALID){
-              week_number = solution.week;
-              if(status.time_stamp == status_t::TIME_STAMP_INVALID){
-                status.time_stamp = status_t::TIME_STAMP_BEFORE_START;
-              }
+              update_week_number(solution.week);
             }
             return;
           }
@@ -1575,7 +1578,7 @@ class StreamProcessor
             observer.inspect(buf, sizeof(buf), 6 + 8);
             if(packet.valid_week_num = ((unsigned char)buf[3] & 0x02)){
               // valid week number
-              packet.week_num = le_char2_2_num<unsigned short>(*buf);
+              update_week_number(packet.week_num = le_char2_2_num<unsigned short>(*buf));
               if(packet.valid_leap_sec = ((unsigned char)buf[3] & 0x04)){
                 // valid UTC (leap seconds)
                 packet.leap_sec = (char)(buf[2]);
