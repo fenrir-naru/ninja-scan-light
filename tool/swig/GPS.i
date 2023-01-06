@@ -186,15 +186,18 @@ static std::string inspect_str(const VALUE &v){
 #endif
 }
 
+%define MAKE_ACCESSOR2(func_name, target, type)
+%rename(%str(func_name ## =)) set_ ## func_name;
+type set_ ## func_name (const type &v) {
+  return self->target= v;
+}
+%rename(%str(func_name)) get_ ## func_name;
+const type &get_ ## func_name () const {
+  return self->target;
+}
+%enddef
 %define MAKE_ACCESSOR(name, type)
-%rename(%str(name ## =)) set_ ## name;
-type set_ ## name (const type &v) {
-  return self->name = v;
-}
-%rename(%str(name)) get_ ## name;
-const type &get_ ## name () const {
-  return self->name;
-}
+MAKE_ACCESSOR2(name, name, type)
 %enddef
 
 %define MAKE_VECTOR2ARRAY(type)
@@ -865,19 +868,8 @@ struct GPS_Measurement {
 }
 
 %extend GPS_SolverOptions_Common {
-%define MAKE_ACCESSOR2(name, type)
-%rename(%str(name ## =)) set_ ## name;
-type set_ ## name (const type &v) {
-  return self->cast_general()->name = v;
-}
-%rename(%str(name)) get_ ## name;
-const type &get_ ## name () const {
-  return self->cast_general()->name;
-}
-%enddef
-  MAKE_ACCESSOR2(elevation_mask, FloatT);
-  MAKE_ACCESSOR2(residual_mask, FloatT);
-#undef MAKE_ACCESSOR2
+  MAKE_ACCESSOR2(elevation_mask, cast_general()->elevation_mask, FloatT);
+  MAKE_ACCESSOR2(residual_mask, cast_general()->residual_mask, FloatT);
   MAKE_VECTOR2ARRAY(int);
   %ignore cast_general;
 }
