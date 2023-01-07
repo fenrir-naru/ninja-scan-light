@@ -557,6 +557,14 @@ struct GLONASS_Ephemeris
     raw = *this;
     has_string = 0x1F;
   }
+  GLONASS_Ephemeris &rehash(const int &deltaT = 0) {
+    typedef typename GLONASS_SpaceNode<FloatT>::SatelliteProperties prop_t;
+    return *this = GLONASS_Ephemeris(eph_t(
+        typename prop_t::Ephemeris_with_Time(
+          (typename prop_t::Ephemeris)(*this),
+          (typename GLONASS_SpaceNode<FloatT>::TimeProperties)(*this)),
+        deltaT));
+  }
 };
 %}
 %extend GLONASS_Ephemeris {
