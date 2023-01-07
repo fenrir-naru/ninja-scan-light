@@ -586,6 +586,12 @@ struct GLONASS_Ephemeris
 
   MAKE_ACCESSOR(tau_c, FloatT);
   MAKE_ACCESSOR(tau_GPS, FloatT);
+  MAKE_ACCESSOR2(year, date.year, int);
+  MAKE_ACCESSOR2(day_of_year, date.day_of_year, int);
+  
+  void set_date(const unsigned int &N_4, const unsigned int &NA) {
+    self->date = GLONASS_SpaceNode<FloatT>::TimeProperties::raw_t::raw2date(N_4, NA);
+  }
   
   FloatT frequency_L1() const {
     return self->L1_frequency();
