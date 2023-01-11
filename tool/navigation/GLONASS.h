@@ -371,6 +371,18 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
           }
           return res;
         }
+        static void date2raw(const date_t &src, u8_t *N_4_, u16_t *NA_){
+          std::div_t divmod(std::div(src.year - 1996, 4));
+          if(N_4_){*N_4_ = divmod.quot + 1;}
+          if(NA_){
+            *NA_ = src.day_of_year + 1;
+            switch(divmod.rem){
+              case 1: *NA_ += 366; break;
+              case 2: *NA_ += 731; break;
+              case 3: *NA_ += 1096; break;
+            }
+          }
+        }
 
         operator TimeProperties() const {
           TimeProperties res;
@@ -389,14 +401,7 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
 {TARGET = (s32_t)std::floor(t.TARGET / sf[SF_ ## TARGET] + 0.5);}
           CONVERT(tau_c);
           CONVERT(tau_GPS);
-          std::div_t divmod(std::div(t.date.year - 1996, 4));
-          N_4 = divmod.quot + 1;
-          NA = t.date.day_of_year + 1;
-          switch(divmod.rem){
-            case 1: NA += 366; break;
-            case 2: NA += 731; break;
-            case 3: NA += 1096; break;
-          }
+          date2raw(t.date, &N_4, &NA);
           l_n = (t.l_n ? 1 : 0);
 #undef CONVERT
           return *this;
@@ -1072,6 +1077,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
          * 3) t_GPS - t_GL = delta_T + tau_GPS (defined in ICD 4.5 Non-immediate info.)
          */
         struct Ephemeris_with_Time : public Ephemeris, TimeProperties {
+          typename TimeProperties::date_t t_b_date;
           typedef typename Ephemeris::constellation_t constellation_t;
           constellation_t xa_t_b;
           float_t sidereal_t_b_rad;
@@ -1080,8 +1086,13 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
           static const float_t time_step_max_per_one_integration;
 
           void calculate_additional() {
+            u8_t N_4;
+            u16_t NA;
+            TimeProperties::raw_t::date2raw(TimeProperties::date, &N_4, &NA);
+            // TODO detect large difference between NA and N_T caused by rolling over.
+            t_b_date = TimeProperties::raw_t::raw2date(N_4, this->N_T);
             sidereal_t_b_rad = TimeProperties::date_t::Greenwich_sidereal_time_deg(
-                TimeProperties::date.c_tm(),
+                t_b_date.c_tm(),
                 (float_t)(this->t_b) / (60 * 60) - 3) / 180 * M_PI;
             constellation_t x_t_b = {
               {this->xn, this->yn, this->zn},
@@ -1101,11 +1112,14 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
             t_mt.tm_hour += 3;
             std::mktime(&t_mt); // renormalization
             this->date = TimeProperties::date_t::from_c_tm(t_mt);
+            u16_t N_T;
+            TimeProperties::raw_t::date2raw(this->date, NULL, &N_T);
+            this->N_T = N_T;
             this->t_b = (t_mt.tm_hour * 60 + t_mt.tm_min) * 60 + t_mt.tm_sec;
             calculate_additional();
           }
           std::tm c_tm_utc() const {
-            std::tm t(TimeProperties::date.c_tm()); // set date on Moscow time
+            std::tm t(t_b_date.c_tm()); // set date on Moscow time
             (t.tm_sec = (int)(this->t_b)) -= 3 * 60 * 60; // add second on UTC
             std::mktime(&t); // renormalization
             return t;
