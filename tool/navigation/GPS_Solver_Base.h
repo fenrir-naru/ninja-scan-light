@@ -658,10 +658,11 @@ protected:
      * @param x solution
      * @return WSSR scalar
      */
-    float_t wssr(const matrix_t &x = least_square()) const {
+    float_t wssr(const matrix_t &x) const {
       matrix_t v(delta_r - G * x);
       return (v.transpose() * W * v)(0, 0);
     }
+    float_t wssr() const {return wssr(least_square());}
     /**
      * Calculate weighted square sum of residual (WSSR) based on least square solution
      * with solution coefficient matrix (S).

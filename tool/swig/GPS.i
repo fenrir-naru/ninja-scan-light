@@ -1197,11 +1197,11 @@ struct HookableSolver : public BaseT {
     HookableSolver<
           GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
           GPS_Solver<FloatT> >
-        ::HookableSolver<GPS_SpaceNode<FloatT> >(const GPS_SpaceNode<FloatT> &sn)
+        ::HookableSolver/*<GPS_SpaceNode<FloatT> >*/(const GPS_SpaceNode<FloatT> &sn) // to avoid out-of-line constructor error
           : GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >(sn), hook(NULL) {}
     template <> template <>
     HookableSolver<GLONASS_SinglePositioning<FloatT>, GPS_Solver<FloatT> >
-        ::HookableSolver<GLONASS_SpaceNode<FloatT> >(const GLONASS_SpaceNode<FloatT> &sn)
+        ::HookableSolver/*<GLONASS_SpaceNode<FloatT> >*/(const GLONASS_SpaceNode<FloatT> &sn)
           : GLONASS_SinglePositioning<FloatT>(sn), hook(NULL) {}
     template <>
     GPS_Solver<FloatT>::base_t::relative_property_t
