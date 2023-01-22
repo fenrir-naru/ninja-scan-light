@@ -600,6 +600,9 @@ struct GLONASS_Ephemeris
   void set_date(const unsigned int &N_4, const unsigned int &NA) {
     self->date = GLONASS_SpaceNode<FloatT>::TimeProperties::raw_t::raw2date(N_4, NA);
   }
+  void set_date(const std::tm &t) {
+    self->date = GLONASS_SpaceNode<FloatT>::TimeProperties::date_t::from_c_tm(t);
+  }
   
   FloatT frequency_L1() const {
     return self->L1_frequency();
