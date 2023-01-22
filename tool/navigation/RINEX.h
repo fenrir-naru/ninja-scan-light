@@ -1300,7 +1300,7 @@ class RINEX_Writer {
       friend std::ostream &operator<<(std::ostream &out, const header_t &header){
         std::stringstream ss;
         ss << std::setfill(' ') << std::left;
-        for(header_t::const_iterator it(header.begin()), it_end(header.end());
+        for(typename header_t::const_iterator it(header.begin()), it_end(header.end());
             it != it_end; ++it){
           ss << std::setw(60) << it->second.substr(0, 60)
               << std::setw(20) << it->first.substr(0, 20)
