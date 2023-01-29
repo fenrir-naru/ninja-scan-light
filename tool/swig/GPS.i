@@ -545,6 +545,10 @@ struct GLONASS_Ephemeris
   bool is_consistent() const {
     return has_string == 0x1F;
   }
+  bool is_in_range(const GPS_Time<FloatT> &t) const {
+    // "invalidate()" is used to make raw and converted data inconsistent.
+    return eph_t::is_valid(t);
+  }
   bool is_valid(const GPS_Time<FloatT> &t) const {
     return is_consistent() && eph_t::is_valid(t);
   }
@@ -691,10 +695,6 @@ struct GLONASS_Ephemeris
   %rename("valid?") is_valid;
   %rename("in_range?") is_in_range;
 #endif
-  bool is_in_range(const GPS_Time<FloatT> &t) const {
-    // "invalidate()" is used to make raw and converted data inconsistent.
-    return self->is_valid(t);
-  }
 }
 
 %extend GLONASS_SpaceNode {
