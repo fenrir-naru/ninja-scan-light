@@ -548,7 +548,7 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
           
   MAKE_ACCESSOR(WN, unsigned int);
   MAKE_ACCESSOR(t_0, FloatT);
-  MAKE_ACCESSOR(URA, int);
+  MAKE_ACCESSOR(URA, FloatT);
   MAKE_ACCESSOR(  x, FloatT); MAKE_ACCESSOR(  y, FloatT); MAKE_ACCESSOR(  z, FloatT);
   MAKE_ACCESSOR( dx, FloatT); MAKE_ACCESSOR( dy, FloatT); MAKE_ACCESSOR( dz, FloatT);
   MAKE_ACCESSOR(ddx, FloatT); MAKE_ACCESSOR(ddy, FloatT); MAKE_ACCESSOR(ddz, FloatT);
