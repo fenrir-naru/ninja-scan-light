@@ -112,47 +112,74 @@ static std::string inspect_str(const VALUE &v){
 %import "SylphideMath.i"
 %import "Coordinate.i"
 
-%extend GPS_Time {
-  %typemap(out) std::tm {
-    %append_output(SWIG_From(int)($1.tm_year + 1900));
-    %append_output(SWIG_From(int)($1.tm_mon + 1));
-    %append_output(SWIG_From(int)($1.tm_mday));
-    %append_output(SWIG_From(int)($1.tm_hour));
-    %append_output(SWIG_From(int)($1.tm_min));
-    %append_output(SWIG_From(int)($1.tm_sec));
-  }
-#if defined(SWIGRUBY)
-  %typemap(in) const std::tm & (std::tm temp = {0}) {
-    $1 = &temp;
-    int *dst[] = {
-      &(temp.tm_year),
-      &(temp.tm_mon),
-      &(temp.tm_mday),
-      &(temp.tm_hour),
-      &(temp.tm_min),
-      &(temp.tm_sec),
-    };
-    int i_max(sizeof(dst) / sizeof(dst[0]));
-    if(i_max > RARRAY_LEN($input)){i_max = RARRAY_LEN($input);}
+%fragment(SWIG_From_frag(std::tm), "header", fragment=SWIG_From_frag(int)) {
+SWIGINTERNINLINE SWIG_Object
+SWIG_From_dec(std::tm)(const std::tm &value){
+  SWIG_Object res(SWIG_From(int)(value.tm_year + 1900));
+  res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_mon + 1));
+  res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_mday));
+  res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_hour));
+  res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_min));
+  return SWIG_AppendOutput(res, SWIG_From(int)(value.tm_sec));
+}
+}
+%fragment(SWIG_AsVal_frag(std::tm), "header", fragment=SWIG_AsVal_frag(int)){
+SWIGINTERN int
+SWIG_AsVal_dec(std::tm)(SWIG_Object obj, std::tm *val) {
+#ifdef SWIGRUBY
+  int *dst[] = {
+    &(val->tm_year),
+    &(val->tm_mon),
+    &(val->tm_mday),
+    &(val->tm_hour),
+    &(val->tm_min),
+    &(val->tm_sec),
+  };
+  if(RB_TYPE_P(obj, T_ARRAY)){
+    int i_max(RARRAY_LEN(obj));
+    if(i_max > sizeof(dst) / sizeof(dst[0])){return SWIG_ERROR;}
+    VALUE obj_i;
+    int v;
     for(int i(0); i < i_max; ++i){
-      SWIG_Object obj = rb_ary_entry($input, i);
-      int v;
-      if(SWIG_IsOK(SWIG_AsVal(int)(obj, &v))){
-        if(dst[i] == &(temp.tm_year)){
+      obj_i = RARRAY_AREF(obj, i);
+      if(SWIG_IsOK(SWIG_AsVal(int)(obj_i, &v))){
+        if(dst[i] == &(val->tm_year)){
           *dst[i] = v - 1900;
-        }else if(dst[i] == &(temp.tm_mon)){
+        }else if(dst[i] == &(val->tm_mon)){
           *dst[i] = v - 1;
         }else{
           *dst[i] = v;
         }
       }else{
-        SWIG_exception(SWIG_TypeError, "int is expected");
+        SWIG_exception(SWIG_TypeError, 
+            std::string("Unexpected input [").append(std::to_string(i)).append("]: ")
+              .append(inspect_str(obj_i)).c_str());
       }
     }
+    return SWIG_OK;
   }
-  %typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const std::tm & {
-    $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
+#endif
+  return SWIG_ERROR;
+}
+}
+%typemap(out, fragment=SWIG_From_frag(std::tm)) std::tm {
+  $result = SWIG_From(std::tm)($1);
+}
+%typemap(in, fragment=SWIG_AsVal_frag(std::tm)) const std::tm & (std::tm temp = {0}) {
+  if(SWIG_AsVal(std::tm)($input, $1 = &temp) != SWIG_OK){
+    SWIG_exception(SWIG_TypeError, "int[1..6] is expected");
   }
+}
+%typemap(typecheck, precedence=SWIG_TYPECHECK_POINTER) const std::tm & {
+#ifdef SWIGRUBY
+  $1 = (TYPE($input) == T_ARRAY) ? 1 : 0;
+#else
+  $1 = 0;
+#endif
+}
+
+%extend GPS_Time {
+#if defined(SWIGRUBY)
   %typemap(varout,fragment="SWIG_Traits_frag(FloatT)") leap_second_event_t [] {
     $result = rb_ary_new2(sizeof($1) / sizeof($1[0]));
     for(std::size_t i(0); i < sizeof($1) / sizeof($1[0]); ++i){
