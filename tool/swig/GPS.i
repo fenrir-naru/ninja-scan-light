@@ -620,11 +620,12 @@ struct GPS_User_PVT
     ERROR_VELOCITY_LS,
   };
   int error_code() const {return (int)(base_t::error_code);}
-  const GPS_Time<FloatT> &receiver_time() const {return base_t::receiver_time;}
-  const System_XYZ<FloatT, WGS84> &xyz() const {return base_t::user_position.xyz;}
-  const System_LLH<FloatT, WGS84> &llh() const {return base_t::user_position.llh;}
+  // Returning Type because returning const Type & causes reference problem after GC
+  GPS_Time<FloatT> receiver_time() const {return base_t::receiver_time;}
+  System_XYZ<FloatT, WGS84> xyz() const {return base_t::user_position.xyz;}
+  System_LLH<FloatT, WGS84> llh() const {return base_t::user_position.llh;}
   const FloatT &receiver_error() const {return base_t::receiver_error;}
-  const System_ENU<FloatT, WGS84> &velocity() const {return base_t::user_velocity_enu;}
+  System_ENU<FloatT, WGS84> velocity() const {return base_t::user_velocity_enu;}
   const FloatT &receiver_error_rate() const {return base_t::receiver_error_rate;}
   const FloatT &gdop() const {return base_t::dop.g;}
   const FloatT &pdop() const {return base_t::dop.p;}
