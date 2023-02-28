@@ -372,7 +372,7 @@ shared_examples 'Matrix' do
     end
     it 'have +(scalar)' do
       expect((mat[0] + 1).to_a).to eq((Matrix[*compare_with[0]] + Matrix::unit(params[:rc][0])).to_a)
-      expect{mat[2] + 1}.to raise_error(RuntimeError)
+      expect{mat[2] + 1}.to raise_error(ArgumentError)
     end
     it 'have +(mat)' do
       [[0, 1], [2, 3]].each{|i, j|
@@ -381,7 +381,7 @@ shared_examples 'Matrix' do
     end
     it 'have -(scalar)' do
       expect((mat[0] - 1).to_a).to eq((Matrix[*compare_with[0]] - Matrix::unit(params[:rc][0])).to_a)
-      expect{mat[2] - 1}.to raise_error(RuntimeError)
+      expect{mat[2] - 1}.to raise_error(ArgumentError)
     end
     it 'have -(mat)' do
       [[0, 1], [2, 3]].each{|i, j|
@@ -395,7 +395,7 @@ shared_examples 'Matrix' do
     end
     it 'have *(mat)' do
       expect((mat[0] * mat[1]).to_a).to eq((Matrix[*compare_with[0]] * Matrix[*compare_with[1]]).to_a)
-      expect{mat[2] * mat[3]}.to raise_error(RuntimeError)
+      expect{mat[2] * mat[3]}.to raise_error(ArgumentError)
       expect((mat[2] * mat[3].t).to_a).to eq((Matrix[*compare_with[2]] * Matrix[*compare_with[3]].t).to_a)
     end
     it 'have /(scalar)' do
