@@ -43,9 +43,16 @@ inline std::string to_string(const T &value){
 %include std_common.i
 %include std_string.i
 %include exception.i
+%include std_except.i
 
 #if !defined(SWIGIMPORTED)
-%header {
+%exceptionclass native_exception;
+%typemap(throws,noblock=1) native_exception {
+  $1.regenerate();
+  SWIG_fail;
+}
+%ignore native_exception;
+%inline {
 struct native_exception : public std::exception {
 #if defined(SWIGRUBY)
   int state;
@@ -55,16 +62,6 @@ struct native_exception : public std::exception {
   void regenerate() const {}
 #endif
 };
-}
-%exception {
-  try {
-    $action
-  } catch (const native_exception &e) {
-    e.regenerate();
-    SWIG_fail;
-  } catch (const std::exception& e) {
-    SWIG_exception_fail(SWIG_RuntimeError, e.what());
-  }
 }
 #endif
 
@@ -111,6 +108,14 @@ static std::string inspect_str(const VALUE &v){
 
 %import "SylphideMath.i"
 %import "Coordinate.i"
+
+%typemap(in,numinputs=0) const void *check_block {
+#ifdef SWIGRUBY
+  if(!rb_block_given_p()){
+    return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
+  }
+#endif
+}
 
 %fragment(SWIG_From_frag(std::tm), "header", fragment=SWIG_From_frag(int)) {
 SWIGINTERNINLINE SWIG_Object
@@ -297,11 +302,12 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
   MAKE_ACCESSOR(WN_LSF, unsigned int);
   MAKE_ACCESSOR(DN, unsigned int);
   MAKE_ACCESSOR(delta_t_LSF, int);
+  %catches(std::invalid_argument) parse;
   static GPS_Ionospheric_UTC_Parameters<FloatT> parse(const unsigned int buf[10]){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> parser_t;
     if((parser_t::subframe_id(buf) != 4) || (parser_t::sv_page_id(buf) != 56)){
-      throw std::runtime_error("Not valid data");
+      throw std::invalid_argument("Not valid data");
     }
     typename GPS_SpaceNode<FloatT>::Ionospheric_UTC_Parameters::raw_t raw;
     raw.update<2, 0>(buf);
@@ -702,23 +708,9 @@ struct GPS_User_PVT
 %extend GPS_Measurement {
   %ignore items_t;
   %ignore items;
-  %exception each {
-#ifdef SWIGRUBY
-    if(!rb_block_given_p()){
-      return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
-    }
-#endif
-    try {
-      $action
-    } catch (const native_exception &e) {
-      e.regenerate();
-      SWIG_fail;
-    } catch (const std::exception& e) {
-      SWIG_exception_fail(SWIG_RuntimeError, e.what());
-    }
-  }
   %fragment(SWIG_Traits_frag(FloatT));
-  void each() const {
+  %catches(native_exception) each;
+  void each(const void *check_block) const {
     for(typename GPS_Measurement<FloatT>::items_t::const_iterator
           it(self->items.begin()), it_end(self->items.end());
         it != it_end; ++it){
@@ -1007,6 +999,7 @@ struct HookableSolver : public BaseT {
   %ignore user_correctors;
   %immutable hooks;
   %ignore mark;
+  %catches(native_exception, std::runtime_error) solve;
   %fragment("hook"{GPS_Solver<FloatT>}, "header",
       fragment=SWIG_From_frag(int),
       fragment=SWIG_Traits_frag(FloatT),
@@ -1062,7 +1055,7 @@ struct HookableSolver : public BaseT {
         if((!RB_TYPE_P(res_hook, T_ARRAY))
             || (RARRAY_LEN(res_hook) != prop_items)){
           throw std::runtime_error(
-              std::string("[d * ").append(std::to_string(prop_items))
+              std::string("relative_property() returning [d * ").append(std::to_string(prop_items))
                 .append("] is expected (d: " %str(FloatT) "), however ")
                 .append(inspect_str(res_hook)));
         }
@@ -1070,7 +1063,7 @@ struct HookableSolver : public BaseT {
           VALUE v(RARRAY_AREF(res_hook, i));
           if(!SWIG_IsOK(swig::asval(v, &res.values[i]))){
             throw std::runtime_error(
-                std::string(%str(FloatT) " is exepcted, however ")
+                std::string("relative_property() returning " %str(FloatT) " is exepcted, however ")
                   .append(inspect_str(v))
                   .append(" @ [").append(std::to_string(i)).append("]"));
           }
@@ -1187,7 +1180,7 @@ struct HookableSolver : public BaseT {
       list_t input;
       if(update){
         if(!RB_TYPE_P(hash, T_HASH)){
-          throw std::runtime_error(
+          throw std::invalid_argument(
               std::string("Hash is expected, however ").append(inspect_str(hash)));
         }
         for(std::size_t i(0); i < sizeof(k_root) / sizeof(k_root[0]); ++i){
@@ -1265,6 +1258,7 @@ struct HookableSolver : public BaseT {
   VALUE get_correction() const {
     return const_cast<GPS_Solver<FloatT> *>(self)->update_correction(false, Qnil);
   }
+  %catches(std::invalid_argument) set_correction;
   VALUE set_correction(VALUE hash){
     return self->update_correction(true, hash);
   }
@@ -1432,23 +1426,9 @@ struct GPS_Solver
 %fragment(SWIG_From_frag(char));
 
 %extend RINEX_Observation {
-  %exception read {
-#ifdef SWIGRUBY
-    if(!rb_block_given_p()){
-      return rb_enumeratorize(self, ID2SYM(rb_intern("read")), argc, argv);
-    }
-#endif
-    try {
-      $action
-    } catch (const native_exception &e) {
-      e.regenerate();
-      SWIG_fail;
-    } catch (const std::exception& e) {
-      SWIG_exception_fail(SWIG_RuntimeError, e.what());
-    }
-  }
   %fragment(SWIG_Traits_frag(FloatT));
-  static void read(const char *fname) {
+  %catches(native_exception) read;
+  static void read(const char *fname, const void *check_block) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
     struct reader_t : public RINEX_OBS_Reader<FloatT> {
       typedef RINEX_OBS_Reader<FloatT> super_t;
