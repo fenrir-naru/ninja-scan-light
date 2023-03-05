@@ -918,7 +918,7 @@ __RINEX_CLK_TEXT__
       expect(solver.options[:skip_exclusion]).to eq(true)
       expect(solver.correction[:gps_ionospheric]).to include(:klobuchar)
       expect(solver.correction[:gps_tropospheric]).to include(:hopfield)
-      expect{solver.correction = nil}.to raise_error(RuntimeError)
+      expect{solver.correction = nil}.to raise_error(ArgumentError)
       expect{solver.correction = {
         :gps_ionospheric => [proc{|t, usr_pos, sat_pos|
               expect(t).to be_a_kind_of(GPS::Time)
