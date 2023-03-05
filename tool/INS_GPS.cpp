@@ -272,7 +272,7 @@ struct Options : public GlobalOptions<float_sylph_t> {
     operator bool() const {
       return mode != MODE_INACTIVE;
     }
-  } dump_relative; ///< Controller for relative (2D) position outputs  bool out_is_N_packet; ///< True for NPacket formatted outputs
+  } dump_relative; ///< Controller for relative (2D) position outputs
   bool out_is_N_packet; ///< True for NPacket formatted outputs
 
   // Time Stamp

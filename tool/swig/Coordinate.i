@@ -16,6 +16,7 @@
 %include std_common.i
 %include std_string.i
 %include exception.i
+%include std_except.i
 
 //%import "SylphideMath.i"
 
@@ -29,7 +30,13 @@ type set_ ## name (const type &v) {
 %enddef
 
 #if !defined(SWIGIMPORTED)
-%header {
+%exceptionclass native_exception;
+%typemap(throws,noblock=1) native_exception {
+  $1.regenerate();
+  SWIG_fail;
+}
+%ignore native_exception;
+%inline {
 struct native_exception : public std::exception {
 #if defined(SWIGRUBY)
   int state;
@@ -67,22 +74,15 @@ struct native_exception : public std::exception {
     }
   }
 #endif
-  %exception each {
+  %typemap(in,numinputs=0) const void *check_block {
 #ifdef SWIGRUBY
     if(!rb_block_given_p()){
-      return rb_enumeratorize(self, ID2SYM(rb_intern("each")), argc, argv);
+      return rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc, argv);
     }
 #endif
-    try {
-      $action
-    } catch (const native_exception &e) {
-      e.regenerate();
-      SWIG_fail;
-    } catch (const std::exception& e) {
-      SWIG_exception(SWIG_RuntimeError, e.what());
-    }
   }
-  void each() const {
+  %catches(native_exception) each;
+  void each(const void *check_block) const {
     for(int i(0); i < 3; ++i){
 #ifdef SWIGRUBY
       int state;

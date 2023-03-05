@@ -31,9 +31,17 @@
 %include std_string.i
 //%include std_vector.i
 %include exception.i
+%include std_except.i
 
+%ignore native_exception;
 #if !defined(SWIGIMPORTED)
-%header {
+%exceptionclass native_exception;
+%typemap(throws,noblock=1) native_exception {
+  $1.regenerate();
+  SWIG_fail;
+}
+%ignore native_exception;
+%inline {
 struct native_exception : public std::exception {
 #if defined(SWIGRUBY)
   int state;
@@ -43,16 +51,6 @@ struct native_exception : public std::exception {
   void regenerate() const {}
 #endif
 };
-}
-%exception {
-  try {
-    $action
-  } catch (const native_exception &e) {
-    e.regenerate();
-    SWIG_fail;
-  } catch (const std::exception& e) {
-    SWIG_exception_fail(SWIG_RuntimeError, e.what());
-  }
 }
 #endif
 
@@ -548,7 +546,7 @@ struct MatrixUtil {
 #if defined(SWIGRUBY)
   static const each_which_t &sym2each_which(const VALUE &value){
     if(!RB_TYPE_P(value, T_SYMBOL)){
-      std::runtime_error("Symbol is required");
+      std::invalid_argument("Symbol is required");
     }
     static const struct {
       VALUE sym;
@@ -567,7 +565,7 @@ struct MatrixUtil {
       if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
     }
     if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
-      std::runtime_error("Unknown enumerate direction");
+      std::invalid_argument("Unknown enumerate direction");
     }
     return cmp[i].which;
   }
@@ -602,16 +600,16 @@ struct MatrixUtil {
     if(value && RB_TYPE_P(*value, T_ARRAY)){
       if(RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){ // [[r0c0, r0c1, ...], ...]
         if((unsigned int)RARRAY_LEN(*value) < r){
-          throw std::runtime_error("Length is too short");
+          throw std::invalid_argument("Length is too short");
         }
         VALUE value_r;
         for(; i_elm < len; i_elm++){
           if(j == 0){
             value_r = RARRAY_AREF(*value, i);
             if(!RB_TYPE_P(value_r, T_ARRAY)){
-              throw std::runtime_error("double array [[...], ...] is required");
+              throw std::invalid_argument("double array [[...], ...] is required");
             }else if((unsigned int)RARRAY_LEN(value_r) < c){
-              throw std::runtime_error("Length is too short");
+              throw std::invalid_argument("Length is too short");
             }
           }
           v_elm = RARRAY_AREF(value_r, j);
@@ -620,7 +618,7 @@ struct MatrixUtil {
         }
       }else{ // [r0c0, r0c1, ...]
         if((unsigned int)RARRAY_LEN(*value) < len){
-          throw std::runtime_error("Length is too short");
+          throw std::invalid_argument("Length is too short");
         }
         for(; i_elm < len; i_elm++){
           v_elm = RARRAY_AREF(*value, i_elm);
@@ -647,7 +645,7 @@ struct MatrixUtil {
     if(replaced && (i_elm < len)){
       std::stringstream s;
       s << "Unexpected input [" << i << "," << j << "]: ";
-      throw std::runtime_error(s.str().append(inspect_str(v_elm)));
+      throw std::invalid_argument(s.str().append(inspect_str(v_elm)));
     }
 #endif
     return replaced;
@@ -668,6 +666,12 @@ struct MatrixUtil {
 %}
 
 %extend Matrix_Frozen {
+  %catches(std::logic_error) trace;
+  %catches(std::out_of_range) partial;
+  %catches(std::out_of_range) rowVector;
+  %catches(std::out_of_range) columnVector;
+  %catches(std::logic_error, std::runtime_error) determinant;
+
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
     return ($self)->operator()(row, column);
   }
@@ -705,6 +709,7 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-());
   }
   
+  %catches(std::invalid_argument) operator+;
   template <class T2, class Array2D_Type2, class ViewType2>
   Matrix<T, Array2D_Dense<T> > operator+(
       const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
@@ -715,6 +720,7 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator+(scalar));
   }
   
+  %catches(std::invalid_argument) operator-;
   template <class T2, class Array2D_Type2, class ViewType2>
   Matrix<T, Array2D_Dense<T> > operator-(
       const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
@@ -727,7 +733,8 @@ struct MatrixUtil {
   
   template <class T2, class Array2D_Type2, class ViewType2>
   Matrix<T, Array2D_Dense<T> > operator*(
-      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
+      const throw(std::invalid_argument) {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(matrix));
   }
   INSTANTIATE_MATRIX_FUNC(operator*, __mul__);
@@ -750,6 +757,7 @@ struct MatrixUtil {
       Matrix<T, Array2D_Dense<T> > &output_R {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
+  %catches(std::logic_error, std::runtime_error) lup;
   void lup(
       Matrix<T, Array2D_Dense<T> > &output_L, 
       Matrix<T, Array2D_Dense<T> > &output_U, 
@@ -775,6 +783,7 @@ struct MatrixUtil {
     output_U = LU.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
     output_P = buf.P();
   }
+  %catches(std::logic_error) ud;
   void ud(
       Matrix<T, Array2D_Dense<T> > &output_U, 
       Matrix<T, Array2D_Dense<T> > &output_D) const {
@@ -790,12 +799,14 @@ struct MatrixUtil {
     output_R = QR.partial($self->rows(), $self->columns(), 0, $self->rows()).copy();
   }
 
+  %catches(std::logic_error, std::runtime_error) inverse;
   Matrix<T, Array2D_Dense<T> > inverse() const {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->inverse());
   }
   template <class T2, class Array2D_Type2, class ViewType2>
   Matrix<T, Array2D_Dense<T> > operator/(
-      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
+      const throw(std::logic_error, std::runtime_error) {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator/(matrix));
   }
   INSTANTIATE_MATRIX_FUNC(operator/, __div__);
@@ -835,7 +846,7 @@ struct MatrixUtil {
       if(assign && !SWIG_IsOK(swig::asval(v, dst))){
         std::stringstream s;
         s << "Unknown input (T expected) [" << i << "," << j << "]: ";
-        throw std::runtime_error(s.str().append(inspect_str(v)));
+        throw std::invalid_argument(s.str().append(inspect_str(v)));
       }
     }
     static void matrix_yield(
@@ -890,10 +901,11 @@ struct MatrixUtil {
   %typemap(in) const typename MatrixUtil::each_which_t &each_which {
     try{
       $1 = &const_cast<typename MatrixUtil::each_which_t &>(MatrixUtil::sym2each_which($input));
-    }catch(std::runtime_error &e){
-      SWIG_exception(SWIG_TypeError, e.what());
+    }catch(std::invalid_argument &e){
+      SWIG_exception(SWIG_ValueError, e.what());
     }
   }
+  %catches(native_exception) each;
   const Matrix_Frozen<T, Array2D_Type, ViewType> &each(
       void (*each_func)(
         const T &src, T *dst,
@@ -904,6 +916,7 @@ struct MatrixUtil {
   }
   %alias each "each_with_index";
   
+  %catches(native_exception, std::invalid_argument) map;
   Matrix<T, Array2D_Dense<T> > map(
       void (*each_func)(
         const T &src, T *dst,
@@ -950,7 +963,8 @@ MAKE_TO_S(Matrix_Frozen)
   %fragment(SWIG_Traits_frag(T));
 
   Matrix(const unsigned int &rows, const unsigned int &columns, 
-      const void *replacer = NULL){
+      const void *replacer = NULL)
+      throw(native_exception, std::invalid_argument) {
     Matrix<T, Array2D_Type, ViewType> res(rows, columns);
     MatrixUtil::replace(res, replacer);
     return new Matrix<T, Array2D_Type, ViewType>(res);
@@ -964,7 +978,7 @@ MAKE_TO_S(Matrix_Frozen)
 #if defined(SWIGRUBY)
   %fragment(SWIG_AsVal_frag(unsigned int));
   %fragment("check_value"{unsigned int});
-  Matrix(const void *replacer){
+  Matrix(const void *replacer) throw(native_exception, std::invalid_argument) {
     const SWIG_Object *value(static_cast<const SWIG_Object *>(replacer));
     static const ID id_r(rb_intern("row_size")), id_c(rb_intern("column_size"));
     if(value && RB_TYPE_P(*value, T_ARRAY) && RB_TYPE_P(RARRAY_AREF(*value, 0), T_ARRAY)){
@@ -978,8 +992,8 @@ MAKE_TO_S(Matrix_Frozen)
       VALUE v_r(rb_funcall(*value, id_r, 0, 0)), v_c(rb_funcall(*value, id_c, 0, 0));
       if(!SWIG_IsOK(SWIG_AsVal(unsigned int)(v_r, &r)) || is_lt_zero_after_asval(r)
           || !SWIG_IsOK(SWIG_AsVal(unsigned int)(v_c, &c)) || is_lt_zero_after_asval(c)){
-        throw std::runtime_error(
-            std::string("Unexpected length [")
+        throw std::invalid_argument(
+            std::string("Invalid length [")
               .append(inspect_str(v_r)).append(", ")
               .append(inspect_str(v_c)).append("]"));
       }
@@ -987,7 +1001,7 @@ MAKE_TO_S(Matrix_Frozen)
       MatrixUtil::replace(res, replacer);
       return new Matrix<T, Array2D_Type, ViewType>(res);
     }else{
-      throw std::runtime_error("double array [[...], ...] or Matrix is required");
+      throw std::invalid_argument("double array [[...], ...] or Matrix is required");
     }
   }
 #endif
@@ -1026,11 +1040,13 @@ MAKE_TO_S(Matrix_Frozen)
   %rename("scalar") getScalar;
   %rename("I") getI;
 
+  %catches(std::out_of_range) swap_rows;
   void swap_rows(
       self_t *self_p,
       const unsigned int &r1, const unsigned int &r2){
     $self->swapRows(r1, r2);
   }
+  %catches(std::out_of_range) swap_columns;
   void swap_columns(
       self_t *self_p,
       const unsigned int &c1, const unsigned int &c2){
@@ -1040,18 +1056,20 @@ MAKE_TO_S(Matrix_Frozen)
   template <class T2, class Array2D_Type2, class ViewType2>
   void replace(
       self_t *self_p,
-      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix){
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
+      throw(std::invalid_argument) {
     $self->replace(matrix);
   }
   INSTANTIATE_MATRIX_FUNC(replace, replace);
 
-  void replace(self_t *self_p, const void *replacer = NULL){
+  void replace(self_t *self_p, const void *replacer = NULL)
+      throw(native_exception, std::invalid_argument, std::runtime_error){
     if(!MatrixUtil::replace(*$self, replacer)){
       throw std::runtime_error("Unsupported replacement");
     }
   }
 
-  void replace(self_t *self_p, const T *serialized){
+  void replace(self_t *self_p, const T *serialized) throw(std::runtime_error) {
     if(!MatrixUtil::replace(*$self, serialized)){
       throw std::runtime_error("Unsupported replacement");
     }
@@ -1062,6 +1080,7 @@ MAKE_TO_S(Matrix_Frozen)
   %bang swap_columns;
   %rename("replace!") replace;
   
+  %catches(native_exception, std::invalid_argument) map_bang;
   void map_bang(
       self_t *self_p,
       void (*each_func)(
@@ -1129,6 +1148,7 @@ MAKE_TO_S(Matrix_Frozen)
       Matrix<ctype, Array2D_Dense<ctype > > &output_V {
     %append_output(SWIG_NewPointerObj((new $*1_ltype(*$1)), $1_descriptor, SWIG_POINTER_OWN));
   }
+  %catches(std::logic_error, std::runtime_error) eigen;
   void eigen(
       Matrix<ctype, Array2D_Dense<ctype > > &output_V, 
       Matrix<ctype, Array2D_Dense<ctype > > &output_D) const {
@@ -1258,7 +1278,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
   }
   Matrix<type, Array2D_Dense<type > > &resize(
       const unsigned int *r_p, const unsigned int *c_p){
-    unsigned int r(r_p ? *r_p : $self->rows()), c(c_p ? *c_p : self->columns());
+    unsigned int r(r_p ? *r_p : $self->rows()), c(c_p ? *c_p : $self->columns());
     Matrix<type, Array2D_Dense<type > > mat_new(r, c);
     unsigned int r_min(r), c_min(c);
     if(r_min > $self->rows()){r_min = $self->rows();}
