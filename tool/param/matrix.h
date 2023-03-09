@@ -1789,11 +1789,11 @@ class Matrix_Frozen {
      * as the same as index 1 (= 5 % 4) is selected.
      *
      * Another example; [4x3].circular(1,2,5,6) is
-     *  00 01 02  =>  12 10 11 12 10
-     *  10 11 12      22 20 21 22 20
-     *  20 21 22      32 30 31 32 30
-     *  30 31 32      02 00 01 02 00
-     *                12 10 11 12 10
+     *  00 01 02  =>  12 10 11 12 10 11
+     *  10 11 12      22 20 21 22 20 21
+     *  20 21 22      32 30 31 32 30 31
+     *  30 31 32      02 00 01 02 00 01
+     *                12 10 11 12 10 11
      *
      * @param row_offset Upper row index of original matrix for circular matrix
      * @param column_offset Left column index of original matrix for circular matrix
