@@ -1580,60 +1580,71 @@ class Matrix_Frozen {
 
   protected:
     template <class MatrixT>
-    bool isEqualOffdiagonal(
+    bool isEqualBlock(
         const MatrixT &mat,
-        const bool &upper = true, const bool &lower = false) const {
+        const bool &upper_offdiagonal = true, const bool &lower_offdiagonal = false,
+        const bool &diagonal = false) const {
       const unsigned int i_end(rows()), j_end(columns());
-      if(upper){
+      if(upper_offdiagonal){
         for(unsigned int i(0); i < i_end; i++){
           for(unsigned int j(i + 1); j < j_end; j++){
-            if((*this)(i, j) != mat(i, j)){return false;}
+            if(mat(i, j) != (*this)(i, j)){return false;}
           }
         }
       }
-      if(lower){
+      if(lower_offdiagonal){
         for(unsigned int i(1); i < i_end; i++){
           for(unsigned int j(0); j < i; j++){
-            if((*this)(i, j) != mat(i, j)){return false;}
+            if(mat(i, j) != (*this)(i, j)){return false;}
           }
+        }
+      }
+      if(diagonal){
+        for(unsigned int i2(0), i2_end((i_end < j_end) ? i_end : j_end); i2 < i2_end; i2++){
+          if(mat(i2, i2) != (*this)(i2, i2)){return false;}
         }
       }
       return true;
     }
-    bool isEqualOffdiagonal(
+    bool isEqualBlock(
         const T &v,
-        const bool &upper = true, const bool &lower = false) const {
+        const bool &upper_offdiagonal = true, const bool &lower_offdiagonal = false,
+        const bool &diagonal = false) const {
       struct {
         const T &v_;
         const T &operator()(const unsigned int &, const unsigned int &) const {return v_;}
       } value = {v};
-      return isEqualOffdiagonal(value, upper, lower);
+      return isEqualBlock(value, upper_offdiagonal, lower_offdiagonal, diagonal);
     }
+    // TODO isEqualBlock() with acceptable delta argument
 
   public:
     /**
      * Test whether matrix is diagonal
+     * TODO: add quasi-diagonal test
      *
      * @return true when diagonal matrix, otherwise false.
      */
     bool isDiagonal() const noexcept {
-      return isSquare() && isEqualOffdiagonal(T(0), true, true);
+      return isSquare() && isEqualBlock(T(0), true, true);
     }
     /**
      * Test whether matrix is lower triangular
+     * TODO: add quasi-triangular test
      *
      * @return true when lower triangular matrix, otherwise false.
      */
     bool isLowerTriangular() const noexcept {
-      return isSquare() && isEqualOffdiagonal(T(0), true, false);
+      return isSquare() && isEqualBlock(T(0), true, false);
     }
     /**
      * Test whether matrix is upper triangular
+     * TODO: add quasi-triangular test
      *
      * @return true when upper triangular matrix, otherwise false.
      */
     bool isUpperTriangular() const noexcept {
-      return isSquare() && isEqualOffdiagonal(T(0), false, true);
+      return isSquare() && isEqualBlock(T(0), false, true);
     }
 
     typedef typename builder_t::transpose_t transpose_t;
@@ -1647,11 +1658,12 @@ class Matrix_Frozen {
     }
     /**
      * Test whether matrix is symmetric
+     * TODO: add quasi-symmetric test
      *
      * @return true when symmetric, otherwise false.
      */
     bool isSymmetric() const noexcept {
-      return isSquare() && isEqualOffdiagonal(transpose());
+      return isSquare() && isEqualBlock(transpose());
     }
 
     typedef typename builder_t::conjugate_t conjugate_t;
@@ -1674,12 +1686,13 @@ class Matrix_Frozen {
       return adjoint_t(*this);
     }
     /**
-     * Test whether matrix is hermitian
+     * Test whether matrix is Hermitian
+     * TODO: add quasi-Hermitian test
      *
      * @return true when Hermitian matrix, otherwise false.
      */
     bool isHermitian() const noexcept {
-      return isSquare() && isEqualOffdiagonal(adjoint());
+      return isSquare() && isEqualBlock(adjoint());
     }
 
   protected:
@@ -1993,7 +2006,7 @@ class Matrix_Frozen {
      * @return true when skew-symmetric matrix, otherwise false.
      */
     bool isSkewSymmetric() const noexcept {
-      return isSquare() && isEqualOffdiagonal(-transpose());
+      return isSquare() && isEqualBlock(-transpose());
     }
 
 
@@ -2236,6 +2249,39 @@ class Matrix_Frozen {
         operator*(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
       if(columns() != matrix.rows()){throw std::invalid_argument("Incorrect size");}
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+    /**
+     * Test whether matrix is normal
+     * TODO: add quasi-normal test
+     *
+     * @return true when normal matrix, otherwise false.
+     */
+    bool isNormal() const noexcept {
+      return isSquare()
+          && ((*this) * adjoint()).isEqualBlock(adjoint() * (*this), true, false, true);
+    }
+    /**
+     * Test whether matrix is orthogonal
+     * TODO: add quasi-orthogonal test
+     *
+     * @return true when orthogonal matrix, otherwise false.
+     */
+    bool isOrthogonal() const noexcept {
+      return isSquare()
+          && ((*this) * transpose() - 1).isEqualBlock(T(0), true, false, true)
+          && (transpose() * (*this) - 1).isEqualBlock(T(0), true, false, true);
+    }
+    /**
+     * Test whether matrix is unitary
+     * TODO: add quasi-unitary test
+     *
+     * @return true when unitary matrix, otherwise false.
+     */
+    bool isUnitary() const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - 1).isEqualBlock(T(0), true, false, true)
+          && (adjoint() * (*this) - 1).isEqualBlock(T(0), true, false, true);
     }
 
     /**
@@ -2691,7 +2737,7 @@ class Matrix_Frozen {
      */
     typename complex_t::real_t norm2F() const noexcept {
       // return complex_t::get_real((adjoint() * (*this)).trace(false));
-      /* The above is as definition, however, double calculation may occure
+      /* The above is as definition, however, double calculation may occur
        * when (*this) is a expression matrix such as multiplication.
        * To avoid such overhead, its expansion form to take summation of
        * abs(element)**2 is used.
@@ -3959,6 +4005,9 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isDifferentSize;
     using super_t::isLU;
     using super_t::isSkewSymmetric;
+    using super_t::isNormal;
+    using super_t::isOrthogonal;
+    using super_t::isUnitary;
 
     /*
      * operator+=, operator-=, operator*=, operator/= are shortcuts of this->replace((*this) op another).

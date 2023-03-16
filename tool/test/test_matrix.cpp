@@ -231,6 +231,27 @@ BOOST_AUTO_TEST_CASE(check_Hermitian){
   BOOST_TEST_MESSAGE("hermitian?:" << rAiB->isHermitian());
   BOOST_REQUIRE_EQUAL(true, rAiB->isHermitian());
 }
+BOOST_AUTO_TEST_CASE(check_normal){
+  prologue_print();
+  BOOST_TEST_MESSAGE("normal?:" << A->isNormal());
+  BOOST_REQUIRE_EQUAL(true, A->isNormal());
+  cmatrix_t Ac(A->complex() * Complex<content_t>(1, 1));
+  BOOST_TEST_MESSAGE("Ac:" << Ac << ", Ac * adj(Ac):" << (Ac * Ac.adjoint()));
+  BOOST_TEST_MESSAGE("normal?:" << Ac.isNormal());
+  BOOST_REQUIRE_EQUAL(true, Ac.isNormal());
+}
+BOOST_AUTO_TEST_CASE(check_orthogonal){
+  // TODO test with practical example
+  matrix_t _A(matrix_t::getI(8));
+  BOOST_TEST_MESSAGE("orthogonal?:" << _A.isOrthogonal());
+  BOOST_REQUIRE_EQUAL(true, _A.isOrthogonal());
+}
+BOOST_AUTO_TEST_CASE(check_unitary){
+  // TODO test with practical example
+  cmatrix_t Ac(cmatrix_t::getI(8));
+  BOOST_TEST_MESSAGE("unitary?:" << Ac.isUnitary());
+  BOOST_REQUIRE_EQUAL(true, Ac.isUnitary());
+}
 
 BOOST_AUTO_TEST_CASE(sum){
   prologue_print();
