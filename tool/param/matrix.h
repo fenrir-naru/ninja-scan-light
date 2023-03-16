@@ -1537,42 +1537,6 @@ class Matrix_Frozen {
     bool isSquare() const noexcept {return rows() == columns();}
 
     /**
-     * Test whether matrix is diagonal
-     *
-     * @return true when diagonal, otherwise false.
-     */
-    bool isDiagonal() const noexcept {
-      if(isSquare()){
-        const unsigned int i_end(rows()), j_end(columns());
-        for(unsigned int i(0); i < i_end; i++){
-          for(unsigned int j(i + 1); j < j_end; j++){
-            if(((*this)(i, j) != T(0)) || ((*this)(j, i) != T(0))){
-              return false;
-            }
-          }
-        }
-        return true;
-      }else{return false;}
-    }
-
-    /**
-     * Test whether matrix is symmetric
-     *
-     * @return true when symmetric, otherwise false.
-     */
-    bool isSymmetric() const noexcept {
-      if(isSquare()){
-        const unsigned int i_end(rows()), j_end(columns());
-        for(unsigned int i(0); i < i_end; i++){
-          for(unsigned int j(i + 1); j < j_end; j++){
-            if((*this)(i, j) != (*this)(j, i)){return false;}
-          }
-        }
-        return true;
-      }else{return false;}
-    }
-
-    /**
      * Test whether size of matrices is different
      *
      * @param matrix Matrix to be compared
@@ -1614,24 +1578,62 @@ class Matrix_Frozen {
       return sum;
     }
 
-    /**
-     * Test whether matrix is LU decomposed.
-     * The assumption of elements is
-     * (0, 0)-(n-1, n-1):  L matrix
-     * (0, n)-(n-1, 2n-1): U matrix
-     *
-     * @return true when LU, otherwise false.
-     */
-    bool isLU() const noexcept {
-      if(rows() * 2 != columns()){return false;}
-      const unsigned int i_end(rows() - 1), j_end(rows());
-      for(unsigned int i(0), i_U(rows()); i < i_end; i++, i_U++){
-        for(unsigned int j(i + 1); j < j_end; j++){
-          if((*this)(i, j) != T(0)){return false;} // check L
-          if((*this)(j, i_U) != T(0)){return false;} // check U
+  protected:
+    template <class MatrixT>
+    bool isEqualOffdiagonal(
+        const MatrixT &mat,
+        const bool &upper = true, const bool &lower = false) const {
+      const unsigned int i_end(rows()), j_end(columns());
+      if(upper){
+        for(unsigned int i(0); i < i_end; i++){
+          for(unsigned int j(i + 1); j < j_end; j++){
+            if((*this)(i, j) != mat(i, j)){return false;}
+          }
+        }
+      }
+      if(lower){
+        for(unsigned int i(1); i < i_end; i++){
+          for(unsigned int j(0); j < i; j++){
+            if((*this)(i, j) != mat(i, j)){return false;}
+          }
         }
       }
       return true;
+    }
+    bool isEqualOffdiagonal(
+        const T &v,
+        const bool &upper = true, const bool &lower = false) const {
+      struct {
+        const T &v_;
+        const T &operator()(const unsigned int &, const unsigned int &) const {return v_;}
+      } value = {v};
+      return isEqualOffdiagonal(value, upper, lower);
+    }
+
+  public:
+    /**
+     * Test whether matrix is diagonal
+     *
+     * @return true when diagonal matrix, otherwise false.
+     */
+    bool isDiagonal() const noexcept {
+      return isSquare() && isEqualOffdiagonal(T(0), true, true);
+    }
+    /**
+     * Test whether matrix is lower triangular
+     *
+     * @return true when lower triangular matrix, otherwise false.
+     */
+    bool isLowerTriangular() const noexcept {
+      return isSquare() && isEqualOffdiagonal(T(0), true, false);
+    }
+    /**
+     * Test whether matrix is upper triangular
+     *
+     * @return true when upper triangular matrix, otherwise false.
+     */
+    bool isUpperTriangular() const noexcept {
+      return isSquare() && isEqualOffdiagonal(T(0), false, true);
     }
 
     typedef typename builder_t::transpose_t transpose_t;
@@ -1642,6 +1644,14 @@ class Matrix_Frozen {
      */
     transpose_t transpose() const noexcept {
       return transpose_t(*this);
+    }
+    /**
+     * Test whether matrix is symmetric
+     *
+     * @return true when symmetric, otherwise false.
+     */
+    bool isSymmetric() const noexcept {
+      return isSquare() && isEqualOffdiagonal(transpose());
     }
 
     typedef typename builder_t::conjugate_t conjugate_t;
@@ -1662,6 +1672,14 @@ class Matrix_Frozen {
      */
     adjoint_t adjoint() const noexcept {
       return adjoint_t(*this);
+    }
+    /**
+     * Test whether matrix is hermitian
+     *
+     * @return true when Hermitian matrix, otherwise false.
+     */
+    bool isHermitian() const noexcept {
+      return isSquare() && isEqualOffdiagonal(adjoint());
     }
 
   protected:
@@ -1967,6 +1985,15 @@ class Matrix_Frozen {
      */
     typename mul_mat_scalar_t::mat_t operator-() const noexcept {
       return operator*(-1);
+    }
+
+    /**
+     * Test whether matrix is skew-symmetric
+     *
+     * @return true when skew-symmetric matrix, otherwise false.
+     */
+    bool isSkewSymmetric() const noexcept {
+      return isSquare() && isEqualOffdiagonal(-transpose());
     }
 
 
@@ -2352,6 +2379,21 @@ class Matrix_Frozen {
         const bool &do_check = true) const {
       unsigned int pivot_num;
       return decomposeLUP(pivot_num, NULL, do_check);
+    }
+
+    /**
+     * Test whether matrix is LU decomposed.
+     * The assumption of elements is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
+     *
+     * @return true when LU, otherwise false.
+     */
+    bool isLU() const noexcept {
+      const unsigned int r(rows());
+      return (r * 2 == columns())
+          && partial(r, r).isLowerTriangular()
+          && partial(r, r, 0, r).isUpperTriangular();
     }
 
     /**
@@ -3911,8 +3953,12 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isSquare;
     using super_t::isDiagonal;
     using super_t::isSymmetric;
+    using super_t::isLowerTriangular;
+    using super_t::isUpperTriangular;
+    using super_t::isHermitian;
     using super_t::isDifferentSize;
     using super_t::isLU;
+    using super_t::isSkewSymmetric;
 
     /*
      * operator+=, operator-=, operator*=, operator/= are shortcuts of this->replace((*this) op another).

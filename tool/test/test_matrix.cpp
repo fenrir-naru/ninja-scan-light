@@ -191,6 +191,46 @@ BOOST_AUTO_TEST_CASE(check_symmetric){
   BOOST_TEST_MESSAGE("sym?:" << A->isSymmetric());
   BOOST_REQUIRE_EQUAL(true, A->isSymmetric());
 }
+BOOST_AUTO_TEST_CASE(check_skew_symmetric){
+  for(unsigned int i(0); i < A->rows(); i++){
+    for(unsigned int j(i); j < A->columns(); j++){
+      (*A)(i, j) = -(*A)(j, i);
+    }
+  }
+  prologue_print();
+  BOOST_TEST_MESSAGE("skew_sym?:" << A->isSkewSymmetric());
+  BOOST_REQUIRE_EQUAL(true, A->isSkewSymmetric());
+}
+BOOST_AUTO_TEST_CASE(check_upper_triangular){
+  clear_elements(false, true, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("upper_triangular?:" << A->isUpperTriangular());
+  BOOST_REQUIRE_EQUAL(true, A->isUpperTriangular());
+  BOOST_REQUIRE_EQUAL(false, A->isLowerTriangular());
+}
+BOOST_AUTO_TEST_CASE(check_lower_triangular){
+  clear_elements(true, false, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("lower_triangular?:" << A->isLowerTriangular());
+  BOOST_REQUIRE_EQUAL(false, A->isUpperTriangular());
+  BOOST_REQUIRE_EQUAL(true, A->isLowerTriangular());
+}
+BOOST_AUTO_TEST_CASE(check_diagonal){
+  clear_elements(true, true, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("diagonal?:" << A->isDiagonal());
+  BOOST_REQUIRE_EQUAL(true, A->isDiagonal());
+}
+BOOST_AUTO_TEST_CASE(check_Hermitian){
+  for(unsigned int i(0); i < A->rows(); i++){
+    for(unsigned int j(i); j < A->columns(); j++){
+      (*rAiB)(i, j) = (*rAiB)(j, i).conjugate();
+    }
+  }
+  BOOST_TEST_MESSAGE("rAiB:" << *rAiB);
+  BOOST_TEST_MESSAGE("hermitian?:" << rAiB->isHermitian());
+  BOOST_REQUIRE_EQUAL(true, rAiB->isHermitian());
+}
 
 BOOST_AUTO_TEST_CASE(sum){
   prologue_print();
@@ -596,7 +636,7 @@ BOOST_AUTO_TEST_CASE(adjoint){
   matrix_compare(b, _AB_ri.mat_i);
 
   cmatrix_t::adjoint_t::adjoint_t __AB(_AB.adjoint()); // cmatrix_t::adjoint_t::adjoint_t = matrix_t
-  BOOST_TEST_MESSAGE("conj.conj:" << __AB);
+  BOOST_TEST_MESSAGE("adj.adj:" << __AB);
   matrix_compare(*rAiB, __AB);
 }
 BOOST_AUTO_TEST_CASE(partial){

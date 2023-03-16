@@ -120,6 +120,23 @@ struct Fixture {
     }
     assign_rAiB();
   }
+  void clear_elements(const bool &upper, const bool &lower, const bool &diagonal){
+    for(unsigned int i(0); i < A->rows(); i++){
+      if(diagonal){A_array[i][i] = (*A)(i, i) = 0;}
+      for(unsigned int j(i + 1); j < A->columns(); j++){
+        if(upper){A_array[i][j] = (*A)(i, j) = 0;}
+        if(lower){A_array[j][i] = (*A)(j, i) = 0;}
+      }
+    }
+    for(unsigned int i(0); i < B->rows(); i++){
+      if(diagonal){B_array[i][i] = (*B)(i, i) = 0;}
+      for(unsigned int j(i + 1); j < B->columns(); j++){
+        if(upper){B_array[i][j] = (*B)(i, j) = 0;}
+        if(lower){B_array[j][i] = (*B)(j, i) = 0;}
+      }
+    }
+    assign_rAiB();
+  }
   void prologue_print(){
     BOOST_TEST_MESSAGE("A:" << *A);
     BOOST_TEST_MESSAGE("B:" << *B);
