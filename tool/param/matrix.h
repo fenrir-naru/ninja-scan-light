@@ -1579,73 +1579,65 @@ class Matrix_Frozen {
     }
 
   protected:
-    template <class MatrixT>
-    bool isEqualBlock(
-        const MatrixT &mat,
+    template <class T2>
+    bool isEqual_Block(
+        const T2 &v,
         const bool &upper_offdiagonal = true, const bool &lower_offdiagonal = false,
         const bool &diagonal = false) const {
       const unsigned int i_end(rows()), j_end(columns());
       if(upper_offdiagonal){
         for(unsigned int i(0); i < i_end; i++){
           for(unsigned int j(i + 1); j < j_end; j++){
-            if(mat(i, j) != (*this)(i, j)){return false;}
+            if(v != (*this)(i, j)){return false;}
           }
         }
       }
       if(lower_offdiagonal){
         for(unsigned int i(1); i < i_end; i++){
           for(unsigned int j(0); j < i; j++){
-            if(mat(i, j) != (*this)(i, j)){return false;}
+            if(v != (*this)(i, j)){return false;}
           }
         }
       }
       if(diagonal){
         for(unsigned int i2(0), i2_end((i_end < j_end) ? i_end : j_end); i2 < i2_end; i2++){
-          if(mat(i2, i2) != (*this)(i2, i2)){return false;}
+          if(v != (*this)(i2, i2)){return false;}
         }
       }
       return true;
     }
-    bool isEqualBlock(
-        const T &v,
-        const bool &upper_offdiagonal = true, const bool &lower_offdiagonal = false,
-        const bool &diagonal = false) const {
-      struct {
-        const T &v_;
-        const T &operator()(const unsigned int &, const unsigned int &) const {return v_;}
-      } value = {v};
-      return isEqualBlock(value, upper_offdiagonal, lower_offdiagonal, diagonal);
-    }
-    // TODO isEqualBlock() with acceptable delta argument
 
+    template <class T2>
+    bool isDiagonal_base(const T2 &v) const noexcept {
+      return isSquare() && isEqual_Block(v, true, true);
+    }
+    template <class T2>
+    bool isLowerTriangular_base(const T2 &v) const noexcept {
+      return isSquare() && isEqual_Block(v, true, false);
+    }
+    template <class T2>
+    bool isUpperTriangular_base(const T2 &v) const noexcept {
+      return isSquare() && isEqual_Block(v, false, true);
+    }
   public:
     /**
      * Test whether matrix is diagonal
-     * TODO: add quasi-diagonal test
      *
      * @return true when diagonal matrix, otherwise false.
      */
-    bool isDiagonal() const noexcept {
-      return isSquare() && isEqualBlock(T(0), true, true);
-    }
+    bool isDiagonal() const noexcept {return isDiagonal_base(T(0));}
     /**
      * Test whether matrix is lower triangular
-     * TODO: add quasi-triangular test
      *
      * @return true when lower triangular matrix, otherwise false.
      */
-    bool isLowerTriangular() const noexcept {
-      return isSquare() && isEqualBlock(T(0), true, false);
-    }
+    bool isLowerTriangular() const noexcept {return isLowerTriangular_base(T(0));}
     /**
      * Test whether matrix is upper triangular
-     * TODO: add quasi-triangular test
      *
      * @return true when upper triangular matrix, otherwise false.
      */
-    bool isUpperTriangular() const noexcept {
-      return isSquare() && isEqualBlock(T(0), false, true);
-    }
+    bool isUpperTriangular() const noexcept {return isUpperTriangular_base(T(0));}
 
     typedef typename builder_t::transpose_t transpose_t;
     /**
@@ -1655,15 +1647,6 @@ class Matrix_Frozen {
      */
     transpose_t transpose() const noexcept {
       return transpose_t(*this);
-    }
-    /**
-     * Test whether matrix is symmetric
-     * TODO: add quasi-symmetric test
-     *
-     * @return true when symmetric, otherwise false.
-     */
-    bool isSymmetric() const noexcept {
-      return isSquare() && isEqualBlock(transpose());
     }
 
     typedef typename builder_t::conjugate_t conjugate_t;
@@ -1684,15 +1667,6 @@ class Matrix_Frozen {
      */
     adjoint_t adjoint() const noexcept {
       return adjoint_t(*this);
-    }
-    /**
-     * Test whether matrix is Hermitian
-     * TODO: add quasi-Hermitian test
-     *
-     * @return true when Hermitian matrix, otherwise false.
-     */
-    bool isHermitian() const noexcept {
-      return isSquare() && isEqualBlock(adjoint());
     }
 
   protected:
@@ -2000,15 +1974,6 @@ class Matrix_Frozen {
       return operator*(-1);
     }
 
-    /**
-     * Test whether matrix is skew-symmetric
-     *
-     * @return true when skew-symmetric matrix, otherwise false.
-     */
-    bool isSkewSymmetric() const noexcept {
-      return isSquare() && isEqualBlock(-transpose());
-    }
-
 
     template <class RHS_MatrixT, bool rhs_positive = true>
     struct Add_Matrix_to_Matrix {
@@ -2097,6 +2062,40 @@ class Matrix_Frozen {
         operator-(const T &scalar, const self_t &matrix){
       return getScalar(matrix.rows(), scalar) - matrix;
     }
+
+
+  protected:
+    template <class T2>
+    bool isSymmetric_base(const T2 &v) const noexcept {
+      return isSquare() && ((*this) - transpose()).isEqual_Block(v);
+    }
+    template <class T2>
+    bool isHermitian_base(const T2 &v) const noexcept {
+      return isSquare() && ((*this) - adjoint()).isEqual_Block(v);
+    }
+    template <class T2>
+    bool isSkewSymmetric_base(const T2 &v) const noexcept {
+      return isSquare() && ((*this) + transpose()).isEqual_Block(v);
+    }
+  public:
+    /**
+     * Test whether matrix is symmetric
+     *
+     * @return true when symmetric, otherwise false.
+     */
+    bool isSymmetric() const noexcept {return isSymmetric_base(T(0));}
+    /**
+     * Test whether matrix is Hermitian
+     *
+     * @return true when Hermitian matrix, otherwise false.
+     */
+    bool isHermitian() const noexcept {return isHermitian_base(T(0));}
+    /**
+     * Test whether matrix is skew-symmetric
+     *
+     * @return true when skew-symmetric matrix, otherwise false.
+     */
+    bool isSkewSymmetric() const noexcept {return isSkewSymmetric_base(T(0));}
 
 
     template <class LHS_T, class RHS_T>
@@ -2251,38 +2250,43 @@ class Matrix_Frozen {
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
     }
 
+  protected:
+    template <class T2>
+    bool isNormal_base(const T2 &v) const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - adjoint() * (*this)).isEqual_Block(v, true, false, true);
+    }
+    template <class T2>
+    bool isOrthogonal_base(const T2 &v) const noexcept {
+      return isSquare()
+          && ((*this) * transpose() - 1).isEqual_Block(v, true, false, true)
+          && (transpose() * (*this) - 1).isEqual_Block(v, true, false, true);
+    }
+    template <class T2>
+    bool isUnitary_base(const T2 &v) const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - 1).isEqual_Block(v, true, false, true)
+          && (adjoint() * (*this) - 1).isEqual_Block(v, true, false, true);
+    }
+  public:
     /**
      * Test whether matrix is normal
-     * TODO: add quasi-normal test
      *
      * @return true when normal matrix, otherwise false.
      */
-    bool isNormal() const noexcept {
-      return isSquare()
-          && ((*this) * adjoint()).isEqualBlock(adjoint() * (*this), true, false, true);
-    }
+    bool isNormal() const noexcept {return isNormal_base(T(0));}
     /**
      * Test whether matrix is orthogonal
-     * TODO: add quasi-orthogonal test
      *
      * @return true when orthogonal matrix, otherwise false.
      */
-    bool isOrthogonal() const noexcept {
-      return isSquare()
-          && ((*this) * transpose() - 1).isEqualBlock(T(0), true, false, true)
-          && (transpose() * (*this) - 1).isEqualBlock(T(0), true, false, true);
-    }
+    bool isOrthogonal() const noexcept {return isOrthogonal_base(T(0));}
     /**
      * Test whether matrix is unitary
-     * TODO: add quasi-unitary test
      *
      * @return true when unitary matrix, otherwise false.
      */
-    bool isUnitary() const noexcept {
-      return isSquare()
-          && ((*this) * adjoint() - 1).isEqualBlock(T(0), true, false, true)
-          && (adjoint() * (*this) - 1).isEqualBlock(T(0), true, false, true);
-    }
+    bool isUnitary() const noexcept {return isUnitary_base(T(0));}
 
     /**
      * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
@@ -2723,12 +2727,34 @@ class Matrix_Frozen {
         return is_nan_or_infinite(v.real())
             || is_nan_or_infinite(v.imaginary());
       }
+
+      struct wide_zero_t {
+        const real_t &width;
+        wide_zero_t(const real_t &width_) : width(width_) {}
+        bool operator!=(const real_t &v) const noexcept {return get_abs(v) > width;}
+        bool operator!=(const v_t &v) const noexcept {return get_abs(v) > width;}
+      };
     };
 
     Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>
         complex() const noexcept {
       return Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>(*this);
     }
+
+#define make_wide_predicate(func_name) \
+bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const noexcept { \
+  return is ## func_name ## _base(typename complex_t::wide_zero_t(acceptable_delta)); \
+}
+    make_wide_predicate(Diagonal);
+    make_wide_predicate(LowerTriangular);
+    make_wide_predicate(UpperTriangular);
+    make_wide_predicate(Symmetric);
+    make_wide_predicate(Hermitian);
+    make_wide_predicate(SkewSymmetric);
+    make_wide_predicate(Normal);
+    make_wide_predicate(Orthogonal);
+    make_wide_predicate(Unitary);
+#undef make_wide_predicate
 
     /**
      * Calculate the 2nd power of Frobenius norm.
