@@ -2730,9 +2730,10 @@ class Matrix_Frozen {
 
       struct wide_zero_t {
         const real_t &width;
-        wide_zero_t(const real_t &width_) : width(width_) {}
+        const real_t width_abs2;
+        wide_zero_t(const real_t &width_) : width(width_), width_abs2(width_ * width_) {}
         bool operator!=(const real_t &v) const noexcept {return get_abs(v) > width;}
-        bool operator!=(const v_t &v) const noexcept {return get_abs(v) > width;}
+        bool operator!=(const v_t &v) const noexcept {return get_abs2(v) > width_abs2;}
       };
     };
 
