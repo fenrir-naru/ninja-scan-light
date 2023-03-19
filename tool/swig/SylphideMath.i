@@ -412,10 +412,17 @@ class Matrix_Frozen {
     template <class T2, class Array2D_Type2, class ViewType2>
     bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept;
     // bool operator!= // automatically defined
-    
+
     bool isSquare() const noexcept;
     bool isDiagonal() const noexcept;
+    bool isLowerTriangular() const noexcept;
+    bool isUpperTriangular() const noexcept;
     bool isSymmetric() const noexcept;
+    bool isHermitian() const noexcept;
+    bool isSkewSymmetric() const noexcept;
+    bool isNormal() const noexcept;
+    bool isOrthogonal() const noexcept;
+    bool isUnitary() const noexcept;
     
     T trace(const bool &do_check = true) const;
     T sum() const noexcept;
@@ -738,6 +745,8 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(matrix));
   }
   INSTANTIATE_MATRIX_FUNC(operator*, __mul__);
+  // TODO __pow__ for **
+  // TODO __pos__ for +@
 
   %typemap(in,numinputs=0)
       Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
@@ -816,16 +825,38 @@ struct MatrixUtil {
     s << $self->inspect();
     return s.str();
   }
+  
+  /* TODO
+   * adjugate
+   * cofactor
+   * combine
+   * hadamard_product, entrywise_product
+   * index, find_index
+   * first_minor
+   */
 
 #ifdef SWIGRUBY
   %rename("square?") isSquare;
   %rename("diagonal?") isDiagonal;
+  %rename("lower_triangular?") isLowerTriangular;
+  %rename("upper_triangular?") isUpperTriangular;
   %rename("symmetric?") isSymmetric;
+  %rename("hermitian?") isHermitian;
+  %rename("skew_symmetric?") isSkewSymmetric;
+  %alias isSkewSymmetric "antisymmetric?"
+  %rename("normal?") isNormal;
+  %rename("orthogonal?") isOrthogonal;
+  %rename("unitary?") isUnitary;
   %rename("different_size?") isDifferentSize;
+  %alias __getitem__ "element,component";
+  // %alias __eq__ "eql?"; // Intentionally commented out because eql? is more strict than ==
+  %alias rows "row_size,row_count";
+  %alias columns "column_size,column_count";
   %alias trace "tr";
   %alias determinant "det";
   %alias inverse "inv";
   %alias transpose "t";
+  %alias conjugate "conj";
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
   %alias qr "qr_decomposition";
@@ -1132,6 +1163,9 @@ MAKE_TO_S(Matrix_Frozen)
 #endif
   }
 };
+/* Ruby #row, #column, #row_vectors, #column_vectors are not intentionally implemented 
+ * because a vector is treated as a (1*n) or (n*1) matrix in C++.
+ */
 %enddef
 
 %define INSTANTIATE_MATRIX_EIGEN2(type, ctype, storage, view)
@@ -1303,6 +1337,22 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %typemap(check) const unsigned int &;
 %enddef
 
+%extend Matrix_Frozen {
+#define make_predicate(name) \
+bool is ## name(const double &acceptable_delta) const noexcept { \
+  return self->is ## name(acceptable_delta); \
+}
+  make_predicate(Diagonal);
+  make_predicate(LowerTriangular);
+  make_predicate(UpperTriangular);
+  make_predicate(Symmetric);
+  make_predicate(Hermitian);
+  make_predicate(SkewSymmetric);
+  make_predicate(Normal);
+  make_predicate(Orthogonal);
+  make_predicate(Unitary);
+#undef make_predicate
+};
 INSTANTIATE_MATRIX(double, D);
 INSTANTIATE_MATRIX_EIGEN(double, Complex<double>);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);

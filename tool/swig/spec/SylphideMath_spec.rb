@@ -103,6 +103,7 @@ shared_examples 'Matrix' do
       }.call,
       :diagonal => mat_type::new(params[:rc][0], params[:rc][0]){|i, j| i == j ? 1 : 0},
       :symmetric => mat_type::new(params[:rc][0], params[:rc][0]){|i, j| i + j},
+      :unit => mat_type::I(params[:rc][0]),
     }}
     describe 'is checked with' do
       it 'square?' do
@@ -117,11 +118,51 @@ shared_examples 'Matrix' do
         expect(mat[:diagonal].diagonal?)    .to eq(true)
         expect(mat[:symmetric].diagonal?)   .to eq(false)
       end
+      it 'lower_triangular?' do
+        expect(mat[:square].lower_triangular?)      .to eq(false)
+        expect(mat[:not_square].lower_triangular?)  .to eq(false)
+        expect(mat[:diagonal].lower_triangular?)    .to eq(true)
+        expect(mat[:symmetric].lower_triangular?)   .to eq(false)
+      end
+      it 'upper_triangular?' do
+        expect(mat[:square].upper_triangular?)      .to eq(false)
+        expect(mat[:not_square].upper_triangular?)  .to eq(false)
+        expect(mat[:diagonal].upper_triangular?)    .to eq(true)
+        expect(mat[:symmetric].upper_triangular?)   .to eq(false)
+      end
       it 'symmetric?' do
         expect(mat[:square].symmetric?)     .to eq(false)
         expect(mat[:not_square].symmetric?) .to eq(false)
         expect(mat[:diagonal].symmetric?)   .to eq(true)
         expect(mat[:symmetric].symmetric?)  .to eq(true)
+      end
+      it 'hermitian?' do
+        expect(mat[:square].hermitian?)     .to eq(false)
+        expect(mat[:not_square].hermitian?) .to eq(false)
+        expect(mat[:diagonal].hermitian?)   .to eq(true)
+        expect(mat[:symmetric].hermitian?)  .to eq(true)
+      end
+      it 'skew_symmetric?' do
+        expect(mat[:square].skew_symmetric?)     .to eq(false)
+        expect(mat[:not_square].skew_symmetric?) .to eq(false)
+        expect(mat[:diagonal].skew_symmetric?)   .to eq(true)
+        expect(mat[:symmetric].skew_symmetric?)  .to eq(false)
+      end
+      it 'normal?' do
+        expect(mat[:square].normal?)     .to eq(false)
+        expect(mat[:not_square].normal?) .to eq(false)
+        expect(mat[:diagonal].normal?)   .to eq(true)
+        expect(mat[:symmetric].normal?)  .to eq(true)
+      end
+      it 'orthogonal?' do
+        expect(mat[:square].orthogonal?)    .to eq(false)
+        expect(mat[:not_square].orthogonal?).to eq(false)
+        expect(mat[:unit].orthogonal?)      .to eq(true)
+      end
+      it 'unitary?' do
+        expect(mat[:square].unitary?)     .to eq(false)
+        expect(mat[:not_square].unitary?) .to eq(false)
+        expect(mat[:unit].unitary?)       .to eq(true)
       end
       it 'different_size?' do
         mat.keys.combination(2).each{|mat1, mat2|
