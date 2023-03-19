@@ -485,6 +485,7 @@ struct MatrixUtil {
     EACH_UPPER,
     EACH_STRICT_LOWER,
     EACH_STRICT_UPPER,
+    EACH_UNKNOWN,
   };
   template <class T, 
       class Array2D_Type, class ViewType,
@@ -551,10 +552,8 @@ struct MatrixUtil {
     }
   }
 #if defined(SWIGRUBY)
-  static const each_which_t &sym2each_which(const VALUE &value){
-    if(!RB_TYPE_P(value, T_SYMBOL)){
-      std::invalid_argument("Symbol is required");
-    }
+  static each_which_t sym2each_which(const VALUE &value){
+    if(!RB_TYPE_P(value, T_SYMBOL)){return EACH_UNKNOWN;}
     static const struct {
       VALUE sym;
       each_which_t which;
@@ -571,9 +570,7 @@ struct MatrixUtil {
     while(value != cmp[i].sym){
       if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
     }
-    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
-      std::invalid_argument("Unknown enumerate direction");
-    }
+    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){return EACH_UNKNOWN;}
     return cmp[i].which;
   }
 #endif
@@ -926,14 +923,14 @@ struct MatrixUtil {
     }
     $1 = matrix_each((const T *)0);
   }
-  %typemap(typecheck) const typename MatrixUtil::each_which_t &each_which {
-    $1 = RB_TYPE_P($input, T_SYMBOL);
+  %typemap(typecheck) const typename MatrixUtil::each_which_t each_which {
+    $1 = (MatrixUtil::sym2each_which($input) != MatrixUtil::EACH_UNKNOWN);
   }
-  %typemap(in) const typename MatrixUtil::each_which_t &each_which {
-    try{
-      $1 = &const_cast<typename MatrixUtil::each_which_t &>(MatrixUtil::sym2each_which($input));
-    }catch(std::invalid_argument &e){
-      SWIG_exception(SWIG_ValueError, e.what());
+  %typemap(in) const typename MatrixUtil::each_which_t each_which {
+    $1 = MatrixUtil::sym2each_which($input);
+    if($1 == MatrixUtil::EACH_UNKNOWN){
+      SWIG_exception(SWIG_ValueError,
+          std::string("Unknown enumerate direction: ").append(inspect_str($1)).c_str());
     }
   }
   %catches(native_exception) each;
@@ -941,7 +938,7 @@ struct MatrixUtil {
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
-      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
     MatrixUtil::each(*$self, each_func, each_which);
     return *$self;
   }
@@ -952,7 +949,7 @@ struct MatrixUtil {
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
-      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
     Matrix<T, Array2D_Dense<T> > res($self->operator Matrix<T, Array2D_Dense<T> >());
     MatrixUtil::each(*$self, each_func, each_which, &res);
     return res;
@@ -1117,7 +1114,7 @@ MAKE_TO_S(Matrix_Frozen)
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
-      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL){
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL){
     MatrixUtil::each(*$self, each_func, each_which, $self);
   }
   %rename("map!") map_bang;
