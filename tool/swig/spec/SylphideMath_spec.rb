@@ -351,6 +351,15 @@ shared_examples 'Matrix' do
         }
       }
     end
+    it 'supports index, find_index' do
+      cnd = proc{|v| v.abs >= 0.5}
+      [:index, :find_index].each{|func|
+        opt.each{|k, indices|
+          expect(mat.send(*[func, k].compact, &cnd)).to be(
+              indices.select{|i, j| cnd.call(compare_with[i][j])}.first)
+        }
+      }
+    end
     it 'supports map, collect, map_with_index, collect_with_index' do
       [:map, :collect, :map_with_index, :collect_with_index].each{|func|
         opt.each{|k, indices|

@@ -893,11 +893,19 @@ struct MatrixUtil {
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
       matrix_yield_internal<true, true>(src, dst, i, j);
     }
+    static void matrix_yield_check(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      VALUE values[] = {swig::from(src)};
+      if(RTEST(yield_throw_if_error(1, values))){
+        rb_iter_break_value(rb_ary_new_from_args(2, UINT2NUM(i), UINT2NUM(j)));
+      }
+    }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
       ID id_thisf(rb_frame_this_func()), id_callee(rb_frame_callee());
       static const ID 
-          id_map(rb_intern("map")), id_mapb(rb_intern("map!")), 
+          id_map(rb_intern("map")), id_mapb(rb_intern("map!")),
+          id_idx(rb_intern("index")),
           id_eachwi(rb_intern("each_with_index"));
       if((id_thisf == id_map) || (id_thisf == id_mapb)){
         static const ID with_index[] = {
@@ -909,6 +917,8 @@ struct MatrixUtil {
           }
         }
         return matrix_yield_get;
+      }else if(id_thisf == id_idx){
+        return matrix_yield_check;
       }else if(id_callee == id_eachwi){
         return matrix_yield_with_index;
       }else{
@@ -955,6 +965,16 @@ struct MatrixUtil {
     return res;
   }
   %alias map "collect,map_with_index,collect_with_index";
+  
+  %catches(native_exception) index;
+  void index(
+      void (*each_func)(
+        const T &src, T *dst,
+        const unsigned int &i, const unsigned int &j),
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
+    MatrixUtil::each(*$self, each_func, each_which);
+  }
+  %alias index "find_index";
   
   SWIG_Object to_a() const {
     unsigned int i_max($self->rows()), j_max($self->columns());
