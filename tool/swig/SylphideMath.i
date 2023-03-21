@@ -12,7 +12,6 @@
 #include <sstream>
 #include <vector>
 #include <exception>
-#include <iostream>
 
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
@@ -478,10 +477,10 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 
 %{
 struct MatrixUtil {
-  struct each_break_t : public std::exception {
+  struct each_break_t {
     unsigned int r, c;
     each_break_t(const unsigned int &row, const unsigned int &column)
-        : std::exception(), r(row), c(column) {}
+        : r(row), c(column) {}
   };
   enum each_which_t {
     EACH_ALL,
@@ -834,7 +833,6 @@ struct MatrixUtil {
    * cofactor
    * combine
    * hadamard_product, entrywise_product
-   * index, find_index
    * first_minor
    */
 
@@ -903,22 +901,14 @@ struct MatrixUtil {
     
     static void matrix_yield_check(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      std::cerr
-            << inspect_str(swig::from(src)) << ", " 
-            << inspect_str(UINT2NUM(i)) << ", "
-            << inspect_str(UINT2NUM(j)) << std::endl;
       VALUE res(matrix_yield_internal<false, false>(src, dst, i, j));
-      if(RTEST(res)){
-        throw typename MatrixUtil::each_break_t(i, j);
-        //rb_iter_break_value(rb_ary_new_from_args(2, UINT2NUM(i), UINT2NUM(j)));
-      }
+      if(RTEST(res)){throw typename MatrixUtil::each_break_t(i, j);}
     }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
       ID id_thisf(rb_frame_this_func()), id_callee(rb_frame_callee());
       static const ID 
           id_map(rb_intern("map")), id_mapb(rb_intern("map!")),
-          id_idx(rb_intern("index")),
           id_eachwi(rb_intern("each_with_index"));
       if((id_thisf == id_map) || (id_thisf == id_mapb)){
         static const ID with_index[] = {
@@ -930,8 +920,6 @@ struct MatrixUtil {
           }
         }
         return matrix_yield_get;
-      }else if(id_thisf == id_idx){
-        return matrix_yield_check;
       }else if(id_callee == id_eachwi){
         return matrix_yield_with_index;
       }else{
@@ -981,53 +969,26 @@ struct MatrixUtil {
   
   %catches(native_exception) index;
   VALUE index(
-      void (*each_func)(
-        const T &src, T *dst,
-        const unsigned int &i, const unsigned int &j),
       const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
     try{
-      MatrixUtil::each(*$self, each_func, each_which);
+      MatrixUtil::each(*$self, matrix_yield_check, each_which);
       return Qnil;
     }catch(const typename MatrixUtil::each_break_t &each_break){
       return rb_ary_new_from_args(2, UINT2NUM(each_break.r), UINT2NUM(each_break.c));
     }
   }
-#if 0
-  %typemap(in,numinputs=0,noblock=1) VALUE index_enumerator {
-    $1 = rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc-1, argv+1);
-  }
-  VALUE index(
-      VALUE index_enumerator, VALUE value, 
-      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
-    struct proc_t {
-      static VALUE equal(RB_BLOCK_CALL_FUNC_ARGLIST(y, c)){return rb_equal(c, y);}
-    };
-    static const ID id_each(rb_intern("each"));
-    VALUE res = rb_block_call(
-        index_enumerator, id_each, 0, 0,
-        (rb_block_call_func_t)rb_equal, // or proc_t::equal, or rb_sym_to_proc(ID2SYM(rb_intern("==")))
-        value);
-    std::cerr << inspect_str(res) << std::endl;
-    return res;
-  }
-#else
   %typemap(check,noblock=1) VALUE idx_selector {
     if(MatrixUtil::sym2each_which($1) == MatrixUtil::EACH_UNKNOWN){
       SWIG_exception(SWIG_ValueError,
           std::string("Unknown enumerate direction: ").append(inspect_str($1)).c_str());
     }
   }
-  void index(VALUE value, VALUE idx_selector = Qnil) const {
-    std::cerr << inspect_str(rb_ary_new_from_args(
-          3, rb_current_receiver(), ID2SYM(rb_frame_callee()), idx_selector)) 
-        << std::endl;
-    VALUE res = rb_block_call(
+  VALUE index(VALUE value, VALUE idx_selector = Qnil) const {
+    return rb_block_call(
         rb_current_receiver(), rb_frame_callee(),
         (RTEST(idx_selector) ? 1 : 0), &idx_selector,
         (rb_block_call_func_t)rb_equal, value);
-    std::cerr << inspect_str(res) << std::endl;
   }
-#endif
   %alias index "find_index";
   
   SWIG_Object to_a() const {

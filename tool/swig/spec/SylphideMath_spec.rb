@@ -355,8 +355,12 @@ shared_examples 'Matrix' do
       cnd = proc{|v| v.abs >= 0.5}
       [:index, :find_index].each{|func|
         opt.each{|k, indices|
-          expect(mat.send(*[func, k].compact, &cnd)).to be(
+          expect(mat.send(*[func, k].compact, &cnd)).to eq(
               indices.select{|i, j| cnd.call(compare_with[i][j])}.first)
+          indices.each{|i, j|
+            expect(mat.send(*[func, compare_with[i][j], k].compact)).to eq([i, j])
+          }
+          expect(mat.send(*[func, 1, k].compact)).to be(nil)
         }
       }
     end
