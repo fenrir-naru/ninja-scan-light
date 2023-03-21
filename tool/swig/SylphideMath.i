@@ -12,6 +12,7 @@
 #include <sstream>
 #include <vector>
 #include <exception>
+#include <iostream>
 
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
@@ -477,6 +478,11 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 
 %{
 struct MatrixUtil {
+  struct each_break_t : public std::exception {
+    unsigned int r, c;
+    each_break_t(const unsigned int &row, const unsigned int &column)
+        : std::exception(), r(row), c(column) {}
+  };
   enum each_which_t {
     EACH_ALL,
     EACH_DIAGONAL,
@@ -496,7 +502,7 @@ struct MatrixUtil {
         const T &src_elm, T *dst_elm,
         const unsigned int &i, const unsigned int &j),
       const each_which_t &each_which = EACH_ALL,
-      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL){
+      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL) {
     unsigned int i_max(src.rows()), j_max(src.columns());
     switch(each_which){
       case EACH_DIAGONAL:
@@ -861,7 +867,7 @@ struct MatrixUtil {
   %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header", 
       fragment=SWIG_Traits_frag(T)){
     template <bool with_index = false, bool assign = false>
-    static inline void matrix_yield_internal(
+    static inline VALUE matrix_yield_internal(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
       SWIG_Object v;
       if(with_index){
@@ -876,6 +882,7 @@ struct MatrixUtil {
         s << "Unknown input (T expected) [" << i << "," << j << "]: ";
         throw std::invalid_argument(s.str().append(inspect_str(v)));
       }
+      return v;
     }
     static void matrix_yield(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
@@ -893,11 +900,17 @@ struct MatrixUtil {
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
       matrix_yield_internal<true, true>(src, dst, i, j);
     }
+    
     static void matrix_yield_check(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
-      VALUE values[] = {swig::from(src)};
-      if(RTEST(yield_throw_if_error(1, values))){
-        rb_iter_break_value(rb_ary_new_from_args(2, UINT2NUM(i), UINT2NUM(j)));
+      std::cerr
+            << inspect_str(swig::from(src)) << ", " 
+            << inspect_str(UINT2NUM(i)) << ", "
+            << inspect_str(UINT2NUM(j)) << std::endl;
+      VALUE res(matrix_yield_internal<false, false>(src, dst, i, j));
+      if(RTEST(res)){
+        throw typename MatrixUtil::each_break_t(i, j);
+        //rb_iter_break_value(rb_ary_new_from_args(2, UINT2NUM(i), UINT2NUM(j)));
       }
     }
     static void (*matrix_each(const T *))
@@ -933,7 +946,7 @@ struct MatrixUtil {
     }
     $1 = matrix_each((const T *)0);
   }
-  %typemap(typecheck) const typename MatrixUtil::each_which_t each_which {
+  %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const typename MatrixUtil::each_which_t each_which {
     $1 = (MatrixUtil::sym2each_which($input) != MatrixUtil::EACH_UNKNOWN);
   }
   %typemap(in) const typename MatrixUtil::each_which_t each_which {
@@ -967,13 +980,54 @@ struct MatrixUtil {
   %alias map "collect,map_with_index,collect_with_index";
   
   %catches(native_exception) index;
-  void index(
+  VALUE index(
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j),
       const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
-    MatrixUtil::each(*$self, each_func, each_which);
+    try{
+      MatrixUtil::each(*$self, each_func, each_which);
+      return Qnil;
+    }catch(const typename MatrixUtil::each_break_t &each_break){
+      return rb_ary_new_from_args(2, UINT2NUM(each_break.r), UINT2NUM(each_break.c));
+    }
   }
+#if 0
+  %typemap(in,numinputs=0,noblock=1) VALUE index_enumerator {
+    $1 = rb_enumeratorize(self, ID2SYM(rb_frame_callee()), argc-1, argv+1);
+  }
+  VALUE index(
+      VALUE index_enumerator, VALUE value, 
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
+    struct proc_t {
+      static VALUE equal(RB_BLOCK_CALL_FUNC_ARGLIST(y, c)){return rb_equal(c, y);}
+    };
+    static const ID id_each(rb_intern("each"));
+    VALUE res = rb_block_call(
+        index_enumerator, id_each, 0, 0,
+        (rb_block_call_func_t)rb_equal, // or proc_t::equal, or rb_sym_to_proc(ID2SYM(rb_intern("==")))
+        value);
+    std::cerr << inspect_str(res) << std::endl;
+    return res;
+  }
+#else
+  %typemap(check,noblock=1) VALUE idx_selector {
+    if(MatrixUtil::sym2each_which($1) == MatrixUtil::EACH_UNKNOWN){
+      SWIG_exception(SWIG_ValueError,
+          std::string("Unknown enumerate direction: ").append(inspect_str($1)).c_str());
+    }
+  }
+  void index(VALUE value, VALUE idx_selector = Qnil) const {
+    std::cerr << inspect_str(rb_ary_new_from_args(
+          3, rb_current_receiver(), ID2SYM(rb_frame_callee()), idx_selector)) 
+        << std::endl;
+    VALUE res = rb_block_call(
+        rb_current_receiver(), rb_frame_callee(),
+        (RTEST(idx_selector) ? 1 : 0), &idx_selector,
+        (rb_block_call_func_t)rb_equal, value);
+    std::cerr << inspect_str(res) << std::endl;
+  }
+#endif
   %alias index "find_index";
   
   SWIG_Object to_a() const {
