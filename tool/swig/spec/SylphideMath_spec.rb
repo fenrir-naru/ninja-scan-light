@@ -321,6 +321,14 @@ shared_examples 'Matrix' do
         }
       }
     end
+    it 'generates minor matrix with first_minor' do
+      params[:rc][0].times{|i|
+        params[:rc][1].times{|j|
+          expect(mat.first_minor(i, j).to_a) \
+              .to eq(Matrix[*compare_with].first_minor(i, j).to_a)
+        }
+      }
+    end
   end
   
   describe 'iterator' do

@@ -750,6 +750,12 @@ struct MatrixUtil {
   // TODO __pow__ for **
   // TODO __pos__ for +@
 
+  Matrix<T, Array2D_Dense<T> > first_minor(
+      const unsigned int &row,
+      const unsigned int &column) const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->matrix_for_minor(row, column));
+  }
+
   %typemap(in,numinputs=0)
       Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
       Matrix<T, Array2D_Dense<T> > &output_U (Matrix<T, Array2D_Dense<T> > temp),
@@ -833,7 +839,6 @@ struct MatrixUtil {
    * cofactor
    * combine
    * hadamard_product, entrywise_product
-   * first_minor
    */
 
 #ifdef SWIGRUBY
