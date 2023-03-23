@@ -2300,6 +2300,7 @@ class Matrix_Frozen {
         const unsigned int &column) const noexcept {
       typedef typename builder_t::template resize_t<-1, -1>::assignable_t res_t;
       res_t res(res_t::blank(rows() - 1, columns() - 1));
+#if 0
       unsigned int i(0), i2(0);
       const unsigned int i_end(res.rows()), j_end(res.columns());
       for( ; i < row; ++i, ++i2){
@@ -2323,6 +2324,10 @@ class Matrix_Frozen {
           res(i, j) = operator()(i2, j2);
         }
       }
+#else
+      // equivalent version to use circular view
+      res.circular(row, column).replace(circular(row + 1, column + 1, rows() - 1, columns() - 1), false);
+#endif
       return res;
     }
 
