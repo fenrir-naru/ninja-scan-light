@@ -4028,6 +4028,45 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
       return Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::copy_value(*this, matrix);
     }
 
+    template <class T2, class Array2D_Type2, class ViewType2>
+    static typename builder_t::assignable_t hstack(
+        const unsigned int &length,
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> matrices[]) {
+      unsigned int c_sum(0), r_max(0);
+      for(unsigned int i(0); i < length; ++i){
+        c_sum += matrices[i].columns();
+        if(r_max < matrices[i].rows()){
+          r_max = matrices[i].rows();
+        }
+      }
+      typename builder_t::assignable_t res(blank(r_max, c_sum));
+      res.clear();
+      for(unsigned int i(0), c_offset(0); i < length; ++i){
+        res.partial(matrices[i].rows(), matrices[i].columns(), 0, c_offset).replace(matrices[i], false);
+        c_offset += matrices[i].columns();
+      }
+      return res;
+    }
+    template <class T2, class Array2D_Type2, class ViewType2>
+    static typename builder_t::assignable_t vstack(
+        const unsigned int &length,
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> matrices[]) {
+      unsigned int r_sum(0), c_max(0);
+      for(unsigned int i(0); i < length; ++i){
+        r_sum += matrices[i].rows();
+        if(c_max < matrices[i].columns()){
+          c_max = matrices[i].columns();
+        }
+      }
+      typename builder_t::assignable_t res(blank(r_sum, c_max));
+      res.clear();
+      for(unsigned int i(0), r_offset(0); i < length; ++i){
+        res.partial(matrices[i].rows(), matrices[i].columns(), r_offset, 0).replace(matrices[i], false);
+        r_offset += matrices[i].rows();
+      }
+      return res;
+    }
+
     using super_t::isSquare;
     using super_t::isDiagonal;
     using super_t::isSymmetric;

@@ -836,6 +836,48 @@ BOOST_AUTO_TEST_CASE(minor){
   }
 }
 
+BOOST_AUTO_TEST_CASE(hstack){
+  assign_linear();
+  prologue_print();
+  matrix_t inputs[] = {*A, *B};
+  matrix_t AB(matrix_t::hstack(2, inputs));
+  BOOST_TEST_MESSAGE("AB:" << AB);
+  BOOST_CHECK(AB.rows() == inputs[0].rows());
+  BOOST_CHECK(AB.columns() == (inputs[0].columns() + inputs[1].columns()));
+  matrix_compare(AB.partial(inputs[0].rows(), inputs[0].columns()), inputs[0]);
+  matrix_compare(AB.partial(inputs[1].rows(), inputs[1].columns(), 0, inputs[0].columns()), inputs[1]);
+
+  // matrices having different number of rows
+  matrix_t::partial_offsetless_t inputs2[] = {A->partial(4, 4), B->partial(6, 6)};
+  matrix_t AB2(matrix_t::hstack(2, inputs2));
+  BOOST_TEST_MESSAGE("AB2:" << AB2);
+  BOOST_CHECK(AB2.rows() == inputs2[1].rows()); // take maximum rows
+  BOOST_CHECK(AB2.columns() == (inputs2[0].columns() + inputs2[1].columns()));
+  matrix_compare(AB2.partial(inputs2[0].rows(), inputs2[0].columns()), inputs2[0]);
+  matrix_compare(AB2.partial(inputs2[1].rows(), inputs2[1].columns(), 0, inputs2[0].columns()), inputs2[1]);
+}
+
+BOOST_AUTO_TEST_CASE(vstack){
+  assign_linear();
+  prologue_print();
+  matrix_t inputs[] = {*A, *B};
+  matrix_t AB(matrix_t::vstack(2, inputs));
+  BOOST_TEST_MESSAGE("AB:" << AB);
+  BOOST_CHECK(AB.rows() == (inputs[0].rows() + inputs[1].rows()));
+  BOOST_CHECK(AB.columns() == inputs[0].columns());
+  matrix_compare(AB.partial(inputs[0].rows(), inputs[0].columns()), inputs[0]);
+  matrix_compare(AB.partial(inputs[1].rows(), inputs[1].columns(), inputs[0].rows(), 0), inputs[1]);
+
+  // matrices having different number of columns
+  matrix_t::partial_offsetless_t inputs2[] = {A->partial(4, 4), B->partial(6, 6)};
+  matrix_t AB2(matrix_t::vstack(2, inputs2));
+  BOOST_TEST_MESSAGE("AB2:" << AB2);
+  BOOST_CHECK(AB2.rows() == (inputs2[0].rows() + inputs2[1].rows()));
+  BOOST_CHECK(AB2.columns() == inputs2[1].columns()); // take maximum columns
+  matrix_compare(AB2.partial(inputs2[0].rows(), inputs2[0].columns()), inputs2[0]);
+  matrix_compare(AB2.partial(inputs2[1].rows(), inputs2[1].columns(), inputs2[0].rows(), 0), inputs2[1]);
+}
+
 BOOST_AUTO_TEST_CASE(det){
   prologue_print();
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
