@@ -740,6 +740,17 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-(scalar));
   }
   
+#ifdef SWIGRUBY
+  %alias entrywise_product "hadamard_product";
+#endif
+  %catches(std::invalid_argument) entrywise_product;
+  template <class T2, class Array2D_Type2, class ViewType2>
+  Matrix<T, Array2D_Dense<T> > entrywise_product(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->entrywise_product(matrix));
+  }
+  INSTANTIATE_MATRIX_FUNC(entrywise_product, entrywise_product);
+  
   template <class T2, class Array2D_Type2, class ViewType2>
   Matrix<T, Array2D_Dense<T> > operator*(
       const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
@@ -747,6 +758,7 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(matrix));
   }
   INSTANTIATE_MATRIX_FUNC(operator*, __mul__);
+  
   // TODO __pow__ for **
   // TODO __pos__ for +@
 
@@ -835,10 +847,10 @@ struct MatrixUtil {
   }
   
   /* TODO
-   * adjugate
-   * cofactor
-   * combine
-   * hadamard_product, entrywise_product
+   * adjugate, cofactor
+   *
+   * The followings are better to be implemented in Ruby
+   * combine, hstack, vstack (due to their arguments are variable)
    */
 
 #ifdef SWIGRUBY

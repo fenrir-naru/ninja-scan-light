@@ -460,6 +460,13 @@ shared_examples 'Matrix' do
       expect{mat[2] * mat[3]}.to raise_error(ArgumentError)
       expect((mat[2] * mat[3].t).to_a).to eq((Matrix[*compare_with[2]] * Matrix[*compare_with[3]].t).to_a)
     end
+    it 'have entrywise_product(mat), a.k.a. .*(mat)' do
+      [:entrywise_product, :hadamard_product].each{|func|
+        [[0, 1], [2, 3]].each{|i, j|
+          expect((mat[i].send(func, mat[j])).to_a).to eq((Matrix[*compare_with[i]].send(func, Matrix[*compare_with[j]])).to_a)
+        }
+      } if Gem::Version::create(RUBY_VERSION) >= Gem::Version::create("2.5.0")
+    end
     it 'have /(scalar)' do
       expect((mat[0] / 2).to_a).to eq((Matrix[*compare_with[0]] / 2).to_a)
       expect((mat[2] / 2).to_a).to eq((Matrix[*compare_with[2]] / 2).to_a)
