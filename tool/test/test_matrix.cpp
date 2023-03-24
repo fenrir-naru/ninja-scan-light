@@ -347,6 +347,21 @@ BOOST_AUTO_TEST_CASE(matrix_add){
   matrix_compare_delta(a4, A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
+struct mat_entrywise_product_t {
+  matrix_t m1, m2;
+  content_t operator()(const unsigned &i, const unsigned &j) const {
+    return (m1)(i, j) * (m2)(i, j);
+  }
+};
+
+BOOST_AUTO_TEST_CASE(matrix_entrywise_product){
+  prologue_print();
+  mat_entrywise_product_t ab = {*A, *B};
+  matrix_t AB((*A).entrywise_product(*B));
+  BOOST_TEST_MESSAGE(".*:" << AB);
+  matrix_compare_delta(ab, AB, ACCEPTABLE_DELTA_DEFAULT);
+}
+
 struct mat_mul_t {
   matrix_t m1, m2;
   content_t operator()(const unsigned &i, const unsigned &j) const {
@@ -424,6 +439,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       ((*A) - (*B)),
       (format("*storage: (-, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
+      ((*A).entrywise_product(*B)),
+      (format("*storage: (.*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
       ((*A) * (*B)),
       (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
@@ -435,6 +453,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A) + (*B)).complex(),
       (format("*storage: (+, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      (((*A) + (*B)).entrywise_product(*A) + (*B)),
+      (format("*storage: (+, (.*, (+, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
 
   // optimized cases
   matrix_inspect_contains(

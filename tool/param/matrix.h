@@ -514,6 +514,9 @@ struct Array2D_Operator_Multiply_by_Scalar;
 template <class LHS_T, class RHS_T, bool rhs_positive>
 struct Array2D_Operator_Add;
 
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_EntrywiseMultiply;
+
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -1857,6 +1860,7 @@ class Matrix_Frozen {
       OPERATOR_2_Add_Matrix_to_Matrix,
       OPERATOR_2_Subtract_Matrix_from_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
+      OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix,
       OPERATOR_NONE,
     };
 
@@ -2063,6 +2067,30 @@ class Matrix_Frozen {
       return getScalar(matrix.rows(), scalar) - matrix;
     }
 
+    template <class RHS_MatrixT>
+    struct Entrywise_Multiply_Matrix_by_Matrix {
+      typedef Array2D_Operator_EntrywiseMultiply<self_t, RHS_MatrixT> op_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+        if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
+        return mat_t(
+            typename mat_t::storage_t(
+              mat1.rows(), mat1.columns(), op_t(mat1, mat2)));
+      }
+    };
+
+    /**
+     * Entrywise product of two matrices
+     *
+     * @param matrix Matrix to multiply
+     * @return entrywise multiplied matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Entrywise_Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
+        entrywise_product(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Entrywise_Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
 
   protected:
     template <class T2>
@@ -2125,6 +2153,7 @@ class Matrix_Frozen {
                 || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
                 || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
                 || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+                || (tag == OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix)
                 >::has_multi_mat_by_mat;
         static const bool is_multi_mat_by_scalar
             = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
@@ -3354,6 +3383,10 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
           return (*this) << op.lhs << ", " << op.rhs;
         }
         template <class LHS_T, class RHS_T>
+        format_t &operator<<(const Array2D_Operator_EntrywiseMultiply<LHS_T, RHS_T> &op){
+          return (*this) << op.lhs << ", " << op.rhs;
+        }
+        template <class LHS_T, class RHS_T>
         format_t &operator<<(const Array2D_Operator_Multiply_by_Scalar<LHS_T, RHS_T> &op){
           return (*this) << op.lhs << ", " << op.rhs;
         }
@@ -3375,6 +3408,8 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
               symbol = "+"; break;
             case OPERATOR_2_Subtract_Matrix_from_Matrix:
               symbol = "-"; break;
+            case OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix:
+              symbol = ".*"; break;
             default:
               return (*this) << "(?)";
           }
@@ -3472,6 +3507,28 @@ struct Array2D_Operator_Add<
     }else{
       return super_t::lhs(row, column) - super_t::rhs(row, column);
     }
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2, class Array2D_Type2, class ViewType2>
+struct Array2D_Operator_EntrywiseMultiply<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> >
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+  static const int tag = super_t::lhs_t::OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix;
+  Array2D_Operator_EntrywiseMultiply(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    return super_t::lhs(row, column) * super_t::rhs(row, column);
   }
 };
 
