@@ -2136,36 +2136,36 @@ class Matrix_Frozen {
       struct check_t {
         template <bool is_binary, class U = void>
         struct check_binary_t {
-          static const bool has_multi_mat_by_mat = false;
+          static const int complexity = 1;
         };
         template <class U>
         struct check_binary_t<true, U> {
-          static const bool has_multi_mat_by_mat
+          static const int complexity
               = (check_t<typename OperatorProperty<MatrixT>::operator_t::lhs_t>
-                  ::has_multi_mat_by_mat)
-                || (check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t>
-                  ::has_multi_mat_by_mat);
+                  ::complexity)
+                + (check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t>
+                  ::complexity);
         };
-        static const bool has_multi_mat_by_mat
-            = (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
-              || check_binary_t<
+        static const int complexity
+            = ((tag == OPERATOR_2_Multiply_Matrix_by_Matrix) ? 10 : 1)
+              * check_binary_t<
                 (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
                 || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
                 || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
                 || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
                 || (tag == OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix)
-                >::has_multi_mat_by_mat;
+                >::complexity;
         static const bool is_multi_mat_by_scalar
             = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
       };
 
       /*
        * [Optimization policy 1]
-       * If each side include M * M, then use cache.
+       * If each side includes complex calculation such as M * M, then use cache.
        * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
        * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
        */
-      template <class MatrixT, bool cache_on = check_t<MatrixT>::has_multi_mat_by_mat>
+      template <class MatrixT, bool cache_on = (check_t<MatrixT>::complexity >= 3)>
       struct optimizer1_t {
         typedef MatrixT res_t;
       };

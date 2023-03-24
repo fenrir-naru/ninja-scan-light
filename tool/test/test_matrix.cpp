@@ -445,6 +445,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       ((*A) * (*B)),
       (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
+      (((*A) + (*B)) * (*A)),
+      (format("*storage: (*, (+, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
       (((*A) * (*B)) + (*A)),
       (format("*storage: (+, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
@@ -479,6 +482,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A) / matrix_t::getScalar(A->rows(), 2)),
       (format("*storage: (*, M(%1%,%1%), 0.5)") % SIZE).str()); // should be M * 0.5
+  matrix_inspect_contains(
+      (((*A) + (*B) + (*A)) * (*A)),
+      (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str()); // should be M * M
 }
 
 void check_inv(const matrix_t &mat){
