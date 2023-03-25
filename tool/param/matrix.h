@@ -1856,6 +1856,7 @@ class Matrix_Frozen {
 
 
     enum {
+      OPERATOR_2_Generic,
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
       OPERATOR_2_Subtract_Matrix_from_Matrix,
@@ -2134,27 +2135,31 @@ class Matrix_Frozen {
 
       template <class MatrixT, int tag = OperatorProperty<MatrixT>::tag>
       struct check_t {
-        template <bool is_binary, class U = void>
-        struct check_binary_t {
+        template <int tag2, class U = void>
+        struct check_operator_t {
           static const int complexity = 1;
         };
         template <class U>
-        struct check_binary_t<true, U> {
-          static const int complexity
-              = (check_t<typename OperatorProperty<MatrixT>::operator_t::lhs_t>
-                  ::complexity)
-                + (check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t>
-                  ::complexity);
+        struct check_operator_t<OPERATOR_2_Generic, U> {
+          typedef check_t<typename OperatorProperty<MatrixT>::operator_t::lhs_t> lhs_t;
+          typedef check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t> rhs_t;
+          static const int complexity = lhs_t::complexity + rhs_t::complexity; // linear
         };
-        static const int complexity
-            = ((tag == OPERATOR_2_Multiply_Matrix_by_Matrix) ? 10 : 1)
-              * check_binary_t<
-                (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
-                || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
-                || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
-                || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
-                || (tag == OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix)
-                >::complexity;
+#define make_binary_item(tag_name) \
+template <class U> struct check_operator_t<tag_name, U> \
+    : public check_operator_t<OPERATOR_2_Generic, U>
+        make_binary_item(OPERATOR_2_Multiply_Matrix_by_Scalar) {};
+        make_binary_item(OPERATOR_2_Add_Matrix_to_Matrix) {};
+        make_binary_item(OPERATOR_2_Subtract_Matrix_from_Matrix) {};
+        make_binary_item(OPERATOR_2_Multiply_Matrix_by_Matrix) {
+          typedef check_operator_t<OPERATOR_2_Generic, U> super_t;
+          static const int complexity // square power
+              = (super_t::lhs_t::complexity + 1) * (super_t::rhs_t::complexity + 1);
+        };
+        make_binary_item(OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix) {};
+#undef make_binary_item
+
+        static const int complexity = check_operator_t<tag>::complexity;
         static const bool is_multi_mat_by_scalar
             = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
       };
