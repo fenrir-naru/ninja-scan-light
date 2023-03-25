@@ -3098,7 +3098,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
 
       // Double QR method
       /* <Procedure>
-       * 1) Transform upper Hessenburg's matrix by using Householder's method
+       * 1) Transform this to upper Hessenburg's matrix by using Householder's method
        * ハウスホルダー法を適用して、上ヘッセンベルク行列に置換後
        * 2) Then, Apply double QR method to get eigenvalues
        * ダブルQR法を適用。
@@ -3108,10 +3108,10 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
 
       const unsigned int &_rows(rows());
 
-      // 結果の格納用の行列
+      // Buffer to store resultant; 結果の格納用の行列
       res_t result(res_t::blank(_rows, _rows + 1));
 
-      // 固有値の計算
+      // Eigenvalue computation; 固有値の計算
 #define lambda(i) result(i, _rows)
 
       int m = _rows;
@@ -3133,7 +3133,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
           break;
         }
 
-        //ハウスホルダー変換を繰り返す
+        // Apply Householder transformation iteratively; ハウスホルダー変換を繰り返す
         for(int i(0); i < m - 1; i++){
           typename builder_t::template resize_t<3, 1, 0, 0>::assignable_t omega(3, 1);
           if(i == 0){ // calculate double shift of initial Householder transformation
@@ -3187,7 +3187,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 
         if(complex_t::is_nan_or_infinite(A(m-1,m-2))){
-          throw std::runtime_error("eigen values calculation failed");
+          throw std::runtime_error("eigenvalues calculation failed");
         }
 
         // Convergence test; 収束判定
@@ -4093,7 +4093,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     static typename builder_t::assignable_t hstack(
         const unsigned int &length,
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> matrices[]) {
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> *matrices) {
       unsigned int c_sum(0), r_max(0);
       for(unsigned int i(0); i < length; ++i){
         c_sum += matrices[i].columns();
@@ -4112,7 +4112,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     template <class T2, class Array2D_Type2, class ViewType2>
     static typename builder_t::assignable_t vstack(
         const unsigned int &length,
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> matrices[]) {
+        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> *matrices) {
       unsigned int r_sum(0), c_max(0);
       for(unsigned int i(0); i < length; ++i){
         r_sum += matrices[i].rows();
