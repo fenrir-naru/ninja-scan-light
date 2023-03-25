@@ -517,6 +517,9 @@ struct Array2D_Operator_Add;
 template <class LHS_T, class RHS_T>
 struct Array2D_Operator_EntrywiseMultiply;
 
+template <class LHS_T, class RHS_T, bool rhs_horizontal>
+struct Array2D_Operator_Stack;
+
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -1862,6 +1865,8 @@ class Matrix_Frozen {
       OPERATOR_2_Subtract_Matrix_from_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
       OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix,
+      OPERATOR_2_Stack_Horizontal,
+      OPERATOR_2_Stack_Vertical,
       OPERATOR_NONE,
     };
 
@@ -2093,6 +2098,48 @@ class Matrix_Frozen {
       return Entrywise_Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
     }
 
+    template <class RHS_MatrixT, bool rhs_horizontal = true>
+    struct Stacked_Matrix {
+      typedef Array2D_Operator_Stack<self_t, RHS_MatrixT, rhs_horizontal> op_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+        if(rhs_horizontal ? (mat1.rows() > mat2.rows()) : (mat1.columns() > mat2.columns())){
+          throw std::invalid_argument("Incorrect size");
+        }
+        return mat_t(
+            typename mat_t::storage_t(
+              mat1.rows() + (rhs_horizontal ? 0 : mat2.rows()),
+              mat1.columns() + (rhs_horizontal ? mat2.columns() : 0),
+              op_t(mat1, mat2)));
+      }
+    };
+
+    /**
+     * Horizontal stack of two matrices
+     *
+     * @param matrix Matrix to stack horizontally, i.e., right side
+     * @return stacked matrix
+     * @throw std::invalid_argument When matrix row number is smaller
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, true>::mat_t
+        hstack(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, true>::generate(*this, matrix);
+    }
+
+    /**
+     * Vertical stack of two matrices
+     *
+     * @param matrix Matrix to stack vertically, i.e., bottom side
+     * @return stacked matrix
+     * @throw std::invalid_argument When matrix row number is smaller
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::mat_t
+        vstack(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::generate(*this, matrix);
+    }
+
   protected:
     template <class T2>
     bool isSymmetric_base(const T2 &v) const noexcept {
@@ -2157,6 +2204,7 @@ template <class U> struct check_operator_t<tag_name, U> \
               = (super_t::lhs_t::complexity + 1) * (super_t::rhs_t::complexity + 1);
         };
         make_binary_item(OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix) {};
+        // Stack_Horizontal/Vertical is intentionally ignored.
 #undef make_binary_item
 
         static const int complexity = check_operator_t<tag>::complexity;
@@ -3399,6 +3447,10 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
         format_t &operator<<(const Array2D_Operator_Multiply_by_Matrix<LHS_T, RHS_T> &op){
           return (*this) << op.lhs << ", " << op.rhs;
         }
+        template <class LHS_T, class RHS_T, bool rhs_horizontal>
+        format_t &operator<<(const Array2D_Operator_Stack<LHS_T, RHS_T, rhs_horizontal> &op){
+          return (*this) << op.lhs << ", " << op.rhs;
+        }
 
         template <class T2, class T2_op, class OperatorT, class View_Type2>
         format_t &operator<<(
@@ -3415,6 +3467,10 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
               symbol = "-"; break;
             case OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix:
               symbol = ".*"; break;
+            case OPERATOR_2_Stack_Horizontal:
+              symbol = "H"; break;
+            case OPERATOR_2_Stack_Vertical:
+              symbol = "V"; break;
             default:
               return (*this) << "(?)";
           }
@@ -3539,6 +3595,38 @@ struct Array2D_Operator_EntrywiseMultiply<
 
 template <
     class T, class Array2D_Type, class ViewType,
+    class T2, class Array2D_Type2, class ViewType2,
+    bool rhs_horizontal>
+struct Array2D_Operator_Stack<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2>,
+      rhs_horizontal>
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+  static const int tag = rhs_horizontal
+      ? super_t::lhs_t::OPERATOR_2_Stack_Horizontal
+      : super_t::lhs_t::OPERATOR_2_Stack_Vertical;
+  const unsigned int threshold;
+  Array2D_Operator_Stack(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs),
+      threshold(rhs_horizontal ? _lhs.columns() : _lhs.rows()) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    if(rhs_horizontal){
+      return (column < threshold) ? super_t::lhs(row, column) : super_t::rhs(row, column - threshold);
+    }else{
+      return (row < threshold) ? super_t::lhs(row, column) : super_t::rhs(row - threshold, column);
+    }
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
     class T2, class Array2D_Type2, class ViewType2>
 struct Array2D_Operator_Multiply_by_Matrix<
       Matrix_Frozen<T, Array2D_Type, ViewType>,
@@ -3620,6 +3708,27 @@ private:
     struct check_op_t<void, void, U> {
       // active when both left and right hand side terms are none operator
       // This may be overwritten by (M * M) if its MatrixBuilder specialization exists
+      typedef typename MatrixBuilder<LHS_T>
+          ::template view_apply_t<ViewType>::applied_t res_t;
+    };
+    typedef typename check_op_t<>::res_t mat_t;
+  };
+  template <class LHS_T, class RHS_T, bool rhs_horizontal>
+  struct unpack_op_t<Array2D_Operator_Stack<LHS_T, RHS_T, rhs_horizontal> > { // (H/V, M, M)
+    template <
+        class OperatorT_L = typename LHS_T::template OperatorProperty<>::operator_t,
+        class OperatorT_R = typename RHS_T::template OperatorProperty<>::operator_t,
+        class U = void>
+    struct check_op_t {
+      typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Stack<
+          typename MatrixBuilder<LHS_T>::assignable_t::frozen_t,
+          typename MatrixBuilder<RHS_T>::assignable_t::frozen_t,
+          rhs_horizontal> >, ViewType> res_t;
+    };
+    template <class U>
+    struct check_op_t<void, void, U> {
+      // active when both left and right hand side terms are none operator
+      // This may be overwritten by (H/V, M, M) if its MatrixBuilder specialization exists
       typedef typename MatrixBuilder<LHS_T>
           ::template view_apply_t<ViewType>::applied_t res_t;
     };
@@ -4088,45 +4197,6 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
         throw std::invalid_argument("Incorrect size");
       }
       return Matrix_Frozen<T2, Array2D_Type2, ViewType2>::builder_t::copy_value(*this, matrix);
-    }
-
-    template <class T2, class Array2D_Type2, class ViewType2>
-    static typename builder_t::assignable_t hstack(
-        const unsigned int &length,
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> *matrices) {
-      unsigned int c_sum(0), r_max(0);
-      for(unsigned int i(0); i < length; ++i){
-        c_sum += matrices[i].columns();
-        if(r_max < matrices[i].rows()){
-          r_max = matrices[i].rows();
-        }
-      }
-      typename builder_t::assignable_t res(blank(r_max, c_sum));
-      res.clear();
-      for(unsigned int i(0), c_offset(0); i < length; ++i){
-        res.partial(matrices[i].rows(), matrices[i].columns(), 0, c_offset).replace(matrices[i], false);
-        c_offset += matrices[i].columns();
-      }
-      return res;
-    }
-    template <class T2, class Array2D_Type2, class ViewType2>
-    static typename builder_t::assignable_t vstack(
-        const unsigned int &length,
-        const Matrix_Frozen<T2, Array2D_Type2, ViewType2> *matrices) {
-      unsigned int r_sum(0), c_max(0);
-      for(unsigned int i(0); i < length; ++i){
-        r_sum += matrices[i].rows();
-        if(c_max < matrices[i].columns()){
-          c_max = matrices[i].columns();
-        }
-      }
-      typename builder_t::assignable_t res(blank(r_sum, c_max));
-      res.clear();
-      for(unsigned int i(0), r_offset(0); i < length; ++i){
-        res.partial(matrices[i].rows(), matrices[i].columns(), r_offset, 0).replace(matrices[i], false);
-        r_offset += matrices[i].rows();
-      }
-      return res;
     }
 
     using super_t::isSquare;
