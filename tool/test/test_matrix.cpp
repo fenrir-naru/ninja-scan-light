@@ -912,12 +912,22 @@ BOOST_AUTO_TEST_CASE(vstack){
 
 BOOST_AUTO_TEST_CASE(det){
   prologue_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU2(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_TEST_MESSAGE("det:" << A->determinant());
+
+  matrix_t::partial_t Ap(A->partial(A->rows() - 1, A->columns() - 1, 1, 1));
+  BOOST_CHECK_SMALL(Ap.determinant_minor() - Ap.determinant_LU(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(Ap.determinant_minor() - Ap.determinant_LU2(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(Ap.determinant_minor() - Ap.determinant(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_TEST_MESSAGE("det:" << Ap.determinant());
 
   assign_unsymmetric();
   assign_intermediate_zeros();
   prologue_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU2(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_TEST_MESSAGE("det:" << A->determinant());
 }

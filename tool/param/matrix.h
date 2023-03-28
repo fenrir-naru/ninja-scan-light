@@ -2371,7 +2371,8 @@ template <class U> struct check_operator_t<tag_name, U> \
     bool isUnitary() const noexcept {return isUnitary_base(T(0));}
 
     /**
-     * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
+     * Generate a matrix in which i-th row and j-th column are removed
+     * to calculate first-minor (第一小行列式、1行1列ずつ取り除いた行列の行列式)
      *
      * @param row Row to be removed
      * @param column Column to be removed
@@ -2414,7 +2415,7 @@ template <class U> struct check_operator_t<tag_name, U> \
     }
 
     /**
-     * Calculate determinant by using minor
+     * Calculate determinant by using first-minor (slow algorithm)
      *
      * @param do_check Whether check size property. The default is true.
      * @return Determinant
@@ -2422,18 +2423,27 @@ template <class U> struct check_operator_t<tag_name, U> \
      */
     T determinant_minor(const bool &do_check = true) const {
       if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
-      if(rows() == 1){
-        return (*this)(0, 0);
-      }else{
-        T sum(0);
-        T sign(1);
-        for(unsigned int i(0), i_end(rows()); i < i_end; i++){
-          if((*this)(i, 0) != T(0)){
-            sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant(false)) * sign;
+      switch(rows()){
+        case 1: return (*this)(0, 0);
+        case 2: return (*this)(0, 0) * (*this)(1, 1) - (*this)(0, 1) * (*this)(1, 0);
+        case 3:
+          return (*this)(0, 0) * (*this)(1, 1) * (*this)(2, 2)
+              + (*this)(0, 1) * (*this)(1, 2) * (*this)(2, 0)
+              + (*this)(0, 2) * (*this)(1, 0) * (*this)(2, 1)
+              - (*this)(0, 0) * (*this)(1, 2) * (*this)(2, 1)
+              - (*this)(0, 1) * (*this)(1, 0) * (*this)(2, 2)
+              - (*this)(0, 2) * (*this)(1, 1) * (*this)(2, 0);
+        default: {
+          T sum(0);
+          T sign(1);
+          for(unsigned int i(0), i_end(rows()); i < i_end; i++){
+            if((*this)(i, 0) != T(0)){
+              sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant_minor(false)) * sign;
+            }
+            sign = -sign;
           }
-          sign = -sign;
+          return sum;
         }
-        return sum;
       }
     }
 
@@ -2510,6 +2520,57 @@ template <class U> struct check_operator_t<tag_name, U> \
         }
       }
       return LU;
+    }
+
+    void decomposeLUP_property(
+        unsigned int &rank, T &determinant, unsigned int &pivot_num,
+        const bool &do_check = true) const {
+      // Algorithm is the same as decomposeLUP, but L matrix is not calculated
+      // because rank/determinant can be obtained throught calculation of lower triangular of U.
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
+
+      typename builder_t::assignable_t U(this->operator typename builder_t::assignable_t()); // copy
+      const unsigned int rows_(rows());
+      pivot_num = 0;
+      determinant = T(1);
+
+      // apply Gaussian elimination
+      for(unsigned int i(0); i < rows_; ++i){
+        if(U(i, i) == T(0)){ // check (i, i) is not zero
+          unsigned int j(i);
+          do{
+            if(++j == rows_){
+              rank = i;
+              return;
+            }
+          }while(U(i, j) == T(0));
+          for(unsigned int i2(i); i2 < rows_; ++i2){ // swap i-th and j-th columns
+            T temp(U(i2, i));
+            U(i2, i) = U(i2, j);
+            U(i2, j) = temp;
+          }
+          pivot_num++;
+        }
+#if 0
+        for(unsigned int i2(i + 1); i2 < rows_; ++i2){
+          T L_i2_i(U(i2, i) / U(i, i)); // equivalent to L(i2, i) = U(i2, i) / U(i, i); skip U(i2, i) = T(0);
+          for(unsigned int j2(i + 1); j2 < rows_; ++j2){
+            U(i2, j2) -= L_i2_i * U(i, j2);
+          }
+        }
+        determinant *= U(i, i);
+#else
+        // integer preservation algorithm (Bareiss)
+        for(unsigned int i2(i + 1); i2 < rows_; ++i2){
+          for(unsigned int j2(i + 1); j2 < rows_; ++j2){
+            ((U(i2, j2) *= U(i, i)) -= U(i2, i) * U(i, j2)) /= determinant;
+          }
+        }
+        determinant = U(i, i);
+#endif
+      }
+      rank = rows_;
+      determinant *= ((pivot_num % 2 == 0) ? 1 : -1);
     }
 
     typename builder_t::template resize_t<0, 0, 1, 2>::assignable_t decomposeLU(
@@ -2599,8 +2660,66 @@ template <class U> struct check_operator_t<tag_name, U> \
       return res;
     }
 
+    /**
+     * Calculate determinant by using LU decomposition (faster algorithm)
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return Determinant
+     */
+    T determinant_LU2(const bool &do_check = true) const {
+      unsigned int pivot_num, rank;
+      T res;
+      decomposeLUP_property(rank, res, pivot_num, do_check);
+      if(rank != rows()){
+        throw std::runtime_error("LU decomposition cannot be performed");
+      }
+      return res;
+    }
+
     T determinant(const bool &do_check = true) const {
-      return determinant_LU(do_check);
+      return determinant_LU2(do_check);
+    }
+
+    /**
+     * Calculate cofactor (余因子), i.e.,
+     * determinant of smaller square matrix removing specified one row and column
+     * fro original matrix.
+     *
+     * @param row
+     * @param column
+     * @param do_check check size (true) or not (false). The default is true.
+     * @return Cofactor
+     */
+    T cofactor(
+        const unsigned int &row, const unsigned int &column,
+        const bool &do_check = true) const {
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
+      if((row >= rows()) || (column >= columns())){
+        throw std::out_of_range("incorrect row and/or column indices");
+      }
+      // circular.determinant is equivalent to matrix_for_minor.determinant
+      // in terms of absolute values (polarity should be taken care of.)
+      //return matrix_for_minor(row, column).determinant(false) * (((row + column) % 2 == 0) ? 1 : -1);
+      return circular(row + 1, column + 1, rows() - 1, columns() - 1).determinant(false)
+          * (((rows() % 2 == 1) || ((row + column) % 2 == 0)) ? 1 : -1);
+    }
+
+    /**
+     * Return adjugate (余因子行列), i.e. transposed cofactor matrix.
+     * X * adjugate(X) = det(X) I
+     *
+     * @param do_check check size (true) or not (false). The default is true.
+     * @return Adjugate
+     */
+    typename builder_t::assignable_t adjugate(const bool &do_check = true) const {
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
+      typename builder_t::assignable_t res(builder_t::assignable_t::blank(rows(), columns()));
+      for(unsigned int i(0), i_end(rows()); i < i_end; ++i){
+        for(unsigned int j(0), j_end(columns()); j < j_end; ++j){
+          res(i, j) = cofactor(j, i, false);
+        }
+      }
+      return res;
     }
 
     /**
@@ -2642,16 +2761,9 @@ template <class U> struct check_operator_t<tag_name, U> \
 
 #if 0
         // Cramer (slow); クラメール
-        mat_t result(rows(), columns());
-        T det;
-        if((det = mat.determinant()) == 0){throw std::runtime_error("Operation void!!");}
-        const unsigned int i_end(mat.rows()), j_end(mat.columns());
-        for(unsigned int i(0); i < i_end; i++){
-          for(unsigned int j(0); j < j_end; j++){
-            result(i, j) = mat.matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
-          }
-        }
-        return result.transpose() / det;
+        T det(mat.determinant(false));
+        if(det == T(0)){throw std::runtime_error("Operation void!!");}
+        return mat.adjugate() / det;
 #endif
 
         // Gaussian elimination; ガウス消去法
