@@ -1235,7 +1235,7 @@ MAKE_TO_S(Matrix_Frozen)
   void eigen(
       Matrix<ctype, Array2D_Dense<ctype > > &output_V, 
       Matrix<ctype, Array2D_Dense<ctype > > &output_D) const {
-    typedef typename Matrix_Frozen<type, storage, view >::complex_t::m_t cmat_t;
+    typedef Matrix<ctype, Array2D_Dense<ctype > > cmat_t;
     cmat_t VD($self->eigen());
     output_V = VD.partial($self->rows(), $self->rows()).copy();
     cmat_t D($self->rows(), $self->rows());

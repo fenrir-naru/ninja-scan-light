@@ -521,6 +521,69 @@ template <class LHS_T, class RHS_T, bool rhs_horizontal>
 struct Array2D_Operator_Stack;
 
 
+template <class T>
+struct MatrixValue {
+  template <class T2>
+  struct check_complex_t {
+    static const bool hit = false;
+    typedef T2 r_t;
+    typedef Complex<T2> c_t;
+  };
+  template <class T2>
+  struct check_complex_t<Complex<T2> > {
+    static const bool hit = true;
+    typedef T2 r_t;
+    typedef Complex<T2> c_t;
+  };
+  static const bool is_complex = check_complex_t<T>::hit;
+  typedef typename check_complex_t<T>::r_t real_t;
+  typedef typename check_complex_t<T>::c_t complex_t;
+  static real_t get_real(const real_t &v) noexcept {
+    return v;
+  }
+  static real_t get_real(const complex_t &v) noexcept {
+    return v.real();
+  }
+  static complex_t get_sqrt(const real_t &v) noexcept {
+    return (v >= 0) ? complex_t(std::sqrt(v)) : complex_t(0, std::sqrt(-v));
+  }
+  static complex_t get_sqrt(const complex_t &v) noexcept {
+    return v.sqrt();
+  }
+  static real_t get_abs(const real_t &v) noexcept {
+    return std::abs(v);
+  }
+  static real_t get_abs(const complex_t &v) noexcept {
+    return v.abs();
+  }
+  static real_t get_abs2(const real_t &v) noexcept {
+    return v * v;
+  }
+  static real_t get_abs2(const complex_t &v) noexcept {
+    return v.abs2();
+  }
+  static bool is_nan_or_infinite(const real_t &v) noexcept {
+#if defined(_MSC_VER)
+    return _isnan(v) || !_finite(v);
+#else
+    return std::isnan(v) || !std::isfinite(v);
+#endif
+  }
+  static bool is_nan_or_infinite(const complex_t &v) noexcept {
+    return is_nan_or_infinite(v.real()) || is_nan_or_infinite(v.imaginary());
+  }
+
+  struct wide_zero_t {
+    const real_t &width;
+    const real_t width_abs2;
+    wide_zero_t(const real_t &width_) : width(width_), width_abs2(width_ * width_) {}
+    bool operator==(const real_t &v) const noexcept {return get_abs(v) <= width;}
+    bool operator==(const complex_t &v) const noexcept {return get_abs2(v) <= width_abs2;}
+    bool operator!=(const T &v) const noexcept {return !operator==(v);}
+  };
+};
+
+
 template <class BaseView = void>
 struct MatrixViewBase {
   typedef MatrixViewBase self_t;
@@ -1143,12 +1206,12 @@ struct MatrixBuilder_ViewTransformerBase<
         typename MatrixViewBuilder<
           typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
-  template <class T2 = T>
+  template <bool is_complex = MatrixValue<T>::is_complex, class U = void>
   struct check_complex_t {
     typedef MatrixT<T, Array2D_Type, ViewType> conjugate_t;
   };
-  template <class T2>
-  struct check_complex_t<Complex<T2> > {
+  template <class U>
+  struct check_complex_t<true, U> {
     typedef MatrixT<T, Array2D_Type, typename view_builder_t::conjugate_t> conjugate_t;
   };
   typedef typename check_complex_t<>::conjugate_t conjugate_t;
@@ -1248,6 +1311,7 @@ class Matrix_Frozen {
     typedef ViewType view_t;
     typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
     typedef self_t frozen_t;
+    typedef MatrixValue<T> value_t;
 
     typedef MatrixBuilder<self_t> builder_t;
 
@@ -2874,76 +2938,14 @@ template <class U> struct check_operator_t<tag_name, U> \
       return this->operator typename builder_t::assignable_t().pivotMerge(row, column, matrix);
     }
 
-    struct complex_t {
-      template <class T2>
-      struct check_t {
-        static const bool hit = false;
-        typedef T2 r_t;
-        typedef Complex<T2> c_t;
-      };
-      template <class T2>
-      struct check_t<Complex<T2> > {
-        static const bool hit = true;
-        typedef T2 r_t;
-        typedef Complex<T2> c_t;
-      };
-      static const bool is_complex = check_t<T>::hit;
-      typedef typename check_t<T>::c_t v_t;
-      typedef typename builder_t::template cast_t<v_t>::assignable_t m_t;
-      typedef typename check_t<T>::r_t real_t;
-      static real_t get_real(const real_t &v) noexcept {
-        return v;
-      }
-      static real_t get_real(const v_t &v) noexcept {
-        return v.real();
-      }
-      static v_t get_sqrt(const real_t &v) noexcept {
-        return (v >= 0) ? v_t(std::sqrt(v)) : v_t(0, std::sqrt(-v));
-      }
-      static v_t get_sqrt(const v_t &v) noexcept {
-        return v.sqrt();
-      }
-      static real_t get_abs(const real_t &v) noexcept {
-        return std::abs(v);
-      }
-      static real_t get_abs(const v_t &v) noexcept {
-        return v.abs();
-      }
-      static real_t get_abs2(const real_t &v) noexcept {
-        return v * v;
-      }
-      static real_t get_abs2(const v_t &v) noexcept {
-        return v.abs2();
-      }
-      static bool is_nan_or_infinite(const real_t &v) noexcept {
-#if defined(_MSC_VER)
-        return _isnan(v) || !_finite(v);
-#else
-        return std::isnan(v) || !std::isfinite(v);
-#endif
-      }
-      static bool is_nan_or_infinite(const v_t &v) noexcept {
-        return is_nan_or_infinite(v.real())
-            || is_nan_or_infinite(v.imaginary());
-      }
-
-      struct wide_zero_t {
-        const real_t &width;
-        const real_t width_abs2;
-        wide_zero_t(const real_t &width_) : width(width_), width_abs2(width_ * width_) {}
-        bool operator!=(const real_t &v) const noexcept {return get_abs(v) > width;}
-        bool operator!=(const v_t &v) const noexcept {return get_abs2(v) > width_abs2;}
-      };
-    };
-
-    Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>
+    Matrix_Frozen<typename value_t::complex_t, Array2D_Type, ViewType>
         complex() const noexcept {
-      return Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>(*this);
+      return Matrix_Frozen<typename value_t::complex_t, Array2D_Type, ViewType>(*this);
     }
 
 #define make_wide_predicate(func_name) \
-bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const noexcept { \
-  return is ## func_name ## _base(typename complex_t::wide_zero_t(acceptable_delta)); \
+bool is ## func_name(const typename value_t::real_t &acceptable_delta) const noexcept { \
+  return is ## func_name ## _base(typename value_t::wide_zero_t(acceptable_delta)); \
 }
     make_wide_predicate(Diagonal);
     make_wide_predicate(LowerTriangular);
@@ -2961,17 +2963,17 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
      *
      * @return tr(A* * A)
      */
-    typename complex_t::real_t norm2F() const noexcept {
-      // return complex_t::get_real((adjoint() * (*this)).trace(false));
+    typename value_t::real_t norm2F() const noexcept {
+      // return value_t::get_real((adjoint() * (*this)).trace(false));
       /* The above is as definition, however, double calculation may occur
        * when (*this) is a expression matrix such as multiplication.
        * To avoid such overhead, its expansion form to take summation of
        * abs(element)**2 is used.
        */
-      typename complex_t::real_t res(0);
+      typename value_t::real_t res(0);
       for(unsigned int i(0), i_end(rows()); i < i_end; ++i){
         for(unsigned int j(0), j_end(columns()); j < j_end; ++j){
-          res += complex_t::get_abs2((*this)(i, j));
+          res += value_t::get_abs2((*this)(i, j));
         }
       }
       return res;
@@ -2985,15 +2987,15 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
      * @return 2nd power of Frobenius norm of x
      */
     template <class Array2D_Type2, class ViewType2>
-    static typename complex_t::real_t householder_vector(
+    static typename value_t::real_t householder_vector(
         Matrix<T, Array2D_Type2, ViewType2> &x){
       // x = {(0,0), (1,0), ..., (N-1,0)}^{T}
 
-      typename complex_t::real_t x_abs2(x.norm2F());
+      typename value_t::real_t x_abs2(x.norm2F());
       if(x_abs2 == 0){return x_abs2;}
 
-      typename complex_t::real_t x_abs(std::sqrt(x_abs2));
-      typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
+      typename value_t::real_t x_abs(std::sqrt(x_abs2));
+      typename value_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
       T rho(x(0, 0) / x_top_abs * -1);
       // if x(0,0) is real, then rho = -sign(x(0,0)),
       // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
@@ -3004,7 +3006,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
       //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
       //   = (x_abs2 + x_top_abs * x_abs) * 2
       x(0, 0) -= rho * x_abs;
-      typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
+      typename value_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
 
       return x_dash_abs2;
     }
@@ -3051,7 +3053,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
           // x_0 = {(0,0), (1,0), ..., (N-1,0)}^{T}, (N-1)*1
           // x_1 = {(1,1), (2,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-          typename complex_t::real_t x_abs2(householder_vector(x));
+          typename value_t::real_t x_abs2(householder_vector(x));
           // x_0 <- {(0,0) - \rho |x|, (1,0), ..., (N-1,0)}^{T}
           // x_1 <- {(1,1) - \rho |x|, (2,1), ..., (N-1,1)}^{T}, ...
           if(x_abs2 == 0){continue;}
@@ -3112,7 +3114,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
       }
 
       bool real_symmetric(
-          (!complex_t::is_complex)
+          (!value_t::is_complex)
           && ((opt.mat_prop == opt_hessenberg_t::SYMMETRIC)
             || ((opt.mat_prop == opt_hessenberg_t::NOT_CHECKED) && isSymmetric())));
 
@@ -3125,7 +3127,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
         // x_0 = {(1,0), (2,0), ..., (N-1,0)}^{T}, (N-1)*1
         // x_1 = {(2,1), (3,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-        typename complex_t::real_t x_abs2(householder_vector(x));
+        typename value_t::real_t x_abs2(householder_vector(x));
         // x_0 <- {(1,0) - \rho |x|, (2,0), ..., (N-1,0)}^{T}
         // x_1 <- {(2,1) - \rho |x|, (3,1), ..., (N-1,1)}^{T}, ...
         if(x_abs2 == 0){continue;}
@@ -3184,11 +3186,11 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
      */
     void eigen22(
         const unsigned int &row, const unsigned int &column,
-        typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
+        typename value_t::complex_t &upper, typename value_t::complex_t &lower) const {
       const T
           &a((*this)(row, column)),     &b((*this)(row, column + 1)),
           &c((*this)(row + 1, column)), &d((*this)(row + 1, column + 1));
-      typename complex_t::v_t root(complex_t::get_sqrt((a - d) * (a - d) + b * c * 4));
+      typename value_t::complex_t root(value_t::get_sqrt((a - d) * (a - d) + b * c * 4));
       upper = ((root + a + d) / 2);
       lower = ((-root + a + d) / 2);
     }
@@ -3197,8 +3199,8 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
       enum {
         NOT_CHECKED, SQUARE,
       } mat_prop;
-      typename complex_t::real_t threshold_abs; ///< Absolute error to be used for convergence determination
-      typename complex_t::real_t threshold_rel; ///< Relative error to be used for convergence determination
+      typename value_t::real_t threshold_abs; ///< Absolute error to be used for convergence determination
+      typename value_t::real_t threshold_rel; ///< Relative error to be used for convergence determination
       unsigned int inverse_power_max_iter;
 
       opt_eigen_t()
@@ -3219,10 +3221,12 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename MatrixBuilder<typename complex_t::m_t>::template resize_t<0, 1>::assignable_t eigen(
+    typename MatrixBuilder< // a.k.a. (assignable complex matrix)(r, c+1)
+          typename builder_t::template cast_t<typename value_t::complex_t>::assignable_t>
+        ::template resize_t<0, 1>::assignable_t eigen(
         const opt_eigen_t &opt = opt_eigen_t()) const {
 
-      typedef typename complex_t::m_t cmat_t;
+      typedef typename builder_t::template cast_t<typename value_t::complex_t>::assignable_t cmat_t;
       typedef typename MatrixBuilder<cmat_t>::template resize_t<0, 1, 1, 0>::assignable_t cvec_t;
       typedef typename MatrixBuilder<cmat_t>::template resize_t<0, 1>::assignable_t res_t;
 
@@ -3310,7 +3314,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
             // caution: omega size is 3x3 if i in [0, m-2), however, 2x2 when i == m-2
           }
 
-          typename complex_t::real_t omega_abs2(householder_vector(omega));
+          typename value_t::real_t omega_abs2(householder_vector(omega));
           if(omega_abs2 == 0){continue;}
           //std::cout << "omega_abs(" << m << ") " << omega_abs << std::endl;
 
@@ -3346,23 +3350,23 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
         }
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 
-        if(complex_t::is_nan_or_infinite(A(m-1,m-2))){
+        if(value_t::is_nan_or_infinite(A(m-1,m-2))){
           throw std::runtime_error("eigenvalues calculation failed");
         }
 
         // Convergence test; Žû‘©”»’è
-        typename complex_t::real_t
-            A_m2_abs(complex_t::get_abs(A(m-2, m-2))),
-            A_m1_abs(complex_t::get_abs(A(m-1, m-1)));
-        typename complex_t::real_t epsilon(opt.threshold_abs
+        typename value_t::real_t
+            A_m2_abs(value_t::get_abs(A(m-2, m-2))),
+            A_m1_abs(value_t::get_abs(A(m-1, m-1)));
+        typename value_t::real_t epsilon(opt.threshold_abs
           + opt.threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
 
         //std::cout << "epsil(" << m << ") " << epsilon << std::endl;
 
-        if(complex_t::get_abs(A(m-1, m-2)) < epsilon){
+        if(value_t::get_abs(A(m-1, m-2)) < epsilon){
           --m;
           lambda(m) = A(m, m);
-        }else if(complex_t::get_abs(A(m-2, m-3)) < epsilon){
+        }else if(value_t::get_abs(A(m-2, m-3)) < epsilon){
           A.eigen22(m-2, m-2, lambda(m-1), lambda(m-2));
           m -= 2;
         }
@@ -3400,8 +3404,8 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
          * http://www.nrbook.com/a/bookcpdf/c11-7.pdf
          * is also utilized in case some eigenvalues are identical.
          */
-        typename complex_t::v_t approx_lambda(lambda(j));
-        approx_lambda += complex_t::get_abs(approx_lambda) * 1E-4; // 0.01%
+        typename value_t::complex_t approx_lambda(lambda(j));
+        approx_lambda += value_t::get_abs(approx_lambda) * 1E-4; // 0.01%
         typename MatrixBuilder<cmat_t>::template resize_t<0, 0, 1, 2>::assignable_t
             A_C_lambda_LU((A_.complex() - approx_lambda).decomposeLU(false));
 
@@ -3410,8 +3414,8 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
         for(unsigned int loop(0); true; loop++){
           cvec_t target_x_new(
               A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
-          typename complex_t::v_t mu((target_x_new.adjoint() * target_x)(0, 0)); // inner product
-          typename complex_t::real_t v2(target_x_new.norm2F());
+          typename value_t::complex_t mu((target_x_new.adjoint() * target_x)(0, 0)); // inner product
+          typename value_t::real_t v2(target_x_new.norm2F());
           target_x.replace(target_x_new / std::sqrt(v2), false);
           //std::cout << j << ": " << target_x.transpose() << ", " << mu << ", " << v2 << std::endl;
           if(std::abs(mu.abs2() / v2 - 1) < opt.threshold_abs){
@@ -3442,7 +3446,7 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
 #if 0
       // Normalization(³‹K‰») is skipable due to transform matrix is unitary
       for(unsigned int j(0), j_end(x.columns()); j < j_end; j++){
-        result.columnVector(j) /= complex_t::get_sqrt(result.columnVector(j).norm2F());
+        result.columnVector(j) /= value_t::get_sqrt(result.columnVector(j).norm2F());
       }
 #endif
 #undef lambda
@@ -3486,10 +3490,11 @@ bool is ## func_name(const typename complex_t::real_t &acceptable_delta) const n
      * Calculate square root of a matrix
      *
      * @param opt option to calculate eigenvalue/eigenvector
-     * @return square root
+     * @return square root (assignable complex matrix)
      * @see eigen(const opt_eigen_t &)
      */
-    typename complex_t::m_t sqrt(const opt_eigen_t &opt = opt_eigen_t()) const {
+    typename builder_t::template cast_t<typename value_t::complex_t>::assignable_t sqrt(
+        const opt_eigen_t &opt = opt_eigen_t()) const {
       return sqrt(eigen(opt));
     }
 
