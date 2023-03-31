@@ -1390,26 +1390,23 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 %typemap(check) const unsigned int &;
 %enddef
 
-%extend Matrix_Frozen {
-#define make_predicate(name) \
-bool is ## name(const double &acceptable_delta) const noexcept { \
-  return self->is ## name(acceptable_delta); \
-}
-  make_predicate(Diagonal);
-  make_predicate(LowerTriangular);
-  make_predicate(UpperTriangular);
-  make_predicate(Symmetric);
-  make_predicate(Hermitian);
-  make_predicate(SkewSymmetric);
-  make_predicate(Normal);
-  make_predicate(Orthogonal);
-  make_predicate(Unitary);
-#undef make_predicate
-};
 INSTANTIATE_MATRIX(double, D);
 INSTANTIATE_MATRIX_EIGEN(double, Complex<double>);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);
 INSTANTIATE_MATRIX_EIGEN(Complex<double>, Complex<double>);
+
+%rename("tolerance=") set_tolerance;
+%rename("tolerance") get_tolerance;
+%inline %{
+double set_tolerance(const double &width){
+  MatrixValue<double>::zero = width;
+  MatrixValue<Complex<double> >::zero = width;
+  return width;
+}
+double get_tolerance(){
+  return set_tolerance(MatrixValue<double>::zero.width);
+}
+%}
 
 #undef INSTANTIATE_MATRIX_FUNC
 #undef INSTANTIATE_MATRIX_TRANSPOSE

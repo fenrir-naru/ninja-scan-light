@@ -522,6 +522,9 @@ struct Array2D_Operator_Stack;
 
 
 template <class T>
+struct MatrixValue_Special;
+
+template <class T>
 struct MatrixValue {
   template <class T2>
   struct check_complex_t {
@@ -573,16 +576,34 @@ struct MatrixValue {
     return is_nan_or_infinite(v.real()) || is_nan_or_infinite(v.imaginary());
   }
 
-  struct wide_zero_t {
-    const real_t &width;
-    const real_t width_abs2;
-    wide_zero_t(const real_t &width_) : width(width_), width_abs2(width_ * width_) {}
-    bool operator==(const real_t &v) const noexcept {return get_abs(v) <= width;}
-    bool operator==(const complex_t &v) const noexcept {return get_abs2(v) <= width_abs2;}
+  static typename MatrixValue_Special<T>::zero_t zero; // System-wise zero
+};
+
+template <class T>
+struct MatrixValue_Special {
+  typedef MatrixValue<T> v_t;
+  struct zero_t {
+    typename v_t::real_t width, width_abs2;
+    zero_t(const typename v_t::real_t &width_)
+        : width(v_t::get_abs(width_)), width_abs2(v_t::get_abs2(width_)) {}
+    zero_t &operator=(const typename v_t::real_t &width_) {
+      width = v_t::get_abs(width_);
+      width_abs2 = v_t::get_abs2(width_);
+      return *this;
+    }
+    bool operator==(const typename v_t::real_t &v) const noexcept {return v_t::get_abs(v) <= width;}
+    bool operator==(const typename v_t::complex_t &v) const noexcept {return v_t::get_abs2(v) <= width_abs2;}
     bool operator!=(const T &v) const noexcept {return !operator==(v);}
   };
 };
 
+template <class T>
+typename MatrixValue_Special<T>::zero_t MatrixValue<T>::zero = 0;
+
+#if 0 // If exact zero is required, then specialization resolves it.
+template <>
+struct MatrixValue_Special<double> {typedef double zero_t;};
+#endif
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -1584,7 +1605,7 @@ class Matrix_Frozen {
       const unsigned int i_end(rows()), j_end(columns());
       for(unsigned int i(0); i < i_end; i++){
         for(unsigned int j(0); j < j_end; j++){
-          if((*this)(i, j) != matrix(i, j)){
+          if(value_t::zero != ((*this)(i, j) - matrix(i, j))){
             return false;
           }
         }
@@ -1676,38 +1697,31 @@ class Matrix_Frozen {
       }
       return true;
     }
-
-    template <class T2>
-    bool isDiagonal_base(const T2 &v) const noexcept {
-      return isSquare() && isEqual_Block(v, true, true);
-    }
-    template <class T2>
-    bool isLowerTriangular_base(const T2 &v) const noexcept {
-      return isSquare() && isEqual_Block(v, true, false);
-    }
-    template <class T2>
-    bool isUpperTriangular_base(const T2 &v) const noexcept {
-      return isSquare() && isEqual_Block(v, false, true);
-    }
   public:
     /**
      * Test whether matrix is diagonal
      *
      * @return true when diagonal matrix, otherwise false.
      */
-    bool isDiagonal() const noexcept {return isDiagonal_base(T(0));}
+    bool isDiagonal() const noexcept {
+      return isSquare() && isEqual_Block(value_t::zero, true, true);
+    }
     /**
      * Test whether matrix is lower triangular
      *
      * @return true when lower triangular matrix, otherwise false.
      */
-    bool isLowerTriangular() const noexcept {return isLowerTriangular_base(T(0));}
+    bool isLowerTriangular() const noexcept {
+      return isSquare() && isEqual_Block(value_t::zero, true, false);
+    }
     /**
      * Test whether matrix is upper triangular
      *
      * @return true when upper triangular matrix, otherwise false.
      */
-    bool isUpperTriangular() const noexcept {return isUpperTriangular_base(T(0));}
+    bool isUpperTriangular() const noexcept {
+      return isSquare() && isEqual_Block(value_t::zero, false, true);
+    }
 
     typedef typename builder_t::transpose_t transpose_t;
     /**
@@ -2204,38 +2218,30 @@ class Matrix_Frozen {
       return Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::generate(*this, matrix);
     }
 
-  protected:
-    template <class T2>
-    bool isSymmetric_base(const T2 &v) const noexcept {
-      return isSquare() && ((*this) - transpose()).isEqual_Block(v);
-    }
-    template <class T2>
-    bool isHermitian_base(const T2 &v) const noexcept {
-      return isSquare() && ((*this) - adjoint()).isEqual_Block(v);
-    }
-    template <class T2>
-    bool isSkewSymmetric_base(const T2 &v) const noexcept {
-      return isSquare() && ((*this) + transpose()).isEqual_Block(v);
-    }
-  public:
     /**
      * Test whether matrix is symmetric
      *
      * @return true when symmetric, otherwise false.
      */
-    bool isSymmetric() const noexcept {return isSymmetric_base(T(0));}
+    bool isSymmetric() const noexcept {
+      return isSquare() && ((*this) - transpose()).isEqual_Block(value_t::zero);
+    }
     /**
      * Test whether matrix is Hermitian
      *
      * @return true when Hermitian matrix, otherwise false.
      */
-    bool isHermitian() const noexcept {return isHermitian_base(T(0));}
+    bool isHermitian() const noexcept {
+      return isSquare() && ((*this) - adjoint()).isEqual_Block(value_t::zero);
+    }
     /**
      * Test whether matrix is skew-symmetric
      *
      * @return true when skew-symmetric matrix, otherwise false.
      */
-    bool isSkewSymmetric() const noexcept {return isSkewSymmetric_base(T(0));}
+    bool isSkewSymmetric() const noexcept {
+      return isSquare() && ((*this) + transpose()).isEqual_Block(value_t::zero);
+    }
 
 
     template <class LHS_T, class RHS_T>
@@ -2396,43 +2402,35 @@ template <class U> struct check_operator_t<tag_name, U> \
       return Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
     }
 
-  protected:
-    template <class T2>
-    bool isNormal_base(const T2 &v) const noexcept {
-      return isSquare()
-          && ((*this) * adjoint() - adjoint() * (*this)).isEqual_Block(v, true, false, true);
-    }
-    template <class T2>
-    bool isOrthogonal_base(const T2 &v) const noexcept {
-      return isSquare()
-          && ((*this) * transpose() - 1).isEqual_Block(v, true, false, true)
-          && (transpose() * (*this) - 1).isEqual_Block(v, true, false, true);
-    }
-    template <class T2>
-    bool isUnitary_base(const T2 &v) const noexcept {
-      return isSquare()
-          && ((*this) * adjoint() - 1).isEqual_Block(v, true, false, true)
-          && (adjoint() * (*this) - 1).isEqual_Block(v, true, false, true);
-    }
-  public:
     /**
      * Test whether matrix is normal
      *
      * @return true when normal matrix, otherwise false.
      */
-    bool isNormal() const noexcept {return isNormal_base(T(0));}
+    bool isNormal() const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - adjoint() * (*this)).isEqual_Block(value_t::zero, true, false, true);
+    }
     /**
      * Test whether matrix is orthogonal
      *
      * @return true when orthogonal matrix, otherwise false.
      */
-    bool isOrthogonal() const noexcept {return isOrthogonal_base(T(0));}
+    bool isOrthogonal() const noexcept {
+      return isSquare()
+          && ((*this) * transpose() - 1).isEqual_Block(value_t::zero, true, false, true)
+          && (transpose() * (*this) - 1).isEqual_Block(value_t::zero, true, false, true);
+    }
     /**
      * Test whether matrix is unitary
      *
      * @return true when unitary matrix, otherwise false.
      */
-    bool isUnitary() const noexcept {return isUnitary_base(T(0));}
+    bool isUnitary() const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - 1).isEqual_Block(value_t::zero, true, false, true)
+          && (adjoint() * (*this) - 1).isEqual_Block(value_t::zero, true, false, true);
+    }
 
     /**
      * Generate a matrix in which i-th row and j-th column are removed
@@ -2501,7 +2499,7 @@ template <class U> struct check_operator_t<tag_name, U> \
           T sum(0);
           T sign(1);
           for(unsigned int i(0), i_end(rows()); i < i_end; i++){
-            if((*this)(i, 0) != T(0)){
+            if(value_t::zero != (*this)(i, 0)){
               sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant_minor(false)) * sign;
             }
             sign = -sign;
@@ -2556,13 +2554,13 @@ template <class U> struct check_operator_t<tag_name, U> \
       }
       // apply Gaussian elimination
       for(unsigned int i(0); i < rows_; ++i){
-        if(U(i, i) == T(0)){ // check (i, i) is not zero
+        if(value_t::zero == U(i, i)){ // check (i, i) is not zero
           unsigned int j(i);
           do{
             if(++j == rows_){
               throw std::runtime_error("LU decomposition cannot be performed");
             }
-          }while(U(i, j) == T(0));
+          }while(value_t::zero == U(i, j));
           for(unsigned int i2(0); i2 < rows_; ++i2){ // swap i-th and j-th columns
             T temp(U(i2, i));
             U(i2, i) = U(i2, j);
@@ -2600,14 +2598,14 @@ template <class U> struct check_operator_t<tag_name, U> \
 
       // apply Gaussian elimination
       for(unsigned int i(0); i < rows_; ++i){
-        if(U(i, i) == T(0)){ // check (i, i) is not zero
+        if(value_t::zero == U(i, i)){ // check (i, i) is not zero
           unsigned int j(i);
           do{
             if(++j == rows_){
               rank = i;
               return;
             }
-          }while(U(i, j) == T(0));
+          }while(value_t::zero == U(i, j));
           for(unsigned int i2(i); i2 < rows_; ++i2){ // swap i-th and j-th columns
             T temp(U(i2, i));
             U(i2, i) = U(i2, j);
@@ -2826,7 +2824,7 @@ template <class U> struct check_operator_t<tag_name, U> \
 #if 0
         // Cramer (slow); ÉNÉâÉÅÅ[Éã
         T det(mat.determinant(false));
-        if(det == T(0)){throw std::runtime_error("Operation void!!");}
+        if(value_t::zero == det){throw std::runtime_error("Operation void!!");}
         return mat.adjugate() / det;
 #endif
 
@@ -2835,13 +2833,13 @@ template <class U> struct check_operator_t<tag_name, U> \
         mat_t right(getI(mat.rows()));
         const unsigned int rows_(left.rows()), columns_(left.columns());
         for(unsigned int i(0); i < rows_; i++){
-          if(left(i, i) == T(0)){
+          if(value_t::zero == left(i, i)){
             unsigned int i2(i);
             do{
               if(++i2 == rows_){
                 throw std::runtime_error("invert matrix not exist");
               }
-            }while(left(i2, i) == T(0));
+            }while(value_t::zero == left(i2, i));
             // swap i-th and i2-th rows
             for(unsigned int j(i); j < columns_; ++j){
               T temp(left(i, j));
@@ -2850,14 +2848,14 @@ template <class U> struct check_operator_t<tag_name, U> \
             }
             right.swapRows(i, i2);
           }
-          if(left(i, i) != T(1)){
+          if(value_t::zero != (left(i, i) - 1)){
             for(unsigned int j(0); j < columns_; j++){right(i, j) /= left(i, i);}
             for(unsigned int j(i+1); j < columns_; j++){left(i, j) /= left(i, i);}
             left(i, i) = T(1);
           }
           for(unsigned int k(0); k < rows_; k++){
             if(k == i){continue;}
-            if(left(k, i) != T(0)){
+            if(value_t::zero != left(k, i)){
               for(unsigned int j(0); j < columns_; j++){right(k, j) -= right(i, j) * left(k, i);}
               for(unsigned int j(i+1); j < columns_; j++){left(k, j) -= left(i, j) * left(k, i);}
               left(k, i) = T(0);
@@ -2942,21 +2940,6 @@ template <class U> struct check_operator_t<tag_name, U> \
         complex() const noexcept {
       return Matrix_Frozen<typename value_t::complex_t, Array2D_Type, ViewType>(*this);
     }
-
-#define make_wide_predicate(func_name) \
-bool is ## func_name(const typename value_t::real_t &acceptable_delta) const noexcept { \
-  return is ## func_name ## _base(typename value_t::wide_zero_t(acceptable_delta)); \
-}
-    make_wide_predicate(Diagonal);
-    make_wide_predicate(LowerTriangular);
-    make_wide_predicate(UpperTriangular);
-    make_wide_predicate(Symmetric);
-    make_wide_predicate(Hermitian);
-    make_wide_predicate(SkewSymmetric);
-    make_wide_predicate(Normal);
-    make_wide_predicate(Orthogonal);
-    make_wide_predicate(Unitary);
-#undef make_wide_predicate
 
     /**
      * Calculate the 2nd power of Frobenius norm.

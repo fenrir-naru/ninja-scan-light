@@ -190,10 +190,8 @@ BOOST_AUTO_TEST_CASE(check_symmetric){
   prologue_print();
   BOOST_TEST_MESSAGE("sym?:" << A->isSymmetric());
   BOOST_REQUIRE_EQUAL(true, A->isSymmetric());
-  BOOST_REQUIRE_EQUAL(true, A->isSymmetric(1E-8));
   BOOST_TEST_MESSAGE("sym?:" << rAiB->isSymmetric());
   BOOST_REQUIRE_EQUAL(true, rAiB->isSymmetric());
-  BOOST_REQUIRE_EQUAL(true, rAiB->isSymmetric(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_skew_symmetric){
   for(unsigned int i(0); i < A->rows(); i++){
@@ -204,32 +202,26 @@ BOOST_AUTO_TEST_CASE(check_skew_symmetric){
   prologue_print();
   BOOST_TEST_MESSAGE("skew_sym?:" << A->isSkewSymmetric());
   BOOST_REQUIRE_EQUAL(true, A->isSkewSymmetric());
-  BOOST_REQUIRE_EQUAL(true, A->isSkewSymmetric(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_upper_triangular){
   clear_elements(false, true, false);
   prologue_print();
   BOOST_TEST_MESSAGE("upper_triangular?:" << A->isUpperTriangular());
   BOOST_REQUIRE_EQUAL(true, A->isUpperTriangular());
-  BOOST_REQUIRE_EQUAL(true, A->isUpperTriangular(1E-8));
   BOOST_REQUIRE_EQUAL(false, A->isLowerTriangular());
-  BOOST_REQUIRE_EQUAL(false, A->isLowerTriangular(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_lower_triangular){
   clear_elements(true, false, false);
   prologue_print();
   BOOST_TEST_MESSAGE("lower_triangular?:" << A->isLowerTriangular());
   BOOST_REQUIRE_EQUAL(false, A->isUpperTriangular());
-  BOOST_REQUIRE_EQUAL(false, A->isUpperTriangular(1E-8));
   BOOST_REQUIRE_EQUAL(true, A->isLowerTriangular());
-  BOOST_REQUIRE_EQUAL(true, A->isLowerTriangular(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_diagonal){
   clear_elements(true, true, false);
   prologue_print();
   BOOST_TEST_MESSAGE("diagonal?:" << A->isDiagonal());
   BOOST_REQUIRE_EQUAL(true, A->isDiagonal());
-  BOOST_REQUIRE_EQUAL(true, A->isDiagonal(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_Hermitian){
   for(unsigned int i(0); i < A->rows(); i++){
@@ -240,32 +232,27 @@ BOOST_AUTO_TEST_CASE(check_Hermitian){
   BOOST_TEST_MESSAGE("rAiB:" << *rAiB);
   BOOST_TEST_MESSAGE("hermitian?:" << rAiB->isHermitian());
   BOOST_REQUIRE_EQUAL(true, rAiB->isHermitian());
-  BOOST_REQUIRE_EQUAL(true, rAiB->isHermitian(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_normal){
   prologue_print();
   BOOST_TEST_MESSAGE("normal?:" << A->isNormal());
   BOOST_REQUIRE_EQUAL(true, A->isNormal());
-  BOOST_REQUIRE_EQUAL(true, A->isNormal(1E-8));
   cmatrix_t Ac(A->complex() * Complex<content_t>(1, 1));
   BOOST_TEST_MESSAGE("Ac:" << Ac << ", Ac * adj(Ac):" << (Ac * Ac.adjoint()));
   BOOST_TEST_MESSAGE("normal?:" << Ac.isNormal());
   BOOST_REQUIRE_EQUAL(true, Ac.isNormal());
-  BOOST_REQUIRE_EQUAL(true, Ac.isNormal(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_orthogonal){
   // TODO test with practical example
   matrix_t _A(matrix_t::getI(8));
   BOOST_TEST_MESSAGE("orthogonal?:" << _A.isOrthogonal());
   BOOST_REQUIRE_EQUAL(true, _A.isOrthogonal());
-  BOOST_REQUIRE_EQUAL(true, _A.isOrthogonal(1E-8));
 }
 BOOST_AUTO_TEST_CASE(check_unitary){
   // TODO test with practical example
   cmatrix_t Ac(cmatrix_t::getI(8));
   BOOST_TEST_MESSAGE("unitary?:" << Ac.isUnitary());
   BOOST_REQUIRE_EQUAL(true, Ac.isUnitary());
-  BOOST_REQUIRE_EQUAL(true, Ac.isUnitary(1E-8));
 }
 
 BOOST_AUTO_TEST_CASE(sum){

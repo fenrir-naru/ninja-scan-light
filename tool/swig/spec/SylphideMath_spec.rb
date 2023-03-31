@@ -6,6 +6,8 @@ require 'SylphideMath.so'
 require 'matrix'
 
 shared_examples 'Matrix' do
+  let!(:tolerance){SylphideMath::tolerance}
+  after{SylphideMath::tolerance = tolerance}
   let(:params){{
     :rc => [8, 8],
     :acceptable_delta => 1E-10,
@@ -195,6 +197,7 @@ shared_examples 'Matrix' do
         }
       end
       it 'cofactor' do
+        SylphideMath::tolerance = 1E-10
         (5..8).each{|n|
           orig = mat_gen[:square].call(n)
           cmp = Matrix[*orig.to_a]
@@ -207,10 +210,12 @@ shared_examples 'Matrix' do
         }
       end
       it 'adjugate' do
+        SylphideMath::tolerance = 1E-10
         (5..8).each{|n|
           orig = mat_gen[:square].call(n)
-          cmp = Matrix[*orig.to_a]
-          expect(orig.adjugate.to_a).to eq(cmp.adjugate.to_a)
+          (Matrix[*orig.adjugate.to_a] - Matrix[*orig.to_a].adjugate).each{|v| 
+            expect(v.abs).to be < params[:acceptable_delta]
+          }
         }
       end
     end
