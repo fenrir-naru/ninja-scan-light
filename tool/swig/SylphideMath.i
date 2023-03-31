@@ -424,16 +424,15 @@ class Matrix_Frozen {
     bool isOrthogonal() const noexcept;
     bool isUnitary() const noexcept;
     
-    T trace(const bool &do_check = true) const;
+    T trace() const;
     T sum() const noexcept;
     
     // bool isLU() const noexcept
     
-    T determinant(const bool &do_check = true) const;
-    unsigned int rank(const bool &do_check = true) const;
+    T determinant() const;
+    unsigned int rank() const;
     T cofactor(
-        const unsigned int &row, const unsigned int &column,
-        const bool &do_check = true) const;
+        const unsigned int &row, const unsigned int &column) const;
 };
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
