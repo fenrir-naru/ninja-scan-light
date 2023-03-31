@@ -190,6 +190,41 @@ BOOST_AUTO_TEST_CASE(fixed_types){
   }
 
   BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Stack<
+        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Stack<
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 4> >,
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 6, 6> >,
+          true> > >,
+        Matrix_Frozen<content_t, Array2D_Fixed<content_t, 8, 8> >,
+        true> > >::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 4, 4 + 6 + 8> >::value));
+  {
+    matrix_t src[] = {gen_mat(4, 4), gen_mat(6, 6), gen_mat(8, 8)};
+    Matrix_Fixed<content_t, 4, 4 + 6 + 8> x(
+        Matrix_Fixed<content_t, 4, 4>(src[0])
+          .hstack(Matrix_Fixed<content_t, 6, 6>(src[1]))
+          .hstack(Matrix_Fixed<content_t, 8, 8>(src[2])));
+    matrix_compare(x, src[0].hstack(src[1]).hstack(src[2]));
+  }
+  BOOST_CHECK((boost::is_same<
+      Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Stack<
+        Matrix_Frozen<content_t, Array2D_Operator<content_t, Array2D_Operator_Stack<
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 4, 4> >,
+          Matrix_Frozen<content_t, Array2D_Fixed<content_t, 6, 6> >,
+          false> > >,
+        Matrix_Frozen<content_t, Array2D_Fixed<content_t, 8, 8> >,
+        false> > >::builder_t::assignable_t,
+      Matrix_Fixed<content_t, 4 + 6 + 8, 4> >::value));
+  {
+    matrix_t src[] = {gen_mat(4, 4), gen_mat(6, 6), gen_mat(8, 8)};
+    Matrix_Fixed<content_t, 4 + 6 + 8, 4> x(
+        Matrix_Fixed<content_t, 4, 4>(src[0])
+          .vstack(Matrix_Fixed<content_t, 6, 6>(src[1]))
+          .vstack(Matrix_Fixed<content_t, 8, 8>(src[2])));
+    matrix_compare(x, src[0].vstack(src[1]).vstack(src[2]));
+  }
+
+  BOOST_CHECK((boost::is_same<
       matrix_t::builder_t::template resize_t<4, 4, 0, 0>::assignable_t,
       Matrix_Fixed<content_t, 4, 4> >::value));
   BOOST_CHECK((boost::is_same<

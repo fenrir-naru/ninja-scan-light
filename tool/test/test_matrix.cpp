@@ -190,6 +190,69 @@ BOOST_AUTO_TEST_CASE(check_symmetric){
   prologue_print();
   BOOST_TEST_MESSAGE("sym?:" << A->isSymmetric());
   BOOST_REQUIRE_EQUAL(true, A->isSymmetric());
+  BOOST_TEST_MESSAGE("sym?:" << rAiB->isSymmetric());
+  BOOST_REQUIRE_EQUAL(true, rAiB->isSymmetric());
+}
+BOOST_AUTO_TEST_CASE(check_skew_symmetric){
+  for(unsigned int i(0); i < A->rows(); i++){
+    for(unsigned int j(i); j < A->columns(); j++){
+      (*A)(i, j) = -(*A)(j, i);
+    }
+  }
+  prologue_print();
+  BOOST_TEST_MESSAGE("skew_sym?:" << A->isSkewSymmetric());
+  BOOST_REQUIRE_EQUAL(true, A->isSkewSymmetric());
+}
+BOOST_AUTO_TEST_CASE(check_upper_triangular){
+  clear_elements(false, true, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("upper_triangular?:" << A->isUpperTriangular());
+  BOOST_REQUIRE_EQUAL(true, A->isUpperTriangular());
+  BOOST_REQUIRE_EQUAL(false, A->isLowerTriangular());
+}
+BOOST_AUTO_TEST_CASE(check_lower_triangular){
+  clear_elements(true, false, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("lower_triangular?:" << A->isLowerTriangular());
+  BOOST_REQUIRE_EQUAL(false, A->isUpperTriangular());
+  BOOST_REQUIRE_EQUAL(true, A->isLowerTriangular());
+}
+BOOST_AUTO_TEST_CASE(check_diagonal){
+  clear_elements(true, true, false);
+  prologue_print();
+  BOOST_TEST_MESSAGE("diagonal?:" << A->isDiagonal());
+  BOOST_REQUIRE_EQUAL(true, A->isDiagonal());
+}
+BOOST_AUTO_TEST_CASE(check_Hermitian){
+  for(unsigned int i(0); i < A->rows(); i++){
+    for(unsigned int j(i); j < A->columns(); j++){
+      (*rAiB)(i, j) = (*rAiB)(j, i).conjugate();
+    }
+  }
+  BOOST_TEST_MESSAGE("rAiB:" << *rAiB);
+  BOOST_TEST_MESSAGE("hermitian?:" << rAiB->isHermitian());
+  BOOST_REQUIRE_EQUAL(true, rAiB->isHermitian());
+}
+BOOST_AUTO_TEST_CASE(check_normal){
+  prologue_print();
+  BOOST_TEST_MESSAGE("normal?:" << A->isNormal());
+  BOOST_REQUIRE_EQUAL(true, A->isNormal());
+  cmatrix_t Ac(A->complex() * Complex<content_t>(1, 1));
+  BOOST_TEST_MESSAGE("Ac:" << Ac << ", Ac * adj(Ac):" << (Ac * Ac.adjoint()));
+  BOOST_TEST_MESSAGE("normal?:" << Ac.isNormal());
+  BOOST_REQUIRE_EQUAL(true, Ac.isNormal());
+}
+BOOST_AUTO_TEST_CASE(check_orthogonal){
+  // TODO test with practical example
+  matrix_t _A(matrix_t::getI(8));
+  BOOST_TEST_MESSAGE("orthogonal?:" << _A.isOrthogonal());
+  BOOST_REQUIRE_EQUAL(true, _A.isOrthogonal());
+}
+BOOST_AUTO_TEST_CASE(check_unitary){
+  // TODO test with practical example
+  cmatrix_t Ac(cmatrix_t::getI(8));
+  BOOST_TEST_MESSAGE("unitary?:" << Ac.isUnitary());
+  BOOST_REQUIRE_EQUAL(true, Ac.isUnitary());
 }
 
 BOOST_AUTO_TEST_CASE(sum){
@@ -271,6 +334,21 @@ BOOST_AUTO_TEST_CASE(matrix_add){
   matrix_compare_delta(a4, A4, ACCEPTABLE_DELTA_DEFAULT);
 }
 
+struct mat_entrywise_product_t {
+  matrix_t m1, m2;
+  content_t operator()(const unsigned &i, const unsigned &j) const {
+    return (m1)(i, j) * (m2)(i, j);
+  }
+};
+
+BOOST_AUTO_TEST_CASE(matrix_entrywise_product){
+  prologue_print();
+  mat_entrywise_product_t ab = {*A, *B};
+  matrix_t AB((*A).entrywise_product(*B));
+  BOOST_TEST_MESSAGE(".*:" << AB);
+  matrix_compare_delta(ab, AB, ACCEPTABLE_DELTA_DEFAULT);
+}
+
 struct mat_mul_t {
   matrix_t m1, m2;
   content_t operator()(const unsigned &i, const unsigned &j) const {
@@ -348,8 +426,20 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
       ((*A) - (*B)),
       (format("*storage: (-, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
+      ((*A).entrywise_product(*B)),
+      (format("*storage: (.*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A).hstack(*B)),
+      (format("*storage: (H, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A).vstack(*B)),
+      (format("*storage: (V, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
       ((*A) * (*B)),
       (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      (((*A) + (*B)) * (*A)),
+      (format("*storage: (*, (+, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
   matrix_inspect_contains(
       (((*A) * (*B)) + (*A)),
       (format("*storage: (+, (*, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
@@ -359,6 +449,12 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A) + (*B)).complex(),
       (format("*storage: (+, M(%1%,%1%), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      (((*A) + (*B)).entrywise_product(*A) + (*B)),
+      (format("*storage: (+, (.*, (+, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
+  matrix_inspect_contains(
+      ((*A).vstack(*B).vstack(*A) * (*B)),
+      (format("*storage: (*, (V, (V, M(%1%,%1%), M(%1%,%1%)), M(%1%,%1%)), M(%1%,%1%))") % SIZE).str());
 
   // optimized cases
   matrix_inspect_contains(
@@ -382,6 +478,9 @@ BOOST_AUTO_TEST_CASE(matrix_inspect){
   matrix_inspect_contains(
       ((*A) / matrix_t::getScalar(A->rows(), 2)),
       (format("*storage: (*, M(%1%,%1%), 0.5)") % SIZE).str()); // should be M * 0.5
+  matrix_inspect_contains(
+      (((*A) + (*B) + (*A)) * (*A)),
+      (format("*storage: (*, M(%1%,%1%), M(%1%,%1%))") % SIZE).str()); // should be M * M
 }
 
 void check_inv(const matrix_t &mat){
@@ -596,7 +695,7 @@ BOOST_AUTO_TEST_CASE(adjoint){
   matrix_compare(b, _AB_ri.mat_i);
 
   cmatrix_t::adjoint_t::adjoint_t __AB(_AB.adjoint()); // cmatrix_t::adjoint_t::adjoint_t = matrix_t
-  BOOST_TEST_MESSAGE("conj.conj:" << __AB);
+  BOOST_TEST_MESSAGE("adj.adj:" << __AB);
   matrix_compare(*rAiB, __AB);
 }
 BOOST_AUTO_TEST_CASE(partial){
@@ -760,14 +859,62 @@ BOOST_AUTO_TEST_CASE(minor){
   }
 }
 
+BOOST_AUTO_TEST_CASE(hstack){
+  assign_linear();
+  prologue_print();
+  matrix_t AB(A->hstack(*B));
+  BOOST_TEST_MESSAGE("AB:" << AB);
+  BOOST_CHECK(AB.rows() == A->rows());
+  BOOST_CHECK(AB.columns() == (A->columns() + B->columns()));
+  matrix_compare(AB.partial(A->rows(), A->columns()), *A);
+  matrix_compare(AB.partial(B->rows(), B->columns(), 0, A->columns()), *B);
+
+  // matrices having different number of rows
+  matrix_t AB2(A->partial(4, 4).hstack(B->partial(6, 6)));
+  BOOST_TEST_MESSAGE("AB2:" << AB2);
+  BOOST_CHECK(AB2.rows() == 4); // take maximum rows
+  BOOST_CHECK(AB2.columns() == 10);
+  matrix_compare(AB2.partial(4, 4), A->partial(4, 4));
+  matrix_compare(AB2.partial(4, 6, 0, 4), B->partial(4, 6));
+}
+
+BOOST_AUTO_TEST_CASE(vstack){
+  assign_linear();
+  prologue_print();
+  matrix_t AB(A->vstack(*B));
+  BOOST_TEST_MESSAGE("AB:" << AB);
+  BOOST_CHECK(AB.rows() == (A->rows() + B->rows()));
+  BOOST_CHECK(AB.columns() == A->columns());
+  matrix_compare(AB.partial(A->rows(), A->columns()), *A);
+  matrix_compare(AB.partial(B->rows(), B->columns(), A->rows(), 0), *B);
+
+  // matrices having different number of columns
+  matrix_t AB2(A->partial(4, 4).vstack(B->partial(6, 6)));
+  BOOST_TEST_MESSAGE("AB2:" << AB2);
+  BOOST_CHECK(AB2.rows() == 10);
+  BOOST_CHECK(AB2.columns() == 4); // take maximum columns
+  matrix_compare(AB2.partial(4, 4), A->partial(4, 4));
+  matrix_compare(AB2.partial(6, 4, 4, 0), B->partial(6, 4));
+}
+
 BOOST_AUTO_TEST_CASE(det){
   prologue_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU2(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_TEST_MESSAGE("det:" << A->determinant());
+
+  matrix_t::partial_t Ap(A->partial(A->rows() - 1, A->columns() - 1, 1, 1));
+  BOOST_CHECK_SMALL(Ap.determinant_minor() - Ap.determinant_LU(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(Ap.determinant_minor() - Ap.determinant_LU2(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(Ap.determinant_minor() - Ap.determinant(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_TEST_MESSAGE("det:" << Ap.determinant());
 
   assign_unsymmetric();
   assign_intermediate_zeros();
   prologue_print();
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU(), ACCEPTABLE_DELTA_DEFAULT);
+  BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant_LU2(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_CHECK_SMALL(A->determinant_minor() - A->determinant(), ACCEPTABLE_DELTA_DEFAULT);
   BOOST_TEST_MESSAGE("det:" << A->determinant());
 }
