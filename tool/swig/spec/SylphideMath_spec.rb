@@ -92,11 +92,18 @@ shared_examples 'Matrix' do
   end
   
   describe 'property' do
-    let(:mat){{
-      :square => proc{
+    let(:mat_gen){{
+      :square => proc{|r| # example: [[1, 3, 6], [2, 5, 8], [4, 7, 9]]
         k = 0
-        mat_type::new(params[:rc][0], params[:rc][0]){|i, j| k += 1}
-      }.call,
+        res = mat_type::new(r, r)
+        (r * 2 - 1).times{|ij|
+          (([ij - r + 1, 0].max)..([ij, r - 1].min)).each{|i| res[ij - i, i] = (k += 1)}
+        }
+        res
+      }
+    }}
+    let(:mat){{
+      :square => mat_gen[:square].call(params[:rc][0]),
       :not_square => proc{
         k = 0
         mat_type::new(params[:rc][0], params[:rc][0] * 2){|i, j| k += 1}
@@ -183,8 +190,27 @@ shared_examples 'Matrix' do
       end
       it 'determinant, det' do
         [:determinant, :det].each{|f|
-          #expect(mat[:square].send(f)).to eq(Matrix[*mat[:square].to_a].det)
+          expect(mat[:square].send(f)).to eq(Matrix[*mat[:square].to_a].det)
           expect{mat[:not_square].send(f)}.to raise_error(RuntimeError)
+        }
+      end
+      it 'cofactor' do
+        (5..8).each{|n|
+          orig = mat_gen[:square].call(n)
+          cmp = Matrix[*orig.to_a]
+          orig.rows.times{|i|
+            orig.columns.times{|j|
+              a, b = [orig, cmp].collect{|item| item.cofactor(i, j)} #rescue next
+              expect((a - b).abs).to be < params[:acceptable_delta]
+            }
+          }
+        }
+      end
+      it 'adjugate' do
+        (5..8).each{|n|
+          orig = mat_gen[:square].call(n)
+          cmp = Matrix[*orig.to_a]
+          expect(orig.adjugate.to_a).to eq(cmp.adjugate.to_a)
         }
       end
     end

@@ -430,6 +430,9 @@ class Matrix_Frozen {
     // bool isLU() const noexcept
     
     T determinant(const bool &do_check = true) const;
+    T cofactor(
+        const unsigned int &row, const unsigned int &column,
+        const bool &do_check = true) const;
 };
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
@@ -680,6 +683,7 @@ struct MatrixUtil {
   %catches(std::out_of_range) rowVector;
   %catches(std::out_of_range) columnVector;
   %catches(std::logic_error, std::runtime_error) determinant;
+  %catches(std::logic_error, std::runtime_error) cofactor;
 
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
     return ($self)->operator()(row, column);
@@ -767,6 +771,9 @@ struct MatrixUtil {
       const unsigned int &column) const noexcept {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->matrix_for_minor(row, column));
   }
+  Matrix<T, Array2D_Dense<T> > adjugate() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->adjugate());
+  }
 
   %typemap(in,numinputs=0)
       Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
@@ -846,10 +853,7 @@ struct MatrixUtil {
     return s.str();
   }
   
-  /* TODO
-   * adjugate, cofactor
-   *
-   * The followings are better to be implemented in Ruby
+  /* The followings are better to be implemented in Ruby
    * combine, hstack, vstack (due to their arguments are variable)
    */
 
