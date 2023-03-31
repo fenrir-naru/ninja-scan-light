@@ -2743,6 +2743,23 @@ template <class U> struct check_operator_t<tag_name, U> \
     }
 
     /**
+     * Calculate rank by using LU decomposition
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return rank
+     */
+    unsigned int rank_LU2(const bool &do_check = true) const {
+      unsigned int pivot_num, res;
+      T det;
+      decomposeLUP_property(res, det, pivot_num, do_check);
+      return res;
+    }
+
+    unsigned int rank(const bool &do_check = true) const {
+      return rank_LU2(do_check);
+    }
+
+    /**
      * Calculate cofactor (—]ˆöŽq), i.e.,
      * determinant of smaller square matrix removing specified one row and column
      * fro original matrix.

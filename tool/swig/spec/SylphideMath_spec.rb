@@ -196,6 +196,14 @@ shared_examples 'Matrix' do
           expect{mat[:not_square].send(f)}.to raise_error(RuntimeError)
         }
       end
+      it 'rank' do
+        (5..8).each{|n|
+          orig = mat_gen[:square].call(n)
+          expect(orig.rank).to eq(Matrix[*orig.to_a].rank)
+        }
+        expect(mat[:symmetric].rank).to eq(Matrix[*mat[:symmetric].to_a].rank)
+        #expect{mat[:not_square].rank}.to raise_error(RuntimeError)
+      end
       it 'cofactor' do
         SylphideMath::tolerance = 1E-10
         (5..8).each{|n|

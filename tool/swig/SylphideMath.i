@@ -430,6 +430,7 @@ class Matrix_Frozen {
     // bool isLU() const noexcept
     
     T determinant(const bool &do_check = true) const;
+    unsigned int rank(const bool &do_check = true) const;
     T cofactor(
         const unsigned int &row, const unsigned int &column,
         const bool &do_check = true) const;
@@ -683,6 +684,7 @@ struct MatrixUtil {
   %catches(std::out_of_range) rowVector;
   %catches(std::out_of_range) columnVector;
   %catches(std::logic_error, std::runtime_error) determinant;
+  %catches(std::logic_error) rank;
   %catches(std::logic_error, std::runtime_error) cofactor;
 
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
