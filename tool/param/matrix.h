@@ -582,11 +582,11 @@ struct MatrixValue {
 template <class T>
 struct MatrixValue_Special {
   typedef MatrixValue<T> v_t;
-  struct zero_t {
+  struct wide_zero_t {
     typename v_t::real_t width, width_abs2;
-    zero_t(const typename v_t::real_t &width_)
+    wide_zero_t(const typename v_t::real_t &width_)
         : width(v_t::get_abs(width_)), width_abs2(v_t::get_abs2(width_)) {}
-    zero_t &operator=(const typename v_t::real_t &width_) {
+    wide_zero_t &operator=(const typename v_t::real_t &width_) {
       width = v_t::get_abs(width_);
       width_abs2 = v_t::get_abs2(width_);
       return *this;
@@ -595,6 +595,18 @@ struct MatrixValue_Special {
     bool operator==(const typename v_t::complex_t &v) const noexcept {return v_t::get_abs2(v) <= width_abs2;}
     bool operator!=(const T &v) const noexcept {return !operator==(v);}
   };
+  template <
+      bool is_integer = std::numeric_limits<T>::is_integer,
+      class U = void>
+  struct zero_selector_t {
+    typedef wide_zero_t res_t;
+  };
+  template <class U>
+  struct zero_selector_t<true, U> {
+    // When T is a kind of integer types, exact equalness is easiliy achievable.
+    typedef T res_t;
+  };
+  typedef typename zero_selector_t<>::res_t zero_t;
 };
 
 template <class T>
