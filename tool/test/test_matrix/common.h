@@ -147,6 +147,10 @@ struct Fixture {
       A(new matrix_t(SIZE, SIZE)), B(new matrix_t(SIZE, SIZE)),
       rAiB(new cmatrix_t(SIZE, SIZE)) {
     assign_symmetric();
+    { // No tolerance
+      matrix_t::value_t::zero = 0;
+      cmatrix_t::value_t::zero = 0;
+    }
   }
 
   ~Fixture(){

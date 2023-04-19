@@ -255,6 +255,20 @@ BOOST_AUTO_TEST_CASE(check_unitary){
   BOOST_REQUIRE_EQUAL(true, Ac.isUnitary());
 }
 
+BOOST_AUTO_TEST_CASE(check_equal){
+  typedef Matrix<int> imatrix_t;
+  BOOST_CHECK(matrix_t::getI(8) == imatrix_t::getI(8));
+
+  imatrix_t Ai(A->rows(), A->columns());
+  std::transform(A->begin(), A->end(), Ai.begin(), [](const content_t &v){
+    return (int)v;
+  });
+  BOOST_TEST_MESSAGE("A:" << (*A) << ", Ai:" << Ai);
+  BOOST_CHECK((*A) != Ai);
+  matrix_t::value_t::zero = 1;
+  BOOST_CHECK((*A) == Ai);
+}
+
 BOOST_AUTO_TEST_CASE(sum){
   prologue_print();
   BOOST_TEST_MESSAGE("sum:" << A->sum());
