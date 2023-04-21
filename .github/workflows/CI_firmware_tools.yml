@@ -7,7 +7,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     - name: before_setup
@@ -17,6 +17,15 @@ jobs:
         echo "SDCC_DIR=${SDCC_DIR}" >> $GITHUB_ENV
         echo "${SDCC_DIR}/bin" >> $GITHUB_PATH
         echo "DEPLOY_MESSAGE=\"build by Github actions, `ruby -e 'require "time"; print Time::parse(\`git log --format="%cd" -n 1\`.chomp).strftime("%Y%m%d_%H%M%S")'`\"" >> $GITHUB_ENV
+        case $(cat /etc/issue | sed -E "s/^[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*$/\1/") in
+        18.04*)
+          ;;
+        *)
+          sudo sh -c "echo deb http://dk.archive.ubuntu.com/ubuntu/ xenial main >> /etc/apt/sources.list";
+          sudo sh -c "echo deb http://dk.archive.ubuntu.com/ubuntu/ xenial universe >> /etc/apt/sources.list";
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 40976EAF437D05B5;
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 3B4FE6ACC0B21F32;;
+        esac
         sudo apt-get update && sudo apt-get install -yq gcc-5 g++-5 libboost-all-dev g++-arm-linux-gnueabihf
     - name: cache
       uses: actions/cache@v3
