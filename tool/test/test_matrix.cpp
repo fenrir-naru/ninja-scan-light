@@ -1390,6 +1390,26 @@ BOOST_AUTO_TEST_CASE(iterator){
       BOOST_CHECK((*it) <= (*it2));
     }
   }
+  typedef matrix_t::iterator_mapper_t mapper_t;
+  { // custom iterator, diagonal elements
+    const matrix_t *_A(A);
+    matrix_t __A(_A->copy());
+    std::sort(__A.begin<mapper_t::diagonal_t>(), __A.end<mapper_t::diagonal_t>());
+    BOOST_TEST_MESSAGE("sort(diagonal):" << __A);
+    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()); it != it_end; ++it){
+      if(it.row() == it.column()){continue;}
+      BOOST_CHECK(*it == (*_A)(it.row(), it.column()));
+    }
+    for(matrix_t::const_iterator_skelton_t<mapper_t::diagonal_t>
+        it(__A.cbegin<mapper_t::diagonal_t>()), it_end(__A.cend<mapper_t::diagonal_t>()), it2(it + 1);
+        it2 != it_end; ++it, ++it2){
+      BOOST_CHECK(
+          std::find(
+            _A->begin<mapper_t::diagonal_t>(), _A->end<mapper_t::diagonal_t>(), *it)
+          != _A->end<mapper_t::diagonal_t>());
+      BOOST_CHECK((*it) <= (*it2));
+    }
+  }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

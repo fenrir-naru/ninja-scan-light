@@ -1550,6 +1550,38 @@ class Matrix_Frozen {
             return static_cast<impl_t &>(*this);
           }
       };
+      template <class impl_t>
+      class diagonal_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max;
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::idx = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::idx = idx_max;
+            }
+            base_t::r = base_t::c = base_t::idx;
+          }
+        public:
+          diagonal_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_),
+              idx_max((typename base_t::difference_type)(
+                (base_t::rows >= base_t::columns) ? base_t::columns : base_t::rows)) {
+            update();
+          }
+          diagonal_t()
+              : base_t(),
+              idx_max((typename base_t::difference_type)(
+                (base_t::rows >= base_t::columns) ? base_t::columns : base_t::rows)) {
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+      };
     };
 
     template <template <typename> class mapper_t = iterator_base_t>
@@ -1577,6 +1609,15 @@ class Matrix_Frozen {
     typedef const_iterator_skelton_t<iterator_mapper_t::template all_t> const_iterator;
     const_iterator begin() const {return const_iterator(*this);}
     const_iterator end() const {return const_iterator(*this, rows() * columns());}
+
+    template <template <typename> class mapper_t>
+    const_iterator_skelton_t<mapper_t> begin() const {
+      return const_iterator_skelton_t<mapper_t>(*this);
+    }
+    template <template <typename> class mapper_t>
+    const_iterator_skelton_t<mapper_t> end() const {
+      return const_iterator_skelton_t<mapper_t>(*this, rows() * columns());
+    }
 
     /**
      * Copy constructor generating shallow copy linking to source matrix
@@ -4051,6 +4092,23 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::end;
     iterator end() {return iterator(*this, rows() * columns());}
     typename super_t::const_iterator cend() const {return super_t::end();}
+
+    template <template <typename> class mapper_t>
+    iterator_skelton_t<mapper_t> begin() {
+      return iterator_skelton_t<mapper_t>(*this);
+    }
+    template <template <typename> class mapper_t>
+    typename super_t::template const_iterator_skelton_t<mapper_t> cbegin() const {
+      return super_t::template begin<mapper_t>();
+    }
+    template <template <typename> class mapper_t>
+    iterator_skelton_t<mapper_t> end() {
+      return iterator_skelton_t<mapper_t>(*this, rows() * columns());
+    }
+    template <template <typename> class mapper_t>
+    typename super_t::template const_iterator_skelton_t<mapper_t> cend() const {
+      return super_t::template end<mapper_t>();
+    }
 
     /**
      * Clear elements.
