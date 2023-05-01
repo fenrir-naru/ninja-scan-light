@@ -1422,6 +1422,11 @@ BOOST_AUTO_TEST_CASE(iterator2){
 
 #define MAKE_TRIANGULAR_ITERATOR_TEST(name, msg) \
 { \
+  for(matrix_t::const_iterator_skelton_t<mapper_t:: name > \
+      it(A->cbegin<mapper_t:: name >()), it_end(A->cend<mapper_t:: name >()), it2(it); \
+      it != it_end; ++it){ \
+    BOOST_CHECK(*it == it2[it - it2]); \
+  } \
   matrix_t __A(A->copy()); \
   std::sort(__A.begin<mapper_t:: name >(), __A.end<mapper_t:: name >()); \
   BOOST_TEST_MESSAGE("sort(" msg "):" << __A); \
@@ -1440,6 +1445,11 @@ BOOST_AUTO_TEST_CASE(iterator2){
 #define MAKE_TRIANGULAR_ITERATOR_TEST(is_lower, right_shift, msg) \
 { \
   typedef mapper_t::triangular_t<is_lower, right_shift> triangular_t; \
+  for(matrix_t::const_iterator_skelton_t<triangular_t::mapper_t> \
+      it(A->cbegin<triangular_t::mapper_t>()), it_end(A->cend<triangular_t::mapper_t>()), it2(it); \
+      it != it_end; ++it){ \
+    BOOST_CHECK(*it == it2[it - it2]); \
+  } \
   matrix_t __A(A->copy()); \
   std::sort(__A.begin<triangular_t::mapper_t>(), __A.end<triangular_t::mapper_t>()); \
   BOOST_TEST_MESSAGE("sort(" msg "):" << __A); \

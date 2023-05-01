@@ -1618,27 +1618,19 @@ class Matrix_Frozen {
                 base_t::idx = 0;
               }else if(base_t::idx >= idx_max){
                 base_t::idx = idx_max;
-                base_t::r = base_t::rows;
-                base_t::c = 0;
-                if(!is_lower){
-                  // special case for upper, negative idx in the following should be avoided.
-                  int rows(-right_shift + base_t::columns);
-                  if(rows < 0){base_t::r = 0;}
-                  else if(rows < (int)base_t::r){base_t::r = (unsigned int)rows;}
-                }
-                return;
               }
               int idx(is_lower ? (int)base_t::idx : idx_max - base_t::idx - 1);
-              if(idx < offset2){ // in triangle
-                idx += offset1;
-                int r_offset(std::floor((std::sqrt((double)(8 * idx + 1)) - 1) / 2));
+              if(idx <= offset2){ // in triangle
+                idx += (offset1 + 1);
+                int r_offset(std::ceil((std::sqrt((double)(8 * idx + 1)) - 1) / 2));
                 base_t::r = r_offset;
-                base_t::c = idx - (r_offset * (r_offset + 1) / 2);
+                base_t::c = base_t::r + idx - (r_offset * (r_offset + 1) / 2);
                 if(is_lower){
-                  base_t::r -= right_shift;
+                  base_t::r -= (right_shift + 1);
+                  base_t::c -= 1;
                 }else{
-                  base_t::r = (base_t::columns - right_shift) - base_t::r - 1;
-                  base_t::c = base_t::columns - base_t::c - 1;
+                  base_t::r = (base_t::columns - right_shift) - base_t::r;
+                  base_t::c = base_t::columns - base_t::c;
                 }
               }else{ // in rectangle
                 std::div_t rc(std::div(idx - offset2, base_t::columns));
