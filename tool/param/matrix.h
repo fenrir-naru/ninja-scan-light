@@ -582,11 +582,11 @@ struct MatrixValue {
 template <class T>
 struct MatrixValue_Special {
   typedef MatrixValue<T> v_t;
-  struct zero_t {
+  struct wide_zero_t {
     typename v_t::real_t width, width_abs2;
-    zero_t(const typename v_t::real_t &width_)
+    wide_zero_t(const typename v_t::real_t &width_)
         : width(v_t::get_abs(width_)), width_abs2(v_t::get_abs2(width_)) {}
-    zero_t &operator=(const typename v_t::real_t &width_) {
+    wide_zero_t &operator=(const typename v_t::real_t &width_) {
       width = v_t::get_abs(width_);
       width_abs2 = v_t::get_abs2(width_);
       return *this;
@@ -595,6 +595,18 @@ struct MatrixValue_Special {
     bool operator==(const typename v_t::complex_t &v) const noexcept {return v_t::get_abs2(v) <= width_abs2;}
     bool operator!=(const T &v) const noexcept {return !operator==(v);}
   };
+  template <
+      bool is_integer = std::numeric_limits<T>::is_integer,
+      class U = void>
+  struct zero_selector_t {
+    typedef wide_zero_t res_t;
+  };
+  template <class U>
+  struct zero_selector_t<true, U> {
+    // When T is a kind of integer types, exact equalness is easiliy achievable.
+    typedef T res_t;
+  };
+  typedef typename zero_selector_t<>::res_t zero_t;
 };
 
 template <class T>
@@ -1405,29 +1417,39 @@ class Matrix_Frozen {
         typedef std::random_access_iterator_tag iterator_category;
       protected:
         difference_type idx;
-        unsigned int row(const self_t &mat) const {
-          return (mat.columns() > 0) ? (idx / mat.columns()) : 0;
-        }
-        unsigned int column(const self_t &mat) const {
-          return (mat.columns() > 0) ? (idx % mat.columns()) : idx;
-        }
+        unsigned int rows, columns;
+        unsigned int r, c;
       public:
+        const unsigned int &row() const {return r;}
+        const unsigned int &column() const {return c;}
+
         // @see http://www.cplusplus.com/reference/iterator/
         // required for input iterator
-        iterator_base_t(const difference_type &idx_ = 0) : idx(idx_) {}
-        self_type &operator++() {++idx; return static_cast<self_type &>(*this);}
-        self_type operator++(int) {self_type res(static_cast<self_type &>(*this)); ++idx; return res;}
+        iterator_base_t(const self_t &mat, const difference_type &idx_ = 0)
+            : idx(idx_), rows(mat.rows()), columns(mat.columns()), r(0), c(0) {}
+        iterator_base_t()
+            : idx(0), rows(0), columns(0), r(0), c(0) {}
+        self_type &operator++() {return static_cast<self_type &>(*this).operator+=(1);}
+        self_type operator++(int) {
+          self_type res(static_cast<self_type &>(*this));
+          static_cast<self_type &>(*this).operator++();
+          return res;
+        }
         friend bool operator==(const self_type &lhs, const self_type &rhs) {
           return lhs.idx == rhs.idx;
         }
         friend bool operator!=(const self_type &lhs, const self_type &rhs) {return !(lhs == rhs);}
 
         // required for forward iterator
-        //iterator_t() : mat(), idx(0) {}
+        //iterator_t() // ctor.
 
         // required for bidirectional iterator
-        self_type &operator--() {--idx; return static_cast<self_type &>(*this);}
-        self_type operator--(int) {self_type res(static_cast<self_type &>(*this)); --idx; return res;}
+        self_type &operator--() {return static_cast<self_type &>(*this).operator+=(-1);}
+        self_type operator--(int) {
+          self_type res(static_cast<self_type &>(*this));
+          static_cast<self_type &>(*this).operator--();
+          return res;
+        }
 
         // required for random access iterator
         friend bool operator<(const self_type &lhs, const self_type &rhs){
@@ -1468,35 +1490,274 @@ class Matrix_Frozen {
         }
     };
 
-    class const_iterator : public iterator_base_t<const_iterator> {
+    struct iterator_mapper_t {
+      template <class impl_t>
+      class all_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max;
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::idx = 0;
+              base_t::r = base_t::c = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::idx = idx_max;
+              base_t::r = base_t::rows;
+              base_t::c = 0;
+            }else{
+              std::div_t rc(std::div(base_t::idx, base_t::columns));
+              base_t::r = (unsigned int)rc.quot;
+              base_t::c = (unsigned int)rc.rem;
+            }
+          }
+        public:
+          all_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_),
+              idx_max((typename base_t::difference_type)(base_t::rows * base_t::columns)) {
+            update();
+          }
+          all_t()
+              : base_t(),
+              idx_max((typename base_t::difference_type)(base_t::rows * base_t::columns)) {
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+          using base_t::operator++;
+          impl_t &operator++() {
+            if(base_t::r < base_t::rows){
+              if(++base_t::c == base_t::columns){
+                ++base_t::r;
+                base_t::c = 0;
+              }
+              ++base_t::idx;
+            }
+            return static_cast<impl_t &>(*this);
+          }
+          using base_t::operator--;
+          impl_t &operator--() {
+            if(base_t::idx > 0){
+              if(base_t::c == 0){
+                --base_t::r;
+                base_t::c = base_t::columns;
+              }
+              --base_t::c;
+              --base_t::idx;
+            }
+            return static_cast<impl_t &>(*this);
+          }
+      };
+      template <class impl_t>
+      class diagonal_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max;
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::idx = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::idx = idx_max;
+            }
+            base_t::r = base_t::c = base_t::idx;
+          }
+        public:
+          diagonal_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_),
+              idx_max((typename base_t::difference_type)(
+                (base_t::rows >= base_t::columns) ? base_t::columns : base_t::rows)) {
+            update();
+          }
+          diagonal_t()
+              : base_t(),
+              idx_max((typename base_t::difference_type)(
+                (base_t::rows >= base_t::columns) ? base_t::columns : base_t::rows)) {
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+      };
+      template <bool is_lower, int right_shift = 0>
+      struct triangular_t {
+        template <class impl_t>
+        class mapper_t : public iterator_base_t<impl_t> {
+          protected:
+            typedef iterator_base_t<impl_t> base_t;
+            typename base_t::difference_type idx_max, offset1, offset2;
+            void setup() {
+              int shift(is_lower ? right_shift : -right_shift),
+                  len1((int)(is_lower ? base_t::rows : base_t::columns)),
+                  len2((int)(is_lower ? base_t::columns : base_t::rows));
+              // calculation concept: (big triangle) - (2 small triangles if nesccesary)
+              idx_max = offset1 = offset2 = 0;
+              int triangle_len(shift + len1);
+              if(triangle_len < 0){return;}
+              if(shift > 0){ // exclude top left triangle
+                int area_tl((shift + 1) * shift / 2);
+                idx_max -= area_tl;
+                if(is_lower){offset1 = area_tl;}
+                else{offset2 = -shift * len1;}
+              }
+              idx_max += (triangle_len + 1) * triangle_len / 2; // add main triangle
+              if(triangle_len > len2){ // exclude bottom right triangle
+                int len_br(triangle_len - len2);
+                int area_br((len_br + 1) * len_br / 2);
+                idx_max -= area_br;
+                if(is_lower){offset2 = -len_br * len2;}
+                else{offset1 = area_br;}
+              }
+              offset2 += idx_max;
+            }
+            void update(){
+              if(base_t::idx <= 0){
+                base_t::idx = 0;
+              }else if(base_t::idx >= idx_max){
+                base_t::idx = idx_max;
+              }
+              int idx(is_lower ? (int)base_t::idx : idx_max - base_t::idx - 1);
+              if(idx <= offset2){ // in triangle
+                idx += (offset1 + 1);
+                int r_offset(std::ceil((std::sqrt((double)(8 * idx + 1)) - 1) / 2));
+                base_t::r = r_offset;
+                base_t::c = base_t::r + idx - (r_offset * (r_offset + 1) / 2);
+                if(is_lower){
+                  base_t::r -= (right_shift + 1);
+                  base_t::c -= 1;
+                }else{
+                  base_t::r = (base_t::columns - right_shift) - base_t::r;
+                  base_t::c = base_t::columns - base_t::c;
+                }
+              }else{ // in rectangle
+                std::div_t rc(std::div(idx - offset2, base_t::columns));
+                base_t::r = (unsigned int)rc.quot;
+                base_t::c = (unsigned int)rc.rem;
+                if(is_lower){
+                  base_t::r += (base_t::columns - right_shift);
+                }else{
+                  base_t::r = -right_shift - base_t::r - 1;
+                  base_t::c = base_t::columns - base_t::c - 1;
+                }
+              }
+            }
+          public:
+            mapper_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+                : base_t(mat, idx_) {
+              setup();
+              update();
+            }
+            mapper_t() : base_t() {
+              setup();
+              update();
+            }
+            impl_t &operator+=(const typename base_t::difference_type &n){
+              base_t::operator+=(n);
+              update();
+              return static_cast<impl_t &>(*this);
+            }
+            using base_t::operator++;
+            impl_t &operator++() {
+              if(base_t::idx < idx_max){
+                ++base_t::idx;
+                ++base_t::c;
+                if(is_lower){
+                  if((base_t::c == base_t::columns)
+                      || ((int)base_t::c == right_shift + 1 + (int)base_t::r)){
+                    ++base_t::r;
+                    base_t::c = 0;
+                  }
+                }else{
+                  if(base_t::c == base_t::columns){
+                    ++base_t::r;
+                    base_t::c = ((int)base_t::r < -right_shift)
+                        ? 0
+                        : (unsigned int)(right_shift + (int)base_t::r);
+                  }
+                }
+              }
+              return static_cast<impl_t &>(*this);
+            }
+            using base_t::operator--;
+            impl_t &operator--() {
+              if(base_t::idx > 0){
+                --base_t::idx;
+                if(is_lower){
+                  if(base_t::c == 0){
+                    base_t::c = (unsigned int)(right_shift + 1 + (int)(--base_t::r));
+                    if(base_t::c > base_t::columns){base_t::c = base_t::columns;}
+                  }
+                }else{
+                  if((base_t::c == 0)
+                      || ((int)base_t::c == (right_shift + (int)base_t::r))){
+                    --base_t::r;
+                    base_t::c = base_t::columns;
+                  }
+                }
+                --base_t::c;
+              }
+              return static_cast<impl_t &>(*this);
+            }
+        };
+      };
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+#define MAKE_TRIANGULAR_ALIAS(name, is_lower, right_shift) \
+template <class impl_t> using name \
+    = typename triangular_t<is_lower, right_shift>::template mapper_t<impl_t>;
+#else
+#define MAKE_TRIANGULAR_ALIAS(name, is_lower, right_shift) \
+template <class impl_t> \
+struct name : public triangular_t<is_lower, right_shift>::template mapper_t<impl_t> { \
+  typedef typename triangular_t<is_lower, right_shift>::template mapper_t<impl_t> base_t; \
+  name(const self_t &mat, const typename base_t::difference_type &idx_ = 0) \
+      : base_t(mat, idx_) {} \
+  name() : base_t() {} \
+};
+#endif
+      MAKE_TRIANGULAR_ALIAS(lower_triangular_t, true, 0);
+      MAKE_TRIANGULAR_ALIAS(lower_triangular_offdiagonal_t, true, -1);
+      MAKE_TRIANGULAR_ALIAS(upper_triangular_t, false, 0);
+      MAKE_TRIANGULAR_ALIAS(upper_triangular_offdiagonal_t, false, 1);
+#undef MAKE_TRIANGULAR_ALIAS
+    };
+
+    template <template <typename> class MapperT = iterator_base_t>
+    class const_iterator_skelton_t : public MapperT<const_iterator_skelton_t<MapperT> > {
       public:
         typedef const T value_type;
         typedef const T& reference;
         typedef const T* pointer;
       protected:
-        typedef iterator_base_t<const_iterator> base_t;
+        typedef MapperT<const_iterator_skelton_t<MapperT> > base_t;
         self_t mat;
         mutable T tmp;
       public:
-        unsigned int row() const {return base_t::row(mat);}
-        unsigned int column() const {return base_t::column(mat);}
-        reference operator*() const {
-          std::div_t rc(std::div(base_t::idx, mat.columns()));
-          return tmp = mat((unsigned int)rc.quot, (unsigned int)rc.rem);
-        }
-        pointer operator->() const {
-          return &(operator*());
-        }
-        const_iterator(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
-            : base_t(idx_), mat(mat_), tmp() {}
-        const_iterator()
+        reference operator*() const {return tmp = mat(base_t::r, base_t::c);}
+        pointer operator->() const {return &(operator*());}
+        const_iterator_skelton_t(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
+            : base_t(mat_, idx_), mat(mat_), tmp() {}
+        const_iterator_skelton_t()
             : base_t(), mat(), tmp() {}
         reference operator[](const typename base_t::difference_type &n) const {
           return tmp = *((*this) + n);
         }
     };
+
+    typedef const_iterator_skelton_t<iterator_mapper_t::template all_t> const_iterator;
     const_iterator begin() const {return const_iterator(*this);}
     const_iterator end() const {return const_iterator(*this, rows() * columns());}
+
+    template <template <typename> class MapperT>
+    const_iterator_skelton_t<MapperT> begin() const {
+      return const_iterator_skelton_t<MapperT>(*this);
+    }
+    template <template <typename> class MapperT>
+    const_iterator_skelton_t<MapperT> end() const {
+      return const_iterator_skelton_t<MapperT>(*this, rows() * columns());
+    }
 
     /**
      * Copy constructor generating shallow copy linking to source matrix
@@ -3944,38 +4205,50 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::rows;
     using super_t::columns;
 
-    class iterator : public super_t::template iterator_base_t<iterator> {
+    template <template <typename> class MapperT = super_t::template iterator_base_t>
+    class iterator_skelton_t : public MapperT<iterator_skelton_t<MapperT> > {
       public:
         typedef T value_type;
         typedef T& reference;
         typedef T* pointer;
       protected:
+        typedef MapperT<iterator_skelton_t<MapperT> > base_t;
         self_t mat;
-        typedef typename super_t::template iterator_base_t<iterator> base_t;
       public:
-        unsigned int row() const {return base_t::row(mat);}
-        unsigned int column() const {return base_t::column(mat);}
-        reference operator*() {
-          std::div_t rc(std::div(base_t::idx, mat.columns()));
-          return mat((unsigned int)rc.quot, (unsigned int)rc.rem);
-        }
-        pointer operator->() {
-          return &(operator*());
-        }
-        iterator(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
-            : base_t(idx_), mat(mat_) {}
-        iterator()
+        reference operator*() {return mat(base_t::r, base_t::c);}
+        pointer operator->() {return &(operator*());}
+        iterator_skelton_t(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
+            : base_t(mat_, idx_), mat(mat_) {}
+        iterator_skelton_t()
             : base_t(), mat() {}
         reference operator[](const typename base_t::difference_type &n){
           return *((*this) + n);
         }
     };
+    typedef iterator_skelton_t<super_t::iterator_mapper_t::template all_t> iterator;
     using super_t::begin;
     iterator begin() {return iterator(*this);}
     typename super_t::const_iterator cbegin() const {return super_t::begin();}
     using super_t::end;
     iterator end() {return iterator(*this, rows() * columns());}
     typename super_t::const_iterator cend() const {return super_t::end();}
+
+    template <template <typename> class MapperT>
+    iterator_skelton_t<MapperT> begin() {
+      return iterator_skelton_t<MapperT>(*this);
+    }
+    template <template <typename> class MapperT>
+    typename super_t::template const_iterator_skelton_t<MapperT> cbegin() const {
+      return super_t::template begin<MapperT>();
+    }
+    template <template <typename> class MapperT>
+    iterator_skelton_t<MapperT> end() {
+      return iterator_skelton_t<MapperT>(*this, rows() * columns());
+    }
+    template <template <typename> class MapperT>
+    typename super_t::template const_iterator_skelton_t<MapperT> cend() const {
+      return super_t::template end<MapperT>();
+    }
 
     /**
      * Clear elements.

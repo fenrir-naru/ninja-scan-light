@@ -255,6 +255,20 @@ BOOST_AUTO_TEST_CASE(check_unitary){
   BOOST_REQUIRE_EQUAL(true, Ac.isUnitary());
 }
 
+BOOST_AUTO_TEST_CASE(check_equal){
+  typedef Matrix<int> imatrix_t;
+  BOOST_CHECK(matrix_t::getI(8) == imatrix_t::getI(8));
+
+  imatrix_t Ai(A->rows(), A->columns());
+  std::transform(A->begin(), A->end(), Ai.begin(), [](const content_t &v){
+    return (int)v;
+  });
+  BOOST_TEST_MESSAGE("A:" << (*A) << ", Ai:" << Ai);
+  BOOST_CHECK((*A) != Ai);
+  matrix_t::value_t::zero = 1;
+  BOOST_CHECK((*A) == Ai);
+}
+
 BOOST_AUTO_TEST_CASE(sum){
   prologue_print();
   BOOST_TEST_MESSAGE("sum:" << A->sum());
@@ -1357,6 +1371,15 @@ BOOST_AUTO_TEST_CASE(iterator){
     BOOST_CHECK_EQUAL(*it, *it_cmp);
     BOOST_CHECK_EQUAL(std::distance(_A->begin(), it), std::distance(it_cmp_begin, it_cmp));
   }
+}
+BOOST_AUTO_TEST_CASE(iterator2){
+  assign_linear();
+  std::reverse(A->begin(), A->end());
+  for(matrix_t::const_iterator it(A->cbegin()), it_end(A->cend()), it2(it + 1);
+      it2 != it_end; ++it, ++it2){
+    BOOST_CHECK((*it) > (*it2));
+  }
+  prologue_print();
   {
     const matrix_t *_A(A);
     matrix_t __A(_A->copy());
@@ -1373,9 +1396,80 @@ BOOST_AUTO_TEST_CASE(iterator){
 #endif
     for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()), it2(it + 1);
         it2 != it_end; ++it, ++it2){
-      BOOST_CHECK((*it) <= (*it2));
+      BOOST_CHECK((*it) < (*it2));
     }
   }
+  typedef matrix_t::iterator_mapper_t mapper_t;
+  { // custom iterator, diagonal elements
+    const matrix_t *_A(A);
+    matrix_t __A(_A->copy());
+    std::sort(__A.begin<mapper_t::diagonal_t>(), __A.end<mapper_t::diagonal_t>());
+    BOOST_TEST_MESSAGE("sort(diagonal):" << __A);
+    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()); it != it_end; ++it){
+      if(it.row() == it.column()){continue;}
+      BOOST_CHECK(*it == (*_A)(it.row(), it.column()));
+    }
+    for(matrix_t::const_iterator_skelton_t<mapper_t::diagonal_t>
+        it(__A.cbegin<mapper_t::diagonal_t>()), it_end(__A.cend<mapper_t::diagonal_t>()), it2(it + 1);
+        it2 != it_end; ++it, ++it2){
+      BOOST_CHECK(
+          std::find(
+            _A->begin<mapper_t::diagonal_t>(), _A->end<mapper_t::diagonal_t>(), *it)
+          != _A->end<mapper_t::diagonal_t>());
+      BOOST_CHECK((*it) < (*it2));
+    }
+  }
+
+#define MAKE_TRIANGULAR_ITERATOR_TEST(name, msg) \
+{ \
+  for(matrix_t::const_iterator_skelton_t<mapper_t:: name > \
+      it(A->cbegin<mapper_t:: name >()), it_end(A->cend<mapper_t:: name >()), it2(it); \
+      it != it_end; ++it){ \
+    BOOST_CHECK(*it == it2[it - it2]); \
+  } \
+  matrix_t __A(A->copy()); \
+  std::sort(__A.begin<mapper_t:: name >(), __A.end<mapper_t:: name >()); \
+  BOOST_TEST_MESSAGE("sort(" msg "):" << __A); \
+  for(matrix_t::const_iterator_skelton_t<mapper_t:: name > \
+      it(__A.cbegin<mapper_t:: name >()), it_end(__A.cend<mapper_t:: name >()), it2(it + 1); \
+      it2 != it_end; ++it, ++it2){ \
+    BOOST_CHECK((*it) < (*it2)); \
+  } \
+}
+  MAKE_TRIANGULAR_ITERATOR_TEST(lower_triangular_t, "lower");
+  MAKE_TRIANGULAR_ITERATOR_TEST(lower_triangular_offdiagonal_t, "lower(-1)");
+  MAKE_TRIANGULAR_ITERATOR_TEST(upper_triangular_t, "upper");
+  MAKE_TRIANGULAR_ITERATOR_TEST(upper_triangular_offdiagonal_t, "upper(-1)");
+#undef MAKE_TRIANGULAR_ITERATOR_TEST
+
+#define MAKE_TRIANGULAR_ITERATOR_TEST(is_lower, right_shift, msg) \
+{ \
+  typedef mapper_t::triangular_t<is_lower, right_shift> triangular_t; \
+  for(matrix_t::const_iterator_skelton_t<triangular_t::mapper_t> \
+      it(A->cbegin<triangular_t::mapper_t>()), it_end(A->cend<triangular_t::mapper_t>()), it2(it); \
+      it != it_end; ++it){ \
+    BOOST_CHECK(*it == it2[it - it2]); \
+  } \
+  matrix_t __A(A->copy()); \
+  std::sort(__A.begin<triangular_t::mapper_t>(), __A.end<triangular_t::mapper_t>()); \
+  BOOST_TEST_MESSAGE("sort(" msg "):" << __A); \
+  for(matrix_t::const_iterator_skelton_t<triangular_t::mapper_t> \
+      it(__A.cbegin<triangular_t::mapper_t>()), it_end(__A.cend<triangular_t::mapper_t>()), it2(it + 1); \
+      it2 != it_end; ++it, ++it2){ \
+    BOOST_CHECK((*it) < (*it2)); \
+  } \
+}
+  MAKE_TRIANGULAR_ITERATOR_TEST(true, 0, "lower");
+  MAKE_TRIANGULAR_ITERATOR_TEST(true, 1, "lower(+1)");
+  MAKE_TRIANGULAR_ITERATOR_TEST(true, -1, "lower(-1)");
+  MAKE_TRIANGULAR_ITERATOR_TEST(true, 8, "lower(+8), a.k.a., all");
+  MAKE_TRIANGULAR_ITERATOR_TEST(true, -8, "lower(-8), a.k.a., none");
+  MAKE_TRIANGULAR_ITERATOR_TEST(false, 0, "upper");
+  MAKE_TRIANGULAR_ITERATOR_TEST(false, -1, "upper(+1)");
+  MAKE_TRIANGULAR_ITERATOR_TEST(false, 1, "upper(-1)");
+  MAKE_TRIANGULAR_ITERATOR_TEST(false, -8, "upper(+8), a.k.a., all");
+  MAKE_TRIANGULAR_ITERATOR_TEST(false, 8, "upper(-8), a.k.a., none");
+#undef MAKE_TRIANGULAR_ITERATOR_TEST
 }
 
 BOOST_AUTO_TEST_SUITE_END()
