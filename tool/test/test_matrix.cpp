@@ -1422,6 +1422,26 @@ BOOST_AUTO_TEST_CASE(iterator2){
       BOOST_CHECK((*it) < (*it2));
     }
   }
+  { // custom iterator, offdiagonal elements
+    const matrix_t *_A(A);
+    matrix_t __A(_A->copy());
+    std::sort(__A.begin<mapper_t::offdiagonal_t>(), __A.end<mapper_t::offdiagonal_t>());
+    BOOST_TEST_MESSAGE("sort(offdiagonal):" << __A);
+    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()); it != it_end; ++it){
+      if(it.row() != it.column()){continue;}
+      BOOST_CHECK(*it == (*_A)(it.row(), it.column()));
+    }
+    for(matrix_t::const_iterator_skelton_t<mapper_t::offdiagonal_t>
+        it(__A.cbegin<mapper_t::offdiagonal_t>()), it_end(__A.cend<mapper_t::offdiagonal_t>()),
+        it2((it != it_end) ? (it + 1) : it);
+        it2 != it_end; ++it, ++it2){
+      BOOST_CHECK(
+          std::find(
+            _A->begin<mapper_t::offdiagonal_t>(), _A->end<mapper_t::offdiagonal_t>(), *it)
+          != _A->end<mapper_t::offdiagonal_t>());
+      BOOST_CHECK((*it) < (*it2));
+    }
+  }
 
 #define MAKE_TRIANGULAR_ITERATOR_TEST(name, msg) \
 { \

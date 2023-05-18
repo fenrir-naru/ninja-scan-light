@@ -1583,6 +1583,57 @@ class Matrix_Frozen {
           }
           impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
       };
+      template <class impl_t>
+      class offdiagonal_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max, offset;
+          void setup(){
+            idx_max = (typename base_t::difference_type)(base_t::rows * base_t::columns);
+            if(idx_max == 0){
+              offset = 0;
+            }else if(base_t::rows >= base_t::columns){
+              idx_max -= base_t::columns;
+              offset = base_t::columns * (base_t::columns - 1);
+            }else{
+              idx_max -= base_t::rows;
+              offset = idx_max;
+            }
+          }
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::idx = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::idx = idx_max;
+            }
+            if(base_t::idx >= offset){ // on row having no diagonal element
+              std::div_t rc(std::div(base_t::idx - offset, base_t::columns));
+              base_t::r = base_t::columns + (unsigned int)rc.quot;
+              base_t::c = (unsigned int)rc.rem;
+            }else{ // on row having a diagonal element
+              std::div_t rc(std::div(base_t::idx, base_t::columns - 1));
+              base_t::r = (unsigned int)rc.quot;
+              base_t::c = (unsigned int)rc.rem;
+              if(base_t::c >= base_t::r){++base_t::c;}
+            }
+          }
+        public:
+          offdiagonal_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_) {
+            setup();
+            update();
+          }
+          offdiagonal_t() : base_t() {
+            setup();
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+          impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
+      };
       template <bool is_lower, int right_shift = 0>
       struct triangular_t {
         template <class impl_t>
