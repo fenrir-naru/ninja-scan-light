@@ -1375,7 +1375,8 @@ BOOST_AUTO_TEST_CASE(iterator){
 BOOST_AUTO_TEST_CASE(iterator2){
   assign_linear();
   std::reverse(A->begin(), A->end());
-  for(matrix_t::const_iterator it(A->cbegin()), it_end(A->cend()), it2(it + 1);
+  for(matrix_t::const_iterator it(A->cbegin()), it_end(A->cend()),
+      it2((it != it_end) ? (it + 1) : it);
       it2 != it_end; ++it, ++it2){
     BOOST_CHECK((*it) > (*it2));
   }
@@ -1394,7 +1395,8 @@ BOOST_AUTO_TEST_CASE(iterator2){
       BOOST_CHECK(std::find(_A->begin(), _A->end(), *it) != _A->end());
     }
 #endif
-    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()), it2(it + 1);
+    for(matrix_t::const_iterator it(__A.cbegin()), it_end(__A.cend()),
+        it2((it != it_end) ? (it + 1) : it);
         it2 != it_end; ++it, ++it2){
       BOOST_CHECK((*it) < (*it2));
     }
@@ -1410,7 +1412,8 @@ BOOST_AUTO_TEST_CASE(iterator2){
       BOOST_CHECK(*it == (*_A)(it.row(), it.column()));
     }
     for(matrix_t::const_iterator_skelton_t<mapper_t::diagonal_t>
-        it(__A.cbegin<mapper_t::diagonal_t>()), it_end(__A.cend<mapper_t::diagonal_t>()), it2(it + 1);
+        it(__A.cbegin<mapper_t::diagonal_t>()), it_end(__A.cend<mapper_t::diagonal_t>()),
+        it2((it != it_end) ? (it + 1) : it);
         it2 != it_end; ++it, ++it2){
       BOOST_CHECK(
           std::find(
@@ -1431,7 +1434,8 @@ BOOST_AUTO_TEST_CASE(iterator2){
   std::sort(__A.begin<mapper_t:: name >(), __A.end<mapper_t:: name >()); \
   BOOST_TEST_MESSAGE("sort(" msg "):" << __A); \
   for(matrix_t::const_iterator_skelton_t<mapper_t:: name > \
-      it(__A.cbegin<mapper_t:: name >()), it_end(__A.cend<mapper_t:: name >()), it2(it + 1); \
+      it(__A.cbegin<mapper_t:: name >()), it_end(__A.cend<mapper_t:: name >()), \
+      it2((it != it_end) ? (it + 1) : it); \
       it2 != it_end; ++it, ++it2){ \
     BOOST_CHECK((*it) < (*it2)); \
   } \
@@ -1446,16 +1450,26 @@ BOOST_AUTO_TEST_CASE(iterator2){
 { \
   typedef mapper_t::triangular_t<is_lower, right_shift> triangular_t; \
   for(matrix_t::const_iterator_skelton_t<triangular_t::mapper_t> \
-      it(A->cbegin<triangular_t::mapper_t>()), it_end(A->cend<triangular_t::mapper_t>()), it2(it); \
+      it_begin(A->cbegin<triangular_t::mapper_t>()), it_end(A->cend<triangular_t::mapper_t>()), it(it_begin); \
       it != it_end; ++it){ \
-    BOOST_CHECK(*it == it2[it - it2]); \
+    BOOST_TEST_MESSAGE("[" << it - it_begin << "]: " << *it << ", " << it_begin[it - it_begin]); \
+    BOOST_CHECK(*it == it_begin[it - it_begin]); \
+  } \
+  for(std::reverse_iterator<matrix_t::const_iterator_skelton_t<triangular_t::mapper_t> > \
+      it_begin(A->cend<triangular_t::mapper_t>()), it_end(A->cbegin<triangular_t::mapper_t>()), it(it_begin); \
+      it != it_end; ++it){ \
+    BOOST_TEST_MESSAGE("reverse[" << it - it_begin << "]: " << *it << ", " << it_begin[it - it_begin]); \
+    BOOST_CHECK(*it == it_begin[it - it_begin]); \
   } \
   matrix_t __A(A->copy()); \
   std::sort(__A.begin<triangular_t::mapper_t>(), __A.end<triangular_t::mapper_t>()); \
   BOOST_TEST_MESSAGE("sort(" msg "):" << __A); \
   for(matrix_t::const_iterator_skelton_t<triangular_t::mapper_t> \
-      it(__A.cbegin<triangular_t::mapper_t>()), it_end(__A.cend<triangular_t::mapper_t>()), it2(it + 1); \
+      it_begin(__A.cbegin<triangular_t::mapper_t>()), it_end(__A.cend<triangular_t::mapper_t>()), \
+      it(it_begin), it2((it != it_end) ? (it + 1) : it); \
       it2 != it_end; ++it, ++it2){ \
+    BOOST_TEST_MESSAGE("cmp?(" << it2 - it_begin << "," << it - it_begin << "): " \
+        << *it2 << " > " << *it); \
     BOOST_CHECK((*it) < (*it2)); \
   } \
 }

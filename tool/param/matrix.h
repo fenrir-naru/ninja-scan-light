@@ -1488,6 +1488,9 @@ class Matrix_Frozen {
         friend difference_type operator-(const self_type &lhs, const self_type &rhs){
           return lhs.idx - rhs.idx;
         }
+
+        self_type &head() {return static_cast<self_type &>(*this) -= idx;}
+        self_type &tail() {return static_cast<self_type &>(*this) += (rows * columns - idx);}
     };
 
     struct iterator_mapper_t {
@@ -1498,10 +1501,8 @@ class Matrix_Frozen {
           typename base_t::difference_type idx_max;
           void update(){
             if(base_t::idx <= 0){
-              base_t::idx = 0;
               base_t::r = base_t::c = 0;
             }else if(base_t::idx >= idx_max){
-              base_t::idx = idx_max;
               base_t::r = base_t::rows;
               base_t::c = 0;
             }else{
@@ -1533,19 +1534,18 @@ class Matrix_Frozen {
                 ++base_t::r;
                 base_t::c = 0;
               }
-              ++base_t::idx;
             }
+            ++base_t::idx;
             return static_cast<impl_t &>(*this);
           }
           using base_t::operator--;
           impl_t &operator--() {
-            if(base_t::idx > 0){
+            if(base_t::idx-- > 0){
               if(base_t::c == 0){
                 --base_t::r;
                 base_t::c = base_t::columns;
               }
               --base_t::c;
-              --base_t::idx;
             }
             return static_cast<impl_t &>(*this);
           }
@@ -1581,6 +1581,7 @@ class Matrix_Frozen {
             update();
             return static_cast<impl_t &>(*this);
           }
+          impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
       };
       template <bool is_lower, int right_shift = 0>
       struct triangular_t {
@@ -1614,12 +1615,13 @@ class Matrix_Frozen {
               offset2 += idx_max;
             }
             void update(){
-              if(base_t::idx <= 0){
-                base_t::idx = 0;
-              }else if(base_t::idx >= idx_max){
-                base_t::idx = idx_max;
+              int idx(base_t::idx);
+              if(idx < 0){
+                idx = 0;
+              }else if(idx > idx_max){
+                idx = idx_max;
               }
-              int idx(is_lower ? (int)base_t::idx : idx_max - base_t::idx - 1);
+              if(!is_lower){idx = idx_max - idx - 1;}
               if(idx <= offset2){ // in triangle
                 idx += (offset1 + 1);
                 int r_offset(std::ceil((std::sqrt((double)(8 * idx + 1)) - 1) / 2));
@@ -1659,10 +1661,10 @@ class Matrix_Frozen {
               update();
               return static_cast<impl_t &>(*this);
             }
+            impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
             using base_t::operator++;
             impl_t &operator++() {
-              if(base_t::idx < idx_max){
-                ++base_t::idx;
+              if(base_t::idx++ < idx_max){
                 ++base_t::c;
                 if(is_lower){
                   if((base_t::c == base_t::columns)
@@ -1683,8 +1685,7 @@ class Matrix_Frozen {
             }
             using base_t::operator--;
             impl_t &operator--() {
-              if(base_t::idx > 0){
-                --base_t::idx;
+              if(base_t::idx-- > 0){
                 if(is_lower){
                   if(base_t::c == 0){
                     base_t::c = (unsigned int)(right_shift + 1 + (int)(--base_t::r));
@@ -1728,27 +1729,32 @@ struct name : public triangular_t<is_lower, right_shift>::template mapper_t<impl
     class const_iterator_skelton_t : public MapperT<const_iterator_skelton_t<MapperT> > {
       public:
         typedef const T value_type;
-        typedef const T& reference;
-        typedef const T* pointer;
+        typedef const T reference;
+        struct pointer {
+          reference value;
+          const T *operator->() const {return &value;}
+        };
       protected:
         typedef MapperT<const_iterator_skelton_t<MapperT> > base_t;
         self_t mat;
-        mutable T tmp;
       public:
-        reference operator*() const {return tmp = mat(base_t::r, base_t::c);}
-        pointer operator->() const {return &(operator*());}
+        reference operator*() const {return mat(base_t::r, base_t::c);}
+        pointer operator->() const {
+          pointer p = {operator*()};
+          return p;
+        }
         const_iterator_skelton_t(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
-            : base_t(mat_, idx_), mat(mat_), tmp() {}
+            : base_t(mat_, idx_), mat(mat_) {}
         const_iterator_skelton_t()
-            : base_t(), mat(), tmp() {}
+            : base_t(), mat() {}
         reference operator[](const typename base_t::difference_type &n) const {
-          return tmp = *((*this) + n);
+          return *((*this) + n);
         }
     };
 
     typedef const_iterator_skelton_t<iterator_mapper_t::template all_t> const_iterator;
     const_iterator begin() const {return const_iterator(*this);}
-    const_iterator end() const {return const_iterator(*this, rows() * columns());}
+    const_iterator end() const {return const_iterator(*this).tail();}
 
     template <template <typename> class MapperT>
     const_iterator_skelton_t<MapperT> begin() const {
@@ -1756,7 +1762,7 @@ struct name : public triangular_t<is_lower, right_shift>::template mapper_t<impl
     }
     template <template <typename> class MapperT>
     const_iterator_skelton_t<MapperT> end() const {
-      return const_iterator_skelton_t<MapperT>(*this, rows() * columns());
+      return const_iterator_skelton_t<MapperT>(*this).tail();
     }
 
     /**
@@ -4230,7 +4236,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     iterator begin() {return iterator(*this);}
     typename super_t::const_iterator cbegin() const {return super_t::begin();}
     using super_t::end;
-    iterator end() {return iterator(*this, rows() * columns());}
+    iterator end() {return iterator(*this).tail();}
     typename super_t::const_iterator cend() const {return super_t::end();}
 
     template <template <typename> class MapperT>
@@ -4243,7 +4249,7 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     }
     template <template <typename> class MapperT>
     iterator_skelton_t<MapperT> end() {
-      return iterator_skelton_t<MapperT>(*this, rows() * columns());
+      return iterator_skelton_t<MapperT>(*this).tail();
     }
     template <template <typename> class MapperT>
     typename super_t::template const_iterator_skelton_t<MapperT> cend() const {
