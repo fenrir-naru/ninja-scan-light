@@ -2570,6 +2570,34 @@ struct name : public triangular_t<is_lower, right_shift>::template mapper_t<impl
 
       template <class MatrixT, int tag = OperatorProperty<MatrixT>::tag>
       struct check_t {
+#if defined(_MSC_VER)
+        /* work-around of MSVC bug for non-type template parameter
+         * @see https://stackoverflow.com/questions/2763836/sfinae-failing-with-enum-template-parameter
+         */
+        template <bool is_operator2, class U = void>
+        struct check_op_t {
+          static const int complexity_linear = 1;
+          static const int complexity_square = 1;
+        };
+        template <class U>
+        struct check_op_t<true, U> {
+          typedef typename OperatorProperty<MatrixT>::operator_t op_t;
+          static const int complexity_lhs = check_t<op_t::lhs_t>::complexity;
+          static const int complexity_rhs = check_t<op_t::rhs_t>::complexity;
+          static const int complexity_linear = complexity_lhs + complexity_rhs;
+          static const int complexity_square = (complexity_lhs + 1) * (complexity_rhs + 1);
+        };
+        static const bool is_operator2
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
+              || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
+              || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
+              || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+              || (tag == OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix);
+        static const int complexity
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+                ? check_op_t<is_operator2>::complexity_square
+                : check_op_t<is_operator2>::complexity_linear;
+#else
         template <int tag2, class U = void>
         struct check_operator_t {
           static const int complexity = 1;
@@ -2594,8 +2622,8 @@ template <class U> struct check_operator_t<tag_name, U> \
         make_binary_item(OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix) {};
         // Stack_Horizontal/Vertical is intentionally ignored.
 #undef make_binary_item
-
         static const int complexity = check_operator_t<tag>::complexity;
+#endif
         static const bool is_multi_mat_by_scalar
             = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
       };
