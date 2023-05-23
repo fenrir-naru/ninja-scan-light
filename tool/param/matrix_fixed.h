@@ -380,6 +380,32 @@ struct MatrixBuilder_Dependency<
             (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R)>,
           ViewType> > {};
 
+template <
+    class T, class T_op,
+    class T2, class T3, class T4, class T5,
+    class ViewType,
+    int nR_L, int nC_L, class ViewType_L,
+    int nR_R, int nC_R, class ViewType_R,
+    bool horizontal_R>
+struct MatrixBuilder_Dependency<
+    Matrix_Frozen<
+        T,
+        Array2D_Operator<T_op, Array2D_Operator_Stack<
+          Matrix_Frozen<T2, Array2D_Fixed<T3, nR_L, nC_L>, ViewType_L>,
+          Matrix_Frozen<T4, Array2D_Fixed<T5, nR_R, nC_R>, ViewType_R>,
+          horizontal_R> >,
+        ViewType> >
+    : public MatrixBuilder_Dependency<
+        Matrix_Frozen<
+          T,
+          Array2D_Fixed<
+            T,
+            (MatrixViewProperty<ViewType_L>::transposed ? nC_L : nR_L)
+              + (horizontal_R ? 0 : (MatrixViewProperty<ViewType_R>::transposed ? nC_R : nR_R)),
+            (MatrixViewProperty<ViewType_L>::transposed ? nR_L : nC_L)
+              + (horizontal_R ? (MatrixViewProperty<ViewType_R>::transposed ? nR_R : nC_R) : 0)>,
+          ViewType> > {};
+
 // For optimization of local temporary matrix
 template <
     template <class, class, class> class MatrixT,

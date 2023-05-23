@@ -6,6 +6,8 @@ require 'SylphideMath.so'
 require 'matrix'
 
 shared_examples 'Matrix' do
+  let!(:tolerance){SylphideMath::tolerance}
+  after{SylphideMath::tolerance = tolerance}
   let(:params){{
     :rc => [8, 8],
     :acceptable_delta => 1E-10,
@@ -92,17 +94,25 @@ shared_examples 'Matrix' do
   end
   
   describe 'property' do
-    let(:mat){{
-      :square => proc{
+    let(:mat_gen){{
+      :square => proc{|r| # example: [[1, 3, 6], [2, 5, 8], [4, 7, 9]]
         k = 0
-        mat_type::new(params[:rc][0], params[:rc][0]){|i, j| k += 1}
-      }.call,
+        res = mat_type::new(r, r)
+        (r * 2 - 1).times{|ij|
+          (([ij - r + 1, 0].max)..([ij, r - 1].min)).each{|i| res[ij - i, i] = (k += 1)}
+        }
+        res
+      }
+    }}
+    let(:mat){{
+      :square => mat_gen[:square].call(params[:rc][0]),
       :not_square => proc{
         k = 0
         mat_type::new(params[:rc][0], params[:rc][0] * 2){|i, j| k += 1}
       }.call,
       :diagonal => mat_type::new(params[:rc][0], params[:rc][0]){|i, j| i == j ? 1 : 0},
       :symmetric => mat_type::new(params[:rc][0], params[:rc][0]){|i, j| i + j},
+      :unit => mat_type::I(params[:rc][0]),
     }}
     describe 'is checked with' do
       it 'square?' do
@@ -117,11 +127,51 @@ shared_examples 'Matrix' do
         expect(mat[:diagonal].diagonal?)    .to eq(true)
         expect(mat[:symmetric].diagonal?)   .to eq(false)
       end
+      it 'lower_triangular?' do
+        expect(mat[:square].lower_triangular?)      .to eq(false)
+        expect(mat[:not_square].lower_triangular?)  .to eq(false)
+        expect(mat[:diagonal].lower_triangular?)    .to eq(true)
+        expect(mat[:symmetric].lower_triangular?)   .to eq(false)
+      end
+      it 'upper_triangular?' do
+        expect(mat[:square].upper_triangular?)      .to eq(false)
+        expect(mat[:not_square].upper_triangular?)  .to eq(false)
+        expect(mat[:diagonal].upper_triangular?)    .to eq(true)
+        expect(mat[:symmetric].upper_triangular?)   .to eq(false)
+      end
       it 'symmetric?' do
         expect(mat[:square].symmetric?)     .to eq(false)
         expect(mat[:not_square].symmetric?) .to eq(false)
         expect(mat[:diagonal].symmetric?)   .to eq(true)
         expect(mat[:symmetric].symmetric?)  .to eq(true)
+      end
+      it 'hermitian?' do
+        expect(mat[:square].hermitian?)     .to eq(false)
+        expect(mat[:not_square].hermitian?) .to eq(false)
+        expect(mat[:diagonal].hermitian?)   .to eq(true)
+        expect(mat[:symmetric].hermitian?)  .to eq(true)
+      end
+      it 'skew_symmetric?' do
+        expect(mat[:square].skew_symmetric?)     .to eq(false)
+        expect(mat[:not_square].skew_symmetric?) .to eq(false)
+        expect(mat[:diagonal].skew_symmetric?)   .to eq(true)
+        expect(mat[:symmetric].skew_symmetric?)  .to eq(false)
+      end
+      it 'normal?' do
+        expect(mat[:square].normal?)     .to eq(false)
+        expect(mat[:not_square].normal?) .to eq(false)
+        expect(mat[:diagonal].normal?)   .to eq(true)
+        expect(mat[:symmetric].normal?)  .to eq(true)
+      end
+      it 'orthogonal?' do
+        expect(mat[:square].orthogonal?)    .to eq(false)
+        expect(mat[:not_square].orthogonal?).to eq(false)
+        expect(mat[:unit].orthogonal?)      .to eq(true)
+      end
+      it 'unitary?' do
+        expect(mat[:square].unitary?)     .to eq(false)
+        expect(mat[:not_square].unitary?) .to eq(false)
+        expect(mat[:unit].unitary?)       .to eq(true)
       end
       it 'different_size?' do
         mat.keys.combination(2).each{|mat1, mat2|
@@ -142,8 +192,38 @@ shared_examples 'Matrix' do
       end
       it 'determinant, det' do
         [:determinant, :det].each{|f|
-          #expect(mat[:square].send(f)).to eq(Matrix[*mat[:square].to_a].det)
+          expect(mat[:square].send(f)).to eq(Matrix[*mat[:square].to_a].det)
           expect{mat[:not_square].send(f)}.to raise_error(RuntimeError)
+        }
+      end
+      it 'rank' do
+        (5..8).each{|n|
+          orig = mat_gen[:square].call(n)
+          expect(orig.rank).to eq(Matrix[*orig.to_a].rank)
+        }
+        expect(mat[:symmetric].rank).to eq(Matrix[*mat[:symmetric].to_a].rank)
+        expect{mat[:not_square].rank}.to raise_error(RuntimeError)
+      end
+      it 'cofactor' do
+        SylphideMath::tolerance = 1E-10
+        (5..8).each{|n|
+          orig = mat_gen[:square].call(n)
+          cmp = Matrix[*orig.to_a]
+          orig.rows.times{|i|
+            orig.columns.times{|j|
+              a, b = [orig, cmp].collect{|item| item.cofactor(i, j)} #rescue next
+              expect((a - b).abs).to be < params[:acceptable_delta]
+            }
+          }
+        }
+      end
+      it 'adjugate' do
+        SylphideMath::tolerance = 1E-10
+        (5..8).each{|n|
+          orig = mat_gen[:square].call(n)
+          (Matrix[*orig.adjugate.to_a] - Matrix[*orig.to_a].adjugate).each{|v| 
+            expect(v.abs).to be < params[:acceptable_delta]
+          }
         }
       end
     end
@@ -280,6 +360,14 @@ shared_examples 'Matrix' do
         }
       }
     end
+    it 'generates minor matrix with first_minor' do
+      params[:rc][0].times{|i|
+        params[:rc][1].times{|j|
+          expect(mat.first_minor(i, j).to_a) \
+              .to eq(Matrix[*compare_with].first_minor(i, j).to_a)
+        }
+      }
+    end
   end
   
   describe 'iterator' do
@@ -307,6 +395,19 @@ shared_examples 'Matrix' do
             candidates.delete_at(i)
           }
           expect(candidates.empty?).to be(true)
+        }
+      }
+    end
+    it 'supports index, find_index' do
+      cnd = proc{|v| v.abs >= 0.5}
+      [:index, :find_index].each{|func|
+        opt.each{|k, indices|
+          expect(mat.send(*[func, k].compact, &cnd)).to eq(
+              indices.select{|i, j| cnd.call(compare_with[i][j])}.first)
+          indices.each{|i, j|
+            expect(mat.send(*[func, compare_with[i][j], k].compact)).to eq([i, j])
+          }
+          expect(mat.send(*[func, 1, k].compact)).to be(nil)
         }
       }
     end
@@ -397,6 +498,13 @@ shared_examples 'Matrix' do
       expect((mat[0] * mat[1]).to_a).to eq((Matrix[*compare_with[0]] * Matrix[*compare_with[1]]).to_a)
       expect{mat[2] * mat[3]}.to raise_error(ArgumentError)
       expect((mat[2] * mat[3].t).to_a).to eq((Matrix[*compare_with[2]] * Matrix[*compare_with[3]].t).to_a)
+    end
+    it 'have entrywise_product(mat), a.k.a. .*(mat)' do
+      [:entrywise_product, :hadamard_product].each{|func|
+        [[0, 1], [2, 3]].each{|i, j|
+          expect((mat[i].send(func, mat[j])).to_a).to eq((Matrix[*compare_with[i]].send(func, Matrix[*compare_with[j]])).to_a)
+        }
+      } if Gem::Version::create(RUBY_VERSION) >= Gem::Version::create("2.5.0")
     end
     it 'have /(scalar)' do
       expect((mat[0] / 2).to_a).to eq((Matrix[*compare_with[0]] / 2).to_a)

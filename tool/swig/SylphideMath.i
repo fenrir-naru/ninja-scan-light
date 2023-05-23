@@ -412,17 +412,27 @@ class Matrix_Frozen {
     template <class T2, class Array2D_Type2, class ViewType2>
     bool operator==(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const noexcept;
     // bool operator!= // automatically defined
-    
+
     bool isSquare() const noexcept;
     bool isDiagonal() const noexcept;
+    bool isLowerTriangular() const noexcept;
+    bool isUpperTriangular() const noexcept;
     bool isSymmetric() const noexcept;
+    bool isHermitian() const noexcept;
+    bool isSkewSymmetric() const noexcept;
+    bool isNormal() const noexcept;
+    bool isOrthogonal() const noexcept;
+    bool isUnitary() const noexcept;
     
-    T trace(const bool &do_check = true) const;
+    T trace() const;
     T sum() const noexcept;
     
     // bool isLU() const noexcept
     
-    T determinant(const bool &do_check = true) const;
+    T determinant() const;
+    unsigned int rank() const;
+    T cofactor(
+        const unsigned int &row, const unsigned int &column) const;
 };
 
 template <class T, class Array2D_Type, class ViewType = MatrixViewBase<> >
@@ -470,6 +480,11 @@ typedef MatrixViewTranspose<MatrixViewSizeVariable<MatrixViewOffset<MatrixViewBa
 
 %{
 struct MatrixUtil {
+  struct each_break_t {
+    unsigned int r, c;
+    each_break_t(const unsigned int &row, const unsigned int &column)
+        : r(row), c(column) {}
+  };
   enum each_which_t {
     EACH_ALL,
     EACH_DIAGONAL,
@@ -478,6 +493,7 @@ struct MatrixUtil {
     EACH_UPPER,
     EACH_STRICT_LOWER,
     EACH_STRICT_UPPER,
+    EACH_UNKNOWN,
   };
   template <class T, 
       class Array2D_Type, class ViewType,
@@ -488,7 +504,7 @@ struct MatrixUtil {
         const T &src_elm, T *dst_elm,
         const unsigned int &i, const unsigned int &j),
       const each_which_t &each_which = EACH_ALL,
-      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL){
+      Matrix<T, Array2D_Type2, ViewType2> *dst = NULL) {
     unsigned int i_max(src.rows()), j_max(src.columns());
     switch(each_which){
       case EACH_DIAGONAL:
@@ -544,10 +560,8 @@ struct MatrixUtil {
     }
   }
 #if defined(SWIGRUBY)
-  static const each_which_t &sym2each_which(const VALUE &value){
-    if(!RB_TYPE_P(value, T_SYMBOL)){
-      std::invalid_argument("Symbol is required");
-    }
+  static each_which_t sym2each_which(const VALUE &value){
+    if(!RB_TYPE_P(value, T_SYMBOL)){return EACH_UNKNOWN;}
     static const struct {
       VALUE sym;
       each_which_t which;
@@ -564,9 +578,7 @@ struct MatrixUtil {
     while(value != cmp[i].sym){
       if(++i >= (sizeof(cmp) / sizeof(cmp[0]))){break;}
     }
-    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){
-      std::invalid_argument("Unknown enumerate direction");
-    }
+    if(i >= (sizeof(cmp) / sizeof(cmp[0]))){return EACH_UNKNOWN;}
     return cmp[i].which;
   }
 #endif
@@ -671,6 +683,8 @@ struct MatrixUtil {
   %catches(std::out_of_range) rowVector;
   %catches(std::out_of_range) columnVector;
   %catches(std::logic_error, std::runtime_error) determinant;
+  %catches(std::logic_error) rank;
+  %catches(std::logic_error, std::runtime_error) cofactor;
 
   T __getitem__(const unsigned int &row, const unsigned int &column) const {
     return ($self)->operator()(row, column);
@@ -731,6 +745,17 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator-(scalar));
   }
   
+#ifdef SWIGRUBY
+  %alias entrywise_product "hadamard_product";
+#endif
+  %catches(std::invalid_argument) entrywise_product;
+  template <class T2, class Array2D_Type2, class ViewType2>
+  Matrix<T, Array2D_Dense<T> > entrywise_product(
+      const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->entrywise_product(matrix));
+  }
+  INSTANTIATE_MATRIX_FUNC(entrywise_product, entrywise_product);
+  
   template <class T2, class Array2D_Type2, class ViewType2>
   Matrix<T, Array2D_Dense<T> > operator*(
       const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix)
@@ -738,6 +763,18 @@ struct MatrixUtil {
     return (Matrix<T, Array2D_Dense<T> >)(($self)->operator*(matrix));
   }
   INSTANTIATE_MATRIX_FUNC(operator*, __mul__);
+  
+  // TODO __pow__ for **
+  // TODO __pos__ for +@
+
+  Matrix<T, Array2D_Dense<T> > first_minor(
+      const unsigned int &row,
+      const unsigned int &column) const noexcept {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->matrix_for_minor(row, column));
+  }
+  Matrix<T, Array2D_Dense<T> > adjugate() const {
+    return (Matrix<T, Array2D_Dense<T> >)(($self)->adjugate());
+  }
 
   %typemap(in,numinputs=0)
       Matrix<T, Array2D_Dense<T> > &output_L (Matrix<T, Array2D_Dense<T> > temp),
@@ -816,16 +853,33 @@ struct MatrixUtil {
     s << $self->inspect();
     return s.str();
   }
+  
+  /* The followings are better to be implemented in Ruby
+   * combine, hstack, vstack (due to their arguments are variable)
+   */
 
 #ifdef SWIGRUBY
   %rename("square?") isSquare;
   %rename("diagonal?") isDiagonal;
+  %rename("lower_triangular?") isLowerTriangular;
+  %rename("upper_triangular?") isUpperTriangular;
   %rename("symmetric?") isSymmetric;
+  %rename("hermitian?") isHermitian;
+  %rename("skew_symmetric?") isSkewSymmetric;
+  %alias isSkewSymmetric "antisymmetric?"
+  %rename("normal?") isNormal;
+  %rename("orthogonal?") isOrthogonal;
+  %rename("unitary?") isUnitary;
   %rename("different_size?") isDifferentSize;
+  %alias __getitem__ "element,component";
+  // %alias __eq__ "eql?"; // Intentionally commented out because eql? is more strict than ==
+  %alias rows "row_size,row_count";
+  %alias columns "column_size,column_count";
   %alias trace "tr";
   %alias determinant "det";
   %alias inverse "inv";
   %alias transpose "t";
+  %alias conjugate "conj";
   %alias lup "lup_decomposition";
   %alias ud "ud_decomposition";
   %alias qr "qr_decomposition";
@@ -833,7 +887,7 @@ struct MatrixUtil {
   %fragment(SWIG_From_frag(Matrix_Frozen_Helper<T>), "header", 
       fragment=SWIG_Traits_frag(T)){
     template <bool with_index = false, bool assign = false>
-    static inline void matrix_yield_internal(
+    static inline VALUE matrix_yield_internal(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
       SWIG_Object v;
       if(with_index){
@@ -848,6 +902,7 @@ struct MatrixUtil {
         s << "Unknown input (T expected) [" << i << "," << j << "]: ";
         throw std::invalid_argument(s.str().append(inspect_str(v)));
       }
+      return v;
     }
     static void matrix_yield(
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
@@ -865,11 +920,17 @@ struct MatrixUtil {
         const T &src, T *dst, const unsigned int &i, const unsigned int &j){
       matrix_yield_internal<true, true>(src, dst, i, j);
     }
+    
+    static void matrix_yield_check(
+        const T &src, T *dst, const unsigned int &i, const unsigned int &j){
+      VALUE res(matrix_yield_internal<false, false>(src, dst, i, j));
+      if(RTEST(res)){throw typename MatrixUtil::each_break_t(i, j);}
+    }
     static void (*matrix_each(const T *))
         (const T &, T *, const unsigned int &, const unsigned int &) {
       ID id_thisf(rb_frame_this_func()), id_callee(rb_frame_callee());
       static const ID 
-          id_map(rb_intern("map")), id_mapb(rb_intern("map!")), 
+          id_map(rb_intern("map")), id_mapb(rb_intern("map!")),
           id_eachwi(rb_intern("each_with_index"));
       if((id_thisf == id_map) || (id_thisf == id_mapb)){
         static const ID with_index[] = {
@@ -895,14 +956,14 @@ struct MatrixUtil {
     }
     $1 = matrix_each((const T *)0);
   }
-  %typemap(typecheck) const typename MatrixUtil::each_which_t &each_which {
-    $1 = RB_TYPE_P($input, T_SYMBOL);
+  %typemap(typecheck,precedence=SWIG_TYPECHECK_POINTER) const typename MatrixUtil::each_which_t each_which {
+    $1 = (MatrixUtil::sym2each_which($input) != MatrixUtil::EACH_UNKNOWN);
   }
-  %typemap(in) const typename MatrixUtil::each_which_t &each_which {
-    try{
-      $1 = &const_cast<typename MatrixUtil::each_which_t &>(MatrixUtil::sym2each_which($input));
-    }catch(std::invalid_argument &e){
-      SWIG_exception(SWIG_ValueError, e.what());
+  %typemap(in) const typename MatrixUtil::each_which_t each_which {
+    $1 = MatrixUtil::sym2each_which($input);
+    if($1 == MatrixUtil::EACH_UNKNOWN){
+      SWIG_exception(SWIG_ValueError,
+          std::string("Unknown enumerate direction: ").append(inspect_str($1)).c_str());
     }
   }
   %catches(native_exception) each;
@@ -910,7 +971,7 @@ struct MatrixUtil {
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
-      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
     MatrixUtil::each(*$self, each_func, each_which);
     return *$self;
   }
@@ -921,12 +982,36 @@ struct MatrixUtil {
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
-      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL) const {
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
     Matrix<T, Array2D_Dense<T> > res($self->operator Matrix<T, Array2D_Dense<T> >());
     MatrixUtil::each(*$self, each_func, each_which, &res);
     return res;
   }
   %alias map "collect,map_with_index,collect_with_index";
+  
+  %catches(native_exception) index;
+  VALUE index(
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL) const {
+    try{
+      MatrixUtil::each(*$self, matrix_yield_check, each_which);
+      return Qnil;
+    }catch(const typename MatrixUtil::each_break_t &each_break){
+      return rb_ary_new_from_args(2, UINT2NUM(each_break.r), UINT2NUM(each_break.c));
+    }
+  }
+  %typemap(check,noblock=1) VALUE idx_selector {
+    if(MatrixUtil::sym2each_which($1) == MatrixUtil::EACH_UNKNOWN){
+      SWIG_exception(SWIG_ValueError,
+          std::string("Unknown enumerate direction: ").append(inspect_str($1)).c_str());
+    }
+  }
+  VALUE index(VALUE value, VALUE idx_selector = Qnil) const {
+    return rb_block_call(
+        rb_current_receiver(), rb_frame_callee(),
+        (RTEST(idx_selector) ? 1 : 0), &idx_selector,
+        (rb_block_call_func_t)rb_equal, value);
+  }
+  %alias index "find_index";
   
   SWIG_Object to_a() const {
     unsigned int i_max($self->rows()), j_max($self->columns());
@@ -1086,7 +1171,7 @@ MAKE_TO_S(Matrix_Frozen)
       void (*each_func)(
         const T &src, T *dst,
         const unsigned int &i, const unsigned int &j), 
-      const typename MatrixUtil::each_which_t &each_which = MatrixUtil::EACH_ALL){
+      const typename MatrixUtil::each_which_t each_which = MatrixUtil::EACH_ALL){
     MatrixUtil::each(*$self, each_func, each_which, $self);
   }
   %rename("map!") map_bang;
@@ -1132,6 +1217,9 @@ MAKE_TO_S(Matrix_Frozen)
 #endif
   }
 };
+/* Ruby #row, #column, #row_vectors, #column_vectors are not intentionally implemented 
+ * because a vector is treated as a (1*n) or (n*1) matrix in C++.
+ */
 %enddef
 
 %define INSTANTIATE_MATRIX_EIGEN2(type, ctype, storage, view)
@@ -1152,7 +1240,7 @@ MAKE_TO_S(Matrix_Frozen)
   void eigen(
       Matrix<ctype, Array2D_Dense<ctype > > &output_V, 
       Matrix<ctype, Array2D_Dense<ctype > > &output_D) const {
-    typedef typename Matrix_Frozen<type, storage, view >::complex_t::m_t cmat_t;
+    typedef Matrix<ctype, Array2D_Dense<ctype > > cmat_t;
     cmat_t VD($self->eigen());
     output_V = VD.partial($self->rows(), $self->rows()).copy();
     cmat_t D($self->rows(), $self->rows());
@@ -1307,6 +1395,19 @@ INSTANTIATE_MATRIX(double, D);
 INSTANTIATE_MATRIX_EIGEN(double, Complex<double>);
 INSTANTIATE_MATRIX(Complex<double>, ComplexD);
 INSTANTIATE_MATRIX_EIGEN(Complex<double>, Complex<double>);
+
+%rename("tolerance=") set_tolerance;
+%rename("tolerance") get_tolerance;
+%inline %{
+double set_tolerance(const double &width){
+  MatrixValue<double>::zero = width;
+  MatrixValue<Complex<double> >::zero = width;
+  return width;
+}
+double get_tolerance(){
+  return set_tolerance(MatrixValue<double>::zero.width);
+}
+%}
 
 #undef INSTANTIATE_MATRIX_FUNC
 #undef INSTANTIATE_MATRIX_TRANSPOSE

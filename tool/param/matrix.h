@@ -514,6 +514,108 @@ struct Array2D_Operator_Multiply_by_Scalar;
 template <class LHS_T, class RHS_T, bool rhs_positive>
 struct Array2D_Operator_Add;
 
+template <class LHS_T, class RHS_T>
+struct Array2D_Operator_EntrywiseMultiply;
+
+template <class LHS_T, class RHS_T, bool rhs_horizontal>
+struct Array2D_Operator_Stack;
+
+
+template <class T>
+struct MatrixValue_Special;
+
+template <class T>
+struct MatrixValue {
+  template <class T2>
+  struct check_complex_t {
+    static const bool hit = false;
+    typedef T2 r_t;
+    typedef Complex<T2> c_t;
+  };
+  template <class T2>
+  struct check_complex_t<Complex<T2> > {
+    static const bool hit = true;
+    typedef T2 r_t;
+    typedef Complex<T2> c_t;
+  };
+  static const bool is_complex = check_complex_t<T>::hit;
+  typedef typename check_complex_t<T>::r_t real_t;
+  typedef typename check_complex_t<T>::c_t complex_t;
+  static real_t get_real(const real_t &v) noexcept {
+    return v;
+  }
+  static real_t get_real(const complex_t &v) noexcept {
+    return v.real();
+  }
+  static complex_t get_sqrt(const real_t &v) noexcept {
+    return (v >= 0) ? complex_t(std::sqrt(v)) : complex_t(0, std::sqrt(-v));
+  }
+  static complex_t get_sqrt(const complex_t &v) noexcept {
+    return v.sqrt();
+  }
+  static real_t get_abs(const real_t &v) noexcept {
+    return std::abs(v);
+  }
+  static real_t get_abs(const complex_t &v) noexcept {
+    return v.abs();
+  }
+  static real_t get_abs2(const real_t &v) noexcept {
+    return v * v;
+  }
+  static real_t get_abs2(const complex_t &v) noexcept {
+    return v.abs2();
+  }
+  static bool is_nan_or_infinite(const real_t &v) noexcept {
+#if defined(_MSC_VER)
+    return _isnan(v) || !_finite(v);
+#else
+    return std::isnan(v) || !std::isfinite(v);
+#endif
+  }
+  static bool is_nan_or_infinite(const complex_t &v) noexcept {
+    return is_nan_or_infinite(v.real()) || is_nan_or_infinite(v.imaginary());
+  }
+
+  static typename MatrixValue_Special<T>::zero_t zero; // System-wise zero
+};
+
+template <class T>
+struct MatrixValue_Special {
+  typedef MatrixValue<T> v_t;
+  struct wide_zero_t {
+    typename v_t::real_t width, width_abs2;
+    wide_zero_t(const typename v_t::real_t &width_)
+        : width(v_t::get_abs(width_)), width_abs2(v_t::get_abs2(width_)) {}
+    wide_zero_t &operator=(const typename v_t::real_t &width_) {
+      width = v_t::get_abs(width_);
+      width_abs2 = v_t::get_abs2(width_);
+      return *this;
+    }
+    bool operator==(const typename v_t::real_t &v) const noexcept {return v_t::get_abs(v) <= width;}
+    bool operator==(const typename v_t::complex_t &v) const noexcept {return v_t::get_abs2(v) <= width_abs2;}
+    bool operator!=(const T &v) const noexcept {return !operator==(v);}
+  };
+  template <
+      bool is_integer = std::numeric_limits<T>::is_integer,
+      class U = void>
+  struct zero_selector_t {
+    typedef wide_zero_t res_t;
+  };
+  template <class U>
+  struct zero_selector_t<true, U> {
+    // When T is a kind of integer types, exact equalness is easiliy achievable.
+    typedef T res_t;
+  };
+  typedef typename zero_selector_t<>::res_t zero_t;
+};
+
+template <class T>
+typename MatrixValue_Special<T>::zero_t MatrixValue<T>::zero = 0;
+
+#if 0 // If exact zero is required, then specialization resolves it.
+template <>
+struct MatrixValue_Special<double> {typedef double zero_t;};
+#endif
 
 template <class BaseView = void>
 struct MatrixViewBase {
@@ -1137,12 +1239,12 @@ struct MatrixBuilder_ViewTransformerBase<
         typename MatrixViewBuilder<
           typename view_builder_t::loop_t>::offset_t>::size_variable_t> circular_t;
 
-  template <class T2 = T>
+  template <bool is_complex = MatrixValue<T>::is_complex, class U = void>
   struct check_complex_t {
     typedef MatrixT<T, Array2D_Type, ViewType> conjugate_t;
   };
-  template <class T2>
-  struct check_complex_t<Complex<T2> > {
+  template <class U>
+  struct check_complex_t<true, U> {
     typedef MatrixT<T, Array2D_Type, typename view_builder_t::conjugate_t> conjugate_t;
   };
   typedef typename check_complex_t<>::conjugate_t conjugate_t;
@@ -1242,6 +1344,7 @@ class Matrix_Frozen {
     typedef ViewType view_t;
     typedef Matrix_Frozen<T, Array2D_Type, ViewType> self_t;
     typedef self_t frozen_t;
+    typedef MatrixValue<T> value_t;
 
     typedef MatrixBuilder<self_t> builder_t;
 
@@ -1314,29 +1417,39 @@ class Matrix_Frozen {
         typedef std::random_access_iterator_tag iterator_category;
       protected:
         difference_type idx;
-        unsigned int row(const self_t &mat) const {
-          return (mat.columns() > 0) ? (idx / mat.columns()) : 0;
-        }
-        unsigned int column(const self_t &mat) const {
-          return (mat.columns() > 0) ? (idx % mat.columns()) : idx;
-        }
+        unsigned int rows, columns;
+        unsigned int r, c;
       public:
+        const unsigned int &row() const {return r;}
+        const unsigned int &column() const {return c;}
+
         // @see http://www.cplusplus.com/reference/iterator/
         // required for input iterator
-        iterator_base_t(const difference_type &idx_ = 0) : idx(idx_) {}
-        self_type &operator++() {++idx; return static_cast<self_type &>(*this);}
-        self_type operator++(int) {self_type res(static_cast<self_type &>(*this)); ++idx; return res;}
+        iterator_base_t(const self_t &mat, const difference_type &idx_ = 0)
+            : idx(idx_), rows(mat.rows()), columns(mat.columns()), r(0), c(0) {}
+        iterator_base_t()
+            : idx(0), rows(0), columns(0), r(0), c(0) {}
+        self_type &operator++() {return static_cast<self_type &>(*this).operator+=(1);}
+        self_type operator++(int) {
+          self_type res(static_cast<self_type &>(*this));
+          static_cast<self_type &>(*this).operator++();
+          return res;
+        }
         friend bool operator==(const self_type &lhs, const self_type &rhs) {
           return lhs.idx == rhs.idx;
         }
         friend bool operator!=(const self_type &lhs, const self_type &rhs) {return !(lhs == rhs);}
 
         // required for forward iterator
-        //iterator_t() : mat(), idx(0) {}
+        //iterator_t() // ctor.
 
         // required for bidirectional iterator
-        self_type &operator--() {--idx; return static_cast<self_type &>(*this);}
-        self_type operator--(int) {self_type res(static_cast<self_type &>(*this)); --idx; return res;}
+        self_type &operator--() {return static_cast<self_type &>(*this).operator+=(-1);}
+        self_type operator--(int) {
+          self_type res(static_cast<self_type &>(*this));
+          static_cast<self_type &>(*this).operator--();
+          return res;
+        }
 
         // required for random access iterator
         friend bool operator<(const self_type &lhs, const self_type &rhs){
@@ -1375,37 +1488,333 @@ class Matrix_Frozen {
         friend difference_type operator-(const self_type &lhs, const self_type &rhs){
           return lhs.idx - rhs.idx;
         }
+
+        self_type &head() {return static_cast<self_type &>(*this) -= idx;}
+        self_type &tail() {return static_cast<self_type &>(*this) += (rows * columns - idx);}
     };
 
-    class const_iterator : public iterator_base_t<const_iterator> {
+    struct iterator_mapper_t {
+      template <class impl_t>
+      class all_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max;
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::r = base_t::c = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::r = base_t::rows;
+              base_t::c = 0;
+            }else{
+              std::div_t rc(std::div(base_t::idx, base_t::columns));
+              base_t::r = (unsigned int)rc.quot;
+              base_t::c = (unsigned int)rc.rem;
+            }
+          }
+        public:
+          all_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_),
+              idx_max((typename base_t::difference_type)(base_t::rows * base_t::columns)) {
+            update();
+          }
+          all_t()
+              : base_t(),
+              idx_max((typename base_t::difference_type)(base_t::rows * base_t::columns)) {
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+          using base_t::operator++;
+          impl_t &operator++() {
+            if(base_t::r < base_t::rows){
+              if(++base_t::c == base_t::columns){
+                ++base_t::r;
+                base_t::c = 0;
+              }
+            }
+            ++base_t::idx;
+            return static_cast<impl_t &>(*this);
+          }
+          using base_t::operator--;
+          impl_t &operator--() {
+            if(base_t::idx-- > 0){
+              if(base_t::c == 0){
+                --base_t::r;
+                base_t::c = base_t::columns;
+              }
+              --base_t::c;
+            }
+            return static_cast<impl_t &>(*this);
+          }
+      };
+      template <class impl_t>
+      class diagonal_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max;
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::idx = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::idx = idx_max;
+            }
+            base_t::r = base_t::c = base_t::idx;
+          }
+        public:
+          diagonal_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_),
+              idx_max((typename base_t::difference_type)(
+                (base_t::rows >= base_t::columns) ? base_t::columns : base_t::rows)) {
+            update();
+          }
+          diagonal_t()
+              : base_t(),
+              idx_max((typename base_t::difference_type)(
+                (base_t::rows >= base_t::columns) ? base_t::columns : base_t::rows)) {
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+          impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
+      };
+      template <class impl_t>
+      class offdiagonal_t : public iterator_base_t<impl_t> {
+        protected:
+          typedef iterator_base_t<impl_t> base_t;
+          typename base_t::difference_type idx_max, offset;
+          void setup(){
+            idx_max = (typename base_t::difference_type)(base_t::rows * base_t::columns);
+            if(idx_max == 0){
+              offset = 0;
+            }else if(base_t::rows >= base_t::columns){
+              idx_max -= base_t::columns;
+              offset = base_t::columns * (base_t::columns - 1);
+            }else{
+              idx_max -= base_t::rows;
+              offset = idx_max;
+            }
+          }
+          void update(){
+            if(base_t::idx <= 0){
+              base_t::idx = 0;
+            }else if(base_t::idx >= idx_max){
+              base_t::idx = idx_max;
+            }
+            if(base_t::idx >= offset){ // on row having no diagonal element
+              std::div_t rc(std::div(base_t::idx - offset, base_t::columns));
+              base_t::r = base_t::columns + (unsigned int)rc.quot;
+              base_t::c = (unsigned int)rc.rem;
+            }else{ // on row having a diagonal element
+              std::div_t rc(std::div(base_t::idx, base_t::columns - 1));
+              base_t::r = (unsigned int)rc.quot;
+              base_t::c = (unsigned int)rc.rem;
+              if(base_t::c >= base_t::r){++base_t::c;}
+            }
+          }
+        public:
+          offdiagonal_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+              : base_t(mat, idx_) {
+            setup();
+            update();
+          }
+          offdiagonal_t() : base_t() {
+            setup();
+            update();
+          }
+          impl_t &operator+=(const typename base_t::difference_type &n){
+            base_t::operator+=(n);
+            update();
+            return static_cast<impl_t &>(*this);
+          }
+          impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
+      };
+      template <bool is_lower, int right_shift = 0>
+      struct triangular_t {
+        template <class impl_t>
+        class mapper_t : public iterator_base_t<impl_t> {
+          protected:
+            typedef iterator_base_t<impl_t> base_t;
+            typename base_t::difference_type idx_max, offset1, offset2;
+            void setup() {
+              int shift(is_lower ? right_shift : -right_shift),
+                  len1((int)(is_lower ? base_t::rows : base_t::columns)),
+                  len2((int)(is_lower ? base_t::columns : base_t::rows));
+              // calculation concept: (big triangle) - (2 small triangles if nesccesary)
+              idx_max = offset1 = offset2 = 0;
+              int triangle_len(shift + len1);
+              if(triangle_len < 0){return;}
+              if(shift > 0){ // exclude top left triangle
+                int area_tl((shift + 1) * shift / 2);
+                idx_max -= area_tl;
+                if(is_lower){offset1 = area_tl;}
+                else{offset2 = -shift * len1;}
+              }
+              idx_max += (triangle_len + 1) * triangle_len / 2; // add main triangle
+              if(triangle_len > len2){ // exclude bottom right triangle
+                int len_br(triangle_len - len2);
+                int area_br((len_br + 1) * len_br / 2);
+                idx_max -= area_br;
+                if(is_lower){offset2 = -len_br * len2;}
+                else{offset1 = area_br;}
+              }
+              offset2 += idx_max;
+            }
+            void update(){
+              int idx(base_t::idx);
+              if(idx < 0){
+                idx = 0;
+              }else if(idx > idx_max){
+                idx = idx_max;
+              }
+              if(!is_lower){idx = idx_max - idx - 1;}
+              if(idx <= offset2){ // in triangle
+                idx += (offset1 + 1);
+                int r_offset(std::ceil((std::sqrt((double)(8 * idx + 1)) - 1) / 2));
+                base_t::r = r_offset;
+                base_t::c = base_t::r + idx - (r_offset * (r_offset + 1) / 2);
+                if(is_lower){
+                  base_t::r -= (right_shift + 1);
+                  base_t::c -= 1;
+                }else{
+                  base_t::r = (base_t::columns - right_shift) - base_t::r;
+                  base_t::c = base_t::columns - base_t::c;
+                }
+              }else{ // in rectangle
+                std::div_t rc(std::div(idx - offset2, base_t::columns));
+                base_t::r = (unsigned int)rc.quot;
+                base_t::c = (unsigned int)rc.rem;
+                if(is_lower){
+                  base_t::r += (base_t::columns - right_shift);
+                }else{
+                  base_t::r = -right_shift - base_t::r - 1;
+                  base_t::c = base_t::columns - base_t::c - 1;
+                }
+              }
+            }
+          public:
+            mapper_t(const self_t &mat, const typename base_t::difference_type &idx_ = 0)
+                : base_t(mat, idx_) {
+              setup();
+              update();
+            }
+            mapper_t() : base_t() {
+              setup();
+              update();
+            }
+            impl_t &operator+=(const typename base_t::difference_type &n){
+              base_t::operator+=(n);
+              update();
+              return static_cast<impl_t &>(*this);
+            }
+            impl_t &tail() {return static_cast<impl_t &>(*this) += (idx_max - base_t::idx);}
+            using base_t::operator++;
+            impl_t &operator++() {
+              if(base_t::idx++ < idx_max){
+                ++base_t::c;
+                if(is_lower){
+                  if((base_t::c == base_t::columns)
+                      || ((int)base_t::c == right_shift + 1 + (int)base_t::r)){
+                    ++base_t::r;
+                    base_t::c = 0;
+                  }
+                }else{
+                  if(base_t::c == base_t::columns){
+                    ++base_t::r;
+                    base_t::c = ((int)base_t::r < -right_shift)
+                        ? 0
+                        : (unsigned int)(right_shift + (int)base_t::r);
+                  }
+                }
+              }
+              return static_cast<impl_t &>(*this);
+            }
+            using base_t::operator--;
+            impl_t &operator--() {
+              if(base_t::idx-- > 0){
+                if(is_lower){
+                  if(base_t::c == 0){
+                    base_t::c = (unsigned int)(right_shift + 1 + (int)(--base_t::r));
+                    if(base_t::c > base_t::columns){base_t::c = base_t::columns;}
+                  }
+                }else{
+                  if((base_t::c == 0)
+                      || ((int)base_t::c == (right_shift + (int)base_t::r))){
+                    --base_t::r;
+                    base_t::c = base_t::columns;
+                  }
+                }
+                --base_t::c;
+              }
+              return static_cast<impl_t &>(*this);
+            }
+        };
+      };
+#if defined(__cplusplus) && (__cplusplus >= 201103L)
+#define MAKE_TRIANGULAR_ALIAS(name, is_lower, right_shift) \
+template <class impl_t> using name \
+    = typename triangular_t<is_lower, right_shift>::template mapper_t<impl_t>;
+#else
+#define MAKE_TRIANGULAR_ALIAS(name, is_lower, right_shift) \
+template <class impl_t> \
+struct name : public triangular_t<is_lower, right_shift>::template mapper_t<impl_t> { \
+  typedef typename triangular_t<is_lower, right_shift>::template mapper_t<impl_t> base_t; \
+  name(const self_t &mat, const typename base_t::difference_type &idx_ = 0) \
+      : base_t(mat, idx_) {} \
+  name() : base_t() {} \
+};
+#endif
+      MAKE_TRIANGULAR_ALIAS(lower_triangular_t, true, 0);
+      MAKE_TRIANGULAR_ALIAS(lower_triangular_offdiagonal_t, true, -1);
+      MAKE_TRIANGULAR_ALIAS(upper_triangular_t, false, 0);
+      MAKE_TRIANGULAR_ALIAS(upper_triangular_offdiagonal_t, false, 1);
+#undef MAKE_TRIANGULAR_ALIAS
+    };
+
+    template <template <typename> class MapperT = iterator_base_t>
+    class const_iterator_skelton_t : public MapperT<const_iterator_skelton_t<MapperT> > {
       public:
         typedef const T value_type;
-        typedef const T& reference;
-        typedef const T* pointer;
+        typedef const T reference;
+        struct pointer {
+          reference value;
+          const T *operator->() const {return &value;}
+        };
       protected:
-        typedef iterator_base_t<const_iterator> base_t;
+        typedef MapperT<const_iterator_skelton_t<MapperT> > base_t;
         self_t mat;
-        mutable T tmp;
       public:
-        unsigned int row() const {return base_t::row(mat);}
-        unsigned int column() const {return base_t::column(mat);}
-        reference operator*() const {
-          std::div_t rc(std::div(base_t::idx, mat.columns()));
-          return tmp = mat((unsigned int)rc.quot, (unsigned int)rc.rem);
-        }
+        reference operator*() const {return mat(base_t::r, base_t::c);}
         pointer operator->() const {
-          return &(operator*());
+          pointer p = {operator*()};
+          return p;
         }
-        const_iterator(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
-            : base_t(idx_), mat(mat_), tmp() {}
-        const_iterator()
-            : base_t(), mat(), tmp() {}
+        const_iterator_skelton_t(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
+            : base_t(mat_, idx_), mat(mat_) {}
+        const_iterator_skelton_t()
+            : base_t(), mat() {}
         reference operator[](const typename base_t::difference_type &n) const {
-          return tmp = *((*this) + n);
+          return *((*this) + n);
         }
     };
+
+    typedef const_iterator_skelton_t<iterator_mapper_t::template all_t> const_iterator;
     const_iterator begin() const {return const_iterator(*this);}
-    const_iterator end() const {return const_iterator(*this, rows() * columns());}
+    const_iterator end() const {return const_iterator(*this).tail();}
+
+    template <template <typename> class MapperT>
+    const_iterator_skelton_t<MapperT> begin() const {
+      return const_iterator_skelton_t<MapperT>(*this);
+    }
+    template <template <typename> class MapperT>
+    const_iterator_skelton_t<MapperT> end() const {
+      return const_iterator_skelton_t<MapperT>(*this).tail();
+    }
 
     /**
      * Copy constructor generating shallow copy linking to source matrix
@@ -1514,7 +1923,7 @@ class Matrix_Frozen {
       const unsigned int i_end(rows()), j_end(columns());
       for(unsigned int i(0); i < i_end; i++){
         for(unsigned int j(0); j < j_end; j++){
-          if((*this)(i, j) != matrix(i, j)){
+          if(value_t::zero != ((*this)(i, j) - matrix(i, j))){
             return false;
           }
         }
@@ -1535,42 +1944,6 @@ class Matrix_Frozen {
      * @return true when square, otherwise false.
      */
     bool isSquare() const noexcept {return rows() == columns();}
-
-    /**
-     * Test whether matrix is diagonal
-     *
-     * @return true when diagonal, otherwise false.
-     */
-    bool isDiagonal() const noexcept {
-      if(isSquare()){
-        const unsigned int i_end(rows()), j_end(columns());
-        for(unsigned int i(0); i < i_end; i++){
-          for(unsigned int j(i + 1); j < j_end; j++){
-            if(((*this)(i, j) != T(0)) || ((*this)(j, i) != T(0))){
-              return false;
-            }
-          }
-        }
-        return true;
-      }else{return false;}
-    }
-
-    /**
-     * Test whether matrix is symmetric
-     *
-     * @return true when symmetric, otherwise false.
-     */
-    bool isSymmetric() const noexcept {
-      if(isSquare()){
-        const unsigned int i_end(rows()), j_end(columns());
-        for(unsigned int i(0); i < i_end; i++){
-          for(unsigned int j(i + 1); j < j_end; j++){
-            if((*this)(i, j) != (*this)(j, i)){return false;}
-          }
-        }
-        return true;
-      }else{return false;}
-    }
 
     /**
      * Test whether size of matrices is different
@@ -1614,24 +1987,58 @@ class Matrix_Frozen {
       return sum;
     }
 
-    /**
-     * Test whether matrix is LU decomposed.
-     * The assumption of elements is
-     * (0, 0)-(n-1, n-1):  L matrix
-     * (0, n)-(n-1, 2n-1): U matrix
-     *
-     * @return true when LU, otherwise false.
-     */
-    bool isLU() const noexcept {
-      if(rows() * 2 != columns()){return false;}
-      const unsigned int i_end(rows() - 1), j_end(rows());
-      for(unsigned int i(0), i_U(rows()); i < i_end; i++, i_U++){
-        for(unsigned int j(i + 1); j < j_end; j++){
-          if((*this)(i, j) != T(0)){return false;} // check L
-          if((*this)(j, i_U) != T(0)){return false;} // check U
+  protected:
+    template <class T2>
+    bool isEqual_Block(
+        const T2 &v,
+        const bool &upper_offdiagonal = true, const bool &lower_offdiagonal = false,
+        const bool &diagonal = false) const {
+      const unsigned int i_end(rows()), j_end(columns());
+      if(upper_offdiagonal){
+        for(unsigned int i(0); i < i_end; i++){
+          for(unsigned int j(i + 1); j < j_end; j++){
+            if(v != (*this)(i, j)){return false;}
+          }
+        }
+      }
+      if(lower_offdiagonal){
+        for(unsigned int i(1); i < i_end; i++){
+          for(unsigned int j(0); j < i; j++){
+            if(v != (*this)(i, j)){return false;}
+          }
+        }
+      }
+      if(diagonal){
+        for(unsigned int i2(0), i2_end((i_end < j_end) ? i_end : j_end); i2 < i2_end; i2++){
+          if(v != (*this)(i2, i2)){return false;}
         }
       }
       return true;
+    }
+  public:
+    /**
+     * Test whether matrix is diagonal
+     *
+     * @return true when diagonal matrix, otherwise false.
+     */
+    bool isDiagonal() const noexcept {
+      return isSquare() && isEqual_Block(value_t::zero, true, true);
+    }
+    /**
+     * Test whether matrix is lower triangular
+     *
+     * @return true when lower triangular matrix, otherwise false.
+     */
+    bool isLowerTriangular() const noexcept {
+      return isSquare() && isEqual_Block(value_t::zero, true, false);
+    }
+    /**
+     * Test whether matrix is upper triangular
+     *
+     * @return true when upper triangular matrix, otherwise false.
+     */
+    bool isUpperTriangular() const noexcept {
+      return isSquare() && isEqual_Block(value_t::zero, false, true);
     }
 
     typedef typename builder_t::transpose_t transpose_t;
@@ -1789,11 +2196,11 @@ class Matrix_Frozen {
      * as the same as index 1 (= 5 % 4) is selected.
      *
      * Another example; [4x3].circular(1,2,5,6) is
-     *  00 01 02  =>  12 10 11 12 10
-     *  10 11 12      22 20 21 22 20
-     *  20 21 22      32 30 31 32 30
-     *  30 31 32      02 00 01 02 00
-     *                12 10 11 12 10
+     *  00 01 02  =>  12 10 11 12 10 11
+     *  10 11 12      22 20 21 22 20 21
+     *  20 21 22      32 30 31 32 30 31
+     *  30 31 32      02 00 01 02 00 01
+     *                12 10 11 12 10 11
      *
      * @param row_offset Upper row index of original matrix for circular matrix
      * @param column_offset Left column index of original matrix for circular matrix
@@ -1848,10 +2255,14 @@ class Matrix_Frozen {
 
 
     enum {
+      OPERATOR_2_Generic,
       OPERATOR_2_Multiply_Matrix_by_Scalar,
       OPERATOR_2_Add_Matrix_to_Matrix,
       OPERATOR_2_Subtract_Matrix_from_Matrix,
       OPERATOR_2_Multiply_Matrix_by_Matrix,
+      OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix,
+      OPERATOR_2_Stack_Horizontal,
+      OPERATOR_2_Stack_Vertical,
       OPERATOR_NONE,
     };
 
@@ -2058,6 +2469,98 @@ class Matrix_Frozen {
       return getScalar(matrix.rows(), scalar) - matrix;
     }
 
+    template <class RHS_MatrixT>
+    struct Entrywise_Multiply_Matrix_by_Matrix {
+      typedef Array2D_Operator_EntrywiseMultiply<self_t, RHS_MatrixT> op_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+        if(mat1.isDifferentSize(mat2)){throw std::invalid_argument("Incorrect size");}
+        return mat_t(
+            typename mat_t::storage_t(
+              mat1.rows(), mat1.columns(), op_t(mat1, mat2)));
+      }
+    };
+
+    /**
+     * Entrywise product of two matrices
+     *
+     * @param matrix Matrix to multiply
+     * @return entrywise multiplied matrix
+     * @throw std::invalid_argument When matrix sizes are not identical
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Entrywise_Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::mat_t
+        entrywise_product(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Entrywise_Multiply_Matrix_by_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2> >::generate(*this, matrix);
+    }
+
+    template <class RHS_MatrixT, bool rhs_horizontal = true>
+    struct Stacked_Matrix {
+      typedef Array2D_Operator_Stack<self_t, RHS_MatrixT, rhs_horizontal> op_t;
+      typedef Matrix_Frozen<T, Array2D_Operator<T, op_t> > mat_t;
+      static mat_t generate(const self_t &mat1, const RHS_MatrixT &mat2){
+        if(rhs_horizontal ? (mat1.rows() > mat2.rows()) : (mat1.columns() > mat2.columns())){
+          throw std::invalid_argument("Incorrect size");
+        }
+        return mat_t(
+            typename mat_t::storage_t(
+              mat1.rows() + (rhs_horizontal ? 0 : mat2.rows()),
+              mat1.columns() + (rhs_horizontal ? mat2.columns() : 0),
+              op_t(mat1, mat2)));
+      }
+    };
+
+    /**
+     * Horizontal stack of two matrices
+     *
+     * @param matrix Matrix to stack horizontally, i.e., right side
+     * @return stacked matrix
+     * @throw std::invalid_argument When matrix row number is smaller
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, true>::mat_t
+        hstack(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, true>::generate(*this, matrix);
+    }
+
+    /**
+     * Vertical stack of two matrices
+     *
+     * @param matrix Matrix to stack vertically, i.e., bottom side
+     * @return stacked matrix
+     * @throw std::invalid_argument When matrix row number is smaller
+     */
+    template <class T2, class Array2D_Type2, class ViewType2>
+    typename Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::mat_t
+        vstack(const Matrix_Frozen<T2, Array2D_Type2, ViewType2> &matrix) const {
+      return Stacked_Matrix<Matrix_Frozen<T2, Array2D_Type2, ViewType2>, false>::generate(*this, matrix);
+    }
+
+    /**
+     * Test whether matrix is symmetric
+     *
+     * @return true when symmetric, otherwise false.
+     */
+    bool isSymmetric() const noexcept {
+      return isSquare() && ((*this) - transpose()).isEqual_Block(value_t::zero);
+    }
+    /**
+     * Test whether matrix is Hermitian
+     *
+     * @return true when Hermitian matrix, otherwise false.
+     */
+    bool isHermitian() const noexcept {
+      return isSquare() && ((*this) - adjoint()).isEqual_Block(value_t::zero);
+    }
+    /**
+     * Test whether matrix is skew-symmetric
+     *
+     * @return true when skew-symmetric matrix, otherwise false.
+     */
+    bool isSkewSymmetric() const noexcept {
+      return isSquare() && ((*this) + transpose()).isEqual_Block(value_t::zero);
+    }
+
 
     template <class LHS_T, class RHS_T>
     friend struct Array2D_Operator_Multiply_by_Matrix;
@@ -2067,37 +2570,71 @@ class Matrix_Frozen {
 
       template <class MatrixT, int tag = OperatorProperty<MatrixT>::tag>
       struct check_t {
-        template <bool is_binary, class U = void>
-        struct check_binary_t {
-          static const bool has_multi_mat_by_mat = false;
+#if defined(_MSC_VER)
+        /* work-around of MSVC bug for non-type template parameter
+         * @see https://stackoverflow.com/questions/2763836/sfinae-failing-with-enum-template-parameter
+         */
+        template <bool is_operator2, class U = void>
+        struct check_op_t {
+          static const int complexity_linear = 1;
+          static const int complexity_square = 1;
         };
         template <class U>
-        struct check_binary_t<true, U> {
-          static const bool has_multi_mat_by_mat
-              = (check_t<typename OperatorProperty<MatrixT>::operator_t::lhs_t>
-                  ::has_multi_mat_by_mat)
-                || (check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t>
-                  ::has_multi_mat_by_mat);
+        struct check_op_t<true, U> {
+          typedef typename OperatorProperty<MatrixT>::operator_t op_t;
+          static const int complexity_lhs = check_t<op_t::lhs_t>::complexity;
+          static const int complexity_rhs = check_t<op_t::rhs_t>::complexity;
+          static const int complexity_linear = complexity_lhs + complexity_rhs;
+          static const int complexity_square = (complexity_lhs + 1) * (complexity_rhs + 1);
         };
-        static const bool has_multi_mat_by_mat
+        static const bool is_operator2
+            = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
+              || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
+              || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
+              || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
+              || (tag == OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix);
+        static const int complexity
             = (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
-              || check_binary_t<
-                (tag == OPERATOR_2_Multiply_Matrix_by_Scalar)
-                || (tag == OPERATOR_2_Add_Matrix_to_Matrix)
-                || (tag == OPERATOR_2_Subtract_Matrix_from_Matrix)
-                || (tag == OPERATOR_2_Multiply_Matrix_by_Matrix)
-                >::has_multi_mat_by_mat;
+                ? check_op_t<is_operator2>::complexity_square
+                : check_op_t<is_operator2>::complexity_linear;
+#else
+        template <int tag2, class U = void>
+        struct check_operator_t {
+          static const int complexity = 1;
+        };
+        template <class U>
+        struct check_operator_t<OPERATOR_2_Generic, U> {
+          typedef check_t<typename OperatorProperty<MatrixT>::operator_t::lhs_t> lhs_t;
+          typedef check_t<typename OperatorProperty<MatrixT>::operator_t::rhs_t> rhs_t;
+          static const int complexity = lhs_t::complexity + rhs_t::complexity; // linear
+        };
+#define make_binary_item(tag_name) \
+template <class U> struct check_operator_t<tag_name, U> \
+    : public check_operator_t<OPERATOR_2_Generic, U>
+        make_binary_item(OPERATOR_2_Multiply_Matrix_by_Scalar) {};
+        make_binary_item(OPERATOR_2_Add_Matrix_to_Matrix) {};
+        make_binary_item(OPERATOR_2_Subtract_Matrix_from_Matrix) {};
+        make_binary_item(OPERATOR_2_Multiply_Matrix_by_Matrix) {
+          typedef check_operator_t<OPERATOR_2_Generic, U> super_t;
+          static const int complexity // square power
+              = (super_t::lhs_t::complexity + 1) * (super_t::rhs_t::complexity + 1);
+        };
+        make_binary_item(OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix) {};
+        // Stack_Horizontal/Vertical is intentionally ignored.
+#undef make_binary_item
+        static const int complexity = check_operator_t<tag>::complexity;
+#endif
         static const bool is_multi_mat_by_scalar
             = (tag == OPERATOR_2_Multiply_Matrix_by_Scalar);
       };
 
       /*
        * [Optimization policy 1]
-       * If each side include M * M, then use cache.
+       * If each side includes complex calculation such as M * M, then use cache.
        * For example, (M * M) * M, and (M * M + M) * M use cache for the first parenthesis terms.
        * (M * M + M) * (M * M + M) uses cache for the first and second parenthesis terms.
        */
-      template <class MatrixT, bool cache_on = check_t<MatrixT>::has_multi_mat_by_mat>
+      template <class MatrixT, bool cache_on = (check_t<MatrixT>::complexity >= 3)>
       struct optimizer1_t {
         typedef MatrixT res_t;
       };
@@ -2212,7 +2749,38 @@ class Matrix_Frozen {
     }
 
     /**
-     * Generate a matrix in which i-th row and j-th column are removed to calculate minor (determinant)
+     * Test whether matrix is normal
+     *
+     * @return true when normal matrix, otherwise false.
+     */
+    bool isNormal() const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - adjoint() * (*this)).isEqual_Block(value_t::zero, true, false, true);
+    }
+    /**
+     * Test whether matrix is orthogonal
+     *
+     * @return true when orthogonal matrix, otherwise false.
+     */
+    bool isOrthogonal() const noexcept {
+      return isSquare()
+          && ((*this) * transpose() - 1).isEqual_Block(value_t::zero, true, false, true)
+          && (transpose() * (*this) - 1).isEqual_Block(value_t::zero, true, false, true);
+    }
+    /**
+     * Test whether matrix is unitary
+     *
+     * @return true when unitary matrix, otherwise false.
+     */
+    bool isUnitary() const noexcept {
+      return isSquare()
+          && ((*this) * adjoint() - 1).isEqual_Block(value_t::zero, true, false, true)
+          && (adjoint() * (*this) - 1).isEqual_Block(value_t::zero, true, false, true);
+    }
+
+    /**
+     * Generate a matrix in which i-th row and j-th column are removed
+     * to calculate first-minor (第一小行列式、1行1列ずつ取り除いた行列の行列式)
      *
      * @param row Row to be removed
      * @param column Column to be removed
@@ -2223,6 +2791,7 @@ class Matrix_Frozen {
         const unsigned int &column) const noexcept {
       typedef typename builder_t::template resize_t<-1, -1>::assignable_t res_t;
       res_t res(res_t::blank(rows() - 1, columns() - 1));
+#if 0
       unsigned int i(0), i2(0);
       const unsigned int i_end(res.rows()), j_end(res.columns());
       for( ; i < row; ++i, ++i2){
@@ -2246,11 +2815,15 @@ class Matrix_Frozen {
           res(i, j) = operator()(i2, j2);
         }
       }
+#else
+      // equivalent version to use circular view
+      res.circular(row, column).replace(circular(row + 1, column + 1, rows() - 1, columns() - 1), false);
+#endif
       return res;
     }
 
     /**
-     * Calculate determinant by using minor
+     * Calculate determinant by using first-minor (slow algorithm)
      *
      * @param do_check Whether check size property. The default is true.
      * @return Determinant
@@ -2258,18 +2831,27 @@ class Matrix_Frozen {
      */
     T determinant_minor(const bool &do_check = true) const {
       if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
-      if(rows() == 1){
-        return (*this)(0, 0);
-      }else{
-        T sum(0);
-        T sign(1);
-        for(unsigned int i(0), i_end(rows()); i < i_end; i++){
-          if((*this)(i, 0) != T(0)){
-            sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant(false)) * sign;
+      switch(rows()){
+        case 1: return (*this)(0, 0);
+        case 2: return (*this)(0, 0) * (*this)(1, 1) - (*this)(0, 1) * (*this)(1, 0);
+        case 3:
+          return (*this)(0, 0) * (*this)(1, 1) * (*this)(2, 2)
+              + (*this)(0, 1) * (*this)(1, 2) * (*this)(2, 0)
+              + (*this)(0, 2) * (*this)(1, 0) * (*this)(2, 1)
+              - (*this)(0, 0) * (*this)(1, 2) * (*this)(2, 1)
+              - (*this)(0, 1) * (*this)(1, 0) * (*this)(2, 2)
+              - (*this)(0, 2) * (*this)(1, 1) * (*this)(2, 0);
+        default: {
+          T sum(0);
+          T sign(1);
+          for(unsigned int i(0), i_end(rows()); i < i_end; i++){
+            if(value_t::zero != (*this)(i, 0)){
+              sum += (*this)(i, 0) * (matrix_for_minor(i, 0).determinant_minor(false)) * sign;
+            }
+            sign = -sign;
           }
-          sign = -sign;
+          return sum;
         }
-        return sum;
       }
     }
 
@@ -2318,13 +2900,13 @@ class Matrix_Frozen {
       }
       // apply Gaussian elimination
       for(unsigned int i(0); i < rows_; ++i){
-        if(U(i, i) == T(0)){ // check (i, i) is not zero
+        if(value_t::zero == U(i, i)){ // check (i, i) is not zero
           unsigned int j(i);
           do{
             if(++j == rows_){
               throw std::runtime_error("LU decomposition cannot be performed");
             }
-          }while(U(i, j) == T(0));
+          }while(value_t::zero == U(i, j));
           for(unsigned int i2(0); i2 < rows_; ++i2){ // swap i-th and j-th columns
             T temp(U(i2, i));
             U(i2, i) = U(i2, j);
@@ -2348,10 +2930,76 @@ class Matrix_Frozen {
       return LU;
     }
 
+    void decomposeLUP_property(
+        unsigned int &rank, T &determinant, unsigned int &pivot_num,
+        const bool &do_check = true) const {
+      // Algorithm is the same as decomposeLUP, but L matrix is not calculated
+      // because rank/determinant can be obtained throught calculation of lower triangular of U.
+      if(do_check && !isSquare()){throw std::logic_error("rows() != columns()");}
+
+      typename builder_t::assignable_t U(this->operator typename builder_t::assignable_t()); // copy
+      const unsigned int rows_(rows());
+      pivot_num = 0;
+      determinant = T(1);
+
+      // apply Gaussian elimination
+      for(unsigned int i(0); i < rows_; ++i){
+        if(value_t::zero == U(i, i)){ // check (i, i) is not zero
+          unsigned int j(i);
+          do{
+            if(++j == rows_){
+              rank = i;
+              return;
+            }
+          }while(value_t::zero == U(i, j));
+          for(unsigned int i2(i); i2 < rows_; ++i2){ // swap i-th and j-th columns
+            T temp(U(i2, i));
+            U(i2, i) = U(i2, j);
+            U(i2, j) = temp;
+          }
+          pivot_num++;
+        }
+#if 0
+        for(unsigned int i2(i + 1); i2 < rows_; ++i2){
+          T L_i2_i(U(i2, i) / U(i, i)); // equivalent to L(i2, i) = U(i2, i) / U(i, i); skip U(i2, i) = T(0);
+          for(unsigned int j2(i + 1); j2 < rows_; ++j2){
+            U(i2, j2) -= L_i2_i * U(i, j2);
+          }
+        }
+        determinant *= U(i, i);
+#else
+        // integer preservation algorithm (Bareiss)
+        for(unsigned int i2(i + 1); i2 < rows_; ++i2){
+          for(unsigned int j2(i + 1); j2 < rows_; ++j2){
+            ((U(i2, j2) *= U(i, i)) -= U(i2, i) * U(i, j2)) /= determinant;
+          }
+        }
+        determinant = U(i, i);
+#endif
+      }
+      rank = rows_;
+      determinant *= ((pivot_num % 2 == 0) ? 1 : -1);
+    }
+
     typename builder_t::template resize_t<0, 0, 1, 2>::assignable_t decomposeLU(
         const bool &do_check = true) const {
       unsigned int pivot_num;
       return decomposeLUP(pivot_num, NULL, do_check);
+    }
+
+    /**
+     * Test whether matrix is LU decomposed.
+     * The assumption of elements is
+     * (0, 0)-(n-1, n-1):  L matrix
+     * (0, n)-(n-1, 2n-1): U matrix
+     *
+     * @return true when LU, otherwise false.
+     */
+    bool isLU() const noexcept {
+      const unsigned int r(rows());
+      return (r * 2 == columns())
+          && partial(r, r).isLowerTriangular()
+          && partial(r, r, 0, r).isUpperTriangular();
     }
 
     /**
@@ -2420,8 +3068,83 @@ class Matrix_Frozen {
       return res;
     }
 
+    /**
+     * Calculate determinant by using LU decomposition (faster algorithm)
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return Determinant
+     */
+    T determinant_LU2(const bool &do_check = true) const {
+      unsigned int pivot_num, rank;
+      T res;
+      decomposeLUP_property(rank, res, pivot_num, do_check);
+      if(rank != rows()){
+        throw std::runtime_error("LU decomposition cannot be performed");
+      }
+      return res;
+    }
+
     T determinant(const bool &do_check = true) const {
-      return determinant_LU(do_check);
+      return determinant_LU2(do_check);
+    }
+
+    /**
+     * Calculate rank by using LU decomposition
+     *
+     * @param do_check Whether check size property. The default is true.
+     * @return rank
+     */
+    unsigned int rank_LU2(const bool &do_check = true) const {
+      unsigned int pivot_num, res;
+      T det;
+      decomposeLUP_property(res, det, pivot_num, do_check);
+      return res;
+    }
+
+    unsigned int rank(const bool &do_check = true) const {
+      return rank_LU2(do_check);
+    }
+
+    /**
+     * Calculate cofactor (余因子), i.e.,
+     * determinant of smaller square matrix removing specified one row and column
+     * fro original matrix.
+     *
+     * @param row
+     * @param column
+     * @param do_check check size (true) or not (false). The default is true.
+     * @return Cofactor
+     */
+    T cofactor(
+        const unsigned int &row, const unsigned int &column,
+        const bool &do_check = true) const {
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
+      if((row >= rows()) || (column >= columns())){
+        throw std::out_of_range("incorrect row and/or column indices");
+      }
+      // circular.determinant is equivalent to matrix_for_minor.determinant
+      // in terms of absolute values (polarity should be taken care of.)
+      //return matrix_for_minor(row, column).determinant(false) * (((row + column) % 2 == 0) ? 1 : -1);
+      return circular(row + 1, column + 1, rows() - 1, columns() - 1).determinant(false)
+          * (((rows() % 2 == 1) || ((row + column) % 2 == 0)) ? 1 : -1);
+    }
+
+    /**
+     * Return adjugate (余因子行列), i.e. transposed cofactor matrix.
+     * X * adjugate(X) = det(X) I
+     *
+     * @param do_check check size (true) or not (false). The default is true.
+     * @return Adjugate
+     */
+    typename builder_t::assignable_t adjugate(const bool &do_check = true) const {
+      if(do_check && !isSquare()){throw std::logic_error("rows != columns");}
+      typename builder_t::assignable_t res(builder_t::assignable_t::blank(rows(), columns()));
+      for(unsigned int i(0), i_end(rows()); i < i_end; ++i){
+        for(unsigned int j(0), j_end(columns()); j < j_end; ++j){
+          res(i, j) = cofactor(j, i, false);
+        }
+      }
+      return res;
     }
 
     /**
@@ -2463,16 +3186,9 @@ class Matrix_Frozen {
 
 #if 0
         // Cramer (slow); クラメール
-        mat_t result(rows(), columns());
-        T det;
-        if((det = mat.determinant()) == 0){throw std::runtime_error("Operation void!!");}
-        const unsigned int i_end(mat.rows()), j_end(mat.columns());
-        for(unsigned int i(0); i < i_end; i++){
-          for(unsigned int j(0); j < j_end; j++){
-            result(i, j) = mat.matrix_for_minor(i, j).determinant() * ((i + j) % 2 == 0 ? 1 : -1);
-          }
-        }
-        return result.transpose() / det;
+        T det(mat.determinant(false));
+        if(value_t::zero == det){throw std::runtime_error("Operation void!!");}
+        return mat.adjugate() / det;
 #endif
 
         // Gaussian elimination; ガウス消去法
@@ -2480,13 +3196,13 @@ class Matrix_Frozen {
         mat_t right(getI(mat.rows()));
         const unsigned int rows_(left.rows()), columns_(left.columns());
         for(unsigned int i(0); i < rows_; i++){
-          if(left(i, i) == T(0)){
+          if(value_t::zero == left(i, i)){
             unsigned int i2(i);
             do{
               if(++i2 == rows_){
                 throw std::runtime_error("invert matrix not exist");
               }
-            }while(left(i2, i) == T(0));
+            }while(value_t::zero == left(i2, i));
             // swap i-th and i2-th rows
             for(unsigned int j(i); j < columns_; ++j){
               T temp(left(i, j));
@@ -2495,14 +3211,14 @@ class Matrix_Frozen {
             }
             right.swapRows(i, i2);
           }
-          if(left(i, i) != T(1)){
+          if(value_t::zero != (left(i, i) - 1)){
             for(unsigned int j(0); j < columns_; j++){right(i, j) /= left(i, i);}
             for(unsigned int j(i+1); j < columns_; j++){left(i, j) /= left(i, i);}
             left(i, i) = T(1);
           }
           for(unsigned int k(0); k < rows_; k++){
             if(k == i){continue;}
-            if(left(k, i) != T(0)){
+            if(value_t::zero != left(k, i)){
               for(unsigned int j(0); j < columns_; j++){right(k, j) -= right(i, j) * left(k, i);}
               for(unsigned int j(i+1); j < columns_; j++){left(k, j) -= left(i, j) * left(k, i);}
               left(k, i) = T(0);
@@ -2583,63 +3299,9 @@ class Matrix_Frozen {
       return this->operator typename builder_t::assignable_t().pivotMerge(row, column, matrix);
     }
 
-    struct complex_t {
-      template <class T2>
-      struct check_t {
-        static const bool hit = false;
-        typedef T2 r_t;
-        typedef Complex<T2> c_t;
-      };
-      template <class T2>
-      struct check_t<Complex<T2> > {
-        static const bool hit = true;
-        typedef T2 r_t;
-        typedef Complex<T2> c_t;
-      };
-      static const bool is_complex = check_t<T>::hit;
-      typedef typename check_t<T>::c_t v_t;
-      typedef typename builder_t::template cast_t<v_t>::assignable_t m_t;
-      typedef typename check_t<T>::r_t real_t;
-      static real_t get_real(const real_t &v) noexcept {
-        return v;
-      }
-      static real_t get_real(const v_t &v) noexcept {
-        return v.real();
-      }
-      static v_t get_sqrt(const real_t &v) noexcept {
-        return (v >= 0) ? v_t(std::sqrt(v)) : v_t(0, std::sqrt(-v));
-      }
-      static v_t get_sqrt(const v_t &v) noexcept {
-        return v.sqrt();
-      }
-      static real_t get_abs(const real_t &v) noexcept {
-        return std::abs(v);
-      }
-      static real_t get_abs(const v_t &v) noexcept {
-        return v.abs();
-      }
-      static real_t get_abs2(const real_t &v) noexcept {
-        return v * v;
-      }
-      static real_t get_abs2(const v_t &v) noexcept {
-        return v.abs2();
-      }
-      static bool is_nan_or_infinite(const real_t &v) noexcept {
-#if defined(_MSC_VER)
-        return _isnan(v) || !_finite(v);
-#else
-        return std::isnan(v) || !std::isfinite(v);
-#endif
-      }
-      static bool is_nan_or_infinite(const v_t &v) noexcept {
-        return is_nan_or_infinite(v.real())
-            || is_nan_or_infinite(v.imaginary());
-      }
-    };
-
-    Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>
+    Matrix_Frozen<typename value_t::complex_t, Array2D_Type, ViewType>
         complex() const noexcept {
-      return Matrix_Frozen<typename complex_t::v_t, Array2D_Type, ViewType>(*this);
+      return Matrix_Frozen<typename value_t::complex_t, Array2D_Type, ViewType>(*this);
     }
 
     /**
@@ -2647,17 +3309,17 @@ class Matrix_Frozen {
      *
      * @return tr(A* * A)
      */
-    typename complex_t::real_t norm2F() const noexcept {
-      // return complex_t::get_real((adjoint() * (*this)).trace(false));
-      /* The above is as definition, however, double calculation may occure
+    typename value_t::real_t norm2F() const noexcept {
+      // return value_t::get_real((adjoint() * (*this)).trace(false));
+      /* The above is as definition, however, double calculation may occur
        * when (*this) is a expression matrix such as multiplication.
        * To avoid such overhead, its expansion form to take summation of
        * abs(element)**2 is used.
        */
-      typename complex_t::real_t res(0);
+      typename value_t::real_t res(0);
       for(unsigned int i(0), i_end(rows()); i < i_end; ++i){
         for(unsigned int j(0), j_end(columns()); j < j_end; ++j){
-          res += complex_t::get_abs2((*this)(i, j));
+          res += value_t::get_abs2((*this)(i, j));
         }
       }
       return res;
@@ -2671,15 +3333,15 @@ class Matrix_Frozen {
      * @return 2nd power of Frobenius norm of x
      */
     template <class Array2D_Type2, class ViewType2>
-    static typename complex_t::real_t householder_vector(
+    static typename value_t::real_t householder_vector(
         Matrix<T, Array2D_Type2, ViewType2> &x){
       // x = {(0,0), (1,0), ..., (N-1,0)}^{T}
 
-      typename complex_t::real_t x_abs2(x.norm2F());
+      typename value_t::real_t x_abs2(x.norm2F());
       if(x_abs2 == 0){return x_abs2;}
 
-      typename complex_t::real_t x_abs(std::sqrt(x_abs2));
-      typename complex_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
+      typename value_t::real_t x_abs(std::sqrt(x_abs2));
+      typename value_t::real_t x_top_abs(std::abs(x(0, 0))); // x(0,0)
       T rho(x(0, 0) / x_top_abs * -1);
       // if x(0,0) is real, then rho = -sign(x(0,0)),
       // otherwise rho = - e^{i \phi}, where x(0,0) \equiv e^{i \phi} |x(0,0)|
@@ -2690,7 +3352,7 @@ class Matrix_Frozen {
       //   = x_abs2 * (1 + \rho \bar{\rho}) - x_abs * (\rho \bar{x(0,0)} + \bar{\rho} x(0,0))
       //   = (x_abs2 + x_top_abs * x_abs) * 2
       x(0, 0) -= rho * x_abs;
-      typename complex_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
+      typename value_t::real_t x_dash_abs2((x_abs2 + x_top_abs * x_abs) * 2);
 
       return x_dash_abs2;
     }
@@ -2737,7 +3399,7 @@ class Matrix_Frozen {
           // x_0 = {(0,0), (1,0), ..., (N-1,0)}^{T}, (N-1)*1
           // x_1 = {(1,1), (2,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-          typename complex_t::real_t x_abs2(householder_vector(x));
+          typename value_t::real_t x_abs2(householder_vector(x));
           // x_0 <- {(0,0) - \rho |x|, (1,0), ..., (N-1,0)}^{T}
           // x_1 <- {(1,1) - \rho |x|, (2,1), ..., (N-1,1)}^{T}, ...
           if(x_abs2 == 0){continue;}
@@ -2798,7 +3460,7 @@ class Matrix_Frozen {
       }
 
       bool real_symmetric(
-          (!complex_t::is_complex)
+          (!value_t::is_complex)
           && ((opt.mat_prop == opt_hessenberg_t::SYMMETRIC)
             || ((opt.mat_prop == opt_hessenberg_t::NOT_CHECKED) && isSymmetric())));
 
@@ -2811,7 +3473,7 @@ class Matrix_Frozen {
         // x_0 = {(1,0), (2,0), ..., (N-1,0)}^{T}, (N-1)*1
         // x_1 = {(2,1), (3,1), ..., (N-1,1)}^{T}, (N-2)*1, ...
 
-        typename complex_t::real_t x_abs2(householder_vector(x));
+        typename value_t::real_t x_abs2(householder_vector(x));
         // x_0 <- {(1,0) - \rho |x|, (2,0), ..., (N-1,0)}^{T}
         // x_1 <- {(2,1) - \rho |x|, (3,1), ..., (N-1,1)}^{T}, ...
         if(x_abs2 == 0){continue;}
@@ -2870,11 +3532,11 @@ class Matrix_Frozen {
      */
     void eigen22(
         const unsigned int &row, const unsigned int &column,
-        typename complex_t::v_t &upper, typename complex_t::v_t &lower) const {
+        typename value_t::complex_t &upper, typename value_t::complex_t &lower) const {
       const T
           &a((*this)(row, column)),     &b((*this)(row, column + 1)),
           &c((*this)(row + 1, column)), &d((*this)(row + 1, column + 1));
-      typename complex_t::v_t root(complex_t::get_sqrt((a - d) * (a - d) + b * c * 4));
+      typename value_t::complex_t root(value_t::get_sqrt((a - d) * (a - d) + b * c * 4));
       upper = ((root + a + d) / 2);
       lower = ((-root + a + d) / 2);
     }
@@ -2883,8 +3545,8 @@ class Matrix_Frozen {
       enum {
         NOT_CHECKED, SQUARE,
       } mat_prop;
-      typename complex_t::real_t threshold_abs; ///< Absolute error to be used for convergence determination
-      typename complex_t::real_t threshold_rel; ///< Relative error to be used for convergence determination
+      typename value_t::real_t threshold_abs; ///< Absolute error to be used for convergence determination
+      typename value_t::real_t threshold_rel; ///< Relative error to be used for convergence determination
       unsigned int inverse_power_max_iter;
 
       opt_eigen_t()
@@ -2905,10 +3567,12 @@ class Matrix_Frozen {
      * @throw std::logic_error When operation is undefined
      * @throw std::runtime_error When operation is unavailable
      */
-    typename MatrixBuilder<typename complex_t::m_t>::template resize_t<0, 1>::assignable_t eigen(
+    typename MatrixBuilder< // a.k.a. (assignable complex matrix)(r, c+1)
+          typename builder_t::template cast_t<typename value_t::complex_t>::assignable_t>
+        ::template resize_t<0, 1>::assignable_t eigen(
         const opt_eigen_t &opt = opt_eigen_t()) const {
 
-      typedef typename complex_t::m_t cmat_t;
+      typedef typename builder_t::template cast_t<typename value_t::complex_t>::assignable_t cmat_t;
       typedef typename MatrixBuilder<cmat_t>::template resize_t<0, 1, 1, 0>::assignable_t cvec_t;
       typedef typename MatrixBuilder<cmat_t>::template resize_t<0, 1>::assignable_t res_t;
 
@@ -2944,7 +3608,7 @@ class Matrix_Frozen {
 
       // Double QR method
       /* <Procedure>
-       * 1) Transform upper Hessenburg's matrix by using Householder's method
+       * 1) Transform this to upper Hessenburg's matrix by using Householder's method
        * ハウスホルダー法を適用して、上ヘッセンベルク行列に置換後
        * 2) Then, Apply double QR method to get eigenvalues
        * ダブルQR法を適用。
@@ -2954,10 +3618,10 @@ class Matrix_Frozen {
 
       const unsigned int &_rows(rows());
 
-      // 結果の格納用の行列
+      // Buffer to store resultant; 結果の格納用の行列
       res_t result(res_t::blank(_rows, _rows + 1));
 
-      // 固有値の計算
+      // Eigenvalue computation; 固有値の計算
 #define lambda(i) result(i, _rows)
 
       int m = _rows;
@@ -2979,7 +3643,7 @@ class Matrix_Frozen {
           break;
         }
 
-        //ハウスホルダー変換を繰り返す
+        // Apply Householder transformation iteratively; ハウスホルダー変換を繰り返す
         for(int i(0); i < m - 1; i++){
           typename builder_t::template resize_t<3, 1, 0, 0>::assignable_t omega(3, 1);
           if(i == 0){ // calculate double shift of initial Householder transformation
@@ -2996,7 +3660,7 @@ class Matrix_Frozen {
             // caution: omega size is 3x3 if i in [0, m-2), however, 2x2 when i == m-2
           }
 
-          typename complex_t::real_t omega_abs2(householder_vector(omega));
+          typename value_t::real_t omega_abs2(householder_vector(omega));
           if(omega_abs2 == 0){continue;}
           //std::cout << "omega_abs(" << m << ") " << omega_abs << std::endl;
 
@@ -3032,23 +3696,23 @@ class Matrix_Frozen {
         }
         //std::cout << "A_scl(" << m << ") " << A(m-1,m-2) << std::endl;
 
-        if(complex_t::is_nan_or_infinite(A(m-1,m-2))){
-          throw std::runtime_error("eigen values calculation failed");
+        if(value_t::is_nan_or_infinite(A(m-1,m-2))){
+          throw std::runtime_error("eigenvalues calculation failed");
         }
 
         // Convergence test; 収束判定
-        typename complex_t::real_t
-            A_m2_abs(complex_t::get_abs(A(m-2, m-2))),
-            A_m1_abs(complex_t::get_abs(A(m-1, m-1)));
-        typename complex_t::real_t epsilon(opt.threshold_abs
+        typename value_t::real_t
+            A_m2_abs(value_t::get_abs(A(m-2, m-2))),
+            A_m1_abs(value_t::get_abs(A(m-1, m-1)));
+        typename value_t::real_t epsilon(opt.threshold_abs
           + opt.threshold_rel * ((A_m2_abs < A_m1_abs) ? A_m2_abs : A_m1_abs));
 
         //std::cout << "epsil(" << m << ") " << epsilon << std::endl;
 
-        if(complex_t::get_abs(A(m-1, m-2)) < epsilon){
+        if(value_t::get_abs(A(m-1, m-2)) < epsilon){
           --m;
           lambda(m) = A(m, m);
-        }else if(complex_t::get_abs(A(m-2, m-3)) < epsilon){
+        }else if(value_t::get_abs(A(m-2, m-3)) < epsilon){
           A.eigen22(m-2, m-2, lambda(m-1), lambda(m-2));
           m -= 2;
         }
@@ -3086,8 +3750,8 @@ class Matrix_Frozen {
          * http://www.nrbook.com/a/bookcpdf/c11-7.pdf
          * is also utilized in case some eigenvalues are identical.
          */
-        typename complex_t::v_t approx_lambda(lambda(j));
-        approx_lambda += complex_t::get_abs(approx_lambda) * 1E-4; // 0.01%
+        typename value_t::complex_t approx_lambda(lambda(j));
+        approx_lambda += value_t::get_abs(approx_lambda) * 1E-4; // 0.01%
         typename MatrixBuilder<cmat_t>::template resize_t<0, 0, 1, 2>::assignable_t
             A_C_lambda_LU((A_.complex() - approx_lambda).decomposeLU(false));
 
@@ -3096,8 +3760,8 @@ class Matrix_Frozen {
         for(unsigned int loop(0); true; loop++){
           cvec_t target_x_new(
               A_C_lambda_LU.solve_linear_eq_with_LU(target_x, false));
-          typename complex_t::v_t mu((target_x_new.adjoint() * target_x)(0, 0)); // inner product
-          typename complex_t::real_t v2(target_x_new.norm2F());
+          typename value_t::complex_t mu((target_x_new.adjoint() * target_x)(0, 0)); // inner product
+          typename value_t::real_t v2(target_x_new.norm2F());
           target_x.replace(target_x_new / std::sqrt(v2), false);
           //std::cout << j << ": " << target_x.transpose() << ", " << mu << ", " << v2 << std::endl;
           if(std::abs(mu.abs2() / v2 - 1) < opt.threshold_abs){
@@ -3128,7 +3792,7 @@ class Matrix_Frozen {
 #if 0
       // Normalization(正規化) is skipable due to transform matrix is unitary
       for(unsigned int j(0), j_end(x.columns()); j < j_end; j++){
-        result.columnVector(j) /= complex_t::get_sqrt(result.columnVector(j).norm2F());
+        result.columnVector(j) /= value_t::get_sqrt(result.columnVector(j).norm2F());
       }
 #endif
 #undef lambda
@@ -3172,10 +3836,11 @@ class Matrix_Frozen {
      * Calculate square root of a matrix
      *
      * @param opt option to calculate eigenvalue/eigenvector
-     * @return square root
+     * @return square root (assignable complex matrix)
      * @see eigen(const opt_eigen_t &)
      */
-    typename complex_t::m_t sqrt(const opt_eigen_t &opt = opt_eigen_t()) const {
+    typename builder_t::template cast_t<typename value_t::complex_t>::assignable_t sqrt(
+        const opt_eigen_t &opt = opt_eigen_t()) const {
       return sqrt(eigen(opt));
     }
 
@@ -3234,11 +3899,19 @@ class Matrix_Frozen {
           return (*this) << op.lhs << ", " << op.rhs;
         }
         template <class LHS_T, class RHS_T>
+        format_t &operator<<(const Array2D_Operator_EntrywiseMultiply<LHS_T, RHS_T> &op){
+          return (*this) << op.lhs << ", " << op.rhs;
+        }
+        template <class LHS_T, class RHS_T>
         format_t &operator<<(const Array2D_Operator_Multiply_by_Scalar<LHS_T, RHS_T> &op){
           return (*this) << op.lhs << ", " << op.rhs;
         }
         template <class LHS_T, class RHS_T>
         format_t &operator<<(const Array2D_Operator_Multiply_by_Matrix<LHS_T, RHS_T> &op){
+          return (*this) << op.lhs << ", " << op.rhs;
+        }
+        template <class LHS_T, class RHS_T, bool rhs_horizontal>
+        format_t &operator<<(const Array2D_Operator_Stack<LHS_T, RHS_T, rhs_horizontal> &op){
           return (*this) << op.lhs << ", " << op.rhs;
         }
 
@@ -3255,6 +3928,12 @@ class Matrix_Frozen {
               symbol = "+"; break;
             case OPERATOR_2_Subtract_Matrix_from_Matrix:
               symbol = "-"; break;
+            case OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix:
+              symbol = ".*"; break;
+            case OPERATOR_2_Stack_Horizontal:
+              symbol = "H"; break;
+            case OPERATOR_2_Stack_Vertical:
+              symbol = "V"; break;
             default:
               return (*this) << "(?)";
           }
@@ -3358,6 +4037,60 @@ struct Array2D_Operator_Add<
 template <
     class T, class Array2D_Type, class ViewType,
     class T2, class Array2D_Type2, class ViewType2>
+struct Array2D_Operator_EntrywiseMultiply<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> >
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+  static const int tag = super_t::lhs_t::OPERATOR_2_Entrywise_Multiply_Matrix_by_Matrix;
+  Array2D_Operator_EntrywiseMultiply(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    return super_t::lhs(row, column) * super_t::rhs(row, column);
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2, class Array2D_Type2, class ViewType2,
+    bool rhs_horizontal>
+struct Array2D_Operator_Stack<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2>,
+      rhs_horizontal>
+    : public Array2D_Operator_Binary<
+        Matrix_Frozen<T, Array2D_Type, ViewType>,
+        Matrix_Frozen<T2, Array2D_Type2, ViewType2> >{
+  typedef Array2D_Operator_Binary<
+      Matrix_Frozen<T, Array2D_Type, ViewType>,
+      Matrix_Frozen<T2, Array2D_Type2, ViewType2> > super_t;
+  static const int tag = rhs_horizontal
+      ? super_t::lhs_t::OPERATOR_2_Stack_Horizontal
+      : super_t::lhs_t::OPERATOR_2_Stack_Vertical;
+  const unsigned int threshold;
+  Array2D_Operator_Stack(
+      const typename super_t::lhs_t &_lhs,
+      const typename super_t::rhs_t &_rhs) noexcept
+      : super_t(_lhs, _rhs),
+      threshold(rhs_horizontal ? _lhs.columns() : _lhs.rows()) {}
+  T operator()(const unsigned int &row, const unsigned int &column) const noexcept {
+    if(rhs_horizontal){
+      return (column < threshold) ? super_t::lhs(row, column) : super_t::rhs(row, column - threshold);
+    }else{
+      return (row < threshold) ? super_t::lhs(row, column) : super_t::rhs(row - threshold, column);
+    }
+  }
+};
+
+template <
+    class T, class Array2D_Type, class ViewType,
+    class T2, class Array2D_Type2, class ViewType2>
 struct Array2D_Operator_Multiply_by_Matrix<
       Matrix_Frozen<T, Array2D_Type, ViewType>,
       Matrix_Frozen<T2, Array2D_Type2, ViewType2> >
@@ -3438,6 +4171,27 @@ private:
     struct check_op_t<void, void, U> {
       // active when both left and right hand side terms are none operator
       // This may be overwritten by (M * M) if its MatrixBuilder specialization exists
+      typedef typename MatrixBuilder<LHS_T>
+          ::template view_apply_t<ViewType>::applied_t res_t;
+    };
+    typedef typename check_op_t<>::res_t mat_t;
+  };
+  template <class LHS_T, class RHS_T, bool rhs_horizontal>
+  struct unpack_op_t<Array2D_Operator_Stack<LHS_T, RHS_T, rhs_horizontal> > { // (H/V, M, M)
+    template <
+        class OperatorT_L = typename LHS_T::template OperatorProperty<>::operator_t,
+        class OperatorT_R = typename RHS_T::template OperatorProperty<>::operator_t,
+        class U = void>
+    struct check_op_t {
+      typedef Matrix_Frozen<T, Array2D_Operator<T, Array2D_Operator_Stack<
+          typename MatrixBuilder<LHS_T>::assignable_t::frozen_t,
+          typename MatrixBuilder<RHS_T>::assignable_t::frozen_t,
+          rhs_horizontal> >, ViewType> res_t;
+    };
+    template <class U>
+    struct check_op_t<void, void, U> {
+      // active when both left and right hand side terms are none operator
+      // This may be overwritten by (H/V, M, M) if its MatrixBuilder specialization exists
       typedef typename MatrixBuilder<LHS_T>
           ::template view_apply_t<ViewType>::applied_t res_t;
     };
@@ -3536,38 +4290,50 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::rows;
     using super_t::columns;
 
-    class iterator : public super_t::template iterator_base_t<iterator> {
+    template <template <typename> class MapperT = super_t::template iterator_base_t>
+    class iterator_skelton_t : public MapperT<iterator_skelton_t<MapperT> > {
       public:
         typedef T value_type;
         typedef T& reference;
         typedef T* pointer;
       protected:
+        typedef MapperT<iterator_skelton_t<MapperT> > base_t;
         self_t mat;
-        typedef typename super_t::template iterator_base_t<iterator> base_t;
       public:
-        unsigned int row() const {return base_t::row(mat);}
-        unsigned int column() const {return base_t::column(mat);}
-        reference operator*() {
-          std::div_t rc(std::div(base_t::idx, mat.columns()));
-          return mat((unsigned int)rc.quot, (unsigned int)rc.rem);
-        }
-        pointer operator->() {
-          return &(operator*());
-        }
-        iterator(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
-            : base_t(idx_), mat(mat_) {}
-        iterator()
+        reference operator*() {return mat(base_t::r, base_t::c);}
+        pointer operator->() {return &(operator*());}
+        iterator_skelton_t(const self_t &mat_, const typename base_t::difference_type &idx_ = 0)
+            : base_t(mat_, idx_), mat(mat_) {}
+        iterator_skelton_t()
             : base_t(), mat() {}
         reference operator[](const typename base_t::difference_type &n){
           return *((*this) + n);
         }
     };
+    typedef iterator_skelton_t<super_t::iterator_mapper_t::template all_t> iterator;
     using super_t::begin;
     iterator begin() {return iterator(*this);}
     typename super_t::const_iterator cbegin() const {return super_t::begin();}
     using super_t::end;
-    iterator end() {return iterator(*this, rows() * columns());}
+    iterator end() {return iterator(*this).tail();}
     typename super_t::const_iterator cend() const {return super_t::end();}
+
+    template <template <typename> class MapperT>
+    iterator_skelton_t<MapperT> begin() {
+      return iterator_skelton_t<MapperT>(*this);
+    }
+    template <template <typename> class MapperT>
+    typename super_t::template const_iterator_skelton_t<MapperT> cbegin() const {
+      return super_t::template begin<MapperT>();
+    }
+    template <template <typename> class MapperT>
+    iterator_skelton_t<MapperT> end() {
+      return iterator_skelton_t<MapperT>(*this).tail();
+    }
+    template <template <typename> class MapperT>
+    typename super_t::template const_iterator_skelton_t<MapperT> cend() const {
+      return super_t::template end<MapperT>();
+    }
 
     /**
      * Clear elements.
@@ -3911,8 +4677,15 @@ class Matrix : public Matrix_Frozen<T, Array2D_Type, ViewType> {
     using super_t::isSquare;
     using super_t::isDiagonal;
     using super_t::isSymmetric;
+    using super_t::isLowerTriangular;
+    using super_t::isUpperTriangular;
+    using super_t::isHermitian;
     using super_t::isDifferentSize;
     using super_t::isLU;
+    using super_t::isSkewSymmetric;
+    using super_t::isNormal;
+    using super_t::isOrthogonal;
+    using super_t::isUnitary;
 
     /*
      * operator+=, operator-=, operator*=, operator/= are shortcuts of this->replace((*this) op another).
