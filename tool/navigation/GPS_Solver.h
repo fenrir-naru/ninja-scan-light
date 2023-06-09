@@ -289,7 +289,7 @@ class GPS_SinglePositioning : public SolverBaseT {
       float_t dt_transit(range / c);
       gps_time_t time_depature(time_arrival - dt_transit);
       xyz_t sat_pos(sat.position(time_depature, dt_transit));
-      float_t geometric_range(usr_pos.xyz.dist(sat_pos));
+      float_t geometric_range(usr_pos.xyz.distance(sat_pos));
 
       // Calculate residual
       residual.residual = range - geometric_range;
