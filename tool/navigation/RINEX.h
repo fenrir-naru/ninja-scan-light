@@ -1496,7 +1496,7 @@ class RINEX_Writer {
   protected:
     version_type_t _version_type;
     header_t _header;
-    std::ostream &dist;
+    std::ostream &dest;
     
     void set_version_type(const version_type_t &version_type){
       _version_type = version_type;
@@ -1511,7 +1511,7 @@ class RINEX_Writer {
         std::ostream &out,
         const header_item_t *header_mask = NULL, 
         const int header_mask_size = 0) 
-        : _version_type(), _header(header_mask, header_mask_size), dist(out) {
+        : _version_type(), _header(header_mask, header_mask_size), dest(out) {
     }
     virtual ~RINEX_Writer() {_header.clear();}
 
@@ -1574,7 +1574,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     typedef RINEX_Writer<> super_t;
   protected:
     using super_t::_header;
-    using super_t::dist;
+    using super_t::dest;
   public:
     typedef typename RINEX_NAV<FloatT>::space_node_t space_node_t;
     typedef typename RINEX_NAV<FloatT>::message_t message_t;
@@ -1673,7 +1673,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           }
           break;
       }
-      dist << buf.str();
+      dest << buf.str();
       return *this;
     }
     self_t &operator<<(const message_sbas_t &msg){
@@ -1704,7 +1704,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           }
           break;
       }
-      dist << buf.str();
+      dest << buf.str();
       return *this;
     }
 
@@ -1754,7 +1754,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       if(systems > 1){
         set_version(version, super_t::version_type_t::SYS_MIXED);
       }
-      super_t::dist << header();
+      super_t::dest << header();
       res++;
 
       struct {
@@ -1825,7 +1825,7 @@ class RINEX_OBS_Writer : public RINEX_Writer<> {
     using super_t::RINEX_FloatD;
     using super_t::RINEX_Value;
     using super_t::_header;
-    using super_t::dist;
+    using super_t::dest;
   public:
     void set_version(
         const int &version,
@@ -2027,7 +2027,7 @@ class RINEX_OBS_Writer : public RINEX_Writer<> {
       }
       top << buf << std::endl;
       
-      dist << top.str() << rest.str();
+      dest << top.str() << rest.str();
       return *this;
     }
 };
