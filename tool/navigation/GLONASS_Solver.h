@@ -269,7 +269,7 @@ class GLONASS_SinglePositioning : public SolverBaseT {
       float_t dt_transit(range / c);
       gps_time_t t_tx(time_arrival - dt_transit);
       xyz_t sat_pos(sat.position(t_tx, dt_transit));
-      float_t geometric_range(usr_pos.xyz.dist(sat_pos));
+      float_t geometric_range(usr_pos.xyz.distance(sat_pos));
 
       // Calculate residual
       res.range_residual = range - geometric_range;

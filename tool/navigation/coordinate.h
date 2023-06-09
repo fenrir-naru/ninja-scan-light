@@ -131,8 +131,12 @@ class System_3D {
       in >> self[2];
       return in;
     }
+  protected:
+    FloatT norm() const {
+      return FloatT(std::sqrt(pow2(v[0]) + pow2(v[1]) + pow2(v[2])));
+    }
 
-
+  public:
     ///< Coordinate rotation
     struct Rotation {
       Quaternion<FloatT> q;
@@ -253,13 +257,12 @@ class System_XYZ : public System_3D<FloatT> {
       return copy -= another;
     }
     
-    FloatT dist() const {
-      return FloatT(std::sqrt(
-          pow2(x()) + pow2(y()) + pow2(z())));
+    FloatT distance() const {
+      return super_t::norm();
     }
     
-    FloatT dist(const self_t &another) const {
-      return (*this - another).dist();
+    FloatT distance(const self_t &another) const {
+      return (*this - another).distance();
     }
     
     static const FloatT f0, a0, b0, e0;
@@ -463,6 +466,10 @@ class System_ENU : public System_3D<FloatT> {
                          north() * c2      + up() * s2      + base.z());
     }
     
+    FloatT distance() const {
+      return super_t::norm();
+    }
+
     FloatT elevation() const {
       return FloatT(std::atan2(up(), std::sqrt(pow2(east()) + pow2(north()))));
     }
