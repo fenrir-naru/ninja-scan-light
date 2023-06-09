@@ -337,6 +337,8 @@ shared_examples 'Matrix' do
       expect(mat.adjoint.to_a).to eq(Matrix[*compare_with].conj.t.to_a)
     end
     it 'supports submatrix with partial' do
+      expect(mat.partial(params[:rc][0] - 1, params[:rc][1] - 1).to_a) \
+          .to eq(Matrix[*compare_with[0..-2].collect{|values| values[0..-2]}].to_a)
       expect(mat.partial(params[:rc][0] - 1, params[:rc][1] - 1, 1, 1).to_a) \
           .to eq(Matrix[*compare_with[1..-1].collect{|values| values[1..-1]}].to_a)
     end

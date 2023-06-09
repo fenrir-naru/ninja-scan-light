@@ -345,12 +345,6 @@ struct MatrixViewFilter : public BaseView {
     res.view().partial(new_rows, new_columns, row_offset, column_offset);
     return res;
   }
-  template <class T, class Array2D_Type, class ViewType>
-  static Matrix_Frozen<T, Array2D_Type, self_t> partial(
-      const Matrix_Frozen<T, Array2D_Type, ViewType> &orig,
-      const unsigned int &new_rows, const unsigned int &new_columns) {
-    return partial(orig, new_rows, new_columns, 0, 0);
-  }
 
   template<class CharT, class Traits>
   friend std::basic_ostream<CharT, Traits> &operator<<(
@@ -1200,6 +1194,14 @@ MAKE_TO_S(Matrix_Frozen)
     return MatView_f::partial(*$self, new_rows, new_columns, row_offset, column_offset);
 #else
     return $self->partial(new_rows, new_columns, row_offset, column_offset);
+#endif
+  }
+  Matrix_Frozen<type, storage, view_to> partial(
+      const unsigned int &new_rows, const unsigned int &new_columns) const {
+#if defined(USE_MATRIX_VIEW_FILTER)
+    return MatView_f::partial(*$self, new_rows, new_columns, 0, 0);
+#else
+    return $self->partial(new_rows, new_columns, 0, 0);
 #endif
   }
   Matrix_Frozen<type, storage, view_to> row_vector(const unsigned int &row) const {
