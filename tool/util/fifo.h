@@ -37,23 +37,23 @@
 template <typename StorageT>
 struct FIFO_Duplicator {
   struct memcpy_t {
-    memcpy_t(const StorageT *src, StorageT *dist){
-      std::memcpy(dist, src, sizeof(StorageT));
+    memcpy_t(const StorageT *src, StorageT *dest){
+      std::memcpy(dest, src, sizeof(StorageT));
     }
     template <typename SizeT>
-    memcpy_t(const StorageT *src, StorageT *dist, SizeT size){
-      std::memcpy(dist, src, sizeof(StorageT) * size);
+    memcpy_t(const StorageT *src, StorageT *dest, SizeT size){
+      std::memcpy(dest, src, sizeof(StorageT) * size);
     }
   };
 
   struct operator_eq_t {
-    operator_eq_t(const StorageT *src, StorageT *dist){
-      *dist = *src;
+    operator_eq_t(const StorageT *src, StorageT *dest){
+      *dest = *src;
     }
     template <typename SizeT>
-    operator_eq_t(const StorageT *src, StorageT *dist, SizeT size){
+    operator_eq_t(const StorageT *src, StorageT *dest, SizeT size){
       while(size--){
-        *(dist++) = *(src++);
+        *(dest++) = *(src++);
       }
     }
   };
