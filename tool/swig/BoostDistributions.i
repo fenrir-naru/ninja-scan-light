@@ -14,7 +14,7 @@
   }
 }
 
-%include std_pair.i
+%include std_common.i
 
 %{
 #include <boost/math/distributions.hpp>
@@ -40,14 +40,10 @@ using namespace boost::math;
   RealType skewness() const {return skewness(*$self);}
   RealType kurtosis() const {return kurtosis(*$self);}
   RealType kurtosis_excess() const {return kurtosis_excess(*$self);}
-#if defined(SWIGRUBY)
-  %typemap(out) std::pair<RealType, RealType> {
-    VALUE arr(rb_ary_new2(2));
-    rb_ary_push(arr, DBL2NUM($1.first));
-    rb_ary_push(arr, DBL2NUM($1.second));
-    $result = arr;
+  %typemap(out, fragment=SWIG_Traits_frag(RealType)) std::pair<RealType, RealType> {
+    %append_output(swig::from($1.first));
+    %append_output(swig::from($1.second));
   }
-#endif
   std::pair<RealType, RealType> range() const {return range(*$self);}
   std::pair<RealType, RealType> support() const {return support(*$self);}
 };
@@ -94,14 +90,10 @@ ADD_BASIC_METHODS(dist_name ## _distribution);
   RealT skewness() const {return skewness(*$self);}
   RealT kurtosis() const {return kurtosis(*$self);}
   RealT kurtosis_excess() const {return kurtosis_excess(*$self);}
-#if defined(SWIGRUBY)
-  %typemap(out) std::pair<RealT, RealT> {
-    VALUE arr(rb_ary_new2(2));
-    rb_ary_push(arr, DBL2NUM($1.first));
-    rb_ary_push(arr, DBL2NUM($1.second));
-    $result = arr;
+  %typemap(out, fragment=SWIG_Traits_frag(RealT)) std::pair<RealT, RealT> {
+    %append_output(swig::from($1.first));
+    %append_output(swig::from($1.second));
   }
-#endif
   std::pair<RealT, RealT> range() const {return range(*$self);}
   std::pair<RealT, RealT> support() const {return support(*$self);}
 };
