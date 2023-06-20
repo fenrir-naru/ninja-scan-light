@@ -23,34 +23,34 @@ using namespace boost::math;
 
 %define ADD_BASIC_METHODS(dist_name)
 %extend boost::math::dist_name {
-  RealType pdf(const RealType &x) const {
+  value_type pdf(const value_type &x) const {
     return pdf(*$self, x);
   }
-  RealType cdf(const RealType &x, const bool &is_complement = false) const {
+  value_type cdf(const value_type &x, const bool &is_complement = false) const {
     return is_complement ? cdf(complement(*$self, x)) : cdf(*$self, x);
   }
-  RealType quantile(const RealType &p, const bool &is_complement = false) const {
+  value_type quantile(const value_type &p, const bool &is_complement = false) const {
     return is_complement ? quantile(complement(*$self, p)) : quantile(*$self, p);
   }
-  RealType mean() const {return mean(*$self);}
-  RealType median() const {return median(*$self);}
-  RealType mode() const {return mode(*$self);}
-  RealType standard_deviation() const {return standard_deviation(*$self);}
-  RealType variance() const {return variance(*$self);}
-  RealType skewness() const {return skewness(*$self);}
-  RealType kurtosis() const {return kurtosis(*$self);}
-  RealType kurtosis_excess() const {return kurtosis_excess(*$self);}
-  %typemap(out, fragment=SWIG_Traits_frag(RealType)) std::pair<RealType, RealType> {
-    %append_output(swig::from($1.first));
-    %append_output(swig::from($1.second));
-  }
-  std::pair<RealType, RealType> range() const {return range(*$self);}
-  std::pair<RealType, RealType> support() const {return support(*$self);}
+  value_type mean() const {return mean(*$self);}
+  value_type median() const {return median(*$self);}
+  value_type mode() const {return mode(*$self);}
+  value_type standard_deviation() const {return standard_deviation(*$self);}
+  value_type variance() const {return variance(*$self);}
+  value_type skewness() const {return skewness(*$self);}
+  value_type kurtosis() const {return kurtosis(*$self);}
+  value_type kurtosis_excess() const {return kurtosis_excess(*$self);}
+  std::pair<value_type, value_type> range() const {return range(*$self);}
+  std::pair<value_type, value_type> support() const {return support(*$self);}
 };
 %enddef
 
 %define INSTANTIATE(dist_name, type, class_name)
 %include boost/math/distributions/ ## dist_name ## .hpp
+%typemap(out, fragment=SWIG_Traits_frag(type)) std::pair<type, type> {
+  %append_output(swig::from($1.first));
+  %append_output(swig::from($1.second));
+}
 ADD_BASIC_METHODS(dist_name ## _distribution);
 %template(class_name) boost::math:: ## dist_name ## _distribution<type, policies::policy<> >;
 %enddef
@@ -69,38 +69,12 @@ ADD_BASIC_METHODS(dist_name ## _distribution);
   %ignore kurtosis_excess;
 };
 
-// workaround for hyperexponential haaving RealT template parameter instead of RealType
+// workaround for hyperexponential having RealT template parameter instead of RealType
 %extend boost::math::hyperexponential_distribution {
+  // TODO initializer list
   %ignore hyperexponential_distribution(std::initializer_list<RealT>, std::initializer_list<RealT>);
   %ignore hyperexponential_distribution(std::initializer_list<RealT>);
-  RealT pdf(const RealT &x) const {
-    return pdf(*$self, x);
-  }
-  RealT cdf(const RealT &x, const bool &is_complement = false) const {
-    return is_complement ? cdf(complement(*$self, x)) : cdf(*$self, x);
-  }
-  RealT quantile(const RealT &p, const bool &is_complement = false) const {
-    return is_complement ? quantile(complement(*$self, p)) : quantile(*$self, p);
-  }
-  RealT mean() const {return mean(*$self);}
-  RealT median() const {return median(*$self);}
-  RealT mode() const {return mode(*$self);}
-  RealT standard_deviation() const {return standard_deviation(*$self);}
-  RealT variance() const {return variance(*$self);}
-  RealT skewness() const {return skewness(*$self);}
-  RealT kurtosis() const {return kurtosis(*$self);}
-  RealT kurtosis_excess() const {return kurtosis_excess(*$self);}
-  %typemap(out, fragment=SWIG_Traits_frag(RealT)) std::pair<RealT, RealT> {
-    %append_output(swig::from($1.first));
-    %append_output(swig::from($1.second));
-  }
-  std::pair<RealT, RealT> range() const {return range(*$self);}
-  std::pair<RealT, RealT> support() const {return support(*$self);}
 };
-#if !defined(__MINGW__)
-%include boost/math/distributions/hyperexponential.hpp
-%template(Hyperexponential) boost::math::hyperexponential_distribution<double, policies::policy<> >;
-#endif
 
 INSTANTIATE(arcsine, double, Arcsine);
 INSTANTIATE(bernoulli, double, Bernoulli);
@@ -113,7 +87,7 @@ INSTANTIATE(extreme_value, double, ExtremeValue);
 INSTANTIATE(fisher_f, double, FisherF);
 INSTANTIATE(gamma, double, Gamma);
 INSTANTIATE(geometric, double, Geometric);
-//INSTANTIATE(hyperexponential, double, Hyperexponential); // TODO due to initializer list
+INSTANTIATE(hyperexponential, double, Hyperexponential);
 INSTANTIATE(hypergeometric, double, Hypergeometric);
 INSTANTIATE(inverse_chi_squared, double, InverseChiSquared);
 INSTANTIATE(inverse_gamma, double, InverseGamma);
