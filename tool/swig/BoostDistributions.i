@@ -6,8 +6,12 @@
 %module BoostDistributions
 
 %include std_common.i
+%include std_except.i
 
 %{
+#include <sstream>
+#include <stdexcept>
+
 #include <boost/version.hpp>
 #define BOOST_VERSION_LESS_THAN(ver) (BOOST_VERSION < ver)
 
@@ -57,24 +61,30 @@ inline static std::pair<typename DistT::value_type, typename DistT::value_type> 
 };
 template <int RequiredVersion>
 struct distribution_shim_t<RequiredVersion, false> { // dummy
+  static const std::string err_msg(){
+    std::stringstream ss;
+    ss << "BOOST_VERSION(" << BOOST_VERSION 
+        << ") should be >= " << RequiredVersion;
+    return ss.str();
+  }
   template <class DistT, class ValueT>
   inline static typename DistT::value_type pdf(const DistT &dist, const ValueT &x){
-    return 0;
+    throw std::logic_error(err_msg());
   }
   template <class DistT, class ValueT>
   inline static typename DistT::value_type cdf(
       const DistT &dist, const ValueT &x, const bool &is_complement = false){
-    return 0;
+    throw std::logic_error(err_msg());
   }
   template <class DistT, class ValueT>
   inline static typename DistT::value_type quantile(
       const DistT &dist, const ValueT &p, const bool &is_complement = false){
-    return 0;
+    throw std::logic_error(err_msg());
   }
 #define GEN_FUNC(func_name) \
 template <class DistT> \
 inline static typename DistT::value_type func_name(const DistT &dist){ \
-  return 0; \
+  throw std::logic_error(err_msg()); \
 }
   GEN_FUNC(mean);
   GEN_FUNC(median);
@@ -89,7 +99,7 @@ inline static typename DistT::value_type func_name(const DistT &dist){ \
 template <class DistT> \
 inline static std::pair<typename DistT::value_type, typename DistT::value_type> \
     func_name(const DistT &dist){ \
-  return std::make_pair<typename DistT::value_type, typename DistT::value_type>(0, 0); \
+  throw std::logic_error(err_msg()); \
 }
   GEN_FUNC(range);
   GEN_FUNC(support);
@@ -126,6 +136,7 @@ struct dist_name ## _distribution { // dummy
   %append_output(swig::from($1.second));
 }
 %extend boost::math::dist_name ## _distribution {
+  %catches(std::logic_error);
 #define shim_t boost::math::distribution_shim_t<min_ver>
   value_type pdf(const value_type &x) const {
     return shim_t::pdf(*$self, x);
