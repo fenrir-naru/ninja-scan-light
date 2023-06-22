@@ -375,3 +375,5 @@ INSTANTIATE(students_t, double, StudentsT, 103500);
 INSTANTIATE(triangular, double, Triangular, 103500);
 INSTANTIATE(uniform, double, Uniform, 103500);
 INSTANTIATE(weibull, double, Weibull, 103500);
+
+#undef INSTANTIATE
