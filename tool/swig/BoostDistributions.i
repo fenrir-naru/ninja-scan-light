@@ -202,6 +202,7 @@ namespace boost{ namespace math{
 template <class RealType = double, class Policy = policies::policy<> >
 struct dist_name ## _distribution { // dummy
   typedef RealType value_type;
+  dist_name ## _distribution();
 };
 } }
 #endif
