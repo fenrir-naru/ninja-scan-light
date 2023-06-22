@@ -341,6 +341,29 @@ class hyperexponential_distribution { /* extracted from ver 1.81.0 */
 #define BOOST_MATH_DISTRIBUTIONS_HYPEREXPONENTIAL_HPP
 #endif
 
+%define CTACH_LOGIC_ERROR(dist_name, func_name)
+%extend boost::math::dist_name ## _distribution {
+  %catches(std::logic_error) func_name;
+};
+%enddef
+
+%define CTACH_LOGIC_ERROR_FOR_FIND_METHODS(dist_name)
+CTACH_LOGIC_ERROR(dist_name, find_lower_bound_on_p);
+CTACH_LOGIC_ERROR(dist_name, find_upper_bound_on_p);
+CTACH_LOGIC_ERROR(dist_name, find_minimum_number_of_trials);
+CTACH_LOGIC_ERROR(dist_name, find_maximum_number_of_trials);
+%enddef
+CTACH_LOGIC_ERROR_FOR_FIND_METHODS(binomial);
+CTACH_LOGIC_ERROR_FOR_FIND_METHODS(geometric);
+CTACH_LOGIC_ERROR_FOR_FIND_METHODS(negative_binomial);
+#undef CTACH_LOGIC_ERROR_FOR_FIND_METHODS
+
+CTACH_LOGIC_ERROR(chi_squared, find_degrees_of_freedom);
+CTACH_LOGIC_ERROR(non_central_chi_squared, find_degrees_of_freedom);
+CTACH_LOGIC_ERROR(students_t, find_degrees_of_freedom);
+
+#undef CTACH_LOGIC_ERROR
+
 INSTANTIATE(arcsine, double, Arcsine, 105800);
 INSTANTIATE(bernoulli, double, Bernoulli, 103500);
 INSTANTIATE(beta, double, Beta, 103500);
