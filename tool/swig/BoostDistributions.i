@@ -252,10 +252,94 @@ struct dist_name ## _distribution { // dummy
 
 // workaround for hyperexponential having RealT template parameter instead of RealType
 %extend boost::math::hyperexponential_distribution {
-  // TODO initializer list
   %ignore hyperexponential_distribution(std::initializer_list<RealT>, std::initializer_list<RealT>);
   %ignore hyperexponential_distribution(std::initializer_list<RealT>);
+  %typemap(out, fragment=SWIG_Traits_frag(RealT)) std::vector<RealT> {
+    for(typename $1_type::const_iterator it($1.begin()), it_end($1.end());
+        it != it_end; ++it){
+      %append_output(swig::from(*it));
+    }
+  }
+  %typemap(in, fragment=SWIG_Traits_frag(RealT)) const std::vector<RealT> & (std::vector<RealT> temp) {
+#if defined(SWIGRUBY)
+    if(RB_TYPE_P($input, T_ARRAY)){
+      RealT v;
+      for(unsigned int i(0), i_end((unsigned int)RARRAY_LEN($input)); i < i_end; ++i){
+        VALUE val(RARRAY_AREF($input, i));
+        if(!SWIG_IsOK(swig::asval(val, &v))){break;}
+        temp.push_back(v);
+      }
+    }
+#endif
+    $1 = &temp;
+  }
+#if BOOST_VERSION >= 105700
+  hyperexponential_distribution(
+      const std::vector<RealT> &prob, const std::vector<RealT> &range){
+    return new hyperexponential_distribution(
+        prob.begin(), prob.end(), range.begin(), range.end());
+  }
+  hyperexponential_distribution(
+      const std::vector<RealT> &range){
+    return new hyperexponential_distribution(range.begin(), range.end());
+  }
+#endif
 };
+
+// workaround for swig parse error of hyperexponential::is_iterator (>=1.77.0)
+#if BOOST_VERSION >= 107700
+namespace boost{ namespace math{
+template <typename RealT = double, typename PolicyT = policies::policy<> >
+class hyperexponential_distribution { /* extracted from ver 1.81.0 */
+  public:
+    typedef RealT value_type;
+    typedef PolicyT policy_type;
+    
+    hyperexponential_distribution();
+
+    // Four arg constructor: no ambiguity here, the arguments must be two pairs of iterators:
+    template <typename ProbIterT, typename RateIterT>
+    hyperexponential_distribution(
+        ProbIterT prob_first, ProbIterT prob_last,
+        RateIterT rate_first, RateIterT rate_last);
+
+    // Two arg constructor from 2 ranges, we SFINAE this out of existence if
+    // either argument type is incrementable as in that case the type is
+    // probably an iterator:
+    template <
+        typename ProbRangeT, typename RateRangeT, 
+        typename std::enable_if<!is_iterator<ProbRangeT>::value && 
+          !is_iterator<RateRangeT>::value, bool>::type = true>
+    hyperexponential_distribution(
+        ProbRangeT const& prob_range, RateRangeT const& rate_range);
+
+    // Two arg constructor for a pair of iterators: we SFINAE this out of
+    // existence if neither argument types are incrementable.
+    // Note that we allow different argument types here to allow for
+    // construction from an array plus a pointer into that array.
+    template <
+        typename RateIterT, typename RateIterT2,
+        typename std::enable_if<
+          is_iterator<RateIterT>::value || is_iterator<RateIterT2>::value, bool>::type = true>
+    hyperexponential_distribution(
+        RateIterT const& rate_first, RateIterT2 const& rate_last);
+
+    // Initializer list constructor: allows for construction from array literals:
+    hyperexponential_distribution(std::initializer_list<RealT> l1, std::initializer_list<RealT> l2);
+
+    hyperexponential_distribution(std::initializer_list<RealT> l1);
+
+    // Single argument constructor: argument must be a range.
+    template <typename RateRangeT>
+    hyperexponential_distribution(RateRangeT const& rate_range);
+
+    std::vector<RealT> probabilities() const;
+    std::vector<RealT> rates() const;
+    std::size_t num_phases() const;
+};
+} }
+#define BOOST_MATH_DISTRIBUTIONS_HYPEREXPONENTIAL_HPP
+#endif
 
 INSTANTIATE(arcsine, double, Arcsine, 105800);
 INSTANTIATE(bernoulli, double, Bernoulli, 103500);
