@@ -105,6 +105,80 @@ inline static std::pair<typename DistT::value_type, typename DistT::value_type> 
   GEN_FUNC(support);
 #undef GEN_FUNC
 };
+template <class RealType, int RequiredVersion>
+struct distribution_dummy_t {
+  typedef RealType value_type;
+  static const std::string err_msg(){
+    return distribution_shim_t<RequiredVersion, false>::err_msg();
+  }
+  distribution_dummy_t(){throw std::logic_error(err_msg());}
+  
+  // static/member functions
+#define GEN_FUNC_m(ret_type, fun_name) \
+ret_type fun_name(...) const {throw std::logic_error(err_msg());}
+#define GEN_FUNC_s(ret_type, fun_name) \
+static ret_type fun_name(...){throw std::logic_error(err_msg());}
+
+  GEN_FUNC_m(RealType, x_max); // arcsine
+  GEN_FUNC_m(RealType, x_min); // arcsine
+  GEN_FUNC_m(RealType, success_fraction);
+      // bernoulli, binomial, geometric, negative_binomial
+  GEN_FUNC_m(RealType, alpha); // beta, non_central_beta
+  GEN_FUNC_m(RealType, beta); // beta, non_central_beta
+  GEN_FUNC_s(RealType, find_alpha); // beta
+  GEN_FUNC_s(RealType, find_beta); // beta
+  GEN_FUNC_s(RealType, find_lower_bound_on_p);
+      // binomial, geometric, negative_binomial
+  GEN_FUNC_s(RealType, find_maximum_number_of_trials);
+      // binomial, geometric, negative_binomial
+  GEN_FUNC_s(RealType, find_minimum_number_of_trials);
+      // binomial, geometric, negative_binomial
+  GEN_FUNC_s(RealType, find_upper_bound_on_p);
+      // binomial, geometric, negative_binomial
+  GEN_FUNC_m(RealType, trails); // binomial
+  GEN_FUNC_m(RealType, location);
+      // cauchy, extreme_value, inverse_gaussian, 
+      // laplace, logistic, lognormal, normal, skew_normal
+  GEN_FUNC_m(RealType, scale);
+      // cauchy, extreme_value, gamma, inverse_chi_squared,
+      // inverse_gamma, inverse_gaussian, laplace, logistic,
+      // lognormal, normal, pareto, skew_normal, weibull
+  GEN_FUNC_s(RealType, find_degrees_of_freedom);
+      // chi_squared, non_central_chi_squared, students_t
+  GEN_FUNC_m(RealType, degrees_of_freedom);
+      // chi_squared, inverse_chi_squared, non_central_chi_squared,
+      // non_central_t, students_t
+  GEN_FUNC_m(RealType, lambda); // exponential
+  GEN_FUNC_m(RealType, degrees_of_freedom1); // fisher_f, non_central_f
+  GEN_FUNC_m(RealType, degrees_of_freedom2); // fisher_f, non_central_f
+  GEN_FUNC_m(RealType, shape);
+      // gamma, inverse_gamma, inverse_gaussian, pareto,
+      // skew_normal, weibull
+  GEN_FUNC_m(RealType, successes); // geometric, negative_binomial
+  GEN_FUNC_m(std::vector<RealType>, probabilities); // hyperexponential
+  GEN_FUNC_m(std::vector<RealType>, rates); // hyperexponential
+  GEN_FUNC_m(std::size_t, num_phases); // hyperexponential
+  GEN_FUNC_m(bool, check_params); // hypergeometric
+  GEN_FUNC_m(bool, check_x); // hypergeometric
+  GEN_FUNC_m(unsigned, defective); // hypergeometric
+  GEN_FUNC_m(unsigned, sample_count); // hypergeometric
+  GEN_FUNC_m(unsigned, total); // hypergeometric
+  GEN_FUNC_m(RealType, mean); // inverse_gaussian, poisson
+  GEN_FUNC_m(RealType, number_of_observations); // kolmogorov_smirnov
+  GEN_FUNC_m(RealType, non_centrality);
+      // non_central_beta, non_central_chi_squared, non_central_f,
+      // non_central_t
+  GEN_FUNC_s(RealType, find_non_centrality);
+      // non_central_chi_squared
+  GEN_FUNC_m(RealType, standard_deviation); // normal
+  GEN_FUNC_m(RealType, sigma); // rayleigh
+  GEN_FUNC_m(RealType, lower); // triangular, uniform
+  GEN_FUNC_m(RealType, mode); // triangular
+  GEN_FUNC_m(RealType, upper); // triangular, uniform
+
+#undef GEN_FUNC_s
+#undef GEN_FUNC_m
+};
 } }
 using namespace boost::math;
 %}
@@ -115,8 +189,8 @@ using namespace boost::math;
 #if BOOST_VERSION_LESS_THAN(min_ver)
 namespace boost{ namespace math{
 template <class RealType = double, class Policy = policies::policy<> >
-struct dist_name ## _distribution { // dummy
-  typedef RealType value_type;
+struct dist_name ## _distribution : public distribution_dummy_t<RealType, min_ver> { // dummy
+  dist_name ## _distribution(...) : distribution_dummy_t<RealType, min_ver>() {}
 };
 } }
 #endif
@@ -136,7 +210,7 @@ struct dist_name ## _distribution { // dummy
   %append_output(swig::from($1.second));
 }
 %extend boost::math::dist_name ## _distribution {
-  %catches(std::logic_error);
+  %catches(std::logic_error) dist_name ## _distribution;
 #define shim_t boost::math::distribution_shim_t<min_ver>
   value_type pdf(const value_type &x) const {
     return shim_t::pdf(*$self, x);
