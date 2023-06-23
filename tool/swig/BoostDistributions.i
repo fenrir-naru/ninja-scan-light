@@ -380,6 +380,8 @@ CTACH_LOGIC_ERROR(students_t, find_degrees_of_freedom);
 
 #undef CTACH_LOGIC_ERROR
 
+%feature("autodoc", "1");
+
 INSTANTIATE(arcsine, double, Arcsine, 105800);
 INSTANTIATE(bernoulli, double, Bernoulli, 103500);
 INSTANTIATE(beta, double, Beta, 103500);
