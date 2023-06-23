@@ -19,22 +19,26 @@
 namespace boost { namespace math {
 template <int RequiredVersion, bool check_passed = !BOOST_VERSION_LESS_THAN(RequiredVersion)>
 struct distribution_shim_t {
-  template <class DistT, class ValueT>
-  inline static typename DistT::value_type pdf(const DistT &dist, const ValueT &x){
-    return boost::math::pdf(dist, x);
-  }
-  template <class DistT, class ValueT>
-  inline static typename DistT::value_type cdf(
-      const DistT &dist, const ValueT &x, const bool &is_complement = false){
-    return is_complement ?
-        boost::math::cdf(complement(dist, x)) : boost::math::cdf(dist, x);
-  }
-  template <class DistT, class ValueT>
-  inline static typename DistT::value_type quantile(
-      const DistT &dist, const ValueT &p, const bool &is_complement = false){
-    return is_complement ?
-        boost::math::quantile(complement(dist, p)) : boost::math::quantile(dist, p);
-  }
+#define GEN_FUNC(func_name) \
+template <class DistT, class ValueT> \
+inline static typename DistT::value_type func_name(const DistT &dist, const ValueT &x){ \
+  return boost::math::func_name(dist, x); \
+}
+  GEN_FUNC(pdf);
+  GEN_FUNC(hazard);
+  GEN_FUNC(chf);
+#undef GEN_FUNC
+#define GEN_FUNC(func_name) \
+template <class DistT, class ValueT> \
+inline static typename DistT::value_type func_name( \
+    const DistT &dist, const ValueT &x, const bool &is_complement = false){ \
+  return is_complement \
+      ? boost::math::func_name(complement(dist, x)) \
+      : boost::math::func_name(dist, x); \
+}
+  GEN_FUNC(cdf);
+  GEN_FUNC(quantile);
+#undef GEN_FUNC
 #define GEN_FUNC(func_name) \
 template <class DistT> \
 inline static typename DistT::value_type func_name(const DistT &dist){ \
@@ -67,20 +71,24 @@ struct distribution_shim_t<RequiredVersion, false> { // dummy
         << ") should be >= " << RequiredVersion;
     return ss.str();
   }
-  template <class DistT, class ValueT>
-  inline static typename DistT::value_type pdf(const DistT &dist, const ValueT &x){
-    throw std::logic_error(err_msg());
-  }
-  template <class DistT, class ValueT>
-  inline static typename DistT::value_type cdf(
-      const DistT &dist, const ValueT &x, const bool &is_complement = false){
-    throw std::logic_error(err_msg());
-  }
-  template <class DistT, class ValueT>
-  inline static typename DistT::value_type quantile(
-      const DistT &dist, const ValueT &p, const bool &is_complement = false){
-    throw std::logic_error(err_msg());
-  }
+#define GEN_FUNC(func_name) \
+template <class DistT, class ValueT> \
+inline static typename DistT::value_type func_name(const DistT &dist, const ValueT &x){ \
+  throw std::logic_error(err_msg()); \
+}
+  GEN_FUNC(pdf);
+  GEN_FUNC(hazard);
+  GEN_FUNC(chf);
+#undef GEN_FUNC
+#define GEN_FUNC(func_name) \
+template <class DistT, class ValueT> \
+inline static typename DistT::value_type func_name( \
+    const DistT &dist, const ValueT &x, const bool &is_complement = false){ \
+  throw std::logic_error(err_msg()); \
+}
+  GEN_FUNC(cdf);
+  GEN_FUNC(quantile);
+#undef GEN_FUNC
 #define GEN_FUNC(func_name) \
 template <class DistT> \
 inline static typename DistT::value_type func_name(const DistT &dist){ \
@@ -222,6 +230,12 @@ struct dist_name ## _distribution { // dummy
   }
   value_type quantile(const value_type &p, const bool &is_complement = false) const {
     return shim_t::quantile(*$self, p, is_complement);
+  }
+  value_type hazard(const value_type &x) const {
+    return shim_t::hazard(*$self, x);
+  }
+  value_type chf(const value_type &x) const {
+    return shim_t::chf(*$self, x);
   }
   value_type mean() const {return shim_t::mean(*$self);}
   value_type median() const {return shim_t::median(*$self);}
