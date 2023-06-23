@@ -211,7 +211,8 @@ struct dist_name ## _distribution { // dummy
   %append_output(swig::from($1.second));
 }
 %extend boost::math::dist_name ## _distribution {
-  %catches(std::logic_error) dist_name ## _distribution;
+  %catches(std::logic_error) dist_name ## _distribution; // for ctor
+  %catches(std::logic_error, std::runtime_error); // for the following member functions
 #define shim_t boost::math::distribution_shim_t<min_ver>
   value_type pdf(const value_type &x) const {
     return shim_t::pdf(*$self, x);
