@@ -297,7 +297,9 @@ struct dist_name ## _distribution { // dummy
   }
   hyperexponential_distribution(
       const std::vector<RealT> &range){
-    return new hyperexponential_distribution(range.begin(), range.end());
+    return new hyperexponential_distribution(range);
+    // two argument constructors have an overload problem. It is checked with 1.82.0.
+    //return new hyperexponential_distribution(range.begin(), range.end());
   }
 #endif
 };
