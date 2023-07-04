@@ -1949,6 +1949,9 @@ class StreamProcessor
                   measurement[GNSS_Receiver<float_sylph_t>::satellite_serial(id.gnss, id.svid)]);
               dst.insert(std::make_pair(items_t::L1_PSEUDORANGE, src.pseudo_range));
               dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE, src.carrier_phase));
+              if(src.lock_indicator & 0x02){ // check Half-cycle ambiguity/slip possibility
+                dst.insert(std::make_pair(items_t::L1_CARRIER_PHASE_AMBIGUITY_SCALE, 0.5));
+              }
               dst.insert(std::make_pair(items_t::L1_DOPPLER, src.doppler)); // positive sign for approaching satellite
               dst.insert(std::make_pair(items_t::L1_SIGNAL_STRENGTH_dBHz, src.signal_strength));
               /* According to RINEX, Loss of lock indicator (LLI)
@@ -2025,8 +2028,15 @@ class StreamProcessor
                 dst.insert(std::make_pair(signal->pseudorange.i, le_char8_2_num<double>(*buf)));
                 dst.insert(std::make_pair(signal->pseudorange.i_sigma, 1E-2 * (1 << (0xF & observer[6 + 43 + (32 * i)]))));
               }
-              if(trkstat & 0x02){
-                dst.insert(std::make_pair(signal->carrier_phase.i, le_char8_2_num<double>(*(buf + 8))));
+              if(trkstat & 0x02){ // Carrier phase valid
+                if(trkstat & 0x04){ // Half cycle valid
+                  dst.insert(std::make_pair(
+                      signal->carrier_phase.i,
+                      le_char8_2_num<double>(*(buf + 8)) + ((trkstat & 0x08) ? 0.5 : 0))); // Half cycle subtracted from phase
+                }else{
+                  dst.insert(std::make_pair(signal->carrier_phase.i, le_char8_2_num<double>(*(buf + 8))));
+                  dst.insert(std::make_pair(signal->cp_ambiguity_scale, 0.5));
+                }
                 dst.insert(std::make_pair(signal->carrier_phase.i_sigma, 4E-3 * (0xF & observer[6 + 44 + (32 * i)])));
               }
               float_sylph_t doppler(le_char4_2_num<float>(*(buf + 16)));

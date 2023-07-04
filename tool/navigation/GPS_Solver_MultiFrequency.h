@@ -105,6 +105,7 @@ class GPS_Solver_MultiFrequency : public BaseSolver {
         make_entry2(RANGE_RATE),
         make_entry(SIGNAL_STRENGTH_dBHz),
         make_entry(LOCK_SEC),
+        make_entry(CARRIER_PHASE_AMBIGUITY_SCALE),
 #undef make_entry2
 #undef make_entry
         MEASUREMENT_ITEMS_PREDEFINED,
@@ -175,6 +176,7 @@ const typename GPS_Solver_MultiFrequency<BaseSolver>::measurement_item_set_t
       make_entry2(RANGE_RATE),
       make_entry(SIGNAL_STRENGTH_dBHz),
       make_entry(LOCK_SEC),
+      make_entry(CARRIER_PHASE_AMBIGUITY_SCALE),
 #undef make_entry2
 #undef make_entry
     };
@@ -193,6 +195,7 @@ const typename GPS_Solver_MultiFrequency<BaseSolver>::measurement_item_set_t
       make_entry2(RANGE_RATE),
       make_entry(SIGNAL_STRENGTH_dBHz),
       make_entry(LOCK_SEC),
+      make_entry(CARRIER_PHASE_AMBIGUITY_SCALE),
 #undef make_entry2
 #undef make_entry
     };
