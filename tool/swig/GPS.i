@@ -793,18 +793,18 @@ struct GPS_User_PVT
                       .append(inspect_str(v_key_value)).append("}").c_str());
               }
               rb_hash_foreach(v_key_value,
-#if RUBY_API_VERSION < 20700
+%#if RUBY_API_VERSION_CODE < 20700
                   // @see https://docs.ruby-lang.org/ja/latest/doc/news=2f2_7_0.html
                   (int (*)(ANYARGS))
-#endif
+%#endif
                   arg_t::iter2, v_arg);
               return ST_CONTINUE;
             }
           } arg = {val};
           rb_hash_foreach(obj,
-#if RUBY_API_VERSION < 20700
+%#if RUBY_API_VERSION_CODE < 20700
               (int (*)(ANYARGS))
-#endif
+%#endif
               arg_t::iter1, reinterpret_cast<VALUE>(&arg));
           return SWIG_OK;
         }
