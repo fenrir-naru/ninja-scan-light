@@ -868,6 +868,7 @@ struct GPS_Measurement {
     L1_RANGE_RATE_SIGMA,
     L1_SIGNAL_STRENGTH_dBHz,
     L1_LOCK_SEC,
+    L1_CARRIER_PHASE_AMBIGUITY_SCALE,
     L1_FREQUENCY,
 #define make_entry(key) L2CM_ ## key, L2CL_ ## key
 #define make_entry2(key) make_entry(key), make_entry(key ## _SIGMA)
@@ -877,6 +878,7 @@ struct GPS_Measurement {
     make_entry2(RANGE_RATE),
     make_entry(SIGNAL_STRENGTH_dBHz),
     make_entry(LOCK_SEC),
+    make_entry(CARRIER_PHASE_AMBIGUITY_SCALE),
 #undef make_entry2
 #undef make_entry
     ITEMS_PREDEFINED,
