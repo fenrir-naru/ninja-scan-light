@@ -103,6 +103,7 @@ struct GPS_Solver_Base {
       L1_RANGE_RATE_SIGMA,
       L1_SIGNAL_STRENGTH_dBHz,
       L1_LOCK_SEC,
+      L1_CARRIER_PHASE_AMBIGUITY_SCALE,
       L1_FREQUENCY,
       MEASUREMENT_ITEMS_PREDEFINED,
     };
@@ -113,7 +114,7 @@ struct GPS_Solver_Base {
     struct {
       int i, i_sigma;
     } pseudorange, doppler, carrier_phase, range_rate;
-    int signal_strength, lock_sec;
+    int signal_strength, lock_sec, cp_ambiguity_scale;
   };
   static const measurement_item_set_t L1CA;
 
@@ -1164,6 +1165,7 @@ const typename GPS_Solver_Base<FloatT>::measurement_item_set_t
       make_entry2(RANGE_RATE),
       make_entry(SIGNAL_STRENGTH_dBHz),
       make_entry(LOCK_SEC),
+      make_entry(CARRIER_PHASE_AMBIGUITY_SCALE),
 #undef make_entry2
 #undef make_entry
     };

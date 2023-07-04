@@ -123,16 +123,16 @@ class Complex;
       typedef Complex<T> value_type;
       static int asval(VALUE obj, value_type *v) {
         if(RB_TYPE_P(obj, T_COMPLEX)){
-#if RUBY_API_VERSION_CODE < 20600
+%#if RUBY_API_VERSION_CODE < 20600
           static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
           int res = swig::asval(rb_funcall(obj, id_r, 0), &(v->real()));
           if(!SWIG_IsOK(res)){return res;}
           return swig::asval(rb_funcall(obj, id_i, 0), &(v->imaginary()));
-#else
+%#else
           int res = swig::asval(rb_complex_real(obj), &(v->real()));
           if(!SWIG_IsOK(res)){return res;}
           return swig::asval(rb_complex_imag(obj), &(v->imaginary()));
-#endif 
+%#endif 
         }else{
           v->imaginary() = T(0);
           return swig::asval(obj, &(v->real()));
@@ -148,14 +148,14 @@ class Complex;
     template <class T> struct traits_check< Complex<T>, value_category> {
       static bool check(VALUE obj) {
         if(RB_TYPE_P(obj, T_COMPLEX)){
-#if RUBY_API_VERSION_CODE < 20600
+%#if RUBY_API_VERSION_CODE < 20600
           static const ID id_r(rb_intern("real")), id_i(rb_intern("imag"));
           return swig::check<T>(rb_funcall(obj, id_r, 0))
               && swig::check<T>(rb_funcall(obj, id_i, 0));
-#else
+%#else
           return swig::check<T>(rb_complex_real(obj))
               && swig::check<T>(rb_complex_imag(obj));
-#endif
+%#endif
         }else{
           return swig::check<T>(obj);
         }

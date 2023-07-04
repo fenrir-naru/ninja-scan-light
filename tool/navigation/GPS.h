@@ -668,9 +668,13 @@ class GPS_SpaceNode {
           static const int padding_bits_MSB_abs(
               PaddingBits_in_InputT_MSB * (PaddingBits_in_InputT_MSB >= 0 ? 1 : -1));
           std::div_t aligned(std::div(index, EffectiveBits_in_InputT));
+          static const int padding_bits_LSB(
+              input_bits - (EffectiveBits_in_InputT + PaddingBits_in_InputT_MSB));
+          static const int input_mask(
+              (~(InputT)0) << ((padding_bits_LSB >= 0) ? padding_bits_LSB : 0));
           if(PaddingBits_in_InputT_MSB >= 0){
             OutputT res(
-                (buf[aligned.quot] << (aligned.rem + padding_bits_MSB_abs))
+                ((buf[aligned.quot] & input_mask) << (aligned.rem + padding_bits_MSB_abs))
                   >> (input_bits - output_bits));
             if(aligned.rem > (EffectiveBits_in_InputT - output_bits)){
               // in case of overrun; ex.1 and ex.3
@@ -687,7 +691,7 @@ class GPS_SpaceNode {
             // rare case: negative MSB padding
             int left_shift(aligned.rem + PaddingBits_in_InputT_MSB);
             OutputT res(
-                (buf[aligned.quot] << (left_shift >= 0 ? left_shift : 0))
+                ((buf[aligned.quot] & input_mask) << (left_shift >= 0 ? left_shift : 0))
                   >> (input_bits - output_bits + (left_shift >= 0 ? 0 : -left_shift)));
             if(aligned.rem > (EffectiveBits_in_InputT - output_bits)){
               res |= (OutputT)(

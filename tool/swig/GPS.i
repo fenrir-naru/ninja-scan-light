@@ -985,18 +985,18 @@ struct GPS_User_PVT
                       .append(inspect_str(v_key_value)).append("}").c_str());
               }
               rb_hash_foreach(v_key_value,
-#if RUBY_API_VERSION < 20700
+%#if RUBY_API_VERSION_CODE < 20700
                   // @see https://docs.ruby-lang.org/ja/latest/doc/news=2f2_7_0.html
                   (int (*)(ANYARGS))
-#endif
+%#endif
                   arg_t::iter2, v_arg);
               return ST_CONTINUE;
             }
           } arg = {val};
           rb_hash_foreach(obj,
-#if RUBY_API_VERSION < 20700
+%#if RUBY_API_VERSION_CODE < 20700
               (int (*)(ANYARGS))
-#endif
+%#endif
               arg_t::iter1, reinterpret_cast<VALUE>(&arg));
           return SWIG_OK;
         }
@@ -1060,6 +1060,7 @@ struct GPS_Measurement {
     L1_RANGE_RATE_SIGMA,
     L1_SIGNAL_STRENGTH_dBHz,
     L1_LOCK_SEC,
+    L1_CARRIER_PHASE_AMBIGUITY_SCALE,
     L1_FREQUENCY,
 #define make_entry(key) L2CM_ ## key, L2CL_ ## key
 #define make_entry2(key) make_entry(key), make_entry(key ## _SIGMA)
@@ -1069,6 +1070,7 @@ struct GPS_Measurement {
     make_entry2(RANGE_RATE),
     make_entry(SIGNAL_STRENGTH_dBHz),
     make_entry(LOCK_SEC),
+    make_entry(CARRIER_PHASE_AMBIGUITY_SCALE),
 #undef make_entry2
 #undef make_entry
     ITEMS_PREDEFINED,

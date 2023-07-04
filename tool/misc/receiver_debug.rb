@@ -498,10 +498,12 @@ class GPS_Receiver
           }.each{|k, prop|
             meas.add(prn, k, loader.call(*prop))
           }
+          lli = packet[6 + 31 + (i * 24)]
           # bit 0 of RINEX LLI (loss of lock indicator) shows lost lock
           # between previous and current observation, which maps negative lock seconds
-          meas.add(prn, :L1_LOCK_SEC,
-              (packet[6 + 31 + (i * 24)] & 0x01 == 0x01) ? -1 : 0)
+          meas.add(prn, :L1_LOCK_SEC, (lli & 0x01 == 0x01) ? -1 : 0)
+          # set bit 1 of LLI represents possibility of half cycle ambiguity
+          meas.add(prn, :L1_CARRIER_PHASE_AMBIGUITY_SCALE, 0.5) if (lli & 0x02 == 0x02)
         }
         after_run.call(run(meas, t_meas), [meas, t_meas])
       when [0x02, 0x15] # RXM-RAWX
@@ -538,7 +540,13 @@ class GPS_Receiver
             }],
             :DOPPLER => [32, 4, "e"],
             :DOPPLER_SIGMA => [45, 1, nil, proc{|v| 2E-3 * (1 << (v[0] & 0xF))}],
-            :CARRIER_PHASE => [24, 8, "E", proc{|v| (trk_stat & 0x2 == 0x2) ? v : nil}],
+            :CARRIER_PHASE => [24, 8, "E", proc{|v|
+              case (trk_stat & 0x6)
+              when 0x6; (trk_stat & 0x8 == 0x8) ? (v + 0.5) : v
+              when 0x2; meas.add(svid, "#{sigid}_CARRIER_PHASE_AMBIGUITY_SCALE".to_sym, 0.5); v
+              else; nil
+              end
+            }],
             :CARRIER_PHASE_SIGMA => [44, 1, nil, proc{|v|
               (trk_stat & 0x2 == 0x2) ? (0.004 * (v[0] & 0xF)) : nil
             }],
@@ -611,7 +619,7 @@ class GPS_Receiver
             'S' => :SIGNAL_STRENGTH_dBHz,
           }[type_[0]]]
           next nil unless sig_obs_type.all?
-          [i, sig_obs_type.join('_').to_sym]
+          [i, sig_obs_type.join('_').to_sym, *sig_obs_type]
         }.compact]
       }.flatten(1))]
 
@@ -626,8 +634,7 @@ class GPS_Receiver
       }.call(item[:header]["GLONASS SLOT / FRQ #"])
 
       meas = GPS::Measurement::new
-      item[:meas].each{|k, v|
-        sys, prn = k
+      item[:meas].each{|(sys, prn), v|
         case sys
         when 'G', ' '
         when 'J'; prn += 192
@@ -643,8 +650,11 @@ class GPS_Receiver
         else; next
         end
         types[sys] = (types[' '] || []) unless types[sys]
-        types[sys].each{|i, type_|
-          meas.add(prn, type_, v[i][0]) if v[i]
+        types[sys].each{|i, type_, sig_type, obs_type|
+          next unless v[i]
+          meas.add(prn, type_, v[i][0])
+          meas.add(prn, "#{sig_type}_CARRIER_PHASE_AMBIGUITY_SCALE".to_sym, 0.5) \
+              if (obs_type == :CARRIER_PHASE) && (v[i][1] & 0x2 == 0x2)
         }
       }
       after_run.call(run(meas, t_meas), [meas, t_meas])
