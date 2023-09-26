@@ -162,7 +162,7 @@ class IMU_CSV < A_Packet_Converter
   end
   def read_chunk
     while !@io.eof?
-      items = @io.readline.split(/[,\s]+/) # space, tab or comma
+      items = @io.readline.split(/\b[,\s]+/) # space, tab or comma
       items.collect!{|v| Float(v)} rescue next
       t = (items[@t_index] * @t_scale) + @t_offset
       accel = items.values_at(*@acc_index).zip(@acc_units).collect{|v, sf| v * sf}
