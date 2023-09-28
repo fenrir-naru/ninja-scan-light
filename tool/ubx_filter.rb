@@ -177,6 +177,7 @@ UBX filter
       event,2100:2000,drop,GPS:03 
           # start dropping GPS 3 after GPS time 2100[week] 20000[s]
 
+    Note: For old ubx, just PRN number (without satellite system) like "1" (<-instead of "GPS:01") works well. 
 __STRING__
 
 options = {
