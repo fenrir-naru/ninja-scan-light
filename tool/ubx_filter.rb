@@ -91,6 +91,22 @@ class UBX_Filter
         UBX::update(packet)
       }
     },
+    :drop_ubx => proc{|class_id_list|
+      any = Class::new{def ==(another); true; end}::new
+      class_id_list.collect!{|item|
+        case item
+        when "all"; any
+        else
+          res = Integer(item)
+          (res >= 0x100) ? res.divmod(0x100) : res
+        end
+      }
+      proc{|packet, prop|
+        next nil if class_id_list.include?(prop[:class_id]) \
+            || class_id_list.include?(prop[:class_id][0])
+        packet
+      }
+    },
   }
   
   def initialize(io, opt = {})
@@ -135,10 +151,10 @@ class UBX_Filter
     while true
       break unless (@prop[:packet] = @ubx.read_packet)
       @prop[:class_id] = @prop[:packet][2..3]
-      @prop[:itow] = (ITOW_PARSER[@prop[:packet][2..3]].call(@prop[:packet]) rescue @prop[:itow])
-      @prop[:week] = (WEEK_PARSER[@prop[:packet][2..3]].call(@prop[:packet]) rescue @prop[:week])
+      @prop[:itow] = (ITOW_PARSER[@prop[:class_id]].call(@prop[:packet]) rescue @prop[:itow])
+      @prop[:week] = (WEEK_PARSER[@prop[:class_id]].call(@prop[:packet]) rescue @prop[:week])
       b.call(@prop) if b
-      next unless filtered = @prop[:gates].inject(@prop[:packet]){|packet, gate|
+      return "" unless filtered = @prop[:gates].inject(@prop[:packet]){|packet, gate|
         break nil unless packet
         gate.call(packet, @prop)
       }
@@ -177,6 +193,11 @@ UBX filter
       event,2100:2000,drop,GPS:03 
           # start dropping GPS 3 after GPS time 2100[week] 20000[s]
 
+      Selection with ubx packet type is performed with drop_ubx, the below is example;
+      drop_ubx,all # drop All packets
+      drop_ubx,0x01 # drop All NAV packets
+      drop_ubx,0x0102,0x0112 # drop NAV-POSLLH,VELNED packets
+
     Note: For old ubx, just PRN number (without satellite system) like "1" (<-instead of "GPS:01") works well. 
 __STRING__
 
@@ -191,7 +212,7 @@ ARGV.reject!{|arg|
     when :cmd
       act, *specs = v.split(/ *, */)
       options[:cmd] << [act.to_sym, specs]
-    when :drop, :pass, :event
+    when :drop, :drop_ubx, :pass, :event
       options[:cmd] << [k, v.split(/ *, */)]
     when :cmdfile
       open(v, 'r').each{|line|
@@ -231,6 +252,8 @@ proc{ # Build filter elements
     case act
     when :drop
       [UBX_Filter::FILTERS[:drop_measurement].call(specs.collect{|spec| parse_sat.call(spec)})]
+    when :drop_ubx
+      [UBX_Filter::FILTERS[:drop_ubx].call(specs)]
     #when :pass # ignore, because default is to accept all packets
     else
       []
