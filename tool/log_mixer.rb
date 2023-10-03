@@ -236,8 +236,10 @@ src = {
   :imu => ARGV.shift,
 }
 $log_mix.call({:readers => [
-  IMU_CSV::new(open(src[:imu], 'r')),
-  GPS_UBX::new(open(src[:gps], 'rb')), 
+  IMU_CSV::new((src[:imu] == '-') ? $stdin : open(src[:imu], 'r')),
+  GPS_UBX::new((src[:gps] == '-') \
+      ? proc{STDIN.binmode; $stdin}.call \
+      : open(src[:gps], 'rb')), 
 ]})
 
 end
