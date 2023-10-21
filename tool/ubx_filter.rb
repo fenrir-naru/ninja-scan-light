@@ -169,6 +169,10 @@ if $0 == __FILE__ then
 $stderr.puts <<-__STRING__
 UBX filter
   Usage: #{__FILE__} [--option_key[=option_value]] [original.ubx, otherwise stdin] > filtered.ubx
+__STRING__
+
+if ARGV.any?{|arg| arg =~ /^--help/} then
+  $stderr.puts <<-__STRING__
     --cmdfile=cmdfile.txt is the most useful option.
     Example cmdfile.txt content is the following.
 
@@ -182,10 +186,12 @@ UBX filter
           # Note: GPS 1,4,5, and any QZSS has still been dropped
           # Note2: If this filter is intended to be active no less than 1000 (i.e, >= 1000),
           # pleas use smaller seconds such as 999.9.
+      event,1000,drop,GPS:06
+          # Additionally GPS 6 will be dropped from GPS time 1000[s].
       event,2000,drop,GPS:03
           # after GPS time 2000[s] (any week), dropping GPS:03 is activated
           # In addition, all previous event commands are cleared, 
-          # which means stop dropping GPS:02.
+          # which means stop dropping GPS:02 and GPS:06.
           # Note: GPS 1,4,5, and any QZSS has still been dropped
       event,3000,pass,all
           # after GPS time 3000[s] (any week), 
@@ -200,13 +206,19 @@ UBX filter
 
     Note: For old ubx, just PRN number (without satellite system) like "1" (<-instead of "GPS:01") works well. 
 __STRING__
+  exit(0)
+else
+  $stderr.puts <<-__STRING__
+    --help shows the details.
+__STRING__
+end
 
 options = {
   :out => nil, 
   :cmd => [],
 }
 ARGV.reject!{|arg|
-  if arg =~ /--([^=]+)=?/ then
+  if arg =~ /^--([^=]+)=?/ then
     k, v = [$1.to_sym, $']
     case k
     when :cmd
@@ -270,12 +282,15 @@ proc{ # Build filter elements
       else # Other time spec
         GPSTime::new(specs[0]).to_a
       end
-      events << [t, *make_gates.call(specs[1].to_sym, specs[2..-1])]
+      if idx_last = events.find_index{|event| event[0] == t} then
+        events[idx_last] += make_gates.call(specs[1].to_sym, specs[2..-1])
+      else
+        events << [t, *make_gates.call(specs[1].to_sym, specs[2..-1])]
+      end
     else
       gates += make_gates.call(act, specs)
     end
   }
-  $stderr.puts events.inspect
 
   generate_scenario = proc{|event|
     next nil unless event
@@ -311,7 +326,8 @@ filter = UBX_Filter::new(proc{
   end
 }.call, {:gates => gates})
 
-dest = if options[:out] then
+dest = case options[:out]
+when String
   $stderr.puts "#{File::exist?(options[:out]) ? 'Appending' : 'Writing'} to #{options[:out]} ..."
   open(options[:out], 'wb+')
 else
