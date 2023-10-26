@@ -318,24 +318,30 @@ class GPS_Receiver
   end
 
   GPS::Measurement.class_eval{
-    proc{
-      key2sym = []
-      GPS::Measurement.constants.each{|k|
-        i = GPS::Measurement.const_get(k)
-        key2sym[i] = k if i.kind_of?(Integer)
-      }
-      define_method(:to_a2){
-        to_a.collect{|prn, k, v| [prn, key2sym[k] || k, v]}
-      }
-      define_method(:to_hash2){
-        Hash[*(to_hash.collect{|prn, k_v|
-          [prn, Hash[*(k_v.collect{|k, v| [key2sym[k] || k, v]}.flatten(1))]]
-        }.flatten(1))]
-      }
-    }.call
     add_orig = instance_method(:add)
     define_method(:add){|prn, key, value|
       add_orig.bind(self).call(prn, key.kind_of?(Symbol) ? GPS::Measurement.const_get(key) : key, value)
+    }
+    key2sym = GPS::Measurement.constants.inject([]){|res, k|
+      res[GPS::Measurement.const_get(k)] = k if /^L\d/ =~ k.to_s
+      res
+    }
+    define_method(:to_a2){
+      collect{|prn, k, v| [prn, key2sym[k] || k, v]}
+    }
+    cl_hash2 = Class::new(Hash){
+      define_method(:to_meas){
+        GPS::Measurement::new.tap{|res|
+          each{|prn, k_v|
+            k_v.each{|k, v| res.add(prn, k, v)}
+          }
+        }
+      }
+    }
+    define_method(:to_hash2){
+      cl_hash2::new.tap{|res|
+        each{|prn, k, v| (res[prn] ||= {})[key2sym[k] || k] = v}
+      }
     }
   }
 
