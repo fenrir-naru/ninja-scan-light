@@ -140,7 +140,7 @@ class GPS_Receiver
         opt[:satellites].collect{|prn, label|
           pr, rate, doppler, freq = keys.collect{|k| meas_hash[prn][k] rescue nil}
           freq ||= GPS::SpaceNode.L1_Frequency
-          [pr, rate || ((doppler * GPS::SpaceNode::light_speed / freq) rescue nil)]
+          [pr, rate || ((-doppler * GPS::SpaceNode::light_speed / freq) rescue nil)]
         }
       }
     ]]
