@@ -388,7 +388,8 @@ struct GPS_Solver_Base {
     float_t range_sigma; ///< Standard deviation of pseudorange; If zero or negative, other values are invalid.
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
     float_t range_residual; ///< residual range
-    float_t rate_relative_neg; /// relative rate
+    float_t rate_sigma; ///< Standard deviation of range rate;
+    float_t rate_relative_neg; /// relative rate (taking negative value if range is increasing)
     float_t los_neg[3]; ///< line of sight vector from satellite to user in ECEF coordinate
   };
 
@@ -701,14 +702,13 @@ protected:
           delta_r.circular(offset, 0, size, 1));
     }
     template <class MatrixT2>
-    void copy_G_W_row(const linear_solver_t<MatrixT2> &src,
+    void copy_G_rowwise(const linear_solver_t<MatrixT2> &src,
         const unsigned int &i_src, const unsigned int &i_dst){
       unsigned int c_dst(G.columns()), c_src(src.G.columns()),
           c(c_dst > c_src ? c_src : c_dst); // Normally c=4
       for(unsigned int j(0); j < c; ++j){
         G(i_dst, j) = src.G(i_src, j);
       }
-      W(i_dst, i_dst) = src.W(i_src, i_src);
     }
   };
 
@@ -806,15 +806,15 @@ protected:
     res.receiver_error = receiver_error_init;
 
     geometric_matrices_t geomat(measurement.size());
-    typedef std::vector<std::pair<unsigned int, float_t> > index_obs_t;
-    index_obs_t idx_rate_rel; // [(index of measurement, relative rate), ...]
-    idx_rate_rel.reserve(measurement.size());
+    typedef std::vector<std::pair<unsigned int, relative_property_t> > index_prop_t;
+    index_prop_t idx_prop; // [(index of measurement, relative property), ...]
+    idx_prop.reserve(measurement.size());
 
     // If initialization is not appropriate, more iteration will be performed.
     bool converged(false);
     for(int i_trial(-opt.warmup); i_trial < opt.max_trial; i_trial++){
 
-      idx_rate_rel.clear();
+      idx_prop.clear();
       unsigned int i_row(0), i_measurement(0);
       res.used_satellite_mask.clear();
 
@@ -841,7 +841,7 @@ protected:
         if(coarse_estimation){
           prop.range_sigma = 1;
         }else{
-          idx_rate_rel.push_back(std::make_pair(i_measurement, prop.rate_relative_neg));
+          idx_prop.push_back(std::make_pair(i_measurement, prop));
         }
 
         geomat.delta_r(i_row, 0) = prop.range_residual;
@@ -892,7 +892,7 @@ protected:
     geometric_matrices_t geomat2(res.used_satellites);
     int i_range(0), i_rate(0);
 
-    for(typename index_obs_t::const_iterator it(idx_rate_rel.begin()), it_end(idx_rate_rel.end());
+    for(typename index_prop_t::const_iterator it(idx_prop.begin()), it_end(idx_prop.end());
         it != it_end;
         ++it, ++i_range){
 
@@ -901,9 +901,10 @@ protected:
           *(measurement[it->first].k_v_map), // const version of measurement[PRN]
           rate))){continue;}
 
-      // Copy design matrix and set rate
-      geomat2.copy_G_W_row(geomat, i_range, i_rate);
-      geomat2.delta_r(i_rate, 0) = rate + it->second;
+      // Copy design matrix and set rate and weight
+      geomat2.copy_G_rowwise(geomat, i_range, i_rate);
+      geomat2.delta_r(i_rate, 0) = rate + it->second.rate_relative_neg;
+      geomat2.W(i_rate, i_rate) = 1. / std::pow(it->second.rate_sigma, 2);
 
       ++i_rate;
     }

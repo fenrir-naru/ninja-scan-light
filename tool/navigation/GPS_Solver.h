@@ -294,7 +294,7 @@ class GPS_SinglePositioning : public SolverBaseT {
       // Calculate residual
       residual.residual = range - geometric_range;
 
-      // Setup design matrix
+      // Setup design matrix (direction is negative; satellite -> user)
       residual.los_neg_x = -(sat_pos.x() - usr_pos.xyz.x()) / geometric_range;
       residual.los_neg_y = -(sat_pos.y() - usr_pos.xyz.y()) / geometric_range;
       residual.los_neg_z = -(sat_pos.z() - usr_pos.xyz.z()) / geometric_range;
@@ -426,12 +426,17 @@ class GPS_SinglePositioning : public SolverBaseT {
           usr_pos, residual, range_error);
       res.rate_relative_neg = rate_relative_neg(sat, res.range_corrected, time_arrival, usr_vel,
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
+      res.rate_sigma = sat.rate_sigma(time_arrival);
 
 #if 0
-      // TODO consider case when standard deviation of pseudorange measurement is provided by receiver
+      // TODO consider case when standard deviation of pseudorange and/or its rate are provided by receiver
       if(!this->range_sigma(measurement, res.range_sigma)){
         // If receiver's range variance is not provided
         res.range_sigma = 1E0; // TODO range error variance [m]
+      }
+      if(!this->rate_sigma(measurement, res.rate_sigma)){
+        // If receiver's rate variance is not provided
+        res.rate_sigma = 1E-1;
       }
 #endif
 

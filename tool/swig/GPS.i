@@ -1024,7 +1024,7 @@ struct HookableSolver : public BaseT {
           const GPS_Solver<FloatT>::base_t::relative_property_t &res_orig) const {
       union {
         base_t::relative_property_t prop;
-        FloatT values[7];
+        FloatT values[8];
       } res = {res_orig};
 #ifdef SWIGRUBY
       do{
@@ -1032,15 +1032,19 @@ struct HookableSolver : public BaseT {
         static const int prop_items(sizeof(res.values) / sizeof(res.values[0]));
         VALUE hook(rb_hash_lookup(hooks, key));
         if(NIL_P(hook)){break;}
-        FloatT weight((res.prop.range_sigma > 0) 
+        FloatT weight_range((res.prop.range_sigma > 0) 
             ? (1. / std::pow(res.prop.range_sigma, 2)) // weight=1/(sigma^2)
             : res.prop.range_sigma);
+        FloatT weight_rate((res.prop.rate_sigma > 0) 
+            ? (1. / std::pow(res.prop.rate_sigma, 2)) // weight=1/(sigma^2)
+            : res.prop.rate_sigma);
         VALUE values[] = {
             SWIG_From(int)(prn), // prn
             rb_ary_new_from_args(prop_items, // relative_property
-              swig::from(weight),
+              swig::from(weight_range),
               swig::from(res.prop.range_corrected),
               swig::from(res.prop.range_residual),
+              swig::from(weight_rate),
               swig::from(res.prop.rate_relative_neg),
               swig::from(res.prop.los_neg[0]),
               swig::from(res.prop.los_neg[1]),
@@ -1072,6 +1076,9 @@ struct HookableSolver : public BaseT {
         }
         if(res.values[0] > 0){
           res.values[0] = std::pow(1. / res.values[0], 0.5); // sigma=(1/weight)^0.5
+        }
+        if(res.values[3] > 0){
+          res.values[3] = std::pow(1. / res.values[3], 0.5); // sigma=(1/weight)^0.5
         }
       }while(false);
 #endif

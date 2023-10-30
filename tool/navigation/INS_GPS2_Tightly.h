@@ -466,7 +466,6 @@ class INS_GPS2_Tightly : public BaseFINS {
 
     struct relative_property_t : public solver_t::relative_property_t {
       float_t rate_residual;
-      float_t rate_sigma;
     };
 
     /**
@@ -485,7 +484,6 @@ class INS_GPS2_Tightly : public BaseFINS {
         const receiver_state_t &x) const {
 
       relative_property_t res;
-      res.rate_sigma = -1; // initialization with invalid value;
 
       const solver_t &solver_selected(solver.select(prn));
       (typename solver_t::relative_property_t &)res = solver_selected.relative_property(
@@ -493,18 +491,12 @@ class INS_GPS2_Tightly : public BaseFINS {
 
       if(res.range_sigma <= 0){return res;}
 
-      do{
-        float_t rate;
-        if(!solver_selected.rate(measurement, rate)){break;}
-        res.rate_residual = rate
-            - super_t::m_clock_error_rate[x.clock_index] + res.rate_relative_neg;
-
-        if(!solver_selected.rate_sigma(measurement, res.rate_sigma)){
-          // If receiver's rate variance is not provided
-          res.rate_sigma = solver_selected.select_satellite(prn, x.t).rate_sigma(x.t);
-        }
-      }while(false);
-
+      if(!solver_selected.rate(measurement, res.rate_residual)){
+        res.rate_sigma = -1; // overwrite with invalid value
+      }else{
+        res.rate_residual += -super_t::m_clock_error_rate[x.clock_index]
+            + res.rate_relative_neg;
+      }
       return res;
     }
 
