@@ -262,9 +262,9 @@ class GPS_SinglePositioning : public SolverBaseT {
      *
      * @param sat satellite
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
-     * @param time_arrival time when signal arrive at receiver
+     * @param time_arrival time when signal arrives at receiver
      * @param usr_pos (temporal solution of) user position
-     * @param residual calculated residual with line of site vector, and pseudorange standard deviation (sigma);
+     * @param residual calculated residual with line of sight vector, and pseudorange standard deviation (sigma);
      * When sigma is equal to or less than zero, the calculated results should not be used.
      * @param error Some correction can be overwritten. If its unknown_flag is zero,
      * corrections will be skipped as possible. @see range_errors_t
@@ -280,7 +280,7 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       static const float_t &c(space_node_t::light_speed);
 
-      // Clock error correction
+      // Satellite clock error correction
       range += ((error.unknown_flag & range_error_t::SATELLITE_CLOCK)
           ? (sat.clock_error(time_arrival - range / c) * c)
           : error.value[range_error_t::SATELLITE_CLOCK]);
@@ -301,13 +301,14 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
+      // Ionospheric correction
       if(error.unknown_flag & range_error_t::MASK_IONOSPHERIC){
         residual.residual += ionospheric_correction(time_arrival, usr_pos, relative_pos);
       }else{
         residual.residual += error.value[range_error_t::IONOSPHERIC];
       }
 
-      // Tropospheric
+      // Tropospheric correction
       residual.residual += (error.unknown_flag & range_error_t::MASK_TROPOSPHERIC)
           ? tropospheric_correction(time_arrival, usr_pos, relative_pos)
           : error.value[range_error_t::TROPOSPHERIC];
@@ -347,9 +348,9 @@ class GPS_SinglePositioning : public SolverBaseT {
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
      * @param time_arrival time when signal arrive at receiver
      * @param usr_vel (temporal solution of) user velocity
-     * @param los_neg_x line of site X
-     * @param los_neg_y line of site Y
-     * @param los_neg_z line of site Z
+     * @param los_neg_x line of sight X
+     * @param los_neg_y line of sight Y
+     * @param los_neg_z line of sight Z
      * @return (float_t) relative rate.
      */
     float_t rate_relative_neg(

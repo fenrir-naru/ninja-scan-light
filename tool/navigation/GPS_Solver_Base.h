@@ -148,7 +148,7 @@ struct GPS_Solver_Base {
    * of measurement_t::mapped_type
    * @param values key-value map
    * @param key key
-   * @param buf buffer into which found value is stored
+   * @param buf buffer for storing found value, and preserving original value if value is not found
    * @return (float_t *) When value is found, pointer of buf will be returned.
    * Otherwise, NULL is returned.
    */
@@ -389,7 +389,7 @@ struct GPS_Solver_Base {
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
     float_t range_residual; ///< residual range
     float_t rate_relative_neg; /// relative rate
-    float_t los_neg[3]; ///< line of site vector from satellite to user
+    float_t los_neg[3]; ///< line of sight vector from satellite to user in ECEF coordinate
   };
 
   /**
