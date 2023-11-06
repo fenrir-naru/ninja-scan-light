@@ -351,10 +351,10 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
     }
 };
 
-template <class INS_GPS>
-class INS_GPS_Debug_PureInertial : public INS_GPS_Debug<typename INS_GPS::ins_t> {
+template <class INS_GPS, class T_INS = typename INS_GPS::ins_t>
+class INS_GPS_Debug_PureInertial : public INS_GPS_Debug<T_INS> {
   public:
-    typedef INS_GPS_Debug<typename INS_GPS::ins_t> super_t;
+    typedef INS_GPS_Debug<T_INS> super_t;
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename super_t::float_t float_t;
     typedef typename super_t::vec3_t vec3_t;

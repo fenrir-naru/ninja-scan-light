@@ -58,6 +58,8 @@ static void send_command(u8 cmd){
 }
 
 void ms5611_init(){
+  send_command(0x1E); // reset
+
   { // Read Coefficient 1-6 from PROM
     u8 i, cmd;
     __xdata u8 *buf;
