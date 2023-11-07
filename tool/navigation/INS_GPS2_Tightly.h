@@ -317,20 +317,27 @@ struct GPS_Solution_PVT : public PVT_BaseT {
    */
   operator GPS_Solution<FloatT> () const {
     GPS_Solution<FloatT> res;
-    res.v_n = this->user_velocity_enu.north();
-    res.v_e = this->user_velocity_enu.east();
-    res.v_d = -this->user_velocity_enu.up();
-    res.latitude = this->user_position.llh.latitude();
-    res.longitude = this->user_position.llh.longitude();
-    res.height = this->user_position.llh.height();
-    // Calculation of estimated accuracy
-    /* Position standard deviation is roughly estimated as (DOP * 2 meters)
-     * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
-     */
-    res.sigma_2d = this->dop.h * 2;
-    res.sigma_height = this->dop.v * 2;
-    // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
-    res.sigma_vel = this->dop.p * 0.1;
+    res.valid_velocity = res.valid_position = false;
+    if(this->position_solved()){
+      res.valid_position = true;
+      res.latitude = this->user_position.llh.latitude();
+      res.longitude = this->user_position.llh.longitude();
+      res.height = this->user_position.llh.height();
+      // Calculation of estimated accuracy
+      /* Position standard deviation is roughly estimated as (DOP * 2 meters)
+       * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
+       */
+      res.sigma_2d = this->dop.h * 2;
+      res.sigma_height = this->dop.v * 2;
+    }
+    if(this->velocity_solved()){
+      res.valid_velocity = true;
+      res.v_n = this->user_velocity_enu.north();
+      res.v_e = this->user_velocity_enu.east();
+      res.v_d = -this->user_velocity_enu.up();
+      // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
+      res.sigma_vel = this->dop.p * 0.1;
+    }
     return res;
   }
 };
