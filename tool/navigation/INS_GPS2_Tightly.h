@@ -626,20 +626,24 @@ class INS_GPS2_Tightly : public BaseFINS {
     }
 
     /**
-     * Calculate DOP
+     * Calculate DOP and sigma
      *
      * @param x receiver state represented by current position and clock properties
      * @param props relative properties
-     * @param res buffer of calculation result
-     * @return (precision_t *) unavailable when null; otherwise, DOP
+     * @param dop buffer of DOP calculation result
+     * @param sigma_pos buffer of position sigma calculation result
+     * @return (precision_t *) unavailable when null; otherwise, pointer to DOP
      */
-    static typename solver_t::user_pvt_t::precision_t *get_DOP(
+    static typename solver_t::user_pvt_t::precision_t *get_DOP_sigma(
         const receiver_state_t &x,
         const relative_property_list_t &props,
-        typename solver_t::user_pvt_t::precision_t &res) {
+        typename solver_t::user_pvt_t::precision_t &dop,
+        typename solver_t::user_pvt_t::precision_t &sigma_pos) {
 
-      mat_t G_full(props.size(), 4); // design matrix
-      //mat_t R_full(props.size(), props.size());
+      struct proxy_t : public solver_t {
+        typedef typename solver_t::geometric_matrices_t geomat_t;
+      };
+      typename proxy_t::geomat_t geomat(props.size());
 
       // count up valid measurement
       int i_row(0);
@@ -650,17 +654,17 @@ class INS_GPS2_Tightly : public BaseFINS {
 
         if(prop.range_sigma <= 0){continue;} // No measurement
         for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
-          G_full(i_row, i) = prop.los_neg[i];
+          geomat.G(i_row, i) = prop.los_neg[i];
         }
-        G_full(i_row, 3) = 1;
-        //R_full(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
+        geomat.W(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
         ++i_row;
       }
       if(i_row < 4){return NULL;}
 
-      typename mat_t::partial_offsetless_t G(G_full.partial(i_row, 4));
-      return &(res = solver_t::dop(
-          (G.transpose() /* * R_full.partial(i_row, i_row)*/ * G).inverse(), x.pos));
+      typename proxy_t::geomat_t::partial_t geomat_used(geomat.partial(i_row));
+      typename solver_t::matrix_t rot(x.pos.ecef2enu());
+      sigma_pos = geomat_used.sigma(rot);
+      return &(dop = geomat_used.dop(rot));
     }
 
     /**
@@ -681,9 +685,9 @@ class INS_GPS2_Tightly : public BaseFINS {
        * by regulating props[n].sigma_(range|rate), whose negative or zero value yields
        * intentional exclusion.
        */
-      /*{ // check DOP
-        typename solver_t::user_pvt_t::precision_t dop;
-        if(get_DOP(x, props, dop)){
+      /*{ // check DOP/sigma
+        typename solver_t::user_pvt_t::precision_t dop, sigma_pos;
+        if(get_DOP_sigma(x, props, dop, sigma_pos)){
           // do something
           std::cerr << dop.t << std::endl;
         }

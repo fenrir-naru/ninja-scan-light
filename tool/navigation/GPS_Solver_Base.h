@@ -596,6 +596,18 @@ protected:
           C_or_P.partial(n - 3, n - 3, 3, 3));
       return res;
     }
+    typename user_pvt_t::precision_t dop(){
+      return typename user_pvt_t::precision_t(C());
+    }
+    typename user_pvt_t::precision_t dop(const matrix_t &rotation_matrix){
+      return typename user_pvt_t::precision_t(rotate_CP(C(), rotation_matrix));
+    }
+    typename user_pvt_t::precision_t sigma(){
+      return typename user_pvt_t::precision_t(P());
+    }
+    typename user_pvt_t::precision_t sigma(const matrix_t &rotation_matrix){
+      return typename user_pvt_t::precision_t(rotate_CP(P(), rotation_matrix));
+    }
     /**
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
      * where v =~ N(0, sigma), and y and G are observation delta (=delta_r variable)
@@ -883,10 +895,9 @@ protected:
 
     matrix_t rot(res.user_position.ecef2enu());
     try{
-      res.dop = typename user_pvt_t::precision_t(
-          geomat.rotate_CP(geomat.partial(res.used_satellites).C(), rot));
-      res.sigma_pos = typename user_pvt_t::precision_t(
-          geomat.rotate_CP(geomat.partial(res.used_satellites).P(), rot));
+      typename geometric_matrices_t::partial_t geomat_used(geomat.partial(res.used_satellites));
+      res.dop = geomat_used.dop(rot);
+      res.sigma_pos = geomat_used.sigma(rot);
     }catch(const std::runtime_error &e){ // expect to detect matrix operation error
       res.error_code = user_pvt_t::ERROR_DOP;
       return;
@@ -928,14 +939,14 @@ protected:
 
     try{
       // Least square
-      matrix_t sol(geomat2.partial(i_rate).least_square());
+      typename geometric_matrices_t::partial_t geomat2_used(geomat2.partial(i_rate));
+      matrix_t sol(geomat2_used.least_square());
 
       xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
       res.user_velocity_enu = enu_t::relative_rel(
           vel_xyz, res.user_position.llh);
       res.receiver_error_rate = sol(3, 0);
-      res.sigma_vel = typename user_pvt_t::precision_t(
-          geomat.rotate_CP(geomat2.partial(i_rate).P(), rot));
+      res.sigma_vel = geomat2_used.sigma(rot);
     }catch(const std::runtime_error &e){ // expect to detect matrix operation error
       res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
       return;
@@ -1159,10 +1170,6 @@ public:
 
   solver_interface_t<GPS_Solver_Base<FloatT> > solve() const {
     return solver_interface_t<GPS_Solver_Base<FloatT> >(*this);
-  }
-
-  static typename user_pvt_t::precision_t dop(const matrix_t &C, const pos_t &user_position) {
-    return typename user_pvt_t::precision_t(geometric_matrices_t::rotate_CP(C, user_position.ecef2enu()));
   }
 };
 

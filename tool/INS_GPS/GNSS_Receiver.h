@@ -538,6 +538,9 @@ data.gps.solver_options. expr
             << ',' << "hdop"
             << ',' << "vdop"
             << ',' << "tdop"
+            << ',' << "hsigma"
+            << ',' << "vsigma"
+            << ',' << "tsigma"
             << ',' << "v_north"
             << ',' << "v_east"
             << ',' << "v_down"
@@ -608,9 +611,12 @@ data.gps.solver_options. expr
             << ',' << src.dop.p
             << ',' << src.dop.h
             << ',' << src.dop.v
-            << ',' << src.dop.t;
+            << ',' << src.dop.t
+            << ',' << src.sigma_pos.h
+            << ',' << src.sigma_pos.v
+            << ',' << src.sigma_pos.t;
       }else{
-        out << ",,,,,,,,,";
+        out << ",,,,,,,,,,,,";
       }
       if(src.velocity_solved()){
         out << ',' << src.user_velocity_enu.north()

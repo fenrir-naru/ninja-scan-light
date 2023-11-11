@@ -261,16 +261,19 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
       out << snapshot.props.size() << ','; // number of satellites
 
       do{ // DOP
-        typename super_t::solver_t::user_pvt_t::precision_t dop;
-        if(!super_t::get_DOP(snapshot.state, snapshot.props, dop)){
-          out << ",,,,,";
+        typename super_t::solver_t::user_pvt_t::precision_t dop, sigma_pos;
+        if(!super_t::get_DOP_sigma(snapshot.state, snapshot.props, dop, sigma_pos)){
+          out << ",,,,,,,,";
           break;
         }
         out << dop.g << ','
             << dop.p << ','
             << dop.h << ','
             << dop.v << ','
-            << dop.t << ',';
+            << dop.t << ','
+            << sigma_pos.h << ','
+            << sigma_pos.v << ','
+            << sigma_pos.t << ',';
       }while(false);
 
       typedef std::vector<int> order_t;
