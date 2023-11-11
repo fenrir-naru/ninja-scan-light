@@ -43,11 +43,12 @@ class GPS_Receiver
         ] + (pvt.rel_ENU.to_a rescue [nil] * 3)
       } 
     ]] + [proc{
-      labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym}
+      labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym} \
+          + [:h, :v, :t].collect{|k| "#{k}sigma".to_sym}
       [
         labels,
         proc{|pvt|
-          next [nil] * 5 unless pvt.position_solved?
+          next [nil] * 8 unless pvt.position_solved?
           labels.collect{|k| pvt.send(k)}
         }
       ]

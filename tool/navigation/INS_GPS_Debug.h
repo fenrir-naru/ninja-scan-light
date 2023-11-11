@@ -261,7 +261,7 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
       out << snapshot.props.size() << ','; // number of satellites
 
       do{ // DOP
-        typename super_t::solver_t::user_pvt_t::dop_t dop;
+        typename super_t::solver_t::user_pvt_t::precision_t dop;
         if(!super_t::get_DOP(snapshot.state, snapshot.props, dop)){
           out << ",,,,,";
           break;

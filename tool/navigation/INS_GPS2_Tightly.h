@@ -323,20 +323,15 @@ struct GPS_Solution_PVT : public PVT_BaseT {
       res.latitude = this->user_position.llh.latitude();
       res.longitude = this->user_position.llh.longitude();
       res.height = this->user_position.llh.height();
-      // Calculation of estimated accuracy
-      /* Position standard deviation is roughly estimated as (DOP * 2 meters)
-       * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
-       */
-      res.sigma_2d = this->dop.h * 2;
-      res.sigma_height = this->dop.v * 2;
+      res.sigma_2d = this->sigma_pos.h;
+      res.sigma_height = this->sigma_pos.v;
     }
     if(this->velocity_solved()){
       res.valid_velocity = true;
       res.v_n = this->user_velocity_enu.north();
       res.v_e = this->user_velocity_enu.east();
       res.v_d = -this->user_velocity_enu.up();
-      // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
-      res.sigma_vel = this->dop.p * 0.1;
+      res.sigma_vel = this->sigma_vel.p;
     }
     return res;
   }
@@ -636,12 +631,12 @@ class INS_GPS2_Tightly : public BaseFINS {
      * @param x receiver state represented by current position and clock properties
      * @param props relative properties
      * @param res buffer of calculation result
-     * @return (dop_t *) unavailable when null; otherwise, DOP
+     * @return (precision_t *) unavailable when null; otherwise, DOP
      */
-    static typename solver_t::user_pvt_t::dop_t *get_DOP(
+    static typename solver_t::user_pvt_t::precision_t *get_DOP(
         const receiver_state_t &x,
         const relative_property_list_t &props,
-        typename solver_t::user_pvt_t::dop_t &res) {
+        typename solver_t::user_pvt_t::precision_t &res) {
 
       mat_t G_full(props.size(), 4); // design matrix
       //mat_t R_full(props.size(), props.size());
@@ -687,7 +682,7 @@ class INS_GPS2_Tightly : public BaseFINS {
        * intentional exclusion.
        */
       /*{ // check DOP
-        typename solver_t::user_pvt_t::dop_t dop;
+        typename solver_t::user_pvt_t::precision_t dop;
         if(get_DOP(x, props, dop)){
           // do something
           std::cerr << dop.t << std::endl;

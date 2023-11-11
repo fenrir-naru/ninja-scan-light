@@ -638,6 +638,9 @@ struct GPS_User_PVT
   const FloatT &hdop() const {return base_t::dop.h;}
   const FloatT &vdop() const {return base_t::dop.v;}
   const FloatT &tdop() const {return base_t::dop.t;}
+  const FloatT &hsigma() const {return base_t::sigma_pos.h;}
+  const FloatT &vsigma() const {return base_t::sigma_pos.v;}
+  const FloatT &tsigma() const {return base_t::sigma_pos.t;}
   const unsigned int &used_satellites() const {return base_t::used_satellites;}
   std::vector<int> used_satellite_list() const {return base_t::used_satellite_mask.indices_one();}
   bool position_solved() const {return base_t::position_solved();}
@@ -662,7 +665,7 @@ struct GPS_User_PVT
     return linear_solver().C();
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > C_enu() const {
-    return proxy_t::linear_solver_t::rotate_C(C(), base_t::user_position.ecef2enu());
+    return proxy_t::linear_solver_t::rotate_CP(C(), base_t::user_position.ecef2enu());
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > S() const {
     Matrix<FloatT, Array2D_Dense<FloatT> > res;
