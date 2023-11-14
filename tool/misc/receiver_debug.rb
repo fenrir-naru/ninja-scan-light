@@ -53,11 +53,11 @@ class GPS_Receiver
         }
       ]
     }.call] + [[
-      [:v_north, :v_east, :v_down, :receiver_clock_error_dot_ms],
+      [:v_north, :v_east, :v_down, :receiver_clock_error_dot_ms, :vel_sigma],
       proc{|pvt|
         next [nil] * 4 unless pvt.velocity_solved?
         [:north, :east, :down].collect{|k| pvt.velocity.send(k)} \
-            + [pvt.receiver_error_rate] 
+            + [pvt.receiver_error_rate, pvt.vel_sigma] 
       }
     ]] + [
       [:used_satellites, proc{|pvt| pvt.used_satellites}],

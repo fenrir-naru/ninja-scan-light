@@ -545,6 +545,7 @@ data.gps.solver_options. expr
             << ',' << "v_east"
             << ',' << "v_down"
             << ',' << "receiver_clock_error_dot_ms"
+            << ',' << "vel_sigma"
             << ',' << "used_satellites"
             << ',' << "PRN";
       }
@@ -622,9 +623,10 @@ data.gps.solver_options. expr
         out << ',' << src.user_velocity_enu.north()
             << ',' << src.user_velocity_enu.east()
             << ',' << -src.user_velocity_enu.up()
-            << ',' << src.receiver_error_rate;
+            << ',' << src.receiver_error_rate
+            << ',' << src.sigma_vel.p;
       }else{
-        out << ",,,,";
+        out << ",,,,,";
       }
       if(src.position_solved()){
         out << ',' << src.used_satellites

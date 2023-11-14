@@ -641,6 +641,7 @@ struct GPS_User_PVT
   const FloatT &hsigma() const {return base_t::sigma_pos.h;}
   const FloatT &vsigma() const {return base_t::sigma_pos.v;}
   const FloatT &tsigma() const {return base_t::sigma_pos.t;}
+  const FloatT &vel_sigma() const {return base_t::sigma_vel.p;}
   const unsigned int &used_satellites() const {return base_t::used_satellites;}
   std::vector<int> used_satellite_list() const {return base_t::used_satellite_mask.indices_one();}
   bool position_solved() const {return base_t::position_solved();}
