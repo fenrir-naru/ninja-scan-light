@@ -209,8 +209,13 @@ struct GPS_Solver_Base {
     if((res = find_value(values, measurement_items_t::L1_RANGE_RATE, buf))){
 
     }else if((res = find_value(values, measurement_items_t::L1_DOPPLER, buf))){
-      // Fall back to doppler
-      buf *= -space_node_t::L1_WaveLength();
+      // Fall back to Doppler
+      float_t freq;
+      if(find_value(values, measurement_items_t::L1_FREQUENCY, freq)){
+        buf *= -(space_node_t::light_speed / freq);
+      }else{
+        buf *= -space_node_t::L1_WaveLength();
+      }
     }
     return res;
   }
@@ -221,8 +226,13 @@ struct GPS_Solver_Base {
     if((res = find_value(values, measurement_items_t::L1_RANGE_RATE_SIGMA, buf))){
 
     }else if((res = find_value(values, measurement_items_t::L1_DOPPLER_SIGMA, buf))){
-      // Fall back to doppler
-      buf *= space_node_t::L1_WaveLength();
+      // Fall back to Doppler
+      float_t freq;
+      if(find_value(values, measurement_items_t::L1_FREQUENCY, freq)){
+        buf *= (space_node_t::light_speed / freq);
+      }else{
+        buf *= space_node_t::L1_WaveLength();
+      }
     }
     return res;
   }
