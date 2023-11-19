@@ -1,17 +1,15 @@
+library(dplyr)
+
 ubx.checksum <- function(packet, skip_head = 2, skip_tail = 2){
-  ck_a <- 0
-  ck_b <- 0
   if(skip_head > 0){
     packet <- tail(packet, -skip_head)
   }
   if(skip_tail > 0){
     packet <- head(packet, -skip_tail)
   }
-  sapply(packet, function(b){
-    ck_a <<- ck_a + b
-    ck_b <<- ck_b + ck_a
-  })
-  c(ck_a %% 0x100, ck_b %% 0x100)
+  Reduce(
+      function(ck, x){ck_a <- (ck[[1]] + x) %% 0x100; c(ck_a, (ck_a + ck[[2]]) %% 0x100)},
+      packet, init=c(0, 0))
 }
 ubx.update_checksum <- function(packet){
   packet[rev(head(rev(seq(length(packet))), 2))] <- ubx.checksum(packet)
@@ -67,32 +65,41 @@ ubx.read_packet <- function(conn, yield.fun=NULL){
 }
 
 ubx.read_pv <- function(fname){
-  df_0102 <- data.frame()
-  df_0112 <- data.frame()
+  df_0102 <- c()
+  df_0112 <- c()
   u4 <- function(buf){
     ary <- readBin(as.raw(buf), "int", 2, size=2, signed=F, endian = "little")
     ary[[2]] * 0x10000 + ary[[1]]
   }
   ubx.read_packet(file(fname, "rb"), yield.fun = function(packet){
     if(all(packet[c(3, 4)] == c(0x01, 0x02))){
-      df_0102 <<- rbind(df_0102, data.frame(
-          itow = 1E-3 * u4(tail(packet, -6)),
-          lng = 1E-7 * u4(tail(packet, -10)),
-          lat = 1E-7 * u4(tail(packet, -14)),
-          alt = 1E-3 * u4(tail(packet, -18)),
-          hacc = 1E-3 * u4(tail(packet, -26)),
-          vacc = 1E-3 * u4(tail(packet, -30)) ))
-      NULL
+      df_0102 <<- c(df_0102, 
+        u4(tail(packet, -6)), # itow
+        u4(tail(packet, -10)), # lng
+        u4(tail(packet, -14)), # lat
+        u4(tail(packet, -18)), # alt
+        u4(tail(packet, -26)), # hacc
+        u4(tail(packet, -30)) ) # vacc
     }else if(all(packet[c(3, 4)] == c(0x01, 0x12))){
-      df_0112 <<- rbind(df_0112, data.frame(
-          itow = 1E-3 * u4(tail(packet, -6)),
-          vn = 1E-2 * u4(tail(packet, -10)),
-          ve = 1E-2 * u4(tail(packet, -14)),
-          vd = 1E-2 * u4(tail(packet, -18)),
-          vel_acc = 1E-2 * u4(tail(packet, -34)) ))
-      NULL
+      df_0112 <<- c(df_0112,
+        u4(tail(packet, -6)), # itow
+        u4(tail(packet, -10)), # vn
+        u4(tail(packet, -14)), # ve
+        u4(tail(packet, -18)), # vd
+        u4(tail(packet, -34)) ) # vel_acc
     }
     packet
   })
-  full_join(df_0102, df_0112, by=c("itow"))
+  df_0102 <- as.data.frame(matrix(df_0102, ncol=6, byrow=T,
+      dimnames=list(NULL, c("itow", "lng", "lat", "alt", "hacc", "vacc"))))
+  df_0112 <- as.data.frame(matrix(df_0112, ncol=5, byrow=T,
+      dimnames=list(NULL, c("itow", "vn", "ve", "vd", "vel_acc"))))
+  full_join(df_0102, df_0112, by=c("itow")) %>%
+      mutate(
+        itow = 1E-3 * itow,
+        lng = 1E-7 * lng, lat = 1E-7 * lat, alt = 1E-3 * alt,
+        hacc = 1E-3 * hacc, vacc = 1E-3 * vacc,
+        vn = 1E-2 * vn, ve = 1E-2 * ve, vd = 1E-2 * vd,
+        vel_acc = 1E-2 * vel_acc)
 }
+
