@@ -1139,9 +1139,13 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   struct Checker<INS_GPS_Debug_PureInertial<T> > {
     template <class Calibration>
     static NAV *check_navdata(const Calibration &calibration){
-      return INS_GPS_NAV_Factory<
-            INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> >
-          >::generate(calibration);
+      return options.dump_stddev ?
+          INS_GPS_NAV_Factory<
+              INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T, typename T::filtered_ins_t> >
+            >::generate(calibration) :
+          INS_GPS_NAV_Factory<
+              INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> >
+            >::generate(calibration);
     }
   };
 
