@@ -317,20 +317,22 @@ struct GPS_Solution_PVT : public PVT_BaseT {
    */
   operator GPS_Solution<FloatT> () const {
     GPS_Solution<FloatT> res;
-    res.v_n = this->user_velocity_enu.north();
-    res.v_e = this->user_velocity_enu.east();
-    res.v_d = -this->user_velocity_enu.up();
-    res.latitude = this->user_position.llh.latitude();
-    res.longitude = this->user_position.llh.longitude();
-    res.height = this->user_position.llh.height();
-    // Calculation of estimated accuracy
-    /* Position standard deviation is roughly estimated as (DOP * 2 meters)
-     * @see https://www.gps.gov/systems/gps/performance/2016-GPS-SPS-performance-analysis.pdf Table 3.2
-     */
-    res.sigma_2d = this->dop.h * 2;
-    res.sigma_height = this->dop.v * 2;
-    // Speed standard deviation is roughly estimated as (DOP * 0.1 meter / seconds)
-    res.sigma_vel = this->dop.p * 0.1;
+    res.valid_velocity = res.valid_position = false;
+    if(this->position_solved()){
+      res.valid_position = true;
+      res.latitude = this->user_position.llh.latitude();
+      res.longitude = this->user_position.llh.longitude();
+      res.height = this->user_position.llh.height();
+      res.sigma_2d = this->sigma_pos.h;
+      res.sigma_height = this->sigma_pos.v;
+    }
+    if(this->velocity_solved()){
+      res.valid_velocity = true;
+      res.v_n = this->user_velocity_enu.north();
+      res.v_e = this->user_velocity_enu.east();
+      res.v_d = -this->user_velocity_enu.up();
+      res.sigma_vel = this->sigma_vel.p;
+    }
     return res;
   }
 };
@@ -466,7 +468,6 @@ class INS_GPS2_Tightly : public BaseFINS {
 
     struct relative_property_t : public solver_t::relative_property_t {
       float_t rate_residual;
-      float_t rate_sigma;
     };
 
     /**
@@ -485,7 +486,6 @@ class INS_GPS2_Tightly : public BaseFINS {
         const receiver_state_t &x) const {
 
       relative_property_t res;
-      res.rate_sigma = -1; // initialization with invalid value;
 
       const solver_t &solver_selected(solver.select(prn));
       (typename solver_t::relative_property_t &)res = solver_selected.relative_property(
@@ -493,18 +493,12 @@ class INS_GPS2_Tightly : public BaseFINS {
 
       if(res.range_sigma <= 0){return res;}
 
-      do{
-        float_t rate;
-        if(!solver_selected.rate(measurement, rate)){break;}
-        res.rate_residual = rate
-            - super_t::m_clock_error_rate[x.clock_index] + res.rate_relative_neg;
-
-        if(!solver_selected.rate_sigma(measurement, res.rate_sigma)){
-          // If receiver's rate variance is not provided
-          res.rate_sigma = solver_selected.select_satellite(prn, x.t).rate_sigma(x.t);
-        }
-      }while(false);
-
+      if(!solver_selected.rate(measurement, res.rate_residual)){
+        res.rate_sigma = -1; // overwrite with invalid value
+      }else{
+        res.rate_residual += -super_t::m_clock_error_rate[x.clock_index]
+            + res.rate_relative_neg;
+      }
       return res;
     }
 
@@ -632,20 +626,24 @@ class INS_GPS2_Tightly : public BaseFINS {
     }
 
     /**
-     * Calculate DOP
+     * Calculate DOP and sigma
      *
      * @param x receiver state represented by current position and clock properties
      * @param props relative properties
-     * @param res buffer of calculation result
-     * @return (dop_t *) unavailable when null; otherwise, DOP
+     * @param dop buffer of DOP calculation result
+     * @param sigma_pos buffer of position sigma calculation result
+     * @return (precision_t *) unavailable when null; otherwise, pointer to DOP
      */
-    static typename solver_t::user_pvt_t::dop_t *get_DOP(
+    static typename solver_t::user_pvt_t::precision_t *get_DOP_sigma(
         const receiver_state_t &x,
         const relative_property_list_t &props,
-        typename solver_t::user_pvt_t::dop_t &res) {
+        typename solver_t::user_pvt_t::precision_t &dop,
+        typename solver_t::user_pvt_t::precision_t &sigma_pos) {
 
-      mat_t G_full(props.size(), 4); // design matrix
-      //mat_t R_full(props.size(), props.size());
+      struct proxy_t : public solver_t {
+        typedef typename solver_t::geometric_matrices_t geomat_t;
+      };
+      typename proxy_t::geomat_t geomat(props.size());
 
       // count up valid measurement
       int i_row(0);
@@ -656,17 +654,17 @@ class INS_GPS2_Tightly : public BaseFINS {
 
         if(prop.range_sigma <= 0){continue;} // No measurement
         for(int i(0); i < sizeof(prop.los_neg) / sizeof(prop.los_neg[0]); ++i){
-          G_full(i_row, i) = prop.los_neg[i];
+          geomat.G(i_row, i) = prop.los_neg[i];
         }
-        G_full(i_row, 3) = 1;
-        //R_full(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
+        geomat.W(i_row, i_row) = 1. / std::pow(prop.range_sigma, 2);
         ++i_row;
       }
       if(i_row < 4){return NULL;}
 
-      typename mat_t::partial_offsetless_t G(G_full.partial(i_row, 4));
-      return &(res = solver_t::dop(
-          (G.transpose() /* * R_full.partial(i_row, i_row)*/ * G).inverse(), x.pos));
+      typename proxy_t::geomat_t::partial_t geomat_used(geomat.partial(i_row));
+      typename solver_t::matrix_t rot(x.pos.ecef2enu());
+      sigma_pos = geomat_used.sigma(rot);
+      return &(dop = geomat_used.dop(rot));
     }
 
     /**
@@ -687,9 +685,9 @@ class INS_GPS2_Tightly : public BaseFINS {
        * by regulating props[n].sigma_(range|rate), whose negative or zero value yields
        * intentional exclusion.
        */
-      /*{ // check DOP
-        typename solver_t::user_pvt_t::dop_t dop;
-        if(get_DOP(x, props, dop)){
+      /*{ // check DOP/sigma
+        typename solver_t::user_pvt_t::precision_t dop, sigma_pos;
+        if(get_DOP_sigma(x, props, dop, sigma_pos)){
           // do something
           std::cerr << dop.t << std::endl;
         }

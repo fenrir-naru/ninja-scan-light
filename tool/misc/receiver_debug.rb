@@ -43,20 +43,21 @@ class GPS_Receiver
         ] + (pvt.rel_ENU.to_a rescue [nil] * 3)
       } 
     ]] + [proc{
-      labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym}
+      labels = [:g, :p, :h, :v, :t].collect{|k| "#{k}dop".to_sym} \
+          + [:h, :v, :t].collect{|k| "#{k}sigma".to_sym}
       [
         labels,
         proc{|pvt|
-          next [nil] * 5 unless pvt.position_solved?
+          next [nil] * 8 unless pvt.position_solved?
           labels.collect{|k| pvt.send(k)}
         }
       ]
     }.call] + [[
-      [:v_north, :v_east, :v_down, :receiver_clock_error_dot_ms],
+      [:v_north, :v_east, :v_down, :receiver_clock_error_dot_ms, :vel_sigma],
       proc{|pvt|
         next [nil] * 4 unless pvt.velocity_solved?
         [:north, :east, :down].collect{|k| pvt.velocity.send(k)} \
-            + [pvt.receiver_error_rate] 
+            + [pvt.receiver_error_rate, pvt.vel_sigma] 
       }
     ]] + [
       [:used_satellites, proc{|pvt| pvt.used_satellites}],
@@ -140,7 +141,7 @@ class GPS_Receiver
         opt[:satellites].collect{|prn, label|
           pr, rate, doppler, freq = keys.collect{|k| meas_hash[prn][k] rescue nil}
           freq ||= GPS::SpaceNode.L1_Frequency
-          [pr, rate || ((doppler * GPS::SpaceNode::light_speed / freq) rescue nil)]
+          [pr, rate || ((-doppler * GPS::SpaceNode::light_speed / freq) rescue nil)]
         }
       }
     ]]
@@ -322,24 +323,30 @@ class GPS_Receiver
   end
 
   GPS::Measurement.class_eval{
-    proc{
-      key2sym = []
-      GPS::Measurement.constants.each{|k|
-        i = GPS::Measurement.const_get(k)
-        key2sym[i] = k if i.kind_of?(Integer)
-      }
-      define_method(:to_a2){
-        to_a.collect{|prn, k, v| [prn, key2sym[k] || k, v]}
-      }
-      define_method(:to_hash2){
-        Hash[*(to_hash.collect{|prn, k_v|
-          [prn, Hash[*(k_v.collect{|k, v| [key2sym[k] || k, v]}.flatten(1))]]
-        }.flatten(1))]
-      }
-    }.call
     add_orig = instance_method(:add)
     define_method(:add){|prn, key, value|
       add_orig.bind(self).call(prn, key.kind_of?(Symbol) ? GPS::Measurement.const_get(key) : key, value)
+    }
+    key2sym = GPS::Measurement.constants.inject([]){|res, k|
+      res[GPS::Measurement.const_get(k)] = k if /^L\d/ =~ k.to_s
+      res
+    }
+    define_method(:to_a2){
+      collect{|prn, k, v| [prn, key2sym[k] || k, v]}
+    }
+    cl_hash2 = Class::new(Hash){
+      define_method(:to_meas){
+        GPS::Measurement::new.tap{|res|
+          each{|prn, k_v|
+            k_v.each{|k, v| res.add(prn, k, v)}
+          }
+        }
+      }
+    }
+    define_method(:to_hash2){
+      cl_hash2::new.tap{|res|
+        each{|prn, k, v| (res[prn] ||= {})[key2sym[k] || k] = v}
+      }
     }
   }
 

@@ -162,7 +162,7 @@ class IMU_CSV < A_Packet_Converter
   end
   def read_chunk
     while !@io.eof?
-      items = @io.readline.split(/[,\s]+/) # space, tab or comma
+      items = @io.readline.split(/\b[,\s]+/) # space, tab or comma
       items.collect!{|v| Float(v)} rescue next
       t = (items[@t_index] * @t_scale) + @t_offset
       accel = items.values_at(*@acc_index).zip(@acc_units).collect{|v, sf| v * sf}
@@ -236,8 +236,10 @@ src = {
   :imu => ARGV.shift,
 }
 $log_mix.call({:readers => [
-  IMU_CSV::new(open(src[:imu], 'r')),
-  GPS_UBX::new(open(src[:gps], 'rb')), 
+  IMU_CSV::new((src[:imu] == '-') ? $stdin : open(src[:imu], 'r')),
+  GPS_UBX::new((src[:gps] == '-') \
+      ? proc{STDIN.binmode; $stdin}.call \
+      : open(src[:gps], 'rb')), 
 ]})
 
 end

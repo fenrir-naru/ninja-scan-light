@@ -126,6 +126,37 @@ __PATCH_LINE__
 ;;
 esac
 
+case "${SDCC}" in
+3.3.*)
+patch -u -N -p1 <<'__PATCH_LINE__' || let "$?<=1"
+diff -uprN sdcc-3.3.0.orig/support/sdbinutils/bfd/Makefile.in sdcc-3.3.0/support/sdbinutils/bfd/Makefile.in
+--- sdcc-3.3.0.orig/support/sdbinutils/bfd/Makefile.in  2012-11-08 16:44:00.000000000 +0900
++++ sdcc-3.3.0/support/sdbinutils/bfd/Makefile.in 2023-08-15 15:42:47.661249300 +0900
+@@ -239,7 +239,7 @@ STRIP = @STRIP@
+ TDEFINES = @TDEFINES@
+ USE_NLS = @USE_NLS@
+ VERSION = @VERSION@
+-WARN_CFLAGS = @WARN_CFLAGS@
++WARN_CFLAGS = @WARN_CFLAGS@ -Wno-format-overflow -Wno-pointer-compare -Wno-implicit-fallthrough -Wno-unused-const-variable -Wno-cast-function-type
+ XGETTEXT = @XGETTEXT@
+ abs_builddir = @abs_builddir@
+ abs_srcdir = @abs_srcdir@
+diff -uprN sdcc-3.3.0.orig/support/sdbinutils/binutils/Makefile.in sdcc-3.3.0/support/sdbinutils/binutils/Makefile.in
+--- sdcc-3.3.0.orig/support/sdbinutils/binutils/Makefile.in 2012-11-08 23:22:15.000000000 +0900
++++ sdcc-3.3.0/support/sdbinutils/binutils/Makefile.in  2023-08-15 15:44:30.335377200 +0900
+@@ -264,7 +264,7 @@ SHELL = @SHELL@
+ STRIP = @STRIP@
+ USE_NLS = @USE_NLS@
+ VERSION = @VERSION@
+-WARN_CFLAGS = @WARN_CFLAGS@
++WARN_CFLAGS = @WARN_CFLAGS@ -Wno-format-overflow -Wno-pointer-compare -Wno-implicit-fallthrough -Wno-unused-const-variable -Wno-cast-function-type
+ XGETTEXT = @XGETTEXT@
+ YACC = `if [ -f ../bison/bison ]; then echo ../bison/bison -y -L$(srcdir)/../bison/; else echo @YACC@; fi`
+ YFLAGS = -d
+__PATCH_LINE__
+;;
+esac
+
 DISABLE_DEVICES="z80 z180 r2k r3ka gbz80 ds390 ds400 pic14 pic16 hc08 s08"
 CONFIGURE_OPT="--prefix=${SDCC_DIR} --disable-ucsim --disable-sdcdb --disable-non-free" 
 case "${SDCC}" in

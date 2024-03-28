@@ -129,7 +129,9 @@ class SBAS_SinglePositioning : public SolverBaseT {
             return sat(ptr).ephemeris().clock_error_dot(t_tx);
           }
           static float_t range_sigma(const void *ptr, const gps_time_t &t_tx) {
-            return sat(ptr).ephemeris().URA;
+            return std::sqrt(
+                std::pow(sat(ptr).ephemeris().URA, 2)
+                + std::pow(4.5 / 1.96, 2)); // TODO change? (currently same as GPS)
           }
         };
         satellite_t res = {
@@ -330,11 +332,17 @@ class SBAS_SinglePositioning : public SolverBaseT {
       res.range_corrected = range;
 
       xyz_t rel_vel(sat.velocity(t_tx, dt_transit) - usr_vel); // Calculate velocity
-
       res.rate_relative_neg = res.los_neg[0] * rel_vel.x()
           + res.los_neg[1] * rel_vel.y()
           + res.los_neg[2] * rel_vel.z()
           + sat.clock_error_dot(t_tx) * c;
+      res.rate_sigma = sat.rate_sigma(time_arrival);
+
+      if(_options.use_external_sigma){
+        // Use standard deviation of pseudorange and/or its rate if they are provided by receiver
+        this->range_sigma(measurement, res.range_sigma);
+        this->rate_sigma(measurement, res.rate_sigma);
+      }
 
       return res;
     }

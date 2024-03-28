@@ -365,6 +365,18 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     System_XYZ<FloatT, WGS84> position, velocity;
     FloatT clock_error, clock_error_dot;
   };
+  
+  int get_URA_index() const {
+    return GPS_Ephemeris<FloatT>::URA_index(this->URA);
+  }
+  int set_URA_index(const int &idx) {
+    this->URA = GPS_Ephemeris<FloatT>::URA_meter(idx);
+    return get_URA_index();
+  }
+  FloatT set_fit_interval(const bool &flag) {
+    // set iodc before invocation of this function
+    return (this->fit_interval = GPS_Ephemeris<FloatT>::raw_t::fit_interval(flag, this->iodc));
+  }
 };
 %}
 %extend GPS_Ephemeris {
@@ -399,6 +411,9 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   MAKE_ACCESSOR(omega, FloatT);
   MAKE_ACCESSOR(dot_Omega0, FloatT);
   MAKE_ACCESSOR(dot_i0, FloatT);
+  
+  %rename(%str(URA_index=)) set_URA_index;
+  %rename(%str(URA_index)) get_URA_index;
   
   MAKE_ARRAY_INPUT(const unsigned int, buf, SWIG_AsVal(unsigned int));
   %apply int *OUTPUT { int *subframe_no, int *iodc_or_iode };
@@ -726,6 +741,10 @@ struct GPS_User_PVT
   const FloatT &hdop() const {return base_t::dop.h;}
   const FloatT &vdop() const {return base_t::dop.v;}
   const FloatT &tdop() const {return base_t::dop.t;}
+  const FloatT &hsigma() const {return base_t::sigma_pos.h;}
+  const FloatT &vsigma() const {return base_t::sigma_pos.v;}
+  const FloatT &tsigma() const {return base_t::sigma_pos.t;}
+  const FloatT &vel_sigma() const {return base_t::sigma_vel.p;}
   const unsigned int &used_satellites() const {return base_t::used_satellites;}
   std::vector<int> used_satellite_list() const {return base_t::used_satellite_mask.indices_one();}
   bool position_solved() const {return base_t::position_solved();}
@@ -750,7 +769,7 @@ struct GPS_User_PVT
     return linear_solver().C();
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > C_enu() const {
-    return proxy_t::linear_solver_t::rotate_C(C(), base_t::user_position.ecef2enu());
+    return proxy_t::linear_solver_t::rotate_CP(C(), base_t::user_position.ecef2enu());
   }
   Matrix<FloatT, Array2D_Dense<FloatT> > S() const {
     Matrix<FloatT, Array2D_Dense<FloatT> > res;
@@ -980,6 +999,7 @@ struct GPS_Measurement {
 %extend GPS_SolverOptions_Common {
   MAKE_ACCESSOR2(elevation_mask, cast_general()->elevation_mask, FloatT);
   MAKE_ACCESSOR2(residual_mask, cast_general()->residual_mask, FloatT);
+  MAKE_ACCESSOR2(use_external_sigma, cast_general()->use_external_sigma, bool);
   MAKE_VECTOR2ARRAY(int);
   %ignore cast_general;
 }
@@ -1137,7 +1157,7 @@ struct HookableSolver : public BaseT {
           const GPS_Solver<FloatT>::base_t::relative_property_t &res_orig) const {
       union {
         base_t::relative_property_t prop;
-        FloatT values[7];
+        FloatT values[8];
       } res = {res_orig};
 #ifdef SWIGRUBY
       do{
@@ -1145,15 +1165,19 @@ struct HookableSolver : public BaseT {
         static const int prop_items(sizeof(res.values) / sizeof(res.values[0]));
         VALUE hook(rb_hash_lookup(hooks, key));
         if(NIL_P(hook)){break;}
-        FloatT weight((res.prop.range_sigma > 0) 
+        FloatT weight_range((res.prop.range_sigma > 0) 
             ? (1. / std::pow(res.prop.range_sigma, 2)) // weight=1/(sigma^2)
             : res.prop.range_sigma);
+        FloatT weight_rate((res.prop.rate_sigma > 0) 
+            ? (1. / std::pow(res.prop.rate_sigma, 2)) // weight=1/(sigma^2)
+            : res.prop.rate_sigma);
         VALUE values[] = {
             SWIG_From(int)(prn), // prn
             rb_ary_new_from_args(prop_items, // relative_property
-              swig::from(weight),
+              swig::from(weight_range),
               swig::from(res.prop.range_corrected),
               swig::from(res.prop.range_residual),
+              swig::from(weight_rate),
               swig::from(res.prop.rate_relative_neg),
               swig::from(res.prop.los_neg[0]),
               swig::from(res.prop.los_neg[1]),
@@ -1185,6 +1209,9 @@ struct HookableSolver : public BaseT {
         }
         if(res.values[0] > 0){
           res.values[0] = std::pow(1. / res.values[0], 0.5); // sigma=(1/weight)^0.5
+        }
+        if(res.values[3] > 0){
+          res.values[3] = std::pow(1. / res.values[3], 0.5); // sigma=(1/weight)^0.5
         }
       }while(false);
 #endif
