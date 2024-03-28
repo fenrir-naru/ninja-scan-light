@@ -55,10 +55,12 @@ template <class FloatT>
 struct GPS_Solver_GeneralOptions {
   FloatT elevation_mask;
   FloatT residual_mask;
+  bool use_external_sigma;
 
   GPS_Solver_GeneralOptions()
       : elevation_mask(0), // elevation mask default is 0 [deg]
-      residual_mask(30) { // range residual mask is 30 [m]
+      residual_mask(1E3), // range residual mask is 1000 [m]
+      use_external_sigma(false) { // default is to ignore external sigma inputs
 
   }
 };
@@ -158,7 +160,9 @@ class GPS_SinglePositioning : public SolverBaseT {
             return sat(ptr).clock_error_dot(t_tx);
           }
           static float_t range_sigma(const void *ptr, const gps_time_t &t_tx) {
-            return sat(ptr).ephemeris().URA;
+            return std::sqrt(
+                std::pow(sat(ptr).ephemeris().URA, 2)
+                + std::pow(4.5 / 1.96, 2)); // UEE of modern receiver Table.B2-1 of April 2020 GPS SPS PS;
           }
         };
         satellite_t res = {
@@ -262,9 +266,9 @@ class GPS_SinglePositioning : public SolverBaseT {
      *
      * @param sat satellite
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
-     * @param time_arrival time when signal arrive at receiver
+     * @param time_arrival time when signal arrives at receiver
      * @param usr_pos (temporal solution of) user position
-     * @param residual calculated residual with line of site vector, and pseudorange standard deviation (sigma);
+     * @param residual calculated residual with line of sight vector, and pseudorange standard deviation (sigma);
      * When sigma is equal to or less than zero, the calculated results should not be used.
      * @param error Some correction can be overwritten. If its unknown_flag is zero,
      * corrections will be skipped as possible. @see range_errors_t
@@ -280,7 +284,7 @@ class GPS_SinglePositioning : public SolverBaseT {
 
       static const float_t &c(space_node_t::light_speed);
 
-      // Clock error correction
+      // Satellite clock error correction
       range += ((error.unknown_flag & range_error_t::SATELLITE_CLOCK)
           ? (sat.clock_error(time_arrival - range / c) * c)
           : error.value[range_error_t::SATELLITE_CLOCK]);
@@ -294,20 +298,21 @@ class GPS_SinglePositioning : public SolverBaseT {
       // Calculate residual
       residual.residual = range - geometric_range;
 
-      // Setup design matrix
+      // Setup design matrix (direction is negative; satellite -> user)
       residual.los_neg_x = -(sat_pos.x() - usr_pos.xyz.x()) / geometric_range;
       residual.los_neg_y = -(sat_pos.y() - usr_pos.xyz.y()) / geometric_range;
       residual.los_neg_z = -(sat_pos.z() - usr_pos.xyz.z()) / geometric_range;
 
       enu_t relative_pos(enu_t::relative(sat_pos, usr_pos.xyz));
 
+      // Ionospheric correction
       if(error.unknown_flag & range_error_t::MASK_IONOSPHERIC){
         residual.residual += ionospheric_correction(time_arrival, usr_pos, relative_pos);
       }else{
         residual.residual += error.value[range_error_t::IONOSPHERIC];
       }
 
-      // Tropospheric
+      // Tropospheric correction
       residual.residual += (error.unknown_flag & range_error_t::MASK_TROPOSPHERIC)
           ? tropospheric_correction(time_arrival, usr_pos, relative_pos)
           : error.value[range_error_t::TROPOSPHERIC];
@@ -347,9 +352,9 @@ class GPS_SinglePositioning : public SolverBaseT {
      * @param range "corrected" pseudo range subtracted by (temporal solution of) receiver clock error in meter
      * @param time_arrival time when signal arrive at receiver
      * @param usr_vel (temporal solution of) user velocity
-     * @param los_neg_x line of site X
-     * @param los_neg_y line of site Y
-     * @param los_neg_z line of site Z
+     * @param los_neg_x line of sight X
+     * @param los_neg_y line of sight Y
+     * @param los_neg_z line of sight Z
      * @return (float_t) relative rate.
      */
     float_t rate_relative_neg(
@@ -425,14 +430,13 @@ class GPS_SinglePositioning : public SolverBaseT {
           usr_pos, residual, range_error);
       res.rate_relative_neg = rate_relative_neg(sat, res.range_corrected, time_arrival, usr_vel,
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
+      res.rate_sigma = sat.rate_sigma(time_arrival);
 
-#if 0
-      // TODO consider case when standard deviation of pseudorange measurement is provided by receiver
-      if(!this->range_sigma(measurement, res.range_sigma)){
-        // If receiver's range variance is not provided
-        res.range_sigma = 1E0; // TODO range error variance [m]
+      if(_options.use_external_sigma){
+        // Use standard deviation of pseudorange and/or its rate if they are provided by receiver
+        this->range_sigma(measurement, res.range_sigma);
+        this->rate_sigma(measurement, res.rate_sigma);
       }
-#endif
 
       return res;
     }

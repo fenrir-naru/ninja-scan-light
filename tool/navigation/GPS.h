@@ -1156,7 +1156,8 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
           
           // Subframe.1
           uint_t WN;          ///< Week number
-          float_t URA;          ///< User range accuracy (m)
+          float_t URA;        ///< User range accuracy (m) including all errors
+            ///< for which the Space and Control Segments are responsible. (ICD 6.2.1)
           uint_t SV_health;   ///< Health status
           int_t iodc;         ///< Issue of clock data
           float_t t_GD;       ///< Group delay (s)
