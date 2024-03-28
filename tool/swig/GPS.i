@@ -589,11 +589,18 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
     return SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephemeris::is_valid(t);
   }
   GPS_Time<FloatT> t_applicable() const {return GPS_Time<FloatT>(this->WN, this->t_0);}
+  int get_URA_index() const {
+    return SBAS_Ephemeris<FloatT>::URA_index(this->URA);
+  }
+  int set_URA_index(const int &idx) {
+    this->URA = SBAS_Ephemeris<FloatT>::URA_meter(idx);
+    return get_URA_index();
+  }
 };
 %}
 %extend SBAS_Ephemeris {
   MAKE_ACCESSOR(svid, unsigned int);
-          
+
   MAKE_ACCESSOR(WN, unsigned int);
   MAKE_ACCESSOR(t_0, FloatT);
   MAKE_ACCESSOR(URA, FloatT);
@@ -602,6 +609,9 @@ struct SBAS_Ephemeris : public SBAS_SpaceNode<FloatT>::SatelliteProperties::Ephe
   MAKE_ACCESSOR(ddx, FloatT); MAKE_ACCESSOR(ddy, FloatT); MAKE_ACCESSOR(ddz, FloatT);
   MAKE_ACCESSOR(a_Gf0, FloatT);
   MAKE_ACCESSOR(a_Gf1, FloatT);
+  %rename(%str(URA_index=)) set_URA_index;
+  %rename(%str(URA_index)) get_URA_index;
+
   /**
    * Return broadcasted raw data of SBAS ephemeris
    * @param buf_brdc pointer to store raw data of Type 9 message.
