@@ -379,8 +379,12 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     return get_URA_index();
   }
   FloatT set_fit_interval(const bool &flag) {
-    // set iodc before invocation of this function
-    return (this->fit_interval = GPS_Ephemeris<FloatT>::raw_t::fit_interval(flag, this->iodc));
+    // set svid/iodc before invocation of this function
+    if((this->svid >= 193) && (this->svid <= 202)){ // QZSS
+      return (this->fit_interval = (flag ? (std::numeric_limits<FloatT>::max)() : (2 * 60 * 60)));
+    }else{
+      return (this->fit_interval = GPS_Ephemeris<FloatT>::raw_t::fit_interval(flag, this->iodc));
+    }
   }
 };
 %}
