@@ -170,8 +170,8 @@ class GPS_Receiver
       opt.residual_mask = 1E4 # 10 km (without residual filter, practically)
     }
     output_options = {
-      :system => [[:GPS, 1..32]],
-      :satellites => (1..32).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
+      :system => [[:GPS, 1..32], [:QZSS, 193..202]],
+      :satellites => (1..32).to_a + (193..202).to_a, # [idx, ...] or [[idx, label], ...] is acceptable
       :FDE => false,
     }
     options = options.reject{|k, v|
@@ -280,6 +280,8 @@ class GPS_Receiver
             prns = [svid || (120..158).to_a].flatten
             update_output.call(:SBAS, prns)
             prns.each{|prn| @solver.sbas_options.send(mode, prn)}
+          elsif check_sys_svid.call(:QZSS, 193..202) then
+            [svid || (193..202).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
           else
             raise "Unknown satellite: #{spec}"
           end
@@ -407,13 +409,13 @@ class GPS_Receiver
   }
   
   def register_ephemeris(t_meas, sys, prn, bcast_data)
-    @eph_list ||= Hash[*(1..32).collect{|prn|
+    @eph_list ||= Hash[*((1..32).to_a + (193..202).to_a).collect{|prn|
       eph = GPS::Ephemeris::new
       eph.svid = prn
       [prn, eph]
     }.flatten(1)]
     case sys
-    when :GPS
+    when :GPS, :QZSS
       return unless eph = @eph_list[prn]
       sn = @solver.gps_space_node
       subframe, iodc_or_iode = eph.parse(bcast_data)
@@ -521,10 +523,12 @@ class GPS_Receiver
           sys, svid = gnss_serial.call(*loader.call(36, 2).reverse)
           sigid = (packet[6 + 13] != 0) ? loader.call(38, 1, "C") : 0 # sigID if version(>0); @see UBX-18010854 
           case sys
-          when :GPS 
+          when :GPS
             sigid = {0 => :L1, 3 => :L2CL, 4 => :L2CM}[sigid]
           when :SBAS
             sigid = :L1
+          when :QZSS
+            sigid = {0 => :L1, 5 => :L2CL, 4 => :L2CM}[sigid]
           else; next
           end
           next unless sigid
@@ -726,7 +730,7 @@ if __FILE__ == $0 then
   files.collect!{|fname, ftype|
     raise "File not found: #{fname}" unless File::exist?(fname)
     ftype ||= case fname
-    when /\.\d{2}[nh]$/; :rinex_nav
+    when /\.\d{2}[nhq]$/; :rinex_nav
     when /\.\d{2}o$/; :rinex_obs
     when /\.ubx$/; :ubx
     when /\.sp3$/; :sp3
