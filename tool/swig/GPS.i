@@ -363,6 +363,18 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     System_XYZ<FloatT, WGS84> position, velocity;
     FloatT clock_error, clock_error_dot;
   };
+  
+  int get_URA_index() const {
+    return GPS_Ephemeris<FloatT>::URA_index(this->URA);
+  }
+  int set_URA_index(const int &idx) {
+    this->URA = GPS_Ephemeris<FloatT>::URA_meter(idx);
+    return get_URA_index();
+  }
+  FloatT set_fit_interval(const bool &flag) {
+    // set iodc before invocation of this function
+    return (this->fit_interval = GPS_Ephemeris<FloatT>::raw_t::fit_interval(flag, this->iodc));
+  }
 };
 %}
 %extend GPS_Ephemeris {
@@ -397,6 +409,9 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   MAKE_ACCESSOR(omega, FloatT);
   MAKE_ACCESSOR(dot_Omega0, FloatT);
   MAKE_ACCESSOR(dot_i0, FloatT);
+  
+  %rename(%str(URA_index=)) set_URA_index;
+  %rename(%str(URA_index)) get_URA_index;
   
   MAKE_ARRAY_INPUT(const unsigned int, buf, SWIG_AsVal(unsigned int));
   %apply int *OUTPUT { int *subframe_no, int *iodc_or_iode };
