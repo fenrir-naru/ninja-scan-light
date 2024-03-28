@@ -95,6 +95,11 @@ class GPS_Signal {
           PRN::content <<= 1;
           PRN::content[0] = tmp;
         }
+        void previous(){
+          bool tmp(PRN::content[3] ^ PRN::content[0]);
+          PRN::content >>= 1;
+          PRN::content[9] = tmp;
+        }
     };
     
     class G2 : public PRN {
@@ -113,6 +118,16 @@ class GPS_Signal {
                      ^ PRN::content[9]);
           PRN::content <<= 1;
           PRN::content[0] = tmp;
+        }
+        void previous(){
+          bool tmp(PRN::content[2]
+                     ^ PRN::content[3]
+                     ^ PRN::content[6]
+                     ^ PRN::content[8]
+                     ^ PRN::content[9]
+                     ^ PRN::content[0]);
+          PRN::content >>= 1;
+          PRN::content[9] = tmp;
         }
         static G2 get_G2(const int &prn){
           switch(prn){
@@ -160,9 +175,9 @@ class GPS_Signal {
     class CA_Code {
       public:
         typedef FloatT float_t;
-        static const float_t FREQENCY;
+        static const float_t FREQUENCY;
         static const float_t length_1chip() {
-          static const float_t res(1. / FREQENCY);
+          static const float_t res(1. / FREQUENCY);
           return res;
         }
       protected:
@@ -177,11 +192,15 @@ class GPS_Signal {
           g1.next();
           g2.next();
         }
+        void previous(){
+          g1.previous();
+          g2.previous();
+        }
     };
 };
 
 template <class FloatT>
-const typename GPS_Signal<FloatT>::float_t GPS_Signal<FloatT>::CA_Code::FREQENCY = 1.023E6;
+const typename GPS_Signal<FloatT>::float_t GPS_Signal<FloatT>::CA_Code::FREQUENCY = 1.023E6;
 
 template <class FloatT = double>
 struct GPS_Time {
@@ -1156,7 +1175,8 @@ static void name ## _set(InputT *dest, const s ## bits ## _t &src){ \
           
           // Subframe.1
           uint_t WN;          ///< Week number
-          float_t URA;          ///< User range accuracy (m)
+          float_t URA;        ///< User range accuracy (m) including all errors
+            ///< for which the Space and Control Segments are responsible. (ICD 6.2.1)
           uint_t SV_health;   ///< Health status
           int_t iodc;         ///< Issue of clock data
           float_t t_GD;       ///< Group delay (s)

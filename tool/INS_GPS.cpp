@@ -1120,25 +1120,32 @@ class INS_GPS_NAV : public NAV {
     }
 
   protected:
-    static void set_matrix_full(mat_t &mat, const char *spec){
-      char *_spec(const_cast<char *>(spec));
+    static bool set_matrix_full(mat_t &mat, const char *spec){
+      char *_spec(const_cast<char *>(spec)), *_spec2;
       for(unsigned int i(0), i_end(mat.rows()); i < i_end; i++){
         for(unsigned int j(0), j_end(mat.columns()); j < j_end; j++){
-          mat(i, j) = std::strtod(_spec, &_spec);
+          mat(i, j) = std::strtod(_spec2 = _spec, &_spec);
+          if(_spec == _spec2){return false;} // No conversion
         }
       }
+      return true;
     }
-    static void set_matrix_diagonal(mat_t &mat, const char *spec){
-      char *_spec(const_cast<char *>(spec));
+    static bool set_matrix_diagonal(mat_t &mat, const char *spec){
+      char *_spec(const_cast<char *>(spec)), *_spec2;
       for(unsigned int i(0), i_end(mat.rows()); i < i_end; i++){
-        mat(i, i) = std::strtod(_spec, &_spec);
+        mat(i, i) = std::strtod(_spec2 = _spec, &_spec);
+        if(_spec == _spec2){return false;} // No conversion
       }
+      return true;
     }
-    static void set_matrix_1element(mat_t &mat, const char *spec){
-      char *_spec(const_cast<char *>(spec));
-      int i((int)std::strtol(_spec, &_spec, 10));
-      int j((int)std::strtol(_spec, &_spec, 10));
-      mat(i, j) = std::strtod(_spec, &_spec);
+    static bool set_matrix_1element(mat_t &mat, const char *spec){
+      char *_spec(const_cast<char *>(spec)), *_spec2;
+      int i((int)std::strtol(_spec2 = _spec, &_spec, 10));
+      if(_spec == _spec2){return false;} // No conversion
+      int j((int)std::strtol(_spec2 = _spec, &_spec, 10));
+      if(_spec == _spec2){return false;} // No conversion
+      mat(i, j) = std::strtod(_spec2 = _spec, &_spec);
+      return (_spec != _spec2);
     }
 
     bool init_misc(const char *line, void *){
@@ -1147,41 +1154,43 @@ class INS_GPS_NAV : public NAV {
     bool init_misc(const char *line, INS<float_t> *){
       const char *value;
       if(value = Options::get_value2(line, "x")){
-        char *spec(const_cast<char *>(value));
-        int i((int)std::strtol(spec, &spec, 10));
-        (*ins_gps)[i] = std::strtod(spec, &spec);
-        return true;
+        char *spec(const_cast<char *>(value)), *spec2;
+        int i((int)std::strtol(spec2 = spec, &spec, 10));
+        if(spec == spec2){return false;} // No conversion
+        (*ins_gps)[i] = std::strtod(spec2 = spec, &spec);
+        return spec != spec2;
       }
       return false;
     }
     template <class BaseINS, template <class> class Filter>
     bool init_misc(const char *line, Filtered_INS2<BaseINS, Filter> *){
       const char *value;
+      bool res;
 
       while(true){
         mat_t P(ins_gps->getFilter().getP());
         if(value = Options::get_value2(line, "P")){
-          set_matrix_full(P, value);
+          res = set_matrix_full(P, value);
         }else if(value = Options::get_value2(line, "P_diag")){
-          set_matrix_diagonal(P, value);
+          res = set_matrix_diagonal(P, value);
         }else if(value = Options::get_value2(line, "P_elm")){
-          set_matrix_1element(P, value);
+          res = set_matrix_1element(P, value);
         }else{break;}
         ins_gps->getFilter().setP(P);
-        return true;
+        return res;
       }
 
       while(true){
         mat_t Q(ins_gps->getFilter().getQ());
         if(value = Options::get_value2(line, "Q")){
-          set_matrix_full(Q, value);
+          res = set_matrix_full(Q, value);
         }else if(value = Options::get_value2(line, "Q_diag")){
-          set_matrix_diagonal(Q, value);
+          res = set_matrix_diagonal(Q, value);
         }else if(value = Options::get_value2(line, "Q_elm")){
-          set_matrix_1element(Q, value);
+          res = set_matrix_1element(Q, value);
         }else{break;}
         ins_gps->getFilter().setQ(Q);
-        return true;
+        return res;
       }
 
       return init_misc(line, (BaseINS *)ins_gps);
@@ -1367,9 +1376,13 @@ struct INS_GPS_NAV_Factory : public NAV_Factory<INS_GPS> {
   struct Checker<INS_GPS_Debug_PureInertial<T> > {
     template <class Calibration>
     static NAV *check_navdata(const Calibration &calibration){
-      return INS_GPS_NAV_Factory<
-            INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> >
-          >::generate(calibration);
+      return options.dump_stddev ?
+          INS_GPS_NAV_Factory<
+              INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T, typename T::filtered_ins_t> >
+            >::generate(calibration) :
+          INS_GPS_NAV_Factory<
+              INS_GPS_NAVData<INS_GPS_Debug_PureInertial<T> >
+            >::generate(calibration);
     }
   };
 
@@ -2671,7 +2684,10 @@ class INS_GPS_NAV<INS_GPS>::Helper {
 
       for(char buf[0x4000]; !options.init_misc->eof(); ){ // Miscellaneous setup
         options.init_misc->getline(buf, sizeof(buf));
-        nav.init_misc(buf);
+        if(!nav.init_misc(buf)){
+          cerr << "(error!) Initialization failure: " << buf << endl;
+          exit(-1);
+        }
       }
     }
 

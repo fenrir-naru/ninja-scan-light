@@ -466,19 +466,27 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
       void (HandlerP::*formatter)(
           const float_sylph_t &current, const int &index,
           const Int32 &pressure, const Int32 &temperature) const;
-      void ms5611_convert(
-          const Int32 &d1, const Int32 &d2,
-          Int32 &pressure, Int32 &temperature,
-          const Uint16 (&coef)[6]) const {
-        Int32 dT(d2 - (coef[4] << 8));
+
+      static void ms5XXX_convert(
+          const Int32 &d1, const Int32 &d2, const Uint16 (&coef)[6],
+          Int32 &dT, Int32 &temperature, int64_t &off, int64_t &sens){
+        dT = d2 - (coef[4] << 8);
         temperature = (Int32)2000 + (((int64_t)dT * coef[5]) >> 23);
 
-        int64_t off(((int64_t)coef[1] << 16) + (((int64_t)coef[3] * dT) >> 7));
-        int64_t sens(((int64_t)coef[0] << 15) + (((int64_t)coef[2] * dT) >> 8));
+        off = ((int64_t)coef[1] << 16) + (((int64_t)coef[3] * dT) >> 7);
+        sens = ((int64_t)coef[0] << 15) + (((int64_t)coef[2] * dT) >> 8);
+      }
+      static void ms5611_convert(
+          const Int32 &d1, const Int32 &d2,
+          Int32 &pressure, Int32 &temperature,
+          const Uint16 (&coef)[6]){
+        Int32 dT;
+        int64_t off, sens;
+        ms5XXX_convert(d1, d2, coef, dT, temperature, off, sens);
 
         // Figure 3
         if(temperature < 2000){
-          Int32 t2(((int64_t)dT * dT) << 31);
+          Int32 t2(((int64_t)dT * dT) >> 31);
           Int32 dT2(temperature - 2000), dT2_2(dT2 * dT2);
           Int32 off2((dT2_2 * 5) >> 1);
           Int32 sens2((dT2_2 * 5) >> 2);
@@ -494,6 +502,66 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
 
         pressure = (Int32)(((((int64_t)d1 * sens) >> 21) - off) >> 15);
       }
+      static void ms5803_01_convert(
+          const Int32 &d1, const Int32 &d2,
+          Int32 &pressure, Int32 &temperature,
+          const Uint16 (&coef)[6]){
+        Int32 dT;
+        int64_t off, sens;
+        ms5XXX_convert(d1, d2, coef, dT, temperature, off, sens);
+
+        // Figure 16
+        if(temperature < 2000){
+          Int32 t2(((int64_t)dT * dT) >> 31);
+          Int32 dT2(temperature - 2000), dT2_2(dT2 * dT2);
+          Int32 off2(dT2_2 * 3);
+          Int32 sens2((dT2_2 * 7) >> 3);
+          if(temperature < -1500){
+            Int32 dT3(temperature + 1500), dT3_2(dT3 * dT3);
+            sens2 += (dT3_2 * 2);
+          }
+          temperature -= t2;
+          off -= off2;
+          sens -= sens2;
+        }else if(temperature >= 4500){
+          Int32 dT2(temperature - 4500), dT2_2(dT2 * dT2);
+          Int32 sens2(-(dT2_2 >> 3));
+          sens -= sens2;
+        }
+
+        pressure = (Int32)(((((int64_t)d1 * sens) >> 21) - off) >> 15);
+      }
+      static void ms5803_30_convert(
+          const Int32 &d1, const Int32 &d2,
+          Int32 &pressure, Int32 &temperature,
+          const Uint16 (&coef)[6]){
+        Int32 dT;
+        int64_t off, sens;
+        ms5XXX_convert(d1, d2, coef, dT, temperature, off, sens);
+
+        // Figure 16
+        Int32 dT2(temperature - 2000), dT2_2(dT2 * dT2);
+        if(temperature < 2000){
+          Int32 t2(((int64_t)dT * dT * 3) >> 33);
+          Int32 off2((dT2_2 * 3) >> 1);
+          Int32 sens2((dT2_2 * 7) >> 3);
+          if(temperature < -1500){
+            Int32 dT3(temperature + 1500), dT3_2(dT3 * dT3);
+            off2 += (dT3_2 * 7);
+            sens2 += (dT3_2 * 4);
+          }
+          temperature -= t2;
+          off -= off2;
+          sens -= sens2;
+        }else{
+          Int32 t2(((int64_t)dT * dT * 7) >> 37);
+          Int32 off2(dT2_2 >> 4);
+          temperature -= t2;
+          off -= off2;
+        }
+
+        pressure = (Int32)(((((int64_t)d1 * sens) >> 21) - off) >> 13) * 10;
+      }
 
       /**
        * check P page (pressure sensor)
@@ -507,7 +575,9 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
         if(!options.is_time_in_range(current)){return;}
         
         switch(options.page_P_mode){
-          case 5: { // MS5611 with coefficients
+          case 5: // MS5611 with coefficients
+          case 6: // MS5803-01 with coefficients
+          case 7: { // MS5803-30 with coefficients
             Uint16 coef[6];
             char buf[sizeof(Uint16)];
             for(int i(0); i < sizeof(coef) / sizeof(coef[0]); i++){
@@ -524,7 +594,14 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
                   d1(be_char4_2_num<Uint32>(buf[0][0])),
                   d2(be_char4_2_num<Uint32>(buf[1][0]));
               Int32 pressure, temperature;
-              ms5611_convert(d1, d2, pressure, temperature, coef);
+
+              void (*converter[])(
+                  const Int32 &d1, const Int32 &d2,
+                  Int32 &pressure, Int32 &temperature,
+                  const Uint16 (&coef)[6]) = {
+                ms5611_convert, ms5803_01_convert, ms5803_30_convert,
+              };
+              (*(converter[options.page_P_mode - 5]))(d1, d2, pressure, temperature, coef);
               (this->*formatter)(current, j, pressure, temperature);
             }
             break;
@@ -757,7 +834,7 @@ class StreamProcessor : public SylphideProcessor<float_sylph_t> {
 case mark: if(cnd){ \
   super_t::process_packet( \
       buf, buf_size, \
-      observer_ ## type , previous_seek_next_ ## type, handler_ ## type); \
+      observer_ ## type, previous_seek_next_ ## type, handler_ ## type); \
 } \
 break;
 #define assign_case(type, mark) \

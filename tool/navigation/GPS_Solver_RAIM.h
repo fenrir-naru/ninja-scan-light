@@ -56,7 +56,7 @@ struct GPS_PVT_RAIM_LSR : public PVT_BaseT {
     typename GPS_Solver_Base<FloatT>::prn_t excluded;
     typename GPS_Solver_Base<FloatT>::pos_t user_position;
     typename GPS_Solver_Base<FloatT>::float_t receiver_error;
-    typename GPS_Solver_Base<FloatT>::user_pvt_t::dop_t dop;
+    typename GPS_Solver_Base<FloatT>::user_pvt_t::precision_t dop, sigma_pos;
   } FDE_min, FDE_2nd; ///< Fault exclusion
 };
 
@@ -231,6 +231,7 @@ protected:
       target->user_position = pvt_FDE.user_position;
       target->receiver_error = pvt_FDE.receiver_error;
       target->dop = pvt_FDE.dop;
+      target->sigma_pos = pvt_FDE.sigma_pos;
     }
   }
 };

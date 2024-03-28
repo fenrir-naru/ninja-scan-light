@@ -875,10 +875,10 @@ __RINEX_CLK_TEXT__
       expect(pvt.vdop).to be_within(1E-2).of(1.87)
       expect(pvt.tdop).to be_within(1E-2).of(1.08)
       expect(pvt.velocity.to_a).to eq([:e, :n, :u].collect{|k| pvt.velocity.send(k)})
-      expect(pvt.velocity.north).to be_within(1E-2).of(-0.86) # north
-      expect(pvt.velocity.east) .to be_within(1E-2).of(-1.10) # east
-      expect(pvt.velocity.down) .to be_within(1E-2).of(-0.22) # down
-      expect(pvt.receiver_error_rate).to be_within(1E-2).of(-1061.86)
+      expect(pvt.velocity.north).to be_within(1E-2).of(-0.68) # north
+      expect(pvt.velocity.east) .to be_within(1E-2).of(-0.90) # east
+      expect(pvt.velocity.down) .to be_within(1E-2).of(0.26) # down
+      expect(pvt.receiver_error_rate).to be_within(1E-2).of(-1062.14)
       expect(pvt.G.rows).to eq(6)
       expect(pvt.W.rows).to eq(6)
       expect(pvt.delta_r.rows).to eq(6)
@@ -942,9 +942,9 @@ __RINEX_CLK_TEXT__
         expect(t_arv).to be_a_kind_of(GPS::Time)
         expect(usr_pos).to be_a_kind_of(Coordinate::XYZ)
         expect(usr_vel).to be_a_kind_of(Coordinate::XYZ)
-        weight, range_c, range_r, rate_rel_neg, *los_neg = rel_prop
-        weight = 1
-        [weight, range_c, range_r, rate_rel_neg] + los_neg
+        weight_range, range_c, range_r, weight_rate, rate_rel_neg, *los_neg = rel_prop
+        weight_range = 1
+        [weight_range, range_c, range_r, weight_rate, rate_rel_neg] + los_neg
       }
       solver.hooks[:update_position_solution] = proc{|mat_G, mat_W, mat_delta_r, temp_pvt|
         expect(temp_pvt).to be_a_kind_of(GPS::PVT)

@@ -261,16 +261,19 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
       out << snapshot.props.size() << ','; // number of satellites
 
       do{ // DOP
-        typename super_t::solver_t::user_pvt_t::dop_t dop;
-        if(!super_t::get_DOP(snapshot.state, snapshot.props, dop)){
-          out << ",,,,,";
+        typename super_t::solver_t::user_pvt_t::precision_t dop, sigma_pos;
+        if(!super_t::get_DOP_sigma(snapshot.state, snapshot.props, dop, sigma_pos)){
+          out << ",,,,,,,,";
           break;
         }
         out << dop.g << ','
             << dop.p << ','
             << dop.h << ','
             << dop.v << ','
-            << dop.t << ',';
+            << dop.t << ','
+            << sigma_pos.h << ','
+            << sigma_pos.v << ','
+            << sigma_pos.t << ',';
       }while(false);
 
       typedef std::vector<int> order_t;
@@ -351,10 +354,10 @@ class INS_GPS_Debug_Tightly : public INS_GPS_Debug<INS_GPS> {
     }
 };
 
-template <class INS_GPS>
-class INS_GPS_Debug_PureInertial : public INS_GPS_Debug<typename INS_GPS::ins_t> {
+template <class INS_GPS, class T_INS = typename INS_GPS::ins_t>
+class INS_GPS_Debug_PureInertial : public INS_GPS_Debug<T_INS> {
   public:
-    typedef INS_GPS_Debug<typename INS_GPS::ins_t> super_t;
+    typedef INS_GPS_Debug<T_INS> super_t;
 #if defined(__GNUC__) && (__GNUC__ < 5)
     typedef typename super_t::float_t float_t;
     typedef typename super_t::vec3_t vec3_t;

@@ -148,7 +148,7 @@ struct GPS_Solver_Base {
    * of measurement_t::mapped_type
    * @param values key-value map
    * @param key key
-   * @param buf buffer into which found value is stored
+   * @param buf buffer for storing found value, and preserving original value if value is not found
    * @return (float_t *) When value is found, pointer of buf will be returned.
    * Otherwise, NULL is returned.
    */
@@ -209,8 +209,13 @@ struct GPS_Solver_Base {
     if((res = find_value(values, measurement_items_t::L1_RANGE_RATE, buf))){
 
     }else if((res = find_value(values, measurement_items_t::L1_DOPPLER, buf))){
-      // Fall back to doppler
-      buf *= -space_node_t::L1_WaveLength();
+      // Fall back to Doppler
+      float_t freq;
+      if(find_value(values, measurement_items_t::L1_FREQUENCY, freq)){
+        buf *= -(space_node_t::light_speed / freq);
+      }else{
+        buf *= -space_node_t::L1_WaveLength();
+      }
     }
     return res;
   }
@@ -221,8 +226,13 @@ struct GPS_Solver_Base {
     if((res = find_value(values, measurement_items_t::L1_RANGE_RATE_SIGMA, buf))){
 
     }else if((res = find_value(values, measurement_items_t::L1_DOPPLER_SIGMA, buf))){
-      // Fall back to doppler
-      buf *= space_node_t::L1_WaveLength();
+      // Fall back to Doppler
+      float_t freq;
+      if(find_value(values, measurement_items_t::L1_FREQUENCY, freq)){
+        buf *= (space_node_t::light_speed / freq);
+      }else{
+        buf *= space_node_t::L1_WaveLength();
+      }
     }
     return res;
   }
@@ -279,7 +289,8 @@ struct GPS_Solver_Base {
     inline float_t range_sigma(const gps_time_t &t_tx) const {
       return impl_range_sigma
           ? impl_range_sigma(impl_error, t_tx)
-          : 3.5; // 7.0 [m] of 95% (2-sigma) URE in Sec. 3.4.1 of April 2020 GPS SPS PS;
+          : (std::sqrt((9.7 * 9.7) + (4.5 * 4.5)) / 1.96); // 5.45 [m]
+          // UERE (User Equivalent Range Error) of modern receiver in Eq.(B-8) of April 2020 GPS SPS PS;
     }
     /**
      * Return expected user range rate accuracy (URRA) in standard deviation (1-sigma)
@@ -289,7 +300,12 @@ struct GPS_Solver_Base {
     inline float_t rate_sigma(const gps_time_t &t_tx) const {
       return impl_rate_sigma
           ? impl_rate_sigma(impl_error, t_tx)
-          : 0.003; // 0.006 [m/s] of 95% (2-sigma) URRE in Sec. 3.4.2 of April 2020 GPS SPS PS
+          : 5E-1; // (Empirical value)
+          // Alternatives (may occur failure);
+          // 1) (std::sqrt(((2.0 * 2.0) + (1.0 * 1.0)) * 2) / 1.96); // 1.61 [m/s]
+          // assume differential range with error consisting of "Receiver noise and resolution"
+          // and "Other user segment errors" in UEE Table B.2-1 of April 2020 GPS SPS PS
+          // 2) 0.006 m/s(95%) SPS SIS URRE in Table 3.4-2 is not considered.
     }
     static const satellite_t &unavailable() {
       struct impl_t {
@@ -388,8 +404,9 @@ struct GPS_Solver_Base {
     float_t range_sigma; ///< Standard deviation of pseudorange; If zero or negative, other values are invalid.
     float_t range_corrected; ///< corrected range just including delay, and excluding receiver/satellite error
     float_t range_residual; ///< residual range
-    float_t rate_relative_neg; /// relative rate
-    float_t los_neg[3]; ///< line of site vector from satellite to user
+    float_t rate_sigma; ///< Standard deviation of range rate;
+    float_t rate_relative_neg; /// relative rate (taking negative value if range is increasing)
+    float_t los_neg[3]; ///< line of sight vector from satellite to user in ECEF coordinate
   };
 
   /**
@@ -433,16 +450,16 @@ struct GPS_Solver_Base {
     float_t receiver_error;
     enu_t user_velocity_enu;
     float_t receiver_error_rate;
-    struct dop_t {
+    struct precision_t {
       float_t g, p, h, v, t;
-      dop_t() {}
-      dop_t(const matrix_t &C_enu)
-          : g(std::sqrt(C_enu.trace())),
-          p(std::sqrt(C_enu.partial(3, 3).trace())),
-          h(std::sqrt(C_enu.partial(2, 2).trace())),
-          v(std::sqrt(C_enu(2, 2))),
-          t(std::sqrt(C_enu(3, 3))) {}
-    } dop;
+      precision_t() {}
+      precision_t(const matrix_t &C_or_P_enu)
+          : g(std::sqrt(C_or_P_enu.trace())),
+          p(std::sqrt(C_or_P_enu.partial(3, 3).trace())),
+          h(std::sqrt(C_or_P_enu.partial(2, 2).trace())),
+          v(std::sqrt(C_or_P_enu(2, 2))),
+          t(std::sqrt(C_or_P_enu(3, 3))) {}
+    } dop, sigma_pos, sigma_vel;
     unsigned int used_satellites;
     typedef BitArray<0x400> satellite_mask_t;
     satellite_mask_t used_satellite_mask; ///< bit pattern(use=1, otherwise=0), PRN 1(LSB) to 32 for GPS
@@ -565,26 +582,47 @@ protected:
       return (G.transpose() * G).inverse();
     }
     /**
-     * Transform coordinate of matrix C
-     * C' = (G * R^t)^t * (G * R^t) = R * G^t * G * R^t = R * C * R^t,
+     * Calculate P matrix, where P = E[x^t x] = (G^t * W * G)^{-1} to be used for estimated accuracy calculation
+     * @return P matrix
+     */
+    matrix_t P() const {
+      return (G.transpose() * W * G).inverse();
+    }
+    /**
+     * Transform coordinate of matrix C/P
+     * C' = ((G * R^t)^t * (G * R^t))^-1 = (R * G^t * G * R^t)^-1
+     *    = (R^t)^-1 * (G^t * G)^-1 * R^-1  = R * C * R^t,
+     * P' = ((G * R^t)^t * W * (G * R^t))^-1 = R * P * R^t,
      * where R is a rotation matrix, for example, ECEF to ENU.
      *
      * @param rotation_matrix 3 by 3 rotation matrix
-     * @return transformed matrix C'
+     * @return transformed matrix C' or P'
      * @see rotate_G
      */
-    static matrix_t rotate_C(const matrix_t &C, const matrix_t &rotation_matrix){
-      unsigned int n(C.rows()); // Normally n=4
+    static matrix_t rotate_CP(const matrix_t &C_or_P, const matrix_t &rotation_matrix){
+      unsigned int n(C_or_P.rows()); // Normally n=4
       matrix_t res(n, n);
       res.partial(3, 3).replace( // upper left
-          rotation_matrix * C.partial(3, 3) * rotation_matrix.transpose());
+          rotation_matrix * C_or_P.partial(3, 3) * rotation_matrix.transpose());
       res.partial(3, n - 3, 0, 3).replace( // upper right
-          rotation_matrix * C.partial(3, n - 3, 0, 3));
+          rotation_matrix * C_or_P.partial(3, n - 3, 0, 3));
       res.partial(n - 3, 3, 3, 0).replace( // lower left
-          C.partial(n - 3, 3, 3, 0) * rotation_matrix.transpose());
+          C_or_P.partial(n - 3, 3, 3, 0) * rotation_matrix.transpose());
       res.partial(n - 3, n - 3, 3, 3).replace( // lower right
-          C.partial(n - 3, n - 3, 3, 3));
+          C_or_P.partial(n - 3, n - 3, 3, 3));
       return res;
+    }
+    typename user_pvt_t::precision_t dop(){
+      return typename user_pvt_t::precision_t(C());
+    }
+    typename user_pvt_t::precision_t dop(const matrix_t &rotation_matrix){
+      return typename user_pvt_t::precision_t(rotate_CP(C(), rotation_matrix));
+    }
+    typename user_pvt_t::precision_t sigma(){
+      return typename user_pvt_t::precision_t(P());
+    }
+    typename user_pvt_t::precision_t sigma(const matrix_t &rotation_matrix){
+      return typename user_pvt_t::precision_t(rotate_CP(P(), rotation_matrix));
     }
     /**
      * Solve x of linear equation (y = G x + v) to minimize sigma{v^t * v}
@@ -594,7 +632,7 @@ protected:
      *
      * 4 by row(y) S matrix (=(G^t * W * G)^{-1} * (G^t * W)) will be used to calculate protection level
      * to investigate relationship between bias on each satellite and solution.
-     * residual v = (I - P) = (I - G S), where P = G S, which is irrelevant to rotation,
+     * residual v = (I - G S) y, which is irrelevant to rotation,
      * because P = G R R^{t} S = G' S'.
      *
      * @param S (output) coefficient matrix to calculate solution, i.e., (G^t * W * G)^{-1} * (G^t * W)
@@ -701,14 +739,13 @@ protected:
           delta_r.circular(offset, 0, size, 1));
     }
     template <class MatrixT2>
-    void copy_G_W_row(const linear_solver_t<MatrixT2> &src,
+    void copy_G_rowwise(const linear_solver_t<MatrixT2> &src,
         const unsigned int &i_src, const unsigned int &i_dst){
       unsigned int c_dst(G.columns()), c_src(src.G.columns()),
           c(c_dst > c_src ? c_src : c_dst); // Normally c=4
       for(unsigned int j(0); j < c; ++j){
         G(i_dst, j) = src.G(i_src, j);
       }
-      W(i_dst, i_dst) = src.W(i_src, i_src);
     }
   };
 
@@ -806,15 +843,15 @@ protected:
     res.receiver_error = receiver_error_init;
 
     geometric_matrices_t geomat(measurement.size());
-    typedef std::vector<std::pair<unsigned int, float_t> > index_obs_t;
-    index_obs_t idx_rate_rel; // [(index of measurement, relative rate), ...]
-    idx_rate_rel.reserve(measurement.size());
+    typedef std::vector<std::pair<unsigned int, relative_property_t> > index_prop_t;
+    index_prop_t idx_prop; // [(index of measurement, relative property), ...]
+    idx_prop.reserve(measurement.size());
 
     // If initialization is not appropriate, more iteration will be performed.
     bool converged(false);
     for(int i_trial(-opt.warmup); i_trial < opt.max_trial; i_trial++){
 
-      idx_rate_rel.clear();
+      idx_prop.clear();
       unsigned int i_row(0), i_measurement(0);
       res.used_satellite_mask.clear();
 
@@ -841,7 +878,7 @@ protected:
         if(coarse_estimation){
           prop.range_sigma = 1;
         }else{
-          idx_rate_rel.push_back(std::make_pair(i_measurement, prop.rate_relative_neg));
+          idx_prop.push_back(std::make_pair(i_measurement, prop));
         }
 
         geomat.delta_r(i_row, 0) = prop.range_residual;
@@ -872,9 +909,11 @@ protected:
       return;
     }
 
+    matrix_t rot(res.user_position.ecef2enu());
     try{
-      res.dop = typename user_pvt_t::dop_t(geomat.rotate_C(
-          geomat.partial(res.used_satellites).C(), res.user_position.ecef2enu()));
+      typename geometric_matrices_t::partial_t geomat_used(geomat.partial(res.used_satellites));
+      res.dop = geomat_used.dop(rot);
+      res.sigma_pos = geomat_used.sigma(rot);
     }catch(const std::runtime_error &e){ // expect to detect matrix operation error
       res.error_code = user_pvt_t::ERROR_DOP;
       return;
@@ -892,7 +931,7 @@ protected:
     geometric_matrices_t geomat2(res.used_satellites);
     int i_range(0), i_rate(0);
 
-    for(typename index_obs_t::const_iterator it(idx_rate_rel.begin()), it_end(idx_rate_rel.end());
+    for(typename index_prop_t::const_iterator it(idx_prop.begin()), it_end(idx_prop.end());
         it != it_end;
         ++it, ++i_range){
 
@@ -901,9 +940,10 @@ protected:
           *(measurement[it->first].k_v_map), // const version of measurement[PRN]
           rate))){continue;}
 
-      // Copy design matrix and set rate
-      geomat2.copy_G_W_row(geomat, i_range, i_rate);
-      geomat2.delta_r(i_rate, 0) = rate + it->second;
+      // Copy design matrix and set rate and weight
+      geomat2.copy_G_rowwise(geomat, i_range, i_rate);
+      geomat2.delta_r(i_rate, 0) = rate + it->second.rate_relative_neg;
+      geomat2.W(i_rate, i_rate) = 1. / std::pow(it->second.rate_sigma, 2);
 
       ++i_rate;
     }
@@ -915,12 +955,14 @@ protected:
 
     try{
       // Least square
-      matrix_t sol(geomat2.partial(i_rate).least_square());
+      typename geometric_matrices_t::partial_t geomat2_used(geomat2.partial(i_rate));
+      matrix_t sol(geomat2_used.least_square());
 
       xyz_t vel_xyz(sol.partial(3, 1, 0, 0));
       res.user_velocity_enu = enu_t::relative_rel(
           vel_xyz, res.user_position.llh);
       res.receiver_error_rate = sol(3, 0);
+      res.sigma_vel = geomat2_used.sigma(rot);
     }catch(const std::runtime_error &e){ // expect to detect matrix operation error
       res.error_code = user_pvt_t::ERROR_VELOCITY_LS;
       return;
@@ -1144,10 +1186,6 @@ public:
 
   solver_interface_t<GPS_Solver_Base<FloatT> > solve() const {
     return solver_interface_t<GPS_Solver_Base<FloatT> >(*this);
-  }
-
-  static typename user_pvt_t::dop_t dop(const matrix_t &C, const pos_t &user_position) {
-    return typename user_pvt_t::dop_t(geometric_matrices_t::rotate_C(C, user_position.ecef2enu()));
   }
 };
 

@@ -73,6 +73,8 @@ struct native_exception : public std::exception {
       values[i] = (*self)[i];
     }
   }
+  %typemap(in) FloatT values[3];
+  %typemap(argout) FloatT values[3];
 #endif
   %typemap(in,numinputs=0) const void *check_block {
 #ifdef SWIGRUBY
@@ -98,6 +100,7 @@ struct native_exception : public std::exception {
 #endif
     }
   }
+  %clear const void *check_block;
 };
 #ifdef SWIGRUBY
 %mixin System_3D "Enumerable";
@@ -170,6 +173,9 @@ struct native_exception : public std::exception {
 %template(XYZ) System_XYZ<type, WGS84>;
 %template(LLH) System_LLH<type, WGS84>;
 %template(ENU) System_ENU<type, WGS84>;
+%typemap(out) FloatT &;
+%typemap(in) (type (&res)[3][3]);
+%typemap(argout) (type (&res)[3][3]);
 %enddef
 
 CONCRETIZE(double);
