@@ -573,10 +573,14 @@ data.glonass.solver_options. expr
             << ',' << "hdop"
             << ',' << "vdop"
             << ',' << "tdop"
+            << ',' << "hsigma"
+            << ',' << "vsigma"
+            << ',' << "tsigma"
             << ',' << "v_north"
             << ',' << "v_east"
             << ',' << "v_down"
             << ',' << "receiver_clock_error_dot_ms"
+            << ',' << "vel_sigma"
             << ',' << "used_satellites"
             << ',' << "GPS_PRN(1-32)"
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
@@ -660,17 +664,21 @@ data.glonass.solver_options. expr
             << ',' << src.dop.p
             << ',' << src.dop.h
             << ',' << src.dop.v
-            << ',' << src.dop.t;
+            << ',' << src.dop.t
+            << ',' << src.sigma_pos.h
+            << ',' << src.sigma_pos.v
+            << ',' << src.sigma_pos.t;
       }else{
-        out << ",,,,,,,,,";
+        out << ",,,,,,,,,,,,";
       }
       if(src.velocity_solved()){
         out << ',' << src.user_velocity_enu.north()
             << ',' << src.user_velocity_enu.east()
             << ',' << -src.user_velocity_enu.up()
-            << ',' << src.receiver_error_rate;
+            << ',' << src.receiver_error_rate
+            << ',' << src.sigma_vel.p;
       }else{
-        out << ",,,,";
+        out << ",,,,,";
       }
       if(src.position_solved()){
         out << ',' << src.used_satellites

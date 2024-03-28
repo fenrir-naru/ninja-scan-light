@@ -54,6 +54,9 @@
 #include "mag3110.h"
 #endif
 #include "ms5611.h"
+#if defined(I2C0_RV3129)
+#include "rv3129.h"
+#endif
 #if defined(I2C1_ADS122)
 #include "ads122.h"
 #elif defined(I2C1_ELVR)
@@ -301,6 +304,9 @@ void main() {
   mag3110_init();
 #endif
   ms5611_init();
+#if defined(I2C0_RV3129)
+  rv3129_init();
+#endif
 #if defined(I2C1_ADS122)
   ads122_init();
 #elif defined(I2C1_ELVR)
@@ -333,6 +339,9 @@ void main() {
     mag3110_polling();
 #endif
     ms5611_polling();
+#if defined(I2C0_RV3129)
+    rv3129_polling();
+#endif
 #if defined(I2C1_ADS122)
     ads122_polling();
 #elif defined(I2C1_ELVR)
