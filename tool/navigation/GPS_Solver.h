@@ -55,10 +55,12 @@ template <class FloatT>
 struct GPS_Solver_GeneralOptions {
   FloatT elevation_mask;
   FloatT residual_mask;
+  bool use_external_sigma;
 
   GPS_Solver_GeneralOptions()
       : elevation_mask(0), // elevation mask default is 0 [deg]
-      residual_mask(30) { // range residual mask is 30 [m]
+      residual_mask(1E3), // range residual mask is 1000 [m]
+      use_external_sigma(false) { // default is to ignore external sigma inputs
 
   }
 };
@@ -158,7 +160,9 @@ class GPS_SinglePositioning : public SolverBaseT {
             return sat(ptr).clock_error_dot(t_tx);
           }
           static float_t range_sigma(const void *ptr, const gps_time_t &t_tx) {
-            return sat(ptr).ephemeris().URA;
+            return std::sqrt(
+                std::pow(sat(ptr).ephemeris().URA, 2)
+                + std::pow(4.5 / 1.96, 2)); // UEE of modern receiver Table.B2-1 of April 2020 GPS SPS PS;
           }
         };
         satellite_t res = {
@@ -428,17 +432,11 @@ class GPS_SinglePositioning : public SolverBaseT {
           res.los_neg[0], res.los_neg[1], res.los_neg[2]);
       res.rate_sigma = sat.rate_sigma(time_arrival);
 
-#if 0
-      // TODO consider case when standard deviation of pseudorange and/or its rate are provided by receiver
-      if(!this->range_sigma(measurement, res.range_sigma)){
-        // If receiver's range variance is not provided
-        res.range_sigma = 1E0; // TODO range error variance [m]
+      if(_options.use_external_sigma){
+        // Use standard deviation of pseudorange and/or its rate if they are provided by receiver
+        this->range_sigma(measurement, res.range_sigma);
+        this->rate_sigma(measurement, res.rate_sigma);
       }
-      if(!this->rate_sigma(measurement, res.rate_sigma)){
-        // If receiver's rate variance is not provided
-        res.rate_sigma = 1E-1;
-      }
-#endif
 
       return res;
     }

@@ -896,6 +896,7 @@ struct GPS_Measurement {
 %extend GPS_SolverOptions_Common {
   MAKE_ACCESSOR2(elevation_mask, cast_general()->elevation_mask, FloatT);
   MAKE_ACCESSOR2(residual_mask, cast_general()->residual_mask, FloatT);
+  MAKE_ACCESSOR2(use_external_sigma, cast_general()->use_external_sigma, bool);
   MAKE_VECTOR2ARRAY(int);
   %ignore cast_general;
 }

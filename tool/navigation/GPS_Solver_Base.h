@@ -289,7 +289,8 @@ struct GPS_Solver_Base {
     inline float_t range_sigma(const gps_time_t &t_tx) const {
       return impl_range_sigma
           ? impl_range_sigma(impl_error, t_tx)
-          : 3.5; // 7.0 [m] of 95% (2-sigma) URE in Sec. 3.4.1 of April 2020 GPS SPS PS;
+          : (std::sqrt((9.7 * 9.7) + (4.5 * 4.5)) / 1.96); // 5.45 [m]
+          // UERE (User Equivalent Range Error) of modern receiver in Eq.(B-8) of April 2020 GPS SPS PS;
     }
     /**
      * Return expected user range rate accuracy (URRA) in standard deviation (1-sigma)
@@ -299,7 +300,12 @@ struct GPS_Solver_Base {
     inline float_t rate_sigma(const gps_time_t &t_tx) const {
       return impl_rate_sigma
           ? impl_rate_sigma(impl_error, t_tx)
-          : 0.003; // 0.006 [m/s] of 95% (2-sigma) URRE in Sec. 3.4.2 of April 2020 GPS SPS PS
+          : 5E-1; // (Empirical value)
+          // Alternatives (may occur failure);
+          // 1) (std::sqrt(((2.0 * 2.0) + (1.0 * 1.0)) * 2) / 1.96); // 1.61 [m/s]
+          // assume differential range with error consisting of "Receiver noise and resolution"
+          // and "Other user segment errors" in UEE Table B.2-1 of April 2020 GPS SPS PS
+          // 2) 0.006 m/s(95%) SPS SIS URRE in Table 3.4-2 is not considered.
     }
     static const satellite_t &unavailable() {
       struct impl_t {
