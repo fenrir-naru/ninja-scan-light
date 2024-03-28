@@ -617,6 +617,21 @@ struct GLONASS_Ephemeris
           (typename GLONASS_SpaceNode<FloatT>::TimeProperties)(*this)),
         deltaT));
   }
+  
+  unsigned char get_F_T_index() const {
+    return GLONASS_Ephemeris<FloatT>::F_T_index();
+  }
+  unsigned char set_F_T_index(const unsigned char &idx) {
+    this->F_T = GLONASS_Ephemeris<FloatT>::raw_t::F_T_value(idx);
+    return get_F_T_index();
+  }
+  unsigned char get_P1_index() const {
+    return GLONASS_Ephemeris<FloatT>::P1_index();
+  }
+  unsigned char set_P1_index(const unsigned char &idx) {
+    this->P1 = GLONASS_Ephemeris<FloatT>::raw_t::P1_value(idx);
+    return get_P1_index();
+  }
 };
 %}
 %extend GLONASS_Ephemeris {
@@ -649,11 +664,26 @@ struct GLONASS_Ephemeris
   MAKE_ACCESSOR2(year, date.year, int);
   MAKE_ACCESSOR2(day_of_year, date.day_of_year, int);
   
+  %rename(%str(F_T_index=)) set_F_T_index;
+  %rename(%str(F_T_index)) get_F_T_index;
+  %rename(%str(P1_index=)) set_P1_index;
+  %rename(%str(P1_index)) get_P1_index;
+  
   void set_date(const unsigned int &N_4, const unsigned int &NA) {
     self->date = GLONASS_SpaceNode<FloatT>::TimeProperties::raw_t::raw2date(N_4, NA);
   }
   void set_date(const std::tm &t) {
     self->date = GLONASS_SpaceNode<FloatT>::TimeProperties::date_t::from_c_tm(t);
+  }
+  unsigned char N_4() const {
+    unsigned char res;
+    GLONASS_Ephemeris<FloatT>::TimeProperties::raw_t::date2raw(self->date, &res, NULL);
+    return res;
+  }
+  unsigned short NA() const {
+    unsigned short res;
+    GLONASS_Ephemeris<FloatT>::TimeProperties::raw_t::date2raw(self->date, NULL, &res);
+    return res;
   }
   
   FloatT frequency_L1() const {
