@@ -118,11 +118,11 @@ static void stop_timer(){
 static void get_watch(struct tm *t){
   u8 buf[7];
   read_data(ADDR_Seconds, buf, sizeof(buf));
-  i2c0_read_write(I2C_READ(I2C_ADDRESS_RW), buf, sizeof(buf));
   t->tm_sec = BCD2NUM(buf[0]);        // Seconds [0-60]
   t->tm_min = BCD2NUM(buf[1]);        // Minutes [0-59]
   t->tm_hour = BCD2NUM(buf[2]);       // Hours   [0-23]
   t->tm_mday = BCD2NUM(buf[3]);       // Day     [1-31]
+  t->tm_wday = BCD2NUM(buf[4]);       // Weekday [0:Sunday-6]
   t->tm_mon = BCD2NUM(buf[5]) - 1;    // Month [1-12] -> [0-11]
   t->tm_year = BCD2NUM(buf[6]) + 100; // Year since 2000 -> 1900
 }
@@ -158,9 +158,9 @@ static void get_watch2(u32 *tow_ms){
   struct tm t;
   get_watch(&t);
   *tow_ms = t.tm_wday;    // weekday [0:Sunday-6]
-  (*tow_ms) *= 7;
-  (*tow_ms) += t.tm_hour; // Hours   [0-23]
   (*tow_ms) *= 24;
+  (*tow_ms) += t.tm_hour; // Hours   [0-23]
+  (*tow_ms) *= 60;
   (*tow_ms) += t.tm_min;  // Minutes [0-59]
   (*tow_ms) *= 60;
   (*tow_ms) += t.tm_sec;  // Seconds [0-60]
