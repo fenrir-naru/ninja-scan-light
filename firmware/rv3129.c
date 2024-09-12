@@ -37,6 +37,9 @@
 
 #include "f38x_i2c.h"
 
+#include "data_hub.h"
+#include "ff.h"
+
 #define I2C_ADDRESS_RW (0x56 << 1)
 
 typedef enum {
@@ -169,7 +172,7 @@ static void get_watch2(u32 *tow_ms){
 
 static void set_watch2(u32 tow_ms){
   struct tm t = {0};
-  tow_ms = (tow_ms / 1000) + 1;
+  tow_ms = ((tow_ms + 999) / 1000) + 1; // round up
   t.tm_sec = tow_ms % 60;         // Seconds [0-60]
   t.tm_min = (tow_ms /= 60) % 60; // Minutes [0-59]
   t.tm_hour = (tow_ms /= 60) % 24;// Hours   [0-23]
@@ -193,23 +196,46 @@ static void set_timer(u16 v){
   i2c0_read_write(I2C_WRITE(I2C_ADDRESS_RW), buf, sizeof(buf));
 }
 
-__bit watch_started = FALSE;
+// Load milliseconds of week described in RTC.CFG.
+// After loaded, file name is changed to RTC.OLD to preventfrom multiple load.
+// Appropriate time can be obtained online such as https://gnsscalc.com/
+static const char config_fname[] = "RTC.CFG";
+static void set_rtc_config(FIL *f){
+  long tow_ms_new = data_hub_read_long(f);
+  if(tow_ms_new < 0){return;}
+  stop_watch();
+  set_watch2(tow_ms_new);
+  start_watch();
+#if _FS_MINIMIZE < 1
+  f_close(f);
+  f_rename(config_fname, "RTC.OLD");
+#else // set illegal size for overwrite prevention
+#define push_str(f, str) { \
+  UINT buf_filled; \
+  f_write(f, str, (sizeof(str) - 1), &buf_filled); \
+}
+  push_str(f, "-1");
+#undef push_str
+#endif
+}
 
 void rv3129_init(){
   u8 buf;
+  data_hub_load_config(config_fname, set_rtc_config);
   read_data(ADDR_Control_1, &buf, 1);
   if(buf & 0x01){ // watch started
-    watch_started = TRUE;
     get_watch2(&(gps_time.itow_ms));
     gps_time_modified = TRUE;
     IE0 = 1; // invoke -INT0
   }
 }
 
+static __xdata u8 watch_updated = 0;
+
 void rv3129_polling(){
-  if(watch_started){return;}
   if(!gps_utc_valid){return;}
-  set_watch(&gps_utc);
+  if((watch_updated++ & 0x0F) != 0){return;}
+  stop_watch();
+  set_watch2(gps_time.itow_ms);
   start_watch();
-  watch_started = TRUE;
 }
