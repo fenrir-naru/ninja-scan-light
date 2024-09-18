@@ -34,6 +34,7 @@
 
 #include "main.h"
 #include "type.h"
+#include <time.h>
 
 void wait_8n6clk(unsigned char i);
 void _wait_us(unsigned int count);
@@ -82,6 +83,7 @@ u16 swap_u16(u16 w);
 
 u16 crc16(u8 *buf, u8 size, u16 crc);
 long str2num(char *str, char **endptr);
+void update_wday(struct tm *t);
 
 #endif /* __UTIL_H__ */
 

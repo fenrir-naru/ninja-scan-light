@@ -199,3 +199,14 @@ long str2num(char *s, char **endptr){
   if(endptr){*endptr = s;}
   return res;
 }
+
+void update_wday(struct tm *t){
+  // Recalculate weekday
+  // @see https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week#Sakamoto's_methods
+  // modified base date from 1753/1/1(1=Monday) -> 1980/1/1(2=Tuesday)
+  // valid from 1980/1/1 to 2099/12/31
+  u8 y = t->tm_year - 76; // y > 1980
+  static const u8 tbl[] = {5, 1, 0, 3, 5, 1, 3, 6, 2, 4, 0, 2};
+  if(t->tm_mon < 2){y -= 1;}
+  t->tm_wday = ((y + y/4 + tbl[t->tm_mon] + (u8)t->tm_mday) % 7);
+}
