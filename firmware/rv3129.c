@@ -34,11 +34,14 @@
 #include "rv3129.h"
 #include "main.h"
 #include "gps.h"
+#include "util.h"
 
 #include "f38x_i2c.h"
 
 #include "data_hub.h"
 #include "ff.h"
+
+#include <stdio.h>
 
 #define I2C_ADDRESS_RW (0x56 << 1)
 
@@ -133,15 +136,7 @@ static void get_watch(struct tm *t){
 static void set_watch(struct tm *t){
   u8 mon = t->tm_mon + 1; // Month [0-11] -> [1-12]
   u8 year = t->tm_year - 100; // Year since 1900 -> 2000
-  { // Recalculate weekday
-    // @see https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week#Sakamoto's_methods
-    // modified base date from 1753/1/1(1=Monday) -> 1980/1/1(2=Tuesday)
-    // valid from 1980/1/1 to 2099/12/31
-    u8 y = t->tm_year - 76; // y > 1980
-    static const u8 tbl[] = {5, 1, 0, 3, 5, 1, 3, 6, 2, 4, 0, 2};
-    if(t->tm_mon < 2){y -= 1;}
-    t->tm_wday = ((y + y/4 + tbl[t->tm_mon] + (u8)t->tm_mday) % 7);
-  }
+  update_wday(t); // Recalculate weekday
   {
     u8 buf[] = {
       ADDR_Seconds,
@@ -157,29 +152,37 @@ static void set_watch(struct tm *t){
   }
 }
 
-static void get_watch2(u32 *tow_ms){
+static void get_watch2(u32 *tow_ms, struct tm *t_buf){
   struct tm t;
-  get_watch(&t);
-  *tow_ms = t.tm_wday;    // weekday [0:Sunday-6]
+  if(!t_buf){t_buf = &t;}
+  get_watch(t_buf);
+  *tow_ms = t_buf->tm_wday;    // weekday [0:Sunday-6]
   (*tow_ms) *= 24;
-  (*tow_ms) += t.tm_hour; // Hours   [0-23]
+  (*tow_ms) += t_buf->tm_hour; // Hours   [0-23]
   (*tow_ms) *= 60;
-  (*tow_ms) += t.tm_min;  // Minutes [0-59]
+  (*tow_ms) += t_buf->tm_min;  // Minutes [0-59]
   (*tow_ms) *= 60;
-  (*tow_ms) += t.tm_sec;  // Seconds [0-60]
+  (*tow_ms) += t_buf->tm_sec;  // Seconds [0-60]
   (*tow_ms) *= 1000;
 }
 
-static void set_watch2(u32 tow_ms){
+static void set_watch2(u32 tow_ms, struct tm *t_ref){
   struct tm t = {0};
   tow_ms = ((tow_ms + 999) / 1000) + 1; // round up
   t.tm_sec = tow_ms % 60;         // Seconds [0-60]
   t.tm_min = (tow_ms /= 60) % 60; // Minutes [0-59]
   t.tm_hour = (tow_ms /= 60) % 24;// Hours   [0-23]
   t.tm_wday = tow_ms / 24;        // weekday [0:Sunday-6]
-  t.tm_mday = 9 + t.tm_wday;      // Day     [1-31]
-  t.tm_mon = 0; // 2000/1/9 = Sunday
-  t.tm_year = 100;
+  if(t_ref && (t.tm_wday == t_ref->tm_wday) && (t_ref->tm_year >= 100)){
+    // Note: (RV3129 year) in [2000, 2079]
+    t.tm_mday = t_ref->tm_mday;
+    t.tm_mon = t_ref->tm_mon;
+    t.tm_year = t_ref->tm_year;
+  }else{
+    t.tm_mday = 9 + t.tm_wday;    // Day     [1-31]
+    t.tm_mon = 0; // 2000/1/9 = Sunday
+    t.tm_year = 100;
+  }
   set_watch(&t);
 }
 
@@ -204,7 +207,7 @@ static void set_rtc_config(FIL *f){
   long tow_ms_new = data_hub_read_long(f);
   if(tow_ms_new < 0){return;}
   stop_watch();
-  set_watch2(tow_ms_new);
+  set_watch2(tow_ms_new, NULL);
   start_watch();
 #if _FS_MINIMIZE < 1
   f_close(f);
@@ -224,7 +227,7 @@ void rv3129_init(){
   data_hub_load_config(config_fname, set_rtc_config);
   read_data(ADDR_Control_1, &buf, 1);
   if(buf & 0x01){ // watch started
-    get_watch2(&(gps_time.itow_ms));
+    get_watch2(&(gps_time.itow_ms), &gps_utc);
     gps_time_modified = TRUE;
     IE0 = 1; // invoke -INT0
   }
@@ -236,6 +239,6 @@ void rv3129_polling(){
   if(!gps_utc_valid){return;}
   if((watch_updated++ & 0x0F) != 0){return;}
   stop_watch();
-  set_watch2(gps_time.itow_ms);
+  set_watch2(gps_time.itow_ms, &gps_utc);
   start_watch();
 }
