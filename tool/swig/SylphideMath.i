@@ -1005,6 +1005,7 @@ struct MatrixUtil {
         (RTEST(idx_selector) ? 1 : 0), &idx_selector,
         (rb_block_call_func_t)rb_equal, value);
   }
+  %typemap(check) VALUE idx_selector;
   %alias index "find_index";
   
   SWIG_Object to_a() const {
@@ -1020,6 +1021,20 @@ struct MatrixUtil {
     return res;
   }
 #endif
+  %typemap(in)
+      Matrix<T, Array2D_Dense<T> > &output_L,
+      Matrix<T, Array2D_Dense<T> > &output_U,
+      Matrix<T, Array2D_Dense<T> > &output_P,
+      Matrix<T, Array2D_Dense<T> > &output_D,
+      Matrix<T, Array2D_Dense<T> > &output_Q,
+      Matrix<T, Array2D_Dense<T> > &output_R;
+  %typemap(argout)
+      Matrix<T, Array2D_Dense<T> > &output_L,
+      Matrix<T, Array2D_Dense<T> > &output_U,
+      Matrix<T, Array2D_Dense<T> > &output_P,
+      Matrix<T, Array2D_Dense<T> > &output_D,
+      Matrix<T, Array2D_Dense<T> > &output_Q,
+      Matrix<T, Array2D_Dense<T> > &output_R;
 };
 
 #if defined(SWIGRUBY)
@@ -1171,6 +1186,15 @@ MAKE_TO_S(Matrix_Frozen)
   %rename("map!") map_bang;
   %alias map_bang "collect!,map_with_index!,collect_with_index!";
 #endif
+
+  %typemap(in)
+      void (*each_func)(const T &src, T *dst, const unsigned int &i, const unsigned int &j);
+  %typemap(typecheck) const typename MatrixUtil::each_which_t each_which;
+  %typemap(in) const typename MatrixUtil::each_which_t each_which;
+  %typemap(typecheck) const void *replacer;
+  %typemap(in) const void *replacer;
+  %typemap(in) self_t *self_p;
+  %typemap(argout) self_t *self_p;
 };
 
 %define INSTANTIATE_MATRIX_TRANSPOSE(type, storage, view_from, view_to)
@@ -1251,6 +1275,12 @@ MAKE_TO_S(Matrix_Frozen)
     }
     output_D = D;
   }
+  %typemap(in)
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D,
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V;
+  %typemap(argout)
+      Matrix<ctype, Array2D_Dense<ctype > > &output_D,
+      Matrix<ctype, Array2D_Dense<ctype > > &output_V;
 };
 %enddef
 %define INSTANTIATE_MATRIX_EIGEN(type, ctype)
@@ -1376,6 +1406,8 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
     mat_new.partial(r_min, c_min).replace($self->partial(r_min, c_min), false);
     return (*($self) = mat_new);
   }
+  //%typemap(in) unsigned int *r_p, unsigned int *c_p; // NG; remove custom typemap before Matrix::resize! generation
+  %clear unsigned int *r_p, unsigned int *c_p; // OK, work around version
 };
 
 %template(Matrix ## suffix) Matrix<type, Array2D_Dense<type > >;
