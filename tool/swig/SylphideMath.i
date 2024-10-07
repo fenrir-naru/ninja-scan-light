@@ -960,6 +960,7 @@ struct MatrixUtil {
           std::string("Unknown enumerate direction: ").append(inspect_str($1)).c_str());
     }
   }
+  %typemap(out) const Matrix_Frozen<T, Array2D_Type, ViewType> & "$result = self;"
   %catches(native_exception) each;
   const Matrix_Frozen<T, Array2D_Type, ViewType> &each(
       void (*each_func)(
@@ -970,6 +971,7 @@ struct MatrixUtil {
     return *$self;
   }
   %alias each "each_with_index";
+  %typemap(out) const Matrix_Frozen<T, Array2D_Type, ViewType> &;
   
   %catches(native_exception, std::invalid_argument) map;
   Matrix<T, Array2D_Dense<T> > map(
@@ -1396,6 +1398,7 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
 #endif
     else{SWIG_exception(SWIG_TypeError, "$*1_ltype is expected");}
   }
+  %typemap(out) Matrix<type, Array2D_Dense<type > > & "$result = self;"
   Matrix<type, Array2D_Dense<type > > &resize(
       const unsigned int *r_p, const unsigned int *c_p){
     unsigned int r(r_p ? *r_p : $self->rows()), c(c_p ? *c_p : $self->columns());
@@ -1406,6 +1409,8 @@ INSTANTIATE_MATRIX_PARTIAL(type, Array2D_Dense<type >, MatView_pt, MatView_pt);
     mat_new.partial(r_min, c_min).replace($self->partial(r_min, c_min), false);
     return (*($self) = mat_new);
   }
+  %clear Matrix<type, Array2D_Dense<type > > &;
+
   //%typemap(in) unsigned int *r_p, unsigned int *c_p; // NG; remove custom typemap before Matrix::resize! generation
   %clear unsigned int *r_p, unsigned int *c_p; // OK, work around version
 };
