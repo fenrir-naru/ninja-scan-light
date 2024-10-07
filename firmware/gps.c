@@ -544,6 +544,7 @@ static void make_packet(packet_t *packet){
               gps_utc.tm_hour = buf.utc.hour;         // Hours   [0-23]
               gps_utc.tm_min  = buf.utc.min;          // Minutes [0-59]
               gps_utc.tm_sec  = buf.utc.sec;          // Seconds [0-60]
+              update_wday(&gps_utc);
               gps_utc_valid = TRUE;
             }else if((ubx_state.packet_type == AID_EPH) && (buf.svid <= UBX_GPS_MAX_ID)){
               u32 mask = 1;

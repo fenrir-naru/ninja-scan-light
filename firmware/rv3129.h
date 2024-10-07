@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013, M.Naruoka (fenrir)
+ * Copyright (c) 2024, M.Naruoka (fenrir)
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without modification, 
@@ -29,61 +29,13 @@
  * 
  */
 
-#ifndef __UTIL_H__
-#define __UTIL_H__
+#ifndef __RV3129_H__
+#define __RV3129_H__
 
-#include "main.h"
-#include "type.h"
 #include <time.h>
+#include "type.h"
 
-void wait_8n6clk(unsigned char i);
-void _wait_us(unsigned int count);
-void wait_ms(unsigned int count);
+void rv3129_init();
+void rv3129_polling();
 
-#define wait_us(n) { \
-  ((n) <= 100) ? wait_8n6clk((n) * 5) : _wait_us((n) - 1); \
-}
-
-#ifdef ENDIAN_SWAP_BY_FUNC
-u32 swap_u32(u32 dw);
-u16 swap_u16(u16 w);
-#else
-#define swap_u32(dw) \
-( (u32)(((u32)(dw) & 0x000000FF) << 24) \
-  | (((u32)(dw) & 0x0000FF00) << 8) \
-  | (((u32)(dw) & 0x00FF0000) >> 8) \
-  | (((u32)(dw) & 0xFF000000) >> 24) \
-)
-#define swap_u16(w) \
-( (u16)(((u16)(w) & 0x00FF) << 8) \
-  | (((u16)(w) & 0xFF00) >> 8) \
-)
-#endif
-
-
-#if (defined(__SDCC) || defined(SDCC))
-#define le_u32(dw) (dw)
-#define le_u16(w) (w)
-#define be_u32(dw) swap_u32(dw)
-#define be_u16(w) swap_u16(w)
-#define _nop_() { \
-  __asm \
-    nop \
-  __endasm; \
-}
-#else
-#define le_u32(dw)
-#define le_u16(w)
-#define be_u32(dw)
-#define be_u16(w)
-#endif
-
-#define min(a,b) (((a)<(b))?(a):(b))
-#define max(a,b) (((a)>(b))?(a):(b))
-
-u16 crc16(u8 *buf, u8 size, u16 crc);
-long str2num(char *str, char **endptr);
-void update_wday(struct tm *t);
-
-#endif /* __UTIL_H__ */
-
+#endif /* __RV3129_H__ */

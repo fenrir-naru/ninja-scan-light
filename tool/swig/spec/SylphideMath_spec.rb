@@ -286,7 +286,7 @@ shared_examples 'Matrix' do
       ].each{|arg|
         mat_orig = mat[0].copy
         mat_replaced = arg.kind_of?(Proc) ? mat_orig.send(:replace!, &arg) : mat_orig.send(:replace!, arg)
-        expect(mat_replaced).to equal(mat_orig)
+        expect(mat_replaced).to be(mat_orig)
         expect(mat_replaced).not_to equal(mat[1])
         expect(mat_replaced.to_a).to eq(mat[1].to_a)
       }
@@ -306,7 +306,7 @@ shared_examples 'Matrix' do
             idxs[a], idxs[b] = [b, a]
             mat_builtin = Matrix::columns(mat_builtin.column_vectors.values_at(*idxs))
           end
-          expect(mat_mod).to equal(mat[0])
+          expect(mat_mod).to be(mat[0])
           expect(mat[0].to_a).to eq(mat_builtin.to_a)
         }
       }
@@ -391,11 +391,12 @@ shared_examples 'Matrix' do
           candidates = (func.to_s =~ /with_index$/) \
               ? indices.collect{|i, j| [compare_with[i][j], i, j]} \
               : indices.collect{|i, j| [compare_with[i][j]]}
-          mat.send(*[func, k].compact){|*v|
+          mat2 = mat.send(*[func, k].compact){|*v|
             i = candidates.find_index(v)
             expect(i).not_to be(nil)
             candidates.delete_at(i)
           }
+          expect(mat2).to be(mat)
           expect(candidates.empty?).to be(true)
         }
       }
@@ -449,7 +450,7 @@ shared_examples 'Matrix' do
             v[0] * 2
           }
           expect(candidates.empty?).to be(true)
-          expect(mat2.to_a).to eq(mat.to_a)
+          expect(mat2).to be(mat)
           expect(mat2.to_a).to eq(compare_with.collect.with_index{|values, i|
                 values.collect.with_index{|v, j|
                   indices.include?([i, j]) ? (v * 2) : v
@@ -541,6 +542,7 @@ shared_examples 'Matrix' do
       }
       mat_orig = mat[0].to_a
       r, c = [:rows, :columns].collect{|f| mat[0].send(f)}
+      expect(mat[0].resize!(r, c)).to be(mat[0])
       expect(mat[0].resize!(r, c).to_a).to eq(mat_orig)
       expect(mat[0].resize!(r, nil).to_a).to eq(mat_orig)
       expect(mat[0].resize!(nil, c).to_a).to eq(mat_orig)

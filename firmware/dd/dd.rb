@@ -117,7 +117,7 @@ open(opt[:dst_fname], "a+" + (/mswin|mingw/ =~ RUBY_PLATFORM ? 'b' : '')){|dst|
       dst.write(read_block.call(i, [each_sectors, es - i].min))
     rescue
       sp.close
-      sleep(1000)
+      sleep(3)
       sp = open_proc.call
       $stderr.print 'r'
       retry
