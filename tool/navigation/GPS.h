@@ -160,9 +160,9 @@ class GPS_Signal {
     class CA_Code {
       public:
         typedef FloatT float_t;
-        static const float_t FREQENCY;
+        static const float_t FREQUENCY;
         static const float_t length_1chip() {
-          static const float_t res(1. / FREQENCY);
+          static const float_t res(1. / FREQUENCY);
           return res;
         }
       protected:
@@ -181,7 +181,7 @@ class GPS_Signal {
 };
 
 template <class FloatT>
-const typename GPS_Signal<FloatT>::float_t GPS_Signal<FloatT>::CA_Code::FREQENCY = 1.023E6;
+const typename GPS_Signal<FloatT>::float_t GPS_Signal<FloatT>::CA_Code::FREQUENCY = 1.023E6;
 
 template <class FloatT = double>
 struct GPS_Time {
