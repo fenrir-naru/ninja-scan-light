@@ -95,6 +95,11 @@ class GPS_Signal {
           PRN::content <<= 1;
           PRN::content[0] = tmp;
         }
+        void previous(){
+          bool tmp(PRN::content[3] ^ PRN::content[0]);
+          PRN::content >>= 1;
+          PRN::content[9] = tmp;
+        }
     };
     
     class G2 : public PRN {
@@ -113,6 +118,16 @@ class GPS_Signal {
                      ^ PRN::content[9]);
           PRN::content <<= 1;
           PRN::content[0] = tmp;
+        }
+        void previous(){
+          bool tmp(PRN::content[2]
+                     ^ PRN::content[3]
+                     ^ PRN::content[6]
+                     ^ PRN::content[8]
+                     ^ PRN::content[9]
+                     ^ PRN::content[0]);
+          PRN::content >>= 1;
+          PRN::content[9] = tmp;
         }
         static G2 get_G2(const int &prn){
           switch(prn){
@@ -176,6 +191,10 @@ class GPS_Signal {
         void next(){
           g1.next();
           g2.next();
+        }
+        void previous(){
+          g1.previous();
+          g2.previous();
         }
     };
 };
