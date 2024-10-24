@@ -134,7 +134,9 @@ class GLONASS_SinglePositioning : public SolverBaseT {
             return sat(ptr).clock_error_dot(t_tx);
           }
           static float_t range_sigma(const void *ptr, const gps_time_t &t_tx) {
-            return sat(ptr).ephemeris().F_T;
+            return std::sqrt(
+                std::pow(sat(ptr).ephemeris().F_T, 2)
+                + std::pow(4.5 / 1.96, 2)); // TODO change? (currently same as GPS)
           }
         };
         satellite_t res = {
@@ -229,7 +231,7 @@ class GLONASS_SinglePositioning : public SolverBaseT {
      * @param prn satellite number
      * @param measurement measurement (per satellite) containing pseudo range
      * @param receiver_error (temporal solution of) receiver clock error in meter
-     * @param time_arrival time when signal arrive at receiver
+     * @param time_arrival time when signal arrives at receiver
      * @param usr_pos (temporal solution of) user position
      * @param usr_vel (temporal solution of) user velocity
      * @return (relative_property_t) relative information
@@ -325,11 +327,17 @@ class GLONASS_SinglePositioning : public SolverBaseT {
       res.range_corrected = range;
 
       xyz_t rel_vel(sat.velocity(t_tx, dt_transit) - usr_vel); // Calculate velocity
-
       res.rate_relative_neg = res.los_neg[0] * rel_vel.x()
           + res.los_neg[1] * rel_vel.y()
           + res.los_neg[2] * rel_vel.z()
           + sat.clock_error_dot(t_tx) * c;
+      res.rate_sigma = sat.rate_sigma(time_arrival);
+
+      if(_options.use_external_sigma){
+        // Use standard deviation of pseudorange and/or its rate if they are provided by receiver
+        this->range_sigma(measurement, res.range_sigma);
+        this->rate_sigma(measurement, res.rate_sigma);
+      }
 
       return res;
     }
