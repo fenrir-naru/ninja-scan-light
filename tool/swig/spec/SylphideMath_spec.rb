@@ -602,6 +602,37 @@ shared_examples 'Matrix' do
       }
     end
   end
+  describe 'parallelization with Ractor' do
+    it "supports instantiation in sub Ractor" do
+      expect{
+        rac = Ractor::new{
+          mat_type, r, c = receive
+          # @see https://docs.ruby-lang.org/en/master/ractor_md.html#label-Return+value+of+a+block+for+Ractor.new
+          # When the block return value is available, ...,
+          # so any values can be sent with this communication path 
+          # without any modification.
+          mat_type::new(r, c)
+        }
+        rac.send([mat_type, params[:rc]].flatten.freeze)
+        mat = rac.take
+        [:row_size, :column_size].zip(params[:rc]).each{|k, v|
+          expect(mat.send(k)).to eq(v)
+        }
+      }.not_to raise_error
+    end
+    it "supports messaging by using to_shareable between Ractors" do
+      expect{
+        rac = Ractor::new{
+          mat = receive
+        }
+        rac.send(mat_type::new(*params[:rc]).to_shareable)
+        mat = rac.take
+        [:row_size, :column_size].zip(params[:rc]).each{|k, v|
+          expect(mat.send(k)).to eq(v)
+        }
+      }.not_to raise_error
+    end
+  end if defined?(Ractor)
 end
 
 =begin
