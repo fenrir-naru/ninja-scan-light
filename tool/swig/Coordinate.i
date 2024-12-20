@@ -22,6 +22,12 @@
 
 %feature("autodoc", "1");
 
+%init %{
+#ifdef HAVE_RB_EXT_RACTOR_SAFE
+  rb_ext_ractor_safe(true);
+#endif
+%}
+
 %define MAKE_SETTER(name, type)
 %rename(%str(name ## =)) set_ ## name;
 type set_ ## name (const type &v) {
