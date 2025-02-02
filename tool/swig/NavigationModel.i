@@ -29,6 +29,12 @@
 
 %feature("autodoc", "1");
 
+%init %{
+#ifdef HAVE_RB_EXT_RACTOR_SAFE
+  rb_ext_ractor_safe(true);
+#endif
+%}
+
 %define CONCRETIZE(type)
 %template(MagneticField) MagneticFieldGeneric<type>;
 %template(IGRF11) MagneticFieldGeneric2<type, IGRF11Generic>;

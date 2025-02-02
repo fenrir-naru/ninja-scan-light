@@ -74,6 +74,8 @@ struct BitCounter {
 
     /**
      * Count rightmost zeros before the first one (Number of trailing zeros)
+     * Be careful, if input equals to 0, then total number of corresponding type bits
+     * will be returned like (unsigned int)0 => 32.
      * @param bits results
      */
     static T ntz(const T &v) {
