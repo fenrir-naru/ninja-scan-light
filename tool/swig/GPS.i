@@ -47,6 +47,12 @@ inline std::string to_string(const T &value){
 %include exception.i
 %include std_except.i
 
+%init %{
+#ifdef HAVE_RB_EXT_RACTOR_SAFE
+  rb_ext_ractor_safe(true);
+#endif
+%}
+
 #if !defined(SWIGIMPORTED)
 %exceptionclass native_exception;
 %typemap(throws,noblock=1) native_exception {
