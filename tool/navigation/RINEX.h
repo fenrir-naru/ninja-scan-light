@@ -386,6 +386,18 @@ struct RINEX_NAV {
       // At least 4 hour validity, then, hours => seconds;
       eph.fit_interval = ((fit_interval_hr < 4) ? 4 : fit_interval_hr) * 60 * 60;
     }
+    static message_t from_qzss(const ephemeris_t &eph_){
+      message_t res(eph_);
+      res.eph.svid -= 192;
+      res.fit_interval_hr = (res.fit_interval_hr) > 2 ? 1 : 0;
+      return res;
+    }
+    ephemeris_t eph_qzss() const {
+      ephemeris_t res(eph);
+      res.svid += 192;
+      res.fit_interval = ((fit_interval_hr > 0) ? 4 : 2) * 60 * 60;
+      return res;
+    }
   };
   struct message_sbas_t {
     typedef typename SBAS_SpaceNode<FloatT>
@@ -590,6 +602,13 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     }
 
     template <std::size_t N>
+    void seek_next_v3_qzss(char (&buf)[N]) {
+      seek_next_v3_gps(buf);
+      if(!super_t::_has_next){return;}
+      sys_of_msg = super_t::version_type_t::SYS_QZSS;
+    }
+
+    template <std::size_t N>
     void seek_next_v3_not_implemented(char (&buf)[N], const int &lines) {
       for(int i(1); i < lines; i++){
         if((!super_t::src.good())
@@ -609,7 +628,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
           case 'G': seek_next_v3_gps(buf); return; // GPS
           case 'E': seek_next_v3_not_implemented(buf, 8); return; // Galileo
           case 'R': seek_next_v3_not_implemented(buf, 4); return; // Glonass
-          case 'J': seek_next_v3_not_implemented(buf, 8); return; // QZSS
+          case 'J': seek_next_v3_qzss(buf); return; // QZSS
           case 'C': seek_next_v3_not_implemented(buf, 8); return; // Beido
           case 'S': seek_next_v3_sbas(buf); return; // SBAS
           case 'T': seek_next_v3_not_implemented(buf, 8); return; // IRNSS
@@ -719,6 +738,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     struct space_node_list_t {
       space_node_t *gps;
       SBAS_SpaceNode<FloatT> *sbas;
+      space_node_t *qzss;
     };
 
     static int read_all(std::istream &in, space_node_list_t &space_nodes = {0}){
@@ -730,6 +750,10 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
         (reader.version_type.version >= 300)
             ? reader.extract_iono_utc_v3(*space_nodes.gps)
             : reader.extract_iono_utc_v2(*space_nodes.gps);
+      }
+      if(space_nodes.qzss && (space_nodes.gps != space_nodes.qzss)
+          && (reader.version_type.version >= 302)){
+        reader.extract_iono_utc_v3(*space_nodes.qzss);
       }
       int res(0);
       for(; reader.has_next(); reader.next()){
@@ -743,6 +767,13 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
             if(!space_nodes.sbas){break;}
             typename message_sbas_t::eph_t eph(reader.msg_sbas);
             space_nodes.sbas->satellite(eph.svid).register_ephemeris(eph);
+            res++;
+            break;
+          }
+          case super_t::version_type_t::SYS_QZSS: {
+            if(!space_nodes.qzss){break;}
+            typename RINEX_NAV<FloatT>::ephemeris_t eph(reader.msg.eph_qzss());
+            space_nodes.qzss->satellite(eph.svid).register_ephemeris(eph);
             res++;
             break;
           }
@@ -1637,7 +1668,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
         : super_t(out, default_header, default_header_size) {}
     ~RINEX_NAV_Writer(){}
 
-    self_t &operator<<(const message_t &msg){
+    self_t &dump(const message_t &msg, const bool &is_qzss = false){
       std::stringstream buf;
       switch(super_t::_version_type.version / 100){
         case 2:
@@ -1660,7 +1691,8 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           for(int i(0); i < 8; ++i){
             std::string s(80, ' ');
             switch(i){
-              case 0: super_t::convert(reader_t::eph0_v3, s, &msg); s[0] = 'G'; break;
+              case 0: super_t::convert(reader_t::eph0_v3, s, &msg);
+                s[0] = is_qzss ? 'J' : 'G'; break;
               case 1: super_t::convert(reader_t::eph1_v3, s, &msg); break;
               case 2: super_t::convert(reader_t::eph2_v3, s, &msg); break;
               case 3: super_t::convert(reader_t::eph3_v3, s, &msg); break;
@@ -1675,6 +1707,9 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       }
       dest << buf.str();
       return *this;
+    }
+    self_t &operator<<(const message_t &msg){
+      return dump(msg);
     }
     self_t &operator<<(const message_sbas_t &msg){
       std::stringstream buf;
@@ -1719,6 +1754,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
     struct space_node_list_t {
       const space_node_t *gps;
       const SBAS_SpaceNode<FloatT> *sbas;
+      const space_node_t *qzss;
     };
     int write_all(
         const space_node_list_t &space_nodes,
@@ -1751,6 +1787,20 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
         ++systems;
         set_version(version, super_t::version_type_t::SYS_SBAS);
       }while(false);
+      do{
+        if((version < 302) || (!space_nodes.qzss)){break;}
+        ++systems;
+        set_version(version, super_t::version_type_t::SYS_QZSS);
+        if(!space_nodes.qzss->is_valid_iono_utc()){break;}
+        switch(version / 100){
+          case 3:
+            if(_header["IONOSPHERIC CORR"].find("GPSA") == _header.end()){iono_alpha(*space_nodes.qzss);}
+            if(_header["IONOSPHERIC CORR"].find("GPSB") == _header.end()){iono_beta(*space_nodes.qzss);}
+            if(_header["TIME SYSTEM CORR"].find("QZUT") == _header.end()){utc_params(*space_nodes.qzss);}
+            if(_header["LEAP SECONDS"].entries() == 0){leap_seconds(*space_nodes.qzss);}
+            break;
+        }
+      }while(false);
       if(systems > 1){
         set_version(version, super_t::version_type_t::SYS_MIXED);
       }
@@ -1760,16 +1810,25 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       struct {
         RINEX_NAV_Writer &w;
         int &counter;
+        bool gps, qzss;
         void operator()(const typename space_node_t::Satellite::Ephemeris &eph) {
-          w << message_t(eph);
+          if(gps && (eph.svid <= 32)){
+            w << message_t(eph);
+          }else if(qzss && (eph.svid >= 193) && (eph.svid < 202)){
+            w.dump(message_t::from_qzss(eph), true);
+          }else{
+            return;
+          }
           counter++;
         }
         void operator()(const typename message_sbas_t::eph_t &eph) {
           w << message_sbas_t(eph);
           counter++;
         }
-      } functor = {*this, res};
+      } functor = {*this, res, false, false};
       if(space_nodes.gps){
+        functor.gps = true;
+        if(space_nodes.gps == space_nodes.qzss){functor.qzss = true;}
         for(typename space_node_t::satellites_t::const_iterator
               it(space_nodes.gps->satellites().begin()), it_end(space_nodes.gps->satellites().end());
             it != it_end; ++it){
@@ -1786,6 +1845,17 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           it->second.each_ephemeris(
               functor,
               SBAS_SpaceNode<FloatT>::Satellite::eph_list_t::EACH_ALL_INVERTED);
+        }
+      }
+      if((version >= 302) && (!functor.qzss) && (space_nodes.qzss)){
+        functor.qzss = true;
+        functor.gps = false;
+        for(typename space_node_t::satellites_t::const_iterator
+              it(space_nodes.qzss->satellites().begin()), it_end(space_nodes.qzss->satellites().end());
+            it != it_end; ++it){
+          it->second.each_ephemeris(
+              functor,
+              space_node_t::Satellite::eph_list_t::EACH_ALL_INVERTED);
         }
       }
       return res;

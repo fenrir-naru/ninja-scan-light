@@ -118,6 +118,7 @@ struct GNSS_Receiver {
       if(out_rinex_nav){
         typename RINEX_NAV_Writer<FloatT>::space_node_list_t list = {&gps.space_node};
         list.sbas = &sbas.space_node;
+        list.qzss = &gps.space_node;
         RINEX_NAV_Writer<FloatT>::write_all(*out_rinex_nav, list);
       }
     }
@@ -130,10 +131,32 @@ struct GNSS_Receiver {
     struct measurement_items_t : public gps_solver_t::measurement_items_t {
       // TODO
     };
+    struct ephemeris_proxy_t {
+      struct item_t {
+        const void *impl;
+        typename base_t::satellite_t (*impl_select)(
+            const void *,
+            const typename base_t::prn_t &, const typename base_t::gps_time_t &);
+      } gps, qzss;
+      static typename base_t::satellite_t forward(
+          const void *ptr,
+          const typename base_t::prn_t &prn, const typename base_t::gps_time_t &t){
+        const ephemeris_proxy_t *proxy(static_cast<const ephemeris_proxy_t *>(ptr));
+        const item_t &target(((prn >= 193) && (prn <= 202)) ? proxy->qzss : proxy->gps);
+        return target.impl_select(target.impl, prn, t);
+      }
+      ephemeris_proxy_t(gps_solver_t &solver){
+        gps.impl = qzss.impl = solver.satellites.impl;
+        gps.impl_select = qzss.impl_select = solver.satellites.impl_select;
+        solver.satellites.impl = this;
+        solver.satellites.impl_select = forward;
+      }
+    } ephemeris_proxy;
     solver_t(const GNSS_Receiver &rcv)
         : base_t(),
         gps(rcv.data.gps.space_node),
-        sbas(rcv.data.sbas.space_node) {
+        sbas(rcv.data.sbas.space_node),
+        ephemeris_proxy(gps) {
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
       // ionospheric and tropospheric correction methods
       typename base_t::range_correction_t ionospheric, tropospheric;
@@ -153,8 +176,9 @@ struct GNSS_Receiver {
     // Proxy functions
     const base_t &select(const typename base_t::prn_t &serial) const {
       switch(system_t::serial2system(serial)){
-        case system_t::GPS: 	return gps;
-        case system_t::SBAS:	return sbas;
+        case system_t::GPS:  return gps;
+        case system_t::SBAS: return sbas;
+        case system_t::QZSS: return gps;
       }
       return *this;
     }
@@ -200,14 +224,16 @@ struct GNSS_Receiver {
     void update_ephemeris_source(const data_t &data){
 #if !defined(BUILD_WITHOUT_SP3)
       typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
-      if(cnt.gps > 0){data.sp3.push(gps.satellites, SP3_Product<FloatT>::SYSTEM_GPS);}
+      if(cnt.gps > 0){data.sp3.push(ephemeris_proxy.gps, SP3_Product<FloatT>::SYSTEM_GPS);}
       if(cnt.sbas > 0){data.sp3.push(sbas.satellites, SP3_Product<FloatT>::SYSTEM_SBAS);}
+      if(cnt.qzss > 0){data.sp3.push(ephemeris_proxy.qzss, SP3_Product<FloatT>::SYSTEM_QZSS);}
 #endif
 #if !defined(BUILD_WITHOUT_RINEX_CLK)
       // RINEX clock has higher priority to be applied than SP3
       typename data_t::clk_t::count_t cnt2(data.clk.count());
-      if(cnt2.gps > 0){data.clk.push(gps.satellites, data_t::clk_t::SYSTEM_GPS);}
+      if(cnt2.gps > 0){data.clk.push(ephemeris_proxy.gps, data_t::clk_t::SYSTEM_GPS);}
       if(cnt2.sbas > 0){data.clk.push(sbas.satellites, data_t::clk_t::SYSTEM_SBAS);}
+      if(cnt2.qzss > 0){data.clk.push(ephemeris_proxy.qzss, data_t::clk_t::SYSTEM_QZSS);}
 #endif
     }
   } solver_GNSS;
@@ -388,6 +414,7 @@ struct GNSS_Receiver {
       std::istream &in(options.spec2istream(value));
       typename RINEX_NAV_Reader<FloatT>::space_node_list_t list = {&data.gps.space_node};
       list.sbas = &data.sbas.space_node;
+      list.qzss = &data.gps.space_node;
       int ephemeris(RINEX_NAV_Reader<FloatT>::read_all(in, list));
       if(ephemeris < 0){
         std::cerr << "(error!) Invalid format!" << std::endl;
@@ -418,6 +445,7 @@ struct GNSS_Receiver {
         typename data_t::sp3_t::satellite_count_t cnt(data.sp3.satellite_count());
         if(cnt.gps > 0){std::cerr << "SP3 GPS satellites: " << cnt.gps << std::endl;}
         if(cnt.sbas > 0){std::cerr << "SP3 SBAS satellites: " << cnt.sbas << std::endl;}
+        if(cnt.qzss > 0){std::cerr << "SP3 QZSS satellites: " << cnt.qzss << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
@@ -454,6 +482,7 @@ struct GNSS_Receiver {
         typename data_t::clk_t::count_t cnt(data.clk.count());
         if(cnt.gps > 0){std::cerr << "RINEX clock GPS satellites: " << cnt.gps << std::endl;}
         if(cnt.sbas > 0){std::cerr << "RINEX clock SBAS satellites: " << cnt.sbas << std::endl;}
+        if(cnt.qzss > 0){std::cerr << "RINEX clock QZSS satellites: " << cnt.qzss << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
@@ -549,9 +578,16 @@ data.sbas.solver_options. expr
 
       switch(sys){
         case system_t::GPS:
-          select_all
-              ? data.gps.solver_options.exclude_prn.set(without)
-              : data.gps.solver_options.exclude_prn.set(sv_id, without);
+        case system_t::QZSS:
+          if(select_all){
+            static const int id_table[][2] = {{1, 32}, {193, 202}};
+            int idx(sys == system_t::QZSS ? 1 : 0);
+            for(int i(id_table[idx][0]), i_max(id_table[idx][1]); i <= i_max; ++i){
+              data.gps.solver_options.exclude_prn.set(i, without);
+            }
+          }else{
+            data.gps.solver_options.exclude_prn.set(sv_id, without);
+          }
           break;
         case system_t::SBAS:
           select_all
@@ -611,6 +647,7 @@ data.sbas.solver_options. expr
             << ',' << "GPS_PRN(1-32)"
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
             << ',' << "SBAS_PRN(120-158)"
+            << ',' << "QZSS_PRN(193-202)"
 #endif
             ;
       }
@@ -625,6 +662,10 @@ data.sbas.solver_options. expr
         for(int i(120); i <= 158; ++i){
           out << ',' << "range_residual(SBAS:" << i << ')'
               << ',' << "weight(SBAS:" << i << ')';
+        }
+        for(int i(193); i <= 202; ++i){
+          out << ',' << "range_residual(QZSS:" << i << ')'
+              << ',' << "weight(QZSS:" << i << ')';
         }
 #endif
         return out;
@@ -704,6 +745,7 @@ data.sbas.solver_options. expr
             << ',' << mask_printer_t(src.used_satellite_mask, 1, 32)
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
             << ',' << mask_printer_t(src.used_satellite_mask, 120, 158) // SBAS
+            << ',' << mask_printer_t(src.used_satellite_mask, 193, 202) // QZSS
 #endif
             ;
       }else{
@@ -727,6 +769,7 @@ data.sbas.solver_options. expr
         {1, 32}, // GPS
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
         {120, 158}, // SBAS
+        {193, 202}, // QZSS
 #endif
       };
       unsigned int i_row(0);
@@ -802,6 +845,12 @@ data.sbas.solver_options. expr
               << ',' << "L1_rate(SBAS:" << (*it)->prn << ')'
               << ',' << "azimuth(SBAS:" << (*it)->prn << ')'
               << ',' << "elevation(SBAS:" << (*it)->prn << ')';
+        }
+        for(int i(193); i <= 202; ++i){
+          out << ',' << "L1_range(QZSS:" << i << ')'
+              << ',' << "L1_rate(QZSS:" << i << ')'
+              << ',' << "azimuth(QZSS:" << i << ')'
+              << ',' << "elevation(QZSS:" << i << ')';
         }
 #endif
         return out;
@@ -901,6 +950,14 @@ data.sbas.solver_options. expr
             it_end(sbas_space_node_t::KnownSatellites::name_ordered.end());
           it != it_end; ++it){
         out << ',' << p((*it)->prn, cmd_sbas) << ',' << p.az_el((*it)->prn);
+      }
+      static const cmd_t cmd_qzss[] = {
+        {items_t::L1_PSEUDORANGE, true}, // range
+        {items_t::L1_RANGE_RATE,  false}, // rate
+        {items_t::L1_DOPPLER,     false, print_t::l1_doppler2rate}, // fallback to using doppler
+      };
+      for(int i(193); i <= 202; ++i){
+        out << ',' << p(i, cmd_qzss) << ',' << p.az_el(i);
       }
 #endif
       return out;
