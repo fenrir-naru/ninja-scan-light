@@ -5,14 +5,14 @@
 
 %module SylphideMath
 
-#define ENABLE_IOSTREAM 1
-
 %{
 #include <string>
 #include <sstream>
 #include <vector>
 #include <exception>
+%}
 
+%fragment("SylphideMath.i", "header") %{
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
 #undef isfinite
@@ -25,13 +25,30 @@
 #undef isfinite_
 #define isfinite(x) finite(x)
 #endif
+
+#ifdef HAVE_RB_EXT_RACTOR_SAFE
+#include <atomic>
+template <class T>
+template <class U>
+struct Array2D_Dense<T>::property_t<T, U> {
+  typedef std::atomic<int> ref_cnt_t;
+};
+#endif
 %}
+
+%fragment("SylphideMath.i");
 
 %include std_common.i
 %include std_string.i
 //%include std_vector.i
 %include exception.i
 %include std_except.i
+
+%init %{
+#ifdef HAVE_RB_EXT_RACTOR_SAFE
+  rb_ext_ractor_safe(true);
+#endif
+%}
 
 %ignore native_exception;
 #if !defined(SWIGIMPORTED)
@@ -1020,6 +1037,20 @@ struct MatrixUtil {
       }
       rb_ary_store(res, i, row);
     }
+    return res;
+  }
+  
+  VALUE to_shareable() const {
+    Matrix_Frozen<T, Array2D_Type, ViewType > *ptr(
+        new Matrix_Frozen<T, Array2D_Type, ViewType >(*$self));
+    VALUE res(SWIG_NewPointerObj(
+        ptr,
+        $descriptor(Matrix_Frozen<T, Array2D_Type, ViewType > *),
+        SWIG_POINTER_OWN));
+    rb_obj_freeze(res);
+%#if defined(HAVE_RB_EXT_RACTOR_SAFE)
+    RB_FL_SET(res, RUBY_FL_SHAREABLE);
+%#endif
     return res;
   }
 #endif
