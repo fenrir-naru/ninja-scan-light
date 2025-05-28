@@ -113,6 +113,7 @@ static std::string inspect_str(const VALUE &v){
 %feature("autodoc", "1");
 
 %import "SylphideMath.i"
+%fragment("SylphideMath.i");
 %import "Coordinate.i"
 
 %typemap(in,numinputs=0) const void *check_block {
