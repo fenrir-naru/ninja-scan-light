@@ -234,9 +234,13 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     using super_t::rows;
     using super_t::columns;
 
-    typedef int ref_cnt_t;
-
   protected:
+    template <class T2, class U = void>
+    struct property_t {
+      typedef int ref_cnt_t;
+    };
+    typedef typename property_t<T>::ref_cnt_t ref_cnt_t;
+
     static const int offset = (sizeof(T) >= sizeof(ref_cnt_t)) ? 1 : ((sizeof(ref_cnt_t) + sizeof(T) - 1) / sizeof(T));
     ref_cnt_t *ref_cnt;  ///< reference counter TODO alignment?
     T *values; ///< array for values
