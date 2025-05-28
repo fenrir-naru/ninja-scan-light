@@ -10,7 +10,9 @@
 #include <sstream>
 #include <vector>
 #include <exception>
+%}
 
+%fragment("SylphideMath.i", "header") %{
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
 #undef isfinite
@@ -33,6 +35,8 @@ struct Array2D_Dense<T>::property_t<T, U> {
 };
 #endif
 %}
+
+%fragment("SylphideMath.i");
 
 %include std_common.i
 %include std_string.i
