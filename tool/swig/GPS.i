@@ -19,6 +19,7 @@
 
 #include "navigation/GPS.h"
 #include "navigation/SBAS.h"
+#include "navigation/QZSS.h"
 #include "navigation/RINEX.h"
 #include "navigation/RINEX_Clock.h"
 #include "navigation/SP3.h"
@@ -115,7 +116,6 @@ static std::string inspect_str(const VALUE &v){
 %feature("autodoc", "1");
 
 %import "SylphideMath.i"
-%fragment("SylphideMath.i");
 %import "Coordinate.i"
 
 %typemap(in,numinputs=0) const void *check_block {
@@ -381,8 +381,12 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     return get_URA_index();
   }
   FloatT set_fit_interval(const bool &flag) {
-    // set iodc before invocation of this function
-    return (this->fit_interval = GPS_Ephemeris<FloatT>::raw_t::fit_interval(flag, this->iodc));
+    // set svid/iodc before invocation of this function
+    if((this->svid >= 193) && (this->svid <= 202)){ // QZSS
+      return (this->fit_interval = (flag ? (std::numeric_limits<FloatT>::max)() : (2 * 60 * 60)));
+    }else{
+      return (this->fit_interval = GPS_Ephemeris<FloatT>::raw_t::fit_interval(flag, this->iodc));
+    }
   }
 };
 %}
@@ -508,9 +512,14 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
     almanac_t::raw_t raw;
     switch(parse_t::data_id(buf)){
-      case 1:
+      case 1: // GPS
         raw.update<2, 0>(buf);
         if((raw.svid < 1) || (raw.svid > 32)){return -1;}
+        break;
+      case 3: // QZSS
+        reinterpret_cast<QZSS_SpaceNode<FloatT>::SatelliteProperties::Almanac::raw_t &>(raw)
+            .update<2, 0>(buf);
+        if((raw.svid < 193) || (raw.svid > 202)){return -1;}
         break;
       default:
         return -1;
@@ -524,15 +533,27 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
    * @param buf_brdc pointer to store raw data of subframe 4 or 5.
    * Each 30bit (MSB 2 bits are padding) length word is stored in each successive address of the pointer.
    * @param t GPS time at broadcasting
+   * @param qzss_subframe if 4 or 5, this ephemeris is treated as QZSS, otherwise GPS (default).
    */
-  void dump_almanac(unsigned int buf_brdc[10], const GPS_Time<FloatT> &t){
+  void dump_almanac(
+      unsigned int buf_brdc[10], const GPS_Time<FloatT> &t,
+      const unsigned int &qzss_subframe = 0){
     typedef typename GPS_SpaceNode<FloatT>
         ::BroadcastedMessage<unsigned int, 30> dump_t;
     dump_t::how_set(buf_brdc, t);
     typedef GPS_SpaceNode<FloatT>::SatelliteProperties::Almanac almanac_t;
     almanac_t almanac;
     almanac_t::raw_t raw;
-    (raw = (almanac = *self)).dump<2, 0>(buf_brdc);
+    raw = (almanac = *self);
+    switch(qzss_subframe){
+      case 4:
+      case 5:
+        reinterpret_cast<QZSS_SpaceNode<FloatT>::SatelliteProperties::Almanac::raw_t &>(raw)
+            .dump<2, 0>(buf_brdc, qzss_subframe);
+        break;
+      default:
+        raw.dump<2, 0>(buf_brdc);
+    }
   }
   %typemap(out) constellation_res_t {
     %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
@@ -580,11 +601,14 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
   }
   int read(const char *fname) {
     std::fstream fin(fname, std::ios::in | std::ios::binary);
-    return RINEX_NAV_Reader<FloatT>::read_all(fin, *self);
+    typename RINEX_NAV_Reader<FloatT>::space_node_list_t space_nodes = {self};
+    space_nodes.qzss = self;
+    return RINEX_NAV_Reader<FloatT>::read_all(fin, space_nodes);
   }
 }
 
 %include navigation/GPS.h
+%include navigation/QZSS.h
 
 %inline %{
 template <class FloatT>
@@ -1463,7 +1487,28 @@ struct GPS_Solver
     HookableSolver<
         GPS_Solver_MultiFrequency<GPS_SinglePositioning<FloatT> >,
         GPS_Solver<FloatT> > solver;
-    gps_t() : space_node(), options(), solver(space_node) {
+    struct ephemeris_proxy_t {
+      struct item_t {
+        const void *impl;
+        typename base_t::satellite_t (*impl_select)(
+            const void *,
+            const typename base_t::prn_t &, const typename base_t::gps_time_t &);
+      } gps, qzss;
+      static typename base_t::satellite_t forward(
+          const void *ptr,
+          const typename base_t::prn_t &prn, const typename base_t::gps_time_t &t){
+        const ephemeris_proxy_t *proxy(static_cast<const ephemeris_proxy_t *>(ptr));
+        const item_t &target(((prn >= 193) && (prn <= 202)) ? proxy->qzss : proxy->gps);
+        return target.impl_select(target.impl, prn, t);
+      }
+      ephemeris_proxy_t(GPS_SinglePositioning<FloatT> &solver){
+        gps.impl = qzss.impl = solver.satellites.impl;
+        gps.impl_select = qzss.impl_select = solver.satellites.impl_select;
+        solver.satellites.impl = this;
+        solver.satellites.impl_select = forward;
+      }
+    } ephemeris_proxy;
+    gps_t() : space_node(), options(), solver(space_node), ephemeris_proxy(solver) {
       options.exclude_L2C = true;
     }
   } gps;
@@ -1515,6 +1560,7 @@ struct GPS_Solver
       const typename base_t::prn_t &prn) const {
     if(prn > 0 && prn <= 32){return gps.solver;}
     if(prn >= 120 && prn <= 158){return sbas.solver;}
+    if(prn > 192 && prn <= 202){return gps.solver;}
     return *this;
   }
   // proxy of virtual functions
@@ -1727,11 +1773,13 @@ struct PushableData {
     switch(sys){
       case SYS_GPS:
         return data.push(
-            solver.gps.solver.satellites, DataT::SYSTEM_GPS);
+            solver.gps.ephemeris_proxy.gps, DataT::SYSTEM_GPS);
       case SYS_SBAS:
         return data.push(
             solver.sbas.solver.satellites, DataT::SYSTEM_SBAS);
       case SYS_QZSS:
+        return data.push(
+            solver.gps.ephemeris_proxy.qzss, DataT::SYSTEM_QZSS);
       case SYS_GLONASS:
       case SYS_GALILEO:
       case SYS_BEIDOU:
@@ -1745,7 +1793,7 @@ struct PushableData {
     system_t target[] = {
       SYS_GPS,
       SYS_SBAS,
-      //SYS_QZSS,
+      SYS_QZSS,
       //SYS_GLONASS,
       //SYS_GALILEO,
       //SYS_BEIDOU,

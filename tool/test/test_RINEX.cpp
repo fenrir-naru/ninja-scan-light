@@ -409,6 +409,95 @@ BOOST_AUTO_TEST_CASE(nav_SBAS_v3){
   //compare_lines(src, dist, 8); // TODO check header
 }
 
+BOOST_AUTO_TEST_CASE(nav_QZSS_v3){
+  const char *src = \
+      "     3.04           N: GNSS NAV DATA    J: QZSS             RINEX VERSION / TYPE\n"
+      "GR25 V3.08                              20140513 072944 UTC PGM / RUN BY / DATE \n"
+      "    16        1694     7                                    LEAP SECONDS        \n"
+      "                                                            END OF HEADER       \n"
+      "J01 2014 05 13 08 15 12 3.323303535581D-04-1.818989403546D-11 0.000000000000D+00\n"
+      "     6.900000000000D+01-4.927812500000D+02 2.222949737636D-09 7.641996743610D-01\n"
+      "    -1.654587686062D-05 7.542252133135D-02 1.197867095470D-05 6.492895933151D+03\n"
+      "     2.025120000000D+05-8.381903171539D-07-9.211997910060D-01-2.041459083557D-06\n"
+      "     7.082252892260D-01-1.558437500000D+02-1.575843337115D+00-2.349740733276D-09\n"
+      "    -6.793140104410D-10 2.000000000000D+00 1.792000000000D+03 1.000000000000D+00\n"
+      "     2.000000000000D+00 1.000000000000D+00-4.656612873077D-09 6.900000000000D+01\n"
+      "     1.989000000000D+05 0.000000000000D+00                                      \n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_NAV_Reader<fnum_t> reader_t;
+  typedef RINEX_NAV_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
+
+  gps_t gps;
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    reader_t::space_node_list_t space_nodes = {NULL};
+    space_nodes.qzss = &gps;
+    reader_t::read_all(in, space_nodes);
+  }
+
+  {
+    std::tm t_oc_tm = {12, 15, 8, 13, 5 - 1, 2014 - 1900};
+    /*typename*/ gps_t::gps_time_t t_oc(t_oc_tm);
+    gps.satellite(1 + 192).select_ephemeris(t_oc);
+    const /*typename*/ gps_t::Satellite::Ephemeris &eph(gps.satellite(1 + 192).ephemeris());
+
+    BOOST_CHECK_SMALL(std::abs( 3.323303535581E-04 - eph.a_f0), 1E-16);
+    BOOST_CHECK_SMALL(std::abs(-1.818989403546E-11 - eph.a_f1), 1E-23);
+    BOOST_CHECK_SMALL(std::abs( 0.000000000000E+00 - eph.a_f2), 1E-12);
+
+    BOOST_CHECK_SMALL(std::abs( 6.900000000000E+01 - eph.iode),    1E-11);
+    BOOST_CHECK_SMALL(std::abs(-4.927812500000E+02 - eph.c_rs),    1E-10);
+    BOOST_CHECK_SMALL(std::abs( 2.222949737636E-09 - eph.delta_n), 1E-21);
+    BOOST_CHECK_SMALL(std::abs( 7.641996743610E-01 - eph.M0),      1E-13);
+
+    BOOST_CHECK_SMALL(std::abs(-1.654587686062E-05 - eph.c_uc),    1E-17);
+    BOOST_CHECK_SMALL(std::abs( 7.542252133135E-02 - eph.e),       1E-14);
+    BOOST_CHECK_SMALL(std::abs( 1.197867095470E-05 - eph.c_us),    1E-17);
+    BOOST_CHECK_SMALL(std::abs( 6.492895933151E+03 - eph.sqrt_A),  1E-9);
+
+    BOOST_CHECK_SMALL(std::abs( 2.025120000000E+05 - eph.t_oe),    1E-7);
+    BOOST_CHECK_SMALL(std::abs(-8.381903171539E-07 - eph.c_ic),    1E-19);
+    BOOST_CHECK_SMALL(std::abs(-9.211997910060E-01 - eph.Omega0),  1E-13);
+    BOOST_CHECK_SMALL(std::abs(-2.041459083557E-06 - eph.c_is),    1E-18);
+
+    BOOST_CHECK_SMALL(std::abs( 7.082252892260E-01 - eph.i0),          1E-13);
+    BOOST_CHECK_SMALL(std::abs(-1.558437500000E+02 - eph.c_rc),        1E-10);
+    BOOST_CHECK_SMALL(std::abs(-1.575843337115E+00 - eph.omega),       1E-12);
+    BOOST_CHECK_SMALL(std::abs(-2.349740733276E-09 - eph.dot_Omega0),  1E-21);
+
+    BOOST_CHECK_SMALL(std::abs(-6.793140104410E-10 - eph.dot_i0), 1E-22);
+
+    BOOST_CHECK_SMALL(std::abs( 2.000000000000E+00 - eph.URA),  1E-13);
+    BOOST_CHECK_EQUAL(1, eph.SV_health);
+    BOOST_CHECK_SMALL(std::abs(-4.656612873077E-09 - eph.t_GD), 1E-21);
+    BOOST_CHECK_SMALL(std::abs( 6.900000000000E+01 - eph.iodc), 1E-11);
+
+    BOOST_CHECK_SMALL(std::abs(60 * 60 * 2 - eph.fit_interval), 1E-12);
+  }
+
+  std::string dist;
+  {
+    std::stringstream ss;
+    writer_t writer(ss);
+    writer.set_version(304);
+    std::tm t_header = {44, 29, 7, 13, 5 - 1, 2014 - 1900};
+    writer.pgm_runby_date("GR25 V3.08", "", t_header, "UTC");
+    writer.leap_seconds(gps);
+    writer_t::space_node_list_t space_nodes = {NULL};
+    space_nodes.qzss = &gps;
+    writer.write_all(space_nodes, 304);
+    dist = ss.str();
+    dist.replace(10 * 81 +  5, 18, "2.000000000000D+00"); // overwrite SV accuracy
+    dist.replace(11 * 81 +  5, 18, "1.989000000000D+05"); // overwrite Transmission time
+  }
+
+  //compare_lines(src, dist);
+}
+
 BOOST_AUTO_TEST_CASE(obs_GPS_v2){
   const char *src = \
       "     2.11           OBSERVATION DATA    M (MIXED)           RINEX VERSION / TYPE\n"
