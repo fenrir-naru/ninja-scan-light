@@ -235,8 +235,14 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     using super_t::columns;
 
   protected:
-    static const int offset = (sizeof(T) >= sizeof(int)) ? 1 : ((sizeof(int) + sizeof(T) - 1) / sizeof(T));
-    int *ref;  ///< reference counter TODO alignment?
+    template <class T2, class U = void>
+    struct property_t {
+      typedef int ref_cnt_t;
+    };
+    typedef typename property_t<T>::ref_cnt_t ref_cnt_t;
+
+    static const int offset = (sizeof(T) >= sizeof(ref_cnt_t)) ? 1 : ((sizeof(ref_cnt_t) + sizeof(T) - 1) / sizeof(T));
+    ref_cnt_t *ref_cnt;  ///< reference counter TODO alignment?
     T *values; ///< array for values
 
     template <class T2, bool do_memory_op = std::numeric_limits<T2>::is_specialized>
@@ -263,7 +269,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     };
 
   public:
-    Array2D_Dense() : super_t(0, 0), ref(NULL), values(NULL) {
+    Array2D_Dense() : super_t(0, 0), ref_cnt(NULL), values(NULL) {
     }
 
     /**
@@ -276,9 +282,9 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const unsigned int &rows,
         const unsigned int &columns)
         : super_t(rows, columns),
-        ref(reinterpret_cast<int *>(new T[offset + (rows * columns)])),
-        values(reinterpret_cast<T *>(ref) + offset) {
-      *ref = 1;
+        ref_cnt(reinterpret_cast<ref_cnt_t *>(new T[offset + (rows * columns)])),
+        values(reinterpret_cast<T *>(ref_cnt) + offset) {
+      *ref_cnt = 1;
     }
     /**
      * Constructor with initializer
@@ -292,9 +298,9 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const unsigned int &columns,
         const T *serialized)
         : super_t(rows, columns),
-        ref(reinterpret_cast<int *>(new T[offset + (rows * columns)])),
-        values(reinterpret_cast<T *>(ref) + offset) {
-      *ref = 1;
+        ref_cnt(reinterpret_cast<ref_cnt_t *>(new T[offset + (rows * columns)])),
+        values(reinterpret_cast<T *>(ref_cnt) + offset) {
+      *ref_cnt = 1;
       setup_t<T>::copy(*this, serialized);
     }
     /**
@@ -304,8 +310,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     Array2D_Dense(const self_t &array)
         : super_t(array.m_rows, array.m_columns),
-          ref(array.ref), values(array.values){
-      if(ref){++(*ref);}
+          ref_cnt(array.ref_cnt), values(array.values){
+      if(ref_cnt){++(*ref_cnt);}
     }
     /**
      * Constructor based on another type array, which performs deep copy.
@@ -315,9 +321,9 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     template <class T2>
     Array2D_Dense(const Array2D_Frozen<T2> &array)
         : super_t(array.rows(), array.columns()),
-        ref(reinterpret_cast<int *>(new T[offset + (array.rows() * array.columns())])),
-        values(reinterpret_cast<T *>(ref) + offset) {
-      *ref = 1;
+        ref_cnt(reinterpret_cast<ref_cnt_t *>(new T[offset + (array.rows() * array.columns())])),
+        values(reinterpret_cast<T *>(ref_cnt) + offset) {
+      *ref_cnt = 1;
       T *buf(values);
       const unsigned int i_end(array.rows()), j_end(array.columns());
       for(unsigned int i(0); i < i_end; ++i){
@@ -333,8 +339,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      * allocated memory for elements will be deleted.
      */
     ~Array2D_Dense(){
-      if(ref && ((--(*ref)) <= 0)){
-        delete [] reinterpret_cast<T *>(ref);
+      if(ref_cnt && ((--(*ref_cnt)) <= 0)){
+        delete [] reinterpret_cast<T *>(ref_cnt);
       }
     }
 
@@ -346,10 +352,10 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     self_t &operator=(const self_t &array){
       if(this != &array){
-        if(ref && ((--(*ref)) <= 0)){delete [] reinterpret_cast<T *>(ref);}
+        if(ref_cnt && ((--(*ref_cnt)) <= 0)){delete [] reinterpret_cast<T *>(ref_cnt);}
         super_t::m_rows = array.m_rows;
         super_t::m_columns = array.m_columns;
-        if((ref = array.ref)){++(*ref);}
+        if((ref_cnt = array.ref_cnt)){++(*ref_cnt);}
         values = array.values;
       }
       return *this;
