@@ -10,7 +10,9 @@
 #include <sstream>
 #include <vector>
 #include <exception>
+%}
 
+%fragment("SylphideMath.i", "header") %{
 #if defined(SWIGRUBY) && defined(isfinite)
 #undef isfinite_
 #undef isfinite
@@ -23,7 +25,18 @@
 #undef isfinite_
 #define isfinite(x) finite(x)
 #endif
+
+#ifdef HAVE_RB_EXT_RACTOR_SAFE
+#include <atomic>
+template <class T>
+template <class U>
+struct Array2D_Dense<T>::property_t<T, U> {
+  typedef std::atomic<int> ref_cnt_t;
+};
+#endif
 %}
+
+%fragment("SylphideMath.i");
 
 %include std_common.i
 %include std_string.i
