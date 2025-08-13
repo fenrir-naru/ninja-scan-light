@@ -21,6 +21,7 @@ using boost::format;
 
 typedef double fnum_t;
 typedef GPS_SpaceNode<fnum_t> gps_t;
+typedef SBAS_SpaceNode<fnum_t> sbas_t;
 
 BOOST_AUTO_TEST_SUITE(RINEX)
 
@@ -258,6 +259,154 @@ BOOST_AUTO_TEST_CASE(nav_GPS_v3){
   }
 
   compare_lines(src, dist);
+}
+
+BOOST_AUTO_TEST_CASE(nav_SBAS_v2){
+  const char *src = \
+      "     2.11           H: GEO NAV MSG DATA                     RINEX VERSION / TYPE\n"
+      "SBAS2RINEX 2.0      CNES                20-Oct-03 14:01     PGM / RUN BY / DATE \n"
+      "0.133179128170D-06-0.107469588780D-12 518400 1240 EGNOS  5  D-UTC A0,A1,T,W,S,U \n"
+      "    13                                                      LEAP SECONDS        \n"
+      "This file contains navigation message data from a SBAS      COMMENT             \n"
+      "(geostationary) satellite, here AOR-W (PRN 122 = # 22)      COMMENT             \n"
+      "                                                            END OF HEADER       \n"
+      "22 03 10 18  0  1  4.0-1.005828380585D-07 6.366462912410D-12 5.184420000000D+05 \n"
+      "    2.482832392000D+04-3.593750000000D-04-1.375000000000D-07 0.000000000000D+00 \n"
+      "   -3.408920872000D+04-1.480625000000D-03-5.000000000000D-08 4.000000000000D+00 \n"
+      "   -1.650560000000D+01 8.360000000000D-04 6.250000000000D-08 2.300000000000D+01 \n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_NAV_Reader<fnum_t> reader_t;
+  typedef RINEX_NAV_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
+
+  sbas_t sbas;
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    reader_t::space_node_list_t space_nodes = {NULL};
+    space_nodes.sbas = &sbas;
+    reader_t::read_all(in, space_nodes);
+  }
+
+  {
+    std::tm t_tm = {4, 1, 0, 18, 10 - 1, 2003 - 1900};
+    gps_t::gps_time_t t(t_tm);
+    sbas.satellite(122).select_ephemeris(t);
+    const sbas_t::Satellite::Ephemeris &eph(sbas.satellite(122).ephemeris());
+
+    BOOST_CHECK_SMALL(std::abs(-1.005828380585E-07 - eph.a_Gf0), 1E-19);
+    BOOST_CHECK_SMALL(std::abs( 6.366462912410E-12 - eph.a_Gf1), 1E-24);
+    //BOOST_CHECK_SMALL(std::abs( 5.184420000000E+05 - TODO),     1E-10); // transmission time
+
+    BOOST_CHECK_SMALL(std::abs( 2.482832392000E+07 - eph.x),     1E-05); // km => m
+    BOOST_CHECK_SMALL(std::abs(-3.593750000000E-01 - eph.dx),    1E-13); // km/s => m/s
+    BOOST_CHECK_SMALL(std::abs(-1.375000000000E-04 - eph.ddx),   1E-17); // km/s^2 => m/s^2
+    //BOOST_CHECK_SMALL(std::abs(0.000000000000E+00 - TODO),      1E-12); // health
+
+    BOOST_CHECK_SMALL(std::abs(-3.408920872000E+07 - eph.y),     1E-05);
+    BOOST_CHECK_SMALL(std::abs(-1.480625000000E-00 - eph.dy),    1E-12);
+    BOOST_CHECK_SMALL(std::abs(-5.000000000000E-05 - eph.ddy),   1E-17);
+    BOOST_CHECK_SMALL(std::abs( 4.000000000000E+00 - eph.URA),   1E-12);
+
+    BOOST_CHECK_SMALL(std::abs(-1.650560000000E+04 - eph.z),     1E-08);
+    BOOST_CHECK_SMALL(std::abs( 8.360000000000E-01 - eph.dz),    1E-13);
+    BOOST_CHECK_SMALL(std::abs( 6.250000000000E-05 - eph.ddz),   1E-17);
+    //BOOST_CHECK_SMALL(std::abs( 2.300000000000E+01 - TODO),     1E-11); // iodn
+  }
+
+  std::string dist;
+  {
+    std::stringstream ss;
+    writer_t writer(ss);
+    writer.header()["PGM / RUN BY / DATE"]
+        = "SBAS2RINEX 2.0      CNES                20-Oct-03 14:01";
+    writer_t::space_node_list_t space_nodes = {NULL};
+    space_nodes.sbas = &sbas;
+    writer.write_all(space_nodes, 211);
+    dist = ss.str();
+  }
+
+  //compare_lines(src, dist, 5); // TODO check header
+}
+
+BOOST_AUTO_TEST_CASE(nav_SBAS_v3){
+  const char *src = \
+      "     3.04           N: GNSS NAV DATA    S: SBAS             RINEX VERSION / TYPE\n"
+      "SBAS2RINEX 3.0      CNES                20031018 140100     PGM / RUN BY / DATE \n"
+      "EXAMPLE OF VERSION 3.04 FORMAT                              COMMENT             \n"
+      "SBUT  -.1331791282D-06 -.107469589D-12 552960 1025 EGNOS  5 TIME SYSTEM CORR    \n"
+      "    13                                                      LEAP SECONDS        \n"
+      "This file contains navigation message data from a SBAS      COMMENT             \n"
+      "(geostationary) satellite, here AOR-W (PRN 122 = # S22)     COMMENT             \n"
+      "                                                            END OF HEADER       \n"
+      "S22 2003 10 18  0  1  4-1.005828380585D-07 6.366462912410D-12 5.184420000000D+05\n"
+      "     2.482832392000D+04-3.593750000000D-04-1.375000000000D-07 0.000000000000D+00\n"
+      "    -3.408920872000D+04-1.480625000000D-03-5.000000000000D-08 4.000000000000D+00\n"
+      "    -1.650560000000D+01 8.360000000000D-04 6.250000000000D-08 2.300000000000D+01\n";
+     //----|---1|0---|---2|0---|---3|0---|---4|0---|---5|0---|---6|0---|---7|0---|---8|
+
+  typedef RINEX_NAV_Reader<fnum_t> reader_t;
+  typedef RINEX_NAV_Writer<fnum_t> writer_t;
+
+  check_reader_versatility_to_input<reader_t>(src);
+
+  sbas_t sbas;
+  {
+    std::stringbuf sbuf(src);
+    std::istream in(&sbuf);
+    reader_t::space_node_list_t space_nodes = {NULL};
+    space_nodes.sbas = &sbas;
+    reader_t::read_all(in, space_nodes);
+  }
+
+  {
+    std::tm t_oc_tm = {4, 1, 0, 18, 10 - 1, 2003 - 1900};
+    gps_t::gps_time_t t_oc(t_oc_tm);
+    sbas.satellite(122).select_ephemeris(t_oc);
+    const sbas_t::Satellite::Ephemeris &eph(sbas.satellite(122).ephemeris());
+
+    BOOST_CHECK_SMALL(std::abs(-1.005828380585E-07 - eph.a_Gf0), 1E-19);
+    BOOST_CHECK_SMALL(std::abs( 6.366462912410E-12 - eph.a_Gf1), 1E-24);
+    //BOOST_CHECK_SMALL(std::abs( 5.184420000000E+05 - TODO),     1E-10); // transmission time
+
+    BOOST_CHECK_SMALL(std::abs( 2.482832392000E+07 - eph.x),     1E-05); // km => m
+    BOOST_CHECK_SMALL(std::abs(-3.593750000000E-01 - eph.dx),    1E-13); // km/s => m/s
+    BOOST_CHECK_SMALL(std::abs(-1.375000000000E-04 - eph.ddx),   1E-17); // km/s^2 => m/s^2
+    //BOOST_CHECK_SMALL(std::abs(0.000000000000E+00 - TODO),      1E-12); // health
+
+    BOOST_CHECK_SMALL(std::abs(-3.408920872000E+07 - eph.y),     1E-05);
+    BOOST_CHECK_SMALL(std::abs(-1.480625000000E-00 - eph.dy),    1E-12);
+    BOOST_CHECK_SMALL(std::abs(-5.000000000000E-05 - eph.ddy),   1E-17);
+    BOOST_CHECK_SMALL(std::abs( 4.000000000000E+00 - eph.URA),   1E-12);
+
+    BOOST_CHECK_SMALL(std::abs(-1.650560000000E+04 - eph.z),     1E-08);
+    BOOST_CHECK_SMALL(std::abs( 8.360000000000E-01 - eph.dz),    1E-13);
+    BOOST_CHECK_SMALL(std::abs( 6.250000000000E-05 - eph.ddz),   1E-17);
+    //BOOST_CHECK_SMALL(std::abs( 2.300000000000E+01 - TODO),     1E-11); // iodn
+  }
+
+  std::string dist;
+  {
+    std::stringstream ss;
+    writer_t writer(ss);
+    //writer.header()["PGM / RUN BY / DATE"]
+    //    = "XXRINEXN V3         AIUB                20061002 000123 UTC";
+    std::tm t_header = {0, 1, 14, 18, 10 - 1, 2003 - 1900};
+    writer.pgm_runby_date("SBAS2RINEX 3.0", "CNES", t_header, "");
+    writer.header()["COMMENT"] << "EXAMPLE OF VERSION 3.04 FORMAT";
+    writer.header()["TIME SYSTEM CORR"]
+        << "SBUT  -.1331791282D-06 -.107469589D-12 552960 1025 EGNOS  5";
+    writer.header()["LEAP SECONDS"] = "    13"; // writer.leap_seconds(gps);
+
+    writer_t::space_node_list_t space_nodes = {NULL};
+    space_nodes.sbas = &sbas;
+    writer.write_all(space_nodes, 304);
+    dist = ss.str();
+  }
+
+  //compare_lines(src, dist, 8); // TODO check header
 }
 
 BOOST_AUTO_TEST_CASE(obs_GPS_v2){

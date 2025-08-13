@@ -32,12 +32,15 @@
 #ifndef __GNSS_DATA_H__
 #define __GNSS_DATA_H__
 
+#include <iostream>
+
 #ifndef IS_LITTLE_ENDIAN
 #define IS_LITTLE_ENDIAN 1
 #endif
 #include "SylphideProcessor.h"
 
 #include "navigation/GPS.h"
+#include "navigation/SBAS.h"
 
 template <class FloatT>
 struct GNSS_Data {
@@ -59,6 +62,8 @@ struct GNSS_Data {
   struct Loader {
     typedef GPS_SpaceNode<FloatT> gps_t;
     gps_t *gps;
+    typedef SBAS_SpaceNode<FloatT> sbas_t;
+    sbas_t *sbas;
 
     typedef typename gps_t::Satellite::Ephemeris gps_ephemeris_t;
     struct gps_ephemeris_raw_t : public gps_ephemeris_t::raw_t {
@@ -71,7 +76,7 @@ struct GNSS_Data {
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
 
-    Loader() : gps(NULL) {
+    Loader() : gps(NULL), sbas(NULL) {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
         gps_ephemeris[i].svid = i + 1;
       }
@@ -156,9 +161,29 @@ struct GNSS_Data {
       return false;
     }
 
+    bool load_sbas(const GNSS_Data &data){
+      bool valid_time_of_reception(data.time_of_reception.week >= 0);
+      if(!valid_time_of_reception){return false;}
+
+      switch(sbas->decode_message(
+          (typename observer_t::u32_t *)data.subframe.buffer,
+          data.subframe.sv_number, data.time_of_reception)){
+        case sbas_t::IONO_DELAY_CORRECTION: // 26
+          std::cerr
+              << "Ionospheric delay grid map (S" << data.subframe.sv_number << "):" << std::endl
+              << sbas->satellite(data.subframe.sv_number).ionospheric_grid_points() << std::endl;
+          break;
+        case sbas_t::UNSUPPORTED_MESSAGE:
+          return false;
+      }
+      return true;
+    }
+
     bool load(const GNSS_Data &data){
       switch(data.subframe.gnssID){
         // TODO: other satellite systems
+        case observer_t::gnss_svid_t::SBAS:
+          return load_sbas(data);
         case observer_t::gnss_svid_t::GPS:
           return load_gps(data);
       }
