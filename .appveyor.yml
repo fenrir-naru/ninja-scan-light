@@ -4,8 +4,7 @@ environment:
   GITHUB_PERSONAL_TOKEN:
     secure: XD+aPg99N2rlEOr9Qr/P3it6joUuBMp/J0pGnchoenuLb15QZ6iEwgm44nwEU17i
 install:
-  - set SSL_CERT_FILE=C:/ruby24-x64/ssl/cert.pem
-  - set PATH=C:\Ruby21\bin;%PATH%
+  - set PATH=C:\Ruby25\bin;%PATH%
   - gem install ocra serialport
   - for /f "tokens=2 delims=/" %%a in ("%APPVEYOR_REPO_NAME%") do set REPO_NAME="%%a"
 before_build:
