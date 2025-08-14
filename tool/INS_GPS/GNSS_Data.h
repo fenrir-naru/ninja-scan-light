@@ -42,6 +42,7 @@
 #include "navigation/GPS.h"
 #include "navigation/SBAS.h"
 #include "navigation/QZSS.h"
+#include "navigation/GLONASS.h"
 
 template <class FloatT>
 struct GNSS_Data {
@@ -55,6 +56,7 @@ struct GNSS_Data {
     unsigned int sv_number;
     unsigned int bytes;
     typename observer_t::v8_t buffer[40];
+    int glonass_freq_ch;
   } subframe;
 
   typedef GPS_Time<FloatT> gps_time_t;
@@ -65,6 +67,8 @@ struct GNSS_Data {
     gps_t *gps;
     typedef SBAS_SpaceNode<FloatT> sbas_t;
     sbas_t *sbas;
+    typedef GLONASS_SpaceNode<FloatT> glonass_t;
+    glonass_t *glonass;
 
     typedef typename gps_t::Satellite::Ephemeris gps_ephemeris_t;
     struct gps_ephemeris_raw_t : public gps_ephemeris_t::raw_t {
@@ -85,13 +89,23 @@ struct GNSS_Data {
 
     typedef typename gps_t::Ionospheric_UTC_Parameters gps_iono_utc_t;
 
-    Loader() : gps(NULL), sbas(NULL) {
+    typedef typename glonass_t::Satellite::Ephemeris_with_GPS_Time glonass_ephemeris_t;
+    struct glonass_ephemeris_raw_t : public glonass_ephemeris_t::raw_t {
+      unsigned int super_frame;
+      unsigned int has_string;
+      glonass_ephemeris_raw_t() : has_string(0) {}
+    } glonass_ephemeris[24];
+
+    Loader() : gps(NULL), sbas(NULL), glonass(NULL) {
       for(unsigned int i(0); i < sizeof(gps_ephemeris) / sizeof(gps_ephemeris[0]); ++i){
         gps_ephemeris[i].svid = i + 1;
       }
       for(unsigned int i(0); i < sizeof(qzss_ephemeris) / sizeof(qzss_ephemeris[0]); ++i){
         qzss_ephemeris[i].svid = i + 193;
         qzss_ephemeris[i].is_qzss = true;
+      }
+      for(unsigned int i(0); i < sizeof(glonass_ephemeris) / sizeof(glonass_ephemeris[0]); ++i){
+        glonass_ephemeris[i].svid = i + 1;
       }
     }
 
@@ -195,11 +209,66 @@ struct GNSS_Data {
       return true;
     }
 
+    bool load(const glonass_ephemeris_t &eph){
+      if(!glonass){return false;}
+      glonass->satellite(eph.svid).register_ephemeris(eph);
+      return true;
+    }
+
+    bool load_glonass(const GNSS_Data &data){
+      if(data.subframe.bytes != 16){return false;}
+      if((data.subframe.sv_number == 0)
+          || (data.subframe.sv_number > (sizeof(glonass_ephemeris) / sizeof(glonass_ephemeris[0])))){
+        return false; // exclude unknown satellite, whose sv_number may be 255.
+      }
+      typename observer_t::u32_t *buf((typename observer_t::u32_t *)data.subframe.buffer);
+      typedef typename glonass_t::template BroadcastedMessage<typename observer_t::u32_t> parser_t;
+      unsigned int super_frame(buf[3] >> 16), frame(buf[3] & 0xF), string_no(parser_t::m(buf));
+
+      if((string_no >= 1) && (string_no <= 5)){ // immediate info. (ephemeris) with time property (in non-immediate info,)
+        glonass_ephemeris_raw_t &eph(glonass_ephemeris[data.subframe.sv_number - 1]);
+        if((eph.has_string > 0) && (eph.super_frame != super_frame)){
+          eph.has_string = 0; // clean up
+        }
+        eph.super_frame = super_frame;
+        eph.has_string |= (0x1 << (string_no - 1));
+        switch(string_no){ // string num
+          case 1: eph.template update_string1<0, 0>(buf); break;
+          case 2: eph.template update_string2<0, 0>(buf); break;
+          case 3: eph.template update_string3<0, 0>(buf); break;
+          case 4: eph.template update_string4<0, 0>(buf); break;
+          case 5: {
+            eph.template update_string5<0, 0>(buf);
+            if(frame == 4){
+              // TODO: require special care for 50th frame? @see Table 4.9 note (4)
+            }
+            break;
+          }
+        }
+        if(eph.has_string == 0x1F){ // get all ephemeris and time info. in the same super frame
+          // Ephemeris_with_Time::raw_t =(cast)=> Ephemeris_with_Time => Ephemeris_with_GPS_Time
+          glonass_ephemeris_t eph_converted(eph);
+          eph_converted.freq_ch = data.subframe.glonass_freq_ch; // frequency channel
+          eph_converted.t_b_gps += gps->is_valid_utc() // leap second correction
+              ? gps->iono_utc().delta_t_LS
+              : gps_time_t::guess_leap_seconds(eph_converted.t_b_gps);
+          load(eph_converted); // register ephemeris
+          eph.has_string = 0;
+        }
+        return true;
+      }else{ // non-immediate info. except for time info. (almanac)
+
+      }
+      return false;
+    }
+
     bool load(const GNSS_Data &data){
       switch(data.subframe.gnssID){
         // TODO: other satellite systems
         case observer_t::gnss_svid_t::SBAS:
           return load_sbas(data);
+        case observer_t::gnss_svid_t::GLONASS:
+          return load_glonass(data);
         case observer_t::gnss_svid_t::QZSS:
           if(data.subframe.bytes != sizeof(data.subframe.buffer)){return false;}
         case observer_t::gnss_svid_t::GPS:

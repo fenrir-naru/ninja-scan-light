@@ -38,8 +38,10 @@
 
 #include "navigation/GPS.h"
 #include "navigation/SBAS.h"
+#include "navigation/GLONASS.h"
 #include "navigation/GPS_Solver.h"
 #include "navigation/SBAS_Solver.h"
+#include "navigation/GLONASS_Solver.h"
 #include "navigation/RINEX.h"
 
 #include "navigation/INS_GPS2_Tightly.h"
@@ -93,6 +95,9 @@ struct GNSS_Receiver {
   typedef SBAS_SpaceNode<FloatT> sbas_space_node_t;
   typedef SBAS_SinglePositioning<FloatT, solver_base_t> sbas_solver_t;
 
+  typedef GLONASS_SpaceNode<FloatT> glonass_space_node_t;
+  typedef GLONASS_SinglePositioning<FloatT, solver_base_t> glonass_solver_t;
+
   struct system_t;
 
   struct data_t {
@@ -104,6 +109,10 @@ struct GNSS_Receiver {
       sbas_space_node_t space_node;
       typename sbas_solver_t::options_t solver_options;
     } sbas;
+    struct {
+      glonass_space_node_t space_node;
+      typename glonass_solver_t::options_t solver_options;
+    } glonass;
     std::ostream *out_rinex_nav;
 #if !defined(BUILD_WITHOUT_SP3)
     typedef SP3_Product<FloatT> sp3_t;
@@ -113,12 +122,13 @@ struct GNSS_Receiver {
     typedef typename RINEX_CLK<FloatT>::satellites_t clk_t;
     clk_t clk;
 #endif
-    data_t() : gps(), sbas(), out_rinex_nav(NULL) {}
+    data_t() : gps(), sbas(), glonass(), out_rinex_nav(NULL) {}
     ~data_t(){
       if(out_rinex_nav){
         typename RINEX_NAV_Writer<FloatT>::space_node_list_t list = {&gps.space_node};
         list.sbas = &sbas.space_node;
         list.qzss = &gps.space_node;
+        list.glonass = &glonass.space_node;
         RINEX_NAV_Writer<FloatT>::write_all(*out_rinex_nav, list);
       }
     }
@@ -128,6 +138,7 @@ struct GNSS_Receiver {
     typedef solver_base_t base_t;
     gps_solver_t gps;
     sbas_solver_t sbas;
+    glonass_solver_t glonass;
     struct measurement_items_t : public gps_solver_t::measurement_items_t {
       // TODO
     };
@@ -156,6 +167,7 @@ struct GNSS_Receiver {
         : base_t(),
         gps(rcv.data.gps.space_node),
         sbas(rcv.data.sbas.space_node),
+        glonass(rcv.data.glonass.space_node),
         ephemeris_proxy(gps) {
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
       // ionospheric and tropospheric correction methods
@@ -166,9 +178,11 @@ struct GNSS_Receiver {
       tropospheric.push_back(&gps.tropospheric_simplified);
       gps.ionospheric_correction
           = sbas.ionospheric_correction
+          = glonass.ionospheric_correction
           = ionospheric;
       gps.tropospheric_correction
           = sbas.tropospheric_correction
+          = glonass.tropospheric_correction
           = tropospheric;
 #endif
     }
@@ -179,6 +193,7 @@ struct GNSS_Receiver {
         case system_t::GPS:  return gps;
         case system_t::SBAS: return sbas;
         case system_t::QZSS: return gps;
+        case system_t::GLONASS: return glonass;
       }
       return *this;
     }
@@ -205,6 +220,8 @@ struct GNSS_Receiver {
         MAKE_ENTRY(gps.tropospheric_correction),
         MAKE_ENTRY(sbas.ionospheric_correction),
         MAKE_ENTRY(sbas.tropospheric_correction),
+        MAKE_ENTRY(glonass.ionospheric_correction),
+        MAKE_ENTRY(glonass.tropospheric_correction),
       };
 #undef MAKE_ENTRY
       for(std::size_t i(0); i < sizeof(root) / sizeof(root[0]); ++i){
@@ -227,6 +244,7 @@ struct GNSS_Receiver {
       if(cnt.gps > 0){data.sp3.push(ephemeris_proxy.gps, SP3_Product<FloatT>::SYSTEM_GPS);}
       if(cnt.sbas > 0){data.sp3.push(sbas.satellites, SP3_Product<FloatT>::SYSTEM_SBAS);}
       if(cnt.qzss > 0){data.sp3.push(ephemeris_proxy.qzss, SP3_Product<FloatT>::SYSTEM_QZSS);}
+      if(cnt.glonass > 0){data.sp3.push(glonass.satellites, SP3_Product<FloatT>::SYSTEM_GLONASS);}
 #endif
 #if !defined(BUILD_WITHOUT_RINEX_CLK)
       // RINEX clock has higher priority to be applied than SP3
@@ -234,6 +252,7 @@ struct GNSS_Receiver {
       if(cnt2.gps > 0){data.clk.push(ephemeris_proxy.gps, data_t::clk_t::SYSTEM_GPS);}
       if(cnt2.sbas > 0){data.clk.push(sbas.satellites, data_t::clk_t::SYSTEM_SBAS);}
       if(cnt2.qzss > 0){data.clk.push(ephemeris_proxy.qzss, data_t::clk_t::SYSTEM_QZSS);}
+      if(cnt2.glonass > 0){data.clk.push(glonass.satellites, data_t::clk_t::SYSTEM_GLONASS);}
 #endif
     }
   } solver_GNSS;
@@ -254,6 +273,7 @@ struct GNSS_Receiver {
   void setup(typename GNSS_Data<FloatT>::Loader &loader) const {
     loader.gps = &const_cast<gps_space_node_t &>(data.gps.space_node);
     loader.sbas = &const_cast<sbas_space_node_t &>(data.sbas.space_node);
+    loader.glonass = &const_cast<glonass_space_node_t &>(data.glonass.space_node);
   }
 
   const solver_base_t &solver() const {
@@ -268,11 +288,13 @@ struct GNSS_Receiver {
     // Select most preferable ephemeris
     data.gps.space_node.update_all_ephemeris(t);
     data.sbas.space_node.update_all_ephemeris(t);
+    data.glonass.space_node.update_all_ephemeris(t);
 
     // Solver update mainly for preferable ionospheric model selection
     // based on their availability
     solver_GNSS.gps.update_options(data.gps.solver_options);
     solver_GNSS.sbas.update_options(data.sbas.solver_options);
+    solver_GNSS.glonass.update_options(data.glonass.solver_options);
   }
 
   struct system_t {
@@ -396,6 +418,8 @@ struct GNSS_Receiver {
         return &(gps_solver_t::L2CM);
       case decorder_t::gnss_signal_t::GPS_L2CL:
         return &(gps_solver_t::L2CL);
+      case decorder_t::gnss_signal_t::GLONASS_L1_OF:
+        return &(glonass_solver_t::L1OF);
 #endif
     }
     return NULL; // TODO support other GNSS, signals
@@ -415,6 +439,7 @@ struct GNSS_Receiver {
       typename RINEX_NAV_Reader<FloatT>::space_node_list_t list = {&data.gps.space_node};
       list.sbas = &data.sbas.space_node;
       list.qzss = &data.gps.space_node;
+      list.glonass = &data.glonass.space_node;
       int ephemeris(RINEX_NAV_Reader<FloatT>::read_all(in, list));
       if(ephemeris < 0){
         std::cerr << "(error!) Invalid format!" << std::endl;
@@ -446,6 +471,7 @@ struct GNSS_Receiver {
         if(cnt.gps > 0){std::cerr << "SP3 GPS satellites: " << cnt.gps << std::endl;}
         if(cnt.sbas > 0){std::cerr << "SP3 SBAS satellites: " << cnt.sbas << std::endl;}
         if(cnt.qzss > 0){std::cerr << "SP3 QZSS satellites: " << cnt.qzss << std::endl;}
+        if(cnt.glonass > 0){std::cerr << "SP3 GLONASS satellites: " << cnt.glonass << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
@@ -483,6 +509,7 @@ struct GNSS_Receiver {
         if(cnt.gps > 0){std::cerr << "RINEX clock GPS satellites: " << cnt.gps << std::endl;}
         if(cnt.sbas > 0){std::cerr << "RINEX clock SBAS satellites: " << cnt.sbas << std::endl;}
         if(cnt.qzss > 0){std::cerr << "RINEX clock QZSS satellites: " << cnt.qzss << std::endl;}
+        if(cnt.glonass > 0){std::cerr << "RINEX clock GLONASS satellites: " << cnt.glonass << std::endl;}
       }
       solver_GNSS.update_ephemeris_source(data);
       return true;
@@ -491,7 +518,8 @@ struct GNSS_Receiver {
 
 #define option_apply(expr) \
 data.gps.solver_options. expr; \
-data.sbas.solver_options. expr
+data.sbas.solver_options. expr; \
+data.glonass.solver_options. expr
     if(value = runtime_opt_t::get_value(spec, "GNSS_elv_mask_deg", false)){
       if(dry_run){return true;}
       FloatT mask_deg(std::atof(value));
@@ -519,6 +547,7 @@ data.sbas.solver_options. expr
       solver_GNSS.gps.ionospheric_ntcm_gl.f_10_7 = f_10_7;
       solver_GNSS.gps.ionospheric_correction.add(&solver_GNSS.gps.ionospheric_ntcm_gl);
       solver_GNSS.sbas.ionospheric_correction.add(&solver_GNSS.gps.ionospheric_ntcm_gl);
+      solver_GNSS.glonass.ionospheric_correction.add(&solver_GNSS.gps.ionospheric_ntcm_gl);
       return true;
     }
 
@@ -594,6 +623,11 @@ data.sbas.solver_options. expr
               ? data.sbas.solver_options.exclude_prn.set(without)
               : data.sbas.solver_options.exclude_prn.set(sv_id, without);
           break;
+        case system_t::GLONASS:
+          select_all
+              ? data.glonass.solver_options.exclude_prn.set(without)
+              : data.glonass.solver_options.exclude_prn.set(sv_id, without);
+          break;
         default:
           std::cerr << "(error!) Unsupported satellite! [" << value << "]" << std::endl;
           return false;
@@ -648,6 +682,7 @@ data.sbas.solver_options. expr
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
             << ',' << "SBAS_PRN(120-158)"
             << ',' << "QZSS_PRN(193-202)"
+            << ',' << "GLONASS_PRN(1-24)"
 #endif
             ;
       }
@@ -666,6 +701,10 @@ data.sbas.solver_options. expr
         for(int i(193); i <= 202; ++i){
           out << ',' << "range_residual(QZSS:" << i << ')'
               << ',' << "weight(QZSS:" << i << ')';
+        }
+        for(int i(1); i <= 24; ++i){
+          out << ',' << "range_residual(GLONASS:" << i << ')'
+              << ',' << "weight(GLONASS:" << i << ')';
         }
 #endif
         return out;
@@ -693,6 +732,13 @@ data.sbas.solver_options. expr
           const typename pvt_t::satellite_mask_t &_mask,
           const int &_prn_lsb, const int &_prn_msb)
           : mask(_mask), prn_lsb(_prn_lsb), prn_msb(_prn_msb) {}
+      mask_printer_t(
+          const typename pvt_t::satellite_mask_t &_mask,
+          const int &svid_lsb, const int &svid_msb,
+          const typename system_t::type_t &type)
+          : mask(_mask),
+          prn_lsb(satellite_id_t(type, svid_lsb)),
+          prn_msb(satellite_id_t(type, svid_msb)) {}
       friend std::ostream &operator<<(std::ostream &out, const mask_printer_t &p){
         if(p.prn_msb < p.prn_lsb){return out;}
         int prn(p.prn_lsb % 8);
@@ -746,6 +792,7 @@ data.sbas.solver_options. expr
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
             << ',' << mask_printer_t(src.used_satellite_mask, 120, 158) // SBAS
             << ',' << mask_printer_t(src.used_satellite_mask, 193, 202) // QZSS
+            << ',' << mask_printer_t(src.used_satellite_mask, 1, 24, system_t::GLONASS) // GLONASS
 #endif
             ;
       }else{
@@ -770,6 +817,7 @@ data.sbas.solver_options. expr
 #if !defined(BUILD_WITHOUT_GNSS_MULTI_CONSTELLATION)
         {120, 158}, // SBAS
         {193, 202}, // QZSS
+        {satellite_id_t(system_t::GLONASS, 1), satellite_id_t(system_t::GLONASS, 24)}, // GLONASS
 #endif
       };
       unsigned int i_row(0);
@@ -851,6 +899,12 @@ data.sbas.solver_options. expr
               << ',' << "L1_rate(QZSS:" << i << ')'
               << ',' << "azimuth(QZSS:" << i << ')'
               << ',' << "elevation(QZSS:" << i << ')';
+        }
+        for(int i(1); i <= 24; ++i){
+          out << ',' << "L1_range(GLONASS:" << i << ')'
+              << ',' << "L1_rate(GLONASS:" << i << ')'
+              << ',' << "azimuth(GLONASS:" << i << ')'
+              << ',' << "elevation(GLONASS:" << i << ')';
         }
 #endif
         return out;
@@ -958,6 +1012,15 @@ data.sbas.solver_options. expr
       };
       for(int i(193); i <= 202; ++i){
         out << ',' << p(i, cmd_qzss) << ',' << p.az_el(i);
+      }
+      static const cmd_t cmd_glonass[] = {
+        {items_t::L1_PSEUDORANGE, true}, // range
+        {items_t::L1_RANGE_RATE,  false}, // rate
+        {items_t::L1_DOPPLER,     false, print_t::l1_doppler2rate_with_freq}, // fallback to using doppler
+      };
+      for(int i(satellite_id_t(system_t::GLONASS, 1)), i_end(satellite_id_t(system_t::GLONASS, 24));
+          i <= i_end; ++i){
+        out << ',' << p(i, cmd_glonass) << ',' << p.az_el(i);
       }
 #endif
       return out;

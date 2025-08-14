@@ -161,7 +161,7 @@ class GPS_Receiver
     }
     @debug = {}
     @semaphore = Mutex::new
-    solver_opts = [:gps_options, :sbas_options].collect{|target|
+    solver_opts = [:gps_options, :sbas_options, :glonass_options].collect{|target|
       @solver.send(target)
     }
     solver_opts.each{|opt|
@@ -282,6 +282,11 @@ class GPS_Receiver
             prns.each{|prn| @solver.sbas_options.send(mode, prn)}
           elsif check_sys_svid.call(:QZSS, 193..202) then
             [svid || (193..202).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
+          elsif check_sys_svid.call(:GLONASS, 1..24, 0x100) then
+            prns = [svid || (1..24).to_a].flatten.collect{|i| (i & 0xFF) + 0x100}
+            labels = prns.collect{|prn| "GLONASS:#{prn & 0xFF}"}
+            update_output.call(:GLONASS, prns, labels)
+            prns.each{|prn| @solver.glonass_options.send(mode, prn & 0xFF)}
           else
             raise "Unknown satellite: #{spec}"
           end
@@ -408,12 +413,18 @@ class GPS_Receiver
     }
   }
   
-  def register_ephemeris(t_meas, sys, prn, bcast_data)
+  def register_ephemeris(t_meas, sys, prn, bcast_data, *options)
     @eph_list ||= Hash[*((1..32).to_a + (193..202).to_a).collect{|prn|
       eph = GPS::Ephemeris::new
       eph.svid = prn
       [prn, eph]
     }.flatten(1)]
+    @eph_glonass_list ||= Hash[*(1..24).collect{|num|
+      eph = GPS::Ephemeris_GLONASS::new
+      eph.svid = num
+      [num, eph]
+    }.flatten(1)]
+    opt = options[0] || {}
     case sys
     when :GPS, :QZSS
       return unless eph = @eph_list[prn]
@@ -443,6 +454,15 @@ class GPS_Receiver
           $stderr.puts str
         } if @debug[:SBAS_IGP]
       end if t_meas
+    when :GLONASS
+      return unless eph = @eph_glonass_list[prn]
+      leap_sec = @solver.gps_space_node.is_valid_utc ? 
+          @solver.gps_space_node.iono_utc.delta_t_LS :
+          GPS::Time::guess_leap_seconds(t_meas)
+      return unless eph.parse(bcast_data[0..3], leap_sec)
+      eph.freq_ch = opt[:freq_ch] || 0
+      @solver.glonass_space_node.register_ephemeris(prn, eph)
+      eph.invalidate
     end
   end
   make_critical :register_ephemeris
@@ -529,6 +549,11 @@ class GPS_Receiver
             sigid = :L1
           when :QZSS
             sigid = {0 => :L1, 5 => :L2CL, 4 => :L2CM}[sigid]
+          when :GLONASS
+            svid += 0x100
+            sigid = {0 => :L1}[sigid] # TODO: to support {2 -> :L2}
+            meas.add(svid, :L1_FREQUENCY, 
+                GPS::SpaceNode_GLONASS::L1_frequency(loader.call(39, 1, "C") - 7))
           else; next
           end
           next unless sigid
@@ -572,10 +597,12 @@ class GPS_Receiver
             }.call(packet.slice(6 + 2, 40).pack("C*").unpack("V*")))
       when [0x02, 0x13] # RXM-SFRBX
         sys, svid = gnss_serial.call(packet[6 + 1], packet[6])
+        opt = {}
+        opt[:freq_ch] = packet[6 + 3] - 7 if sys == :GLONASS
         register_ephemeris(
             t_meas,
             sys, svid,
-            packet.slice(6 + 8, 4 * packet[6 + 4]).pack("C*").unpack("V*"))
+            packet.slice(6 + 8, 4 * packet[6 + 4]).pack("C*").unpack("V*"), opt)
       end
     }
     $stderr.puts ", found packets are %s"%[ubx_kind.inspect]
@@ -585,6 +612,7 @@ class GPS_Receiver
     items = [
       @solver.gps_space_node,
       @solver.sbas_space_node,
+      @solver.glonass_space_node,
     ].inject(0){|res, sn|
       loaded_items = critical{sn.send(:read, fname)}
       raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
@@ -597,6 +625,7 @@ class GPS_Receiver
     after_run = b || proc{|pvt| puts pvt.to_s if pvt}
     $stderr.print "Reading RINEX observation file (%s)"%[fname]
     types = nil
+    glonass_freq = nil
     count = 0
     GPS::RINEX_Observation::read(fname){|item|
       $stderr.print '.' if (count += 1) % 1000 == 0
@@ -620,12 +649,31 @@ class GPS_Receiver
         }.compact]
       }.flatten(1))]
 
+      glonass_freq ||= proc{|spec|
+        # frequency channels described in observation file
+        next {} unless spec
+        Hash[*(spec.collect{|line|
+          line[4..-1].scan(/R(\d{2}).([\s+-]\d)./).collect{|prn, ch|
+            [prn.to_i, GPS::SpaceNode_GLONASS::L1_frequency(ch.to_i)]
+          }
+        }.flatten(2))]
+      }.call(item[:header]["GLONASS SLOT / FRQ #"])
+
       meas = GPS::Measurement::new
       item[:meas].each{|(sys, prn), v|
         case sys
         when 'G', ' '
         when 'S'; prn += 100
         when 'J'; prn += 192
+        when 'R'
+          freq = (glonass_freq[prn] ||= proc{|sn|
+            # frequency channels saved with ephemeris
+            sn.update_all_ephemeris(t_meas)
+            next nil unless sn.ephemeris(prn).in_range?(t_meas)
+            sn.ephemeris(prn).frequency_L1
+          }.call(@solver.glonass_space_node))
+          prn += 0x100
+          meas.add(prn, :L1_FREQUENCY, freq) if freq
         else; next
         end
         types[sys] = (types[' '] || []) unless types[sys]
@@ -730,7 +778,7 @@ if __FILE__ == $0 then
   files.collect!{|fname, ftype|
     raise "File not found: #{fname}" unless File::exist?(fname)
     ftype ||= case fname
-    when /\.\d{2}[nhq]$/; :rinex_nav
+    when /\.\d{2}[nhqg]$/; :rinex_nav
     when /\.\d{2}o$/; :rinex_obs
     when /\.ubx$/; :ubx
     when /\.sp3$/; :sp3
