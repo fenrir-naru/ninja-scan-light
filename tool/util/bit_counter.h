@@ -81,6 +81,33 @@ struct BitCounter {
     static T ntz(const T &v) {
       return count((T)((~v) & (v - 1)));
     }
+
+  private:
+    template <int Shift, class U = void>
+    struct set_lower_bits_loop{
+      static inline T run(const T &bits){
+        return set_lower_bits_loop<(Shift << 1)>::run(bits | (bits >> Shift));
+      }
+    };
+
+    template <class U>
+    struct set_lower_bits_loop<num_of_bits, U>{
+      static inline T run(const T &bits){
+        return bits;
+      }
+    };
+  public:
+    static T set_lower_bits(const T &bits) {
+      return set_lower_bits_loop<1>::run(bits);
+    }
+
+    /**
+     * Count leftmost zeros before the first one (Number of leading zeros)
+     * @param bits results
+     */
+    static T nlz(const T &bits){
+      return num_of_bits - count(set_lower_bits(bits));
+    }
 };
 
 #endif /* __BIT_COUNTER__ */
