@@ -9,7 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
     - name: before_setup
       env:
         SDCC_DIR: /tmp/sdcc-${{env.SDCC}}
@@ -28,7 +28,7 @@ jobs:
         esac
         sudo apt-get update && sudo apt-get install -yq gcc-5 g++-5 libboost-all-dev g++-arm-linux-gnueabihf
     - name: cache
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ${{env.SDCC_DIR}}
         key: sdcc-${{env.SDCC}}
@@ -45,7 +45,7 @@ jobs:
         (cd ./tool && make clean all && (cd build_GCC && touch ${GITHUB_SHA}.commit && tar zvcf ubuntu.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
         (cd ./tool && BUILD_DIR=build_GCC_ARM CXX=arm-linux-gnueabihf-g++ make clean all && (cd build_GCC_ARM && touch ${GITHUB_SHA}.commit && tar zvcf raspi.${GITHUB_REF##*/}.tar.gz *.out *.commit) )
     - name: upload_artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         path: |
           tool/build_*/*.tar.gz
