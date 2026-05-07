@@ -209,6 +209,7 @@ struct QuaternionData_TypeMapper<float_sylph_t> {
 #include "navigation/INS_GPS_Synchronization.h"
 #include "navigation/INS_GPS_Debug.h"
 #include "navigation/GPS.h"
+#include "navigation/GLONASS.h"
 
 #include "navigation/WGS84.h"
 #include "navigation/MagneticField.h"
@@ -1991,6 +1992,7 @@ class StreamProcessor
             if(bytes > sizeof(packet.subframe.buffer)){return;}
             observer.inspect(packet.subframe.buffer, (packet.subframe.bytes = bytes), 6 + 8);
             if((G_Observer_t::u8_t)observer[6 + 2] != 0){return;} // TODO reserved1, sigID? (0:L1C/A, 4:L2CM?)
+            packet.subframe.glonass_freq_ch = -7 + (int)(G_Observer_t::u8_t)observer[6 + 3];
             check_subframeX(
                 (G_Observer_t::u8_t)observer[6 + 0],
                 (G_Observer_t::u8_t)observer[6 + 1],
@@ -2058,6 +2060,13 @@ class StreamProcessor
               dst.insert(std::make_pair(signal->signal_strength, observer[6 + 42 + (32 * i)]));
               observer.inspect(buf, 2, 6 + 40 + (32 * i));
               dst.insert(std::make_pair(signal->lock_sec, 1E-3 * le_char2_2_num<G_Observer_t::u16_t>(*buf)));
+
+              if(gnssID == G_Observer_t::gnss_svid_t::GLONASS){
+                int freq_ch(-7 + (int)observer[6 + 39 + (32 * i)]);
+                dst.insert(std::make_pair(
+                    items_t::L1_FREQUENCY,
+                    GLONASS_SpaceNode<float_sylph_t>::L1_frequency(freq_ch)));
+              }
             }
 
             packet_raw_latest.update_measurement(current, measurement);
