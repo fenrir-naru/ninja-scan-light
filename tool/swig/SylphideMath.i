@@ -32,6 +32,14 @@ template <class T>
 template <class U>
 struct Array2D_Dense<T>::property_t<T, U> {
   typedef std::atomic<int> ref_cnt_t;
+  static void alloc(ref_cnt_t **ref_cnt, T **values, const unsigned int &size){
+    *ref_cnt = new ref_cnt_t();
+    *values = new T[size];
+  }
+  static void free(ref_cnt_t **ref_cnt, T **values){
+    delete *ref_cnt;
+    delete [] *values;
+  }
 };
 #endif
 %}
