@@ -3,6 +3,10 @@ require 'rspec'
 $: << File::join(File::dirname(__FILE__), '..', 'build_SWIG')
 require 'SylphideMath.so'
 
+class Ractor
+  alias_method :take, :value
+end if (Gem::Version::new(RUBY_VERSION) <=> Gem::Version::new("3.5.0")) >= 0
+
 require 'matrix'
 
 shared_examples 'Matrix' do
