@@ -33,12 +33,27 @@ template <class U>
 struct Array2D_Dense<T>::property_t<T, U> {
   typedef std::atomic<int> ref_cnt_t;
   static void alloc(ref_cnt_t **ref_cnt, T **values, const unsigned int &size){
-    *ref_cnt = new ref_cnt_t();
+    *(*ref_cnt = new ref_cnt_t()) = 1;
     *values = new T[size];
   }
+  static void share(
+      ref_cnt_t **ref_cnt_dst, T **values_dst,
+      ref_cnt_t * const ref_cnt_src, T * const values_src){
+    // Compare-And-Swap (CAS) loop
+    for(int cnt(ref_cnt_src->load(std::memory_order_relaxed)); cnt > 0; ){
+      if(ref_cnt_src->compare_exchange_weak(cnt, cnt + 1, std::memory_order_relaxed)){
+        *ref_cnt_dst = ref_cnt_src;
+        *values_dst = values_src;
+        return;
+      }
+    }
+  }
   static void free(ref_cnt_t **ref_cnt, T **values){
-    delete *ref_cnt;
-    delete [] *values;
+    if((*ref_cnt)->fetch_sub(1, std::memory_order_release) == 0){
+      std::atomic_thread_fence(std::memory_order_acquire);
+      delete *ref_cnt;
+      delete [] *values;
+    }
   }
 };
 #endif
