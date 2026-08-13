@@ -54,6 +54,7 @@
 
 #include "util/text_helper.h"
 #include "GPS.h"
+#include "SBAS.h"
 
 template <class U = void>
 class RINEX_Reader {
@@ -386,6 +387,51 @@ struct RINEX_NAV {
       eph.fit_interval = ((fit_interval_hr < 4) ? 4 : fit_interval_hr) * 60 * 60;
     }
   };
+  struct message_sbas_t {
+    typedef typename SBAS_SpaceNode<FloatT>
+        ::SatelliteProperties::Ephemeris eph_t;
+    int svid;
+    std::tm date_tm;
+    int t_year4, t_year2, t_mon12;
+    FloatT t_sec;
+    FloatT a_Gf0, a_Gf1;
+    FloatT t_t; // Transmission time of message (start of the message) in GPS seconds of the week
+    FloatT x_km, dx_km_s, ddx_km_s2;
+    FloatT y_km, dy_km_s, ddy_km_s2;
+    FloatT z_km, dz_km_s, ddz_km_s2;
+    unsigned int health;
+    FloatT URA;
+    unsigned int iodn;
+    message_sbas_t() {}
+    message_sbas_t(const eph_t &eph)
+        : svid((int)eph.svid - 100),
+        date_tm(eph.base_time().c_tm()),
+        t_year4(date_tm.tm_year + 1900),
+        t_year2(date_tm.tm_year % 100),
+        t_mon12(date_tm.tm_mon + 1),
+        t_sec(date_tm.tm_sec),
+        a_Gf0(eph.a_Gf0), a_Gf1(eph.a_Gf1),
+        t_t(eph.t_0), // TODO maybe differ from t_e slightly
+        x_km(1E-3 * eph.x), dx_km_s(1E-3 * eph.dx), ddx_km_s2(1E-3 * eph.ddx),
+        y_km(1E-3 * eph.y), dy_km_s(1E-3 * eph.dy), ddy_km_s2(1E-3 * eph.ddy),
+        z_km(1E-3 * eph.z), dz_km_s(1E-3 * eph.dz), ddz_km_s2(1E-3 * eph.ddz),
+        health(0), URA(eph.URA), iodn(0) {
+    }
+    operator eph_t() const {
+      eph_t eph = {0};
+      eph.svid = (unsigned int)svid + 100;
+      typename space_node_t::gps_time_t t(date_tm);
+      t += (t_sec - date_tm.tm_sec);
+      eph.WN = t.week;
+      eph.t_0 = t.seconds;
+      eph.a_Gf0 = a_Gf0; eph.a_Gf1 = a_Gf1;
+      eph.x = 1E3 * x_km; eph.dx = 1E3 * dx_km_s; eph.ddx = 1E3 * ddx_km_s2;
+      eph.y = 1E3 * y_km; eph.dy = 1E3 * dy_km_s; eph.ddy = 1E3 * ddy_km_s2;
+      eph.z = 1E3 * z_km; eph.dz = 1E3 * dz_km_s; eph.ddz = 1E3 * ddz_km_s2;
+      eph.URA = URA;
+      return eph;
+    }
+  };
 };
 
 template <class FloatT = double>
@@ -396,6 +442,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
   public:
     typedef typename RINEX_NAV<FloatT>::space_node_t space_node_t;
     typedef typename RINEX_NAV<FloatT>::message_t message_t;
+    typedef typename RINEX_NAV<FloatT>::message_sbas_t message_sbas_t;
     typedef typename space_node_t::Ionospheric_UTC_Parameters iono_utc_t;
 
     static const typename super_t::convert_item_t eph0_v2[10], eph0_v3[10];
@@ -407,9 +454,15 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     static const typename super_t::convert_item_t eph6_v2[4], eph6_v3[4];
     static const typename super_t::convert_item_t eph7_v2[2], eph7_v3[2];
 
+    static const typename super_t::convert_item_t eph0_sbas_v2[10], eph0_sbas_v3[10];
+    static const typename super_t::convert_item_t eph1_sbas_v2[4], eph1_sbas_v3[4];
+    static const typename super_t::convert_item_t eph2_sbas_v2[4], eph2_sbas_v3[4];
+    static const typename super_t::convert_item_t eph3_sbas_v2[4], eph3_sbas_v3[4];
+
   protected:
     typename super_t::version_type_t::sat_system_t sys_of_msg;
     message_t msg;
+    message_sbas_t msg_sbas;
     
     void seek_next_v2_gps() {
       char buf[256];
@@ -453,10 +506,36 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
       super_t::_has_next = true;
     }
 
+    void seek_next_v2_sbas() {
+      char buf[256];
+
+      for(int i(0); i < 4; i++){
+        if((!super_t::src.good())
+            || super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+        std::string line(buf);
+
+        switch(i){
+          case 0: {
+            super_t::convert(eph0_sbas_v2, line, &msg_sbas);
+            msg_sbas.date_tm.tm_year = msg_sbas.t_year2 + (msg_sbas.t_year2 < 80 ? 100 : 0); // greater than 1980
+            msg_sbas.date_tm.tm_mon = msg_sbas.t_mon12 - 1; // month [0, 11]
+            msg_sbas.date_tm.tm_sec = (int)msg_sbas.t_sec;
+            break;
+          }
+          case 1: super_t::convert(eph1_sbas_v2, line, &msg_sbas); break;
+          case 2: super_t::convert(eph2_sbas_v2, line, &msg_sbas); break;
+          case 3: super_t::convert(eph3_sbas_v2, line, &msg_sbas); break;
+        }
+      }
+      sys_of_msg = super_t::version_type_t::SYS_SBAS;
+      super_t::_has_next = true;
+    }
+
     void seek_next_v2() {
       switch(super_t::version_type.sat_system){
         case super_t::version_type_t::SYS_GPS: seek_next_v2_gps(); return;
         case super_t::version_type_t::SYS_GLONASS: seek_next_v2_glonass(); return;
+        case super_t::version_type_t::SYS_SBAS: seek_next_v2_sbas(); return;
         default: break;
       }
     }
@@ -489,6 +568,28 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
     }
 
     template <std::size_t N>
+    void seek_next_v3_sbas(char (&buf)[N]) {
+      super_t::convert(eph0_sbas_v3, std::string(buf), &msg_sbas);
+      msg_sbas.date_tm.tm_year = msg_sbas.t_year4 - 1900; // tm_year base is 1900
+      msg_sbas.date_tm.tm_mon = msg_sbas.t_mon12 - 1; // month [0, 11]
+      msg_sbas.t_sec = msg_sbas.date_tm.tm_sec;
+
+      for(int i(1); i < 4; i++){
+        if((!super_t::src.good())
+            || super_t::src.getline(buf, sizeof(buf)).fail()){return;}
+        std::string line(buf);
+
+        switch(i){
+          case 1: super_t::convert(eph1_sbas_v3, line, &msg_sbas); break;
+          case 2: super_t::convert(eph2_sbas_v3, line, &msg_sbas); break;
+          case 3: super_t::convert(eph3_sbas_v3, line, &msg_sbas); break;
+        }
+      }
+      sys_of_msg = super_t::version_type_t::SYS_SBAS;
+      super_t::_has_next = true;
+    }
+
+    template <std::size_t N>
     void seek_next_v3_not_implemented(char (&buf)[N], const int &lines) {
       for(int i(1); i < lines; i++){
         if((!super_t::src.good())
@@ -510,7 +611,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
           case 'R': seek_next_v3_not_implemented(buf, 4); return; // Glonass
           case 'J': seek_next_v3_not_implemented(buf, 8); return; // QZSS
           case 'C': seek_next_v3_not_implemented(buf, 8); return; // Beido
-          case 'S': seek_next_v3_not_implemented(buf, 4); return; // SBAS
+          case 'S': seek_next_v3_sbas(buf); return; // SBAS
           case 'T': seek_next_v3_not_implemented(buf, 8); return; // IRNSS
           default: break;
         }
@@ -617,6 +718,7 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
 
     struct space_node_list_t {
       space_node_t *gps;
+      SBAS_SpaceNode<FloatT> *sbas;
     };
 
     static int read_all(std::istream &in, space_node_list_t &space_nodes = {0}){
@@ -637,6 +739,13 @@ class RINEX_NAV_Reader : public RINEX_Reader<> {
             space_nodes.gps->satellite(reader.msg.eph.svid).register_ephemeris(reader.msg.eph);
             res++;
             break;
+          case super_t::version_type_t::SYS_SBAS: {
+            if(!space_nodes.sbas){break;}
+            typename message_sbas_t::eph_t eph(reader.msg_sbas);
+            space_nodes.sbas->satellite(eph.svid).register_ephemeris(eph);
+            res++;
+            break;
+          }
           default: break;
         }
       }
@@ -1107,6 +1216,80 @@ const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>
   GEN_E(23, 19, 12, message_t, fit_interval_hr),
 };
 
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph0_sbas_v2[] = {
+  GEN_D( 0,  2,     message_sbas_t, svid,            int),
+  GEN_D( 3,  2,     message_sbas_t, t_year2,         int),
+  GEN_D( 6,  2,     message_sbas_t, t_mon12,         int),
+  GEN_D( 9,  2,     message_sbas_t, date_tm.tm_mday, int),
+  GEN_D(12,  2,     message_sbas_t, date_tm.tm_hour, int),
+  GEN_D(15,  2,     message_sbas_t, date_tm.tm_min,  int),
+  GEN_F(17,  5,  1, message_sbas_t, t_sec),
+  GEN_E(22, 19, 12, message_sbas_t, a_Gf0),
+  GEN_E(41, 19, 12, message_sbas_t, a_Gf1),
+  GEN_E(60, 19, 12, message_sbas_t, t_t),
+};
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph0_sbas_v3[] = {
+  GEN_I( 1,  2,     message_sbas_t, svid,            int),
+  GEN_I( 4,  4,     message_sbas_t, t_year4,         int),
+  GEN_I( 9,  2,     message_sbas_t, t_mon12,         int),
+  GEN_I(12,  2,     message_sbas_t, date_tm.tm_mday, int),
+  GEN_I(15,  2,     message_sbas_t, date_tm.tm_hour, int),
+  GEN_I(18,  2,     message_sbas_t, date_tm.tm_min,  int),
+  GEN_I(21,  2,     message_sbas_t, date_tm.tm_sec,  int),
+  GEN_E(23, 19, 12, message_sbas_t, a_Gf0),
+  GEN_E(42, 19, 12, message_sbas_t, a_Gf1),
+  GEN_E(61, 19, 12, message_sbas_t, t_t),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_sbas_v2[] = {
+  GEN_E( 3, 19, 12, message_sbas_t, x_km),
+  GEN_E(22, 19, 12, message_sbas_t, dx_km_s),
+  GEN_E(41, 19, 12, message_sbas_t, ddx_km_s2),
+  GEN_E2(60, 19, 12, message_sbas_t, health, unsigned int),
+};
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph1_sbas_v3[] = {
+  GEN_E( 4, 19, 12, message_sbas_t, x_km),
+  GEN_E(23, 19, 12, message_sbas_t, dx_km_s),
+  GEN_E(42, 19, 12, message_sbas_t, ddx_km_s2),
+  GEN_E2(61, 19, 12, message_sbas_t, health, unsigned int),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph2_sbas_v2[] = {
+  GEN_E( 3, 19, 12, message_sbas_t, y_km),
+  GEN_E(22, 19, 12, message_sbas_t, dy_km_s),
+  GEN_E(41, 19, 12, message_sbas_t, ddy_km_s2),
+  GEN_E(60, 19, 12, message_sbas_t, URA),
+};
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph2_sbas_v3[] = {
+  GEN_E( 4, 19, 12, message_sbas_t, y_km),
+  GEN_E(23, 19, 12, message_sbas_t, dy_km_s),
+  GEN_E(42, 19, 12, message_sbas_t, ddy_km_s2),
+  GEN_E(61, 19, 12, message_sbas_t, URA),
+};
+
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph3_sbas_v2[] = {
+  GEN_E( 3, 19, 12, message_sbas_t, z_km),
+  GEN_E(22, 19, 12, message_sbas_t, dz_km_s),
+  GEN_E(41, 19, 12, message_sbas_t, ddz_km_s2),
+  GEN_E2(60, 19, 12, message_sbas_t, iodn, unsigned int),
+};
+template <class FloatT>
+const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::eph3_sbas_v3[] = {
+  GEN_E( 4, 19, 12, message_sbas_t, z_km),
+  GEN_E(23, 19, 12, message_sbas_t, dz_km_s),
+  GEN_E(42, 19, 12, message_sbas_t, ddz_km_s2),
+  GEN_E2(61, 19, 12, message_sbas_t, iodn, unsigned int),
+};
+
+
 template <class FloatT>
 const typename RINEX_NAV_Reader<FloatT>::convert_item_t RINEX_NAV_Reader<FloatT>::iono_alpha_v2[] = {
   GEN_E( 2, 12, 4, iono_utc_t, alpha[0]),
@@ -1395,6 +1578,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
   public:
     typedef typename RINEX_NAV<FloatT>::space_node_t space_node_t;
     typedef typename RINEX_NAV<FloatT>::message_t message_t;
+    typedef typename RINEX_NAV<FloatT>::message_sbas_t message_sbas_t;
 
     static const typename super_t::header_item_t default_header[];
     static const int default_header_size;
@@ -1492,6 +1676,37 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
       dest << buf.str();
       return *this;
     }
+    self_t &operator<<(const message_sbas_t &msg){
+      std::stringstream buf;
+      switch(super_t::_version_type.version / 100){
+        case 2:
+          for(int i(0); i < 8; ++i){
+            std::string s(80, ' ');
+            switch(i){
+              case 0: super_t::convert(reader_t::eph0_sbas_v2, s, &msg); break;
+              case 1: super_t::convert(reader_t::eph1_sbas_v2, s, &msg); break;
+              case 2: super_t::convert(reader_t::eph2_sbas_v2, s, &msg); break;
+              case 3: super_t::convert(reader_t::eph3_sbas_v2, s, &msg); break;
+            }
+            buf << s << std::endl;
+          }
+          break;
+        case 3:
+          for(int i(0); i < 8; ++i){
+            std::string s(80, ' ');
+            switch(i){
+              case 0: super_t::convert(reader_t::eph0_sbas_v3, s, &msg); s[0] = 'S'; break;
+              case 1: super_t::convert(reader_t::eph1_sbas_v3, s, &msg); break;
+              case 2: super_t::convert(reader_t::eph2_sbas_v3, s, &msg); break;
+              case 3: super_t::convert(reader_t::eph3_sbas_v3, s, &msg); break;
+            }
+            buf << s << std::endl;
+          }
+          break;
+      }
+      dest << buf.str();
+      return *this;
+    }
 
   public:
     void set_version(
@@ -1503,6 +1718,7 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
 
     struct space_node_list_t {
       const space_node_t *gps;
+      const SBAS_SpaceNode<FloatT> *sbas;
     };
     int write_all(
         const space_node_list_t &space_nodes,
@@ -1530,6 +1746,11 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
             break;
         }
       }while(false);
+      do{
+        if(!space_nodes.sbas){break;}
+        ++systems;
+        set_version(version, super_t::version_type_t::SYS_SBAS);
+      }while(false);
       if(systems > 1){
         set_version(version, super_t::version_type_t::SYS_MIXED);
       }
@@ -1543,6 +1764,10 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           w << message_t(eph);
           counter++;
         }
+        void operator()(const typename message_sbas_t::eph_t &eph) {
+          w << message_sbas_t(eph);
+          counter++;
+        }
       } functor = {*this, res};
       if(space_nodes.gps){
         for(typename space_node_t::satellites_t::const_iterator
@@ -1551,6 +1776,16 @@ class RINEX_NAV_Writer : public RINEX_Writer<> {
           it->second.each_ephemeris(
               functor,
               space_node_t::Satellite::eph_list_t::EACH_ALL_INVERTED);
+        }
+      }
+      if(space_nodes.sbas){
+        for(typename SBAS_SpaceNode<FloatT>::satellites_t::const_iterator
+              it(space_nodes.sbas->satellites().begin()),
+              it_end(space_nodes.sbas->satellites().end());
+            it != it_end; ++it){
+          it->second.each_ephemeris(
+              functor,
+              SBAS_SpaceNode<FloatT>::Satellite::eph_list_t::EACH_ALL_INVERTED);
         }
       }
       return res;

@@ -2435,6 +2435,7 @@ if(std::abs(TARGET - eph.TARGET) > raw_t::sf[raw_t::SF_ ## TARGET]){break;}
      * @param height_over_ellipsoid
      * @see spherically single layer approach, for example,
      * Eq.(3) of "Ionospheric Range Error Correction Models" by N. Jakowski
+     * @see DO-229D A4.4.10.4 Eq.(A-42) is equivalent
      */
     static float_t slant_factor(
         const enu_t &relative_pos,

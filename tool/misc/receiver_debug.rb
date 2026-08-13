@@ -161,7 +161,7 @@ class GPS_Receiver
     }
     @debug = {}
     @semaphore = Mutex::new
-    solver_opts = [:gps_options].collect{|target|
+    solver_opts = [:gps_options, :sbas_options].collect{|target|
       @solver.send(target)
     }
     solver_opts.each{|opt|
@@ -276,6 +276,10 @@ class GPS_Receiver
           }
           if check_sys_svid.call(:GPS, 1..32) then
             [svid || (1..32).to_a].flatten.each{|prn| @solver.gps_options.send(mode, prn)}
+          elsif check_sys_svid.call(:SBAS, 120..158) then
+            prns = [svid || (120..158).to_a].flatten
+            update_output.call(:SBAS, prns)
+            prns.each{|prn| @solver.sbas_options.send(mode, prn)}
           else
             raise "Unknown satellite: #{spec}"
           end
@@ -429,6 +433,14 @@ class GPS_Receiver
         sn.register_ephemeris(prn, eph)
         eph.invalidate
       end
+    when :SBAS
+      case @solver.sbas_space_node.decode_message(bcast_data[0..7], prn, t_meas)
+      when 26
+        ['', "IGP broadcasted by PRN#{prn} @ #{Time::utc(*t_meas.c_tm)}",
+            @solver.sbas_space_node.ionospheric_grid_points(prn)].each{|str|
+          $stderr.puts str
+        } if @debug[:SBAS_IGP]
+      end if t_meas
     end
   end
   make_critical :register_ephemeris
@@ -509,8 +521,10 @@ class GPS_Receiver
           sys, svid = gnss_serial.call(*loader.call(36, 2).reverse)
           sigid = (packet[6 + 13] != 0) ? loader.call(38, 1, "C") : 0 # sigID if version(>0); @see UBX-18010854 
           case sys
-          when :GPS; 
+          when :GPS 
             sigid = {0 => :L1, 3 => :L2CL, 4 => :L2CM}[sigid]
+          when :SBAS
+            sigid = :L1
           else; next
           end
           next unless sigid
@@ -566,6 +580,7 @@ class GPS_Receiver
   def parse_rinex_nav(fname)
     items = [
       @solver.gps_space_node,
+      @solver.sbas_space_node,
     ].inject(0){|res, sn|
       loaded_items = critical{sn.send(:read, fname)}
       raise "Format error! (Not RINEX) #{fname}" if loaded_items < 0
@@ -605,6 +620,7 @@ class GPS_Receiver
       item[:meas].each{|(sys, prn), v|
         case sys
         when 'G', ' '
+        when 'S'; prn += 100
         when 'J'; prn += 192
         else; next
         end
@@ -710,7 +726,7 @@ if __FILE__ == $0 then
   files.collect!{|fname, ftype|
     raise "File not found: #{fname}" unless File::exist?(fname)
     ftype ||= case fname
-    when /\.\d{2}n$/; :rinex_nav
+    when /\.\d{2}[nh]$/; :rinex_nav
     when /\.\d{2}o$/; :rinex_obs
     when /\.ubx$/; :ubx
     when /\.sp3$/; :sp3
