@@ -127,12 +127,18 @@ static std::string inspect_str(const VALUE &v){
 %fragment(SWIG_From_frag(std::tm), "header", fragment=SWIG_From_frag(int)) {
 SWIGINTERNINLINE SWIG_Object
 SWIG_From_dec(std::tm)(const std::tm &value){
+#if SWIG_VERSION >= 0x040300
+%#define $isvoid 0 
+#endif
   SWIG_Object res(SWIG_From(int)(value.tm_year + 1900));
   res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_mon + 1));
   res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_mday));
   res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_hour));
   res = SWIG_AppendOutput(res, SWIG_From(int)(value.tm_min));
   return SWIG_AppendOutput(res, SWIG_From(int)(value.tm_sec));
+#if SWIG_VERSION >= 0x040300
+%#undef $isvoid
+#endif
 }
 }
 %fragment(SWIG_AsVal_frag(std::tm), "header", fragment=SWIG_AsVal_frag(int)){
