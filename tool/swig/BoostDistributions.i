@@ -215,7 +215,7 @@ struct dist_name ## _distribution { // dummy
 } }
 #endif
 %typemap(out, fragment=SWIG_Traits_frag(type)) std::pair<type, type> {
-  %append_output(swig::from($1.first));
+  %set_output(swig::from($1.first));
   %append_output(swig::from($1.second));
 }
 %extend boost::math::dist_name ## _distribution {
@@ -271,9 +271,12 @@ struct dist_name ## _distribution { // dummy
   %ignore hyperexponential_distribution(std::initializer_list<RealT>, std::initializer_list<RealT>);
   %ignore hyperexponential_distribution(std::initializer_list<RealT>);
   %typemap(out, fragment=SWIG_Traits_frag(RealT)) std::vector<RealT> {
-    for(typename $1_type::const_iterator it($1.begin()), it_end($1.end());
-        it != it_end; ++it){
-      %append_output(swig::from(*it));
+    typename $1_type::const_iterator it($1.begin()), it_end($1.end());
+    if(it != it_end){
+      %set_output(swig::from(*it));
+      while(++it != it_end){
+        %append_output(swig::from(*it));
+      }
     }
   }
   %typemap(in, fragment=SWIG_Traits_frag(RealT)) const std::vector<RealT> & (std::vector<RealT> temp) {
