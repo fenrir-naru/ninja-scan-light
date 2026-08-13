@@ -285,7 +285,8 @@ struct GPS_Ionospheric_UTC_Parameters : public GPS_SpaceNode<FloatT>::Ionospheri
   %fragment(SWIG_Traits_frag(FloatT));
   %typemap(in,numinputs=0) const FloatT *values[4] (FloatT *temp) "$1 = &temp;"
   %typemap(argout) const FloatT *values[4] {
-    for(int i(0); i < 4; ++i){
+    %set_output(swig::from((*$1)[0]));
+    for(int i(1); i < 4; ++i){
       %append_output(swig::from((*$1)[i]));
     }
   }
@@ -539,7 +540,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
     (raw = (almanac = *self)).dump<2, 0>(buf_brdc);
   }
   %typemap(out) constellation_res_t {
-    %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
+    %set_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.position)), 
         $descriptor(System_XYZ<FloatT, WGS84> *), SWIG_POINTER_OWN));
     %append_output(SWIG_NewPointerObj((new System_XYZ<FloatT, WGS84>($1.velocity)), 
         $descriptor(System_XYZ<FloatT, WGS84> *), SWIG_POINTER_OWN));
@@ -579,7 +580,7 @@ struct GPS_Ephemeris : public GPS_SpaceNode<FloatT>::SatelliteProperties::Epheme
         %const_cast(self, GPS_SpaceNode<FloatT> *)->satellite(prn).ephemeris());
   }
   %typemap(out) pierce_point_res_t {
-    %append_output(swig::from($1.latitude));
+    %set_output(swig::from($1.latitude));
     %append_output(swig::from($1.longitude));
   }
   int read(const char *fname) {
@@ -1612,7 +1613,7 @@ struct PushableData {
 
 %extend SP3 {
   %typemap(out) typename SP3_Product<FloatT>::satellite_count_t {
-    %append_output(SWIG_From(int)($1.gps));
+    %set_output(SWIG_From(int)($1.gps));
     %append_output(SWIG_From(int)($1.sbas));
     %append_output(SWIG_From(int)($1.qzss));
     %append_output(SWIG_From(int)($1.glonass));
@@ -1664,7 +1665,7 @@ struct SP3 : public SP3_Product<FloatT>, PushableData {
 
 %extend RINEX_Clock {
   %typemap(out) typename RINEX_CLK<FloatT>::satellites_t::count_t {
-    %append_output(SWIG_From(int)($1.gps));
+    %set_output(SWIG_From(int)($1.gps));
     %append_output(SWIG_From(int)($1.sbas));
     %append_output(SWIG_From(int)($1.qzss));
     %append_output(SWIG_From(int)($1.glonass));
