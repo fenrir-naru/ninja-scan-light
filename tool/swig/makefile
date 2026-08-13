@@ -1,4 +1,4 @@
-SWIG = swig
+SWIG ?= swig
 SWIGFLAGS = -c++ -ruby $(shell if [ -n "$$MSYSTEM" ]; then echo -D__MINGW__; fi)
 INCLUDES = -I../
 BUILD_DIR = build_SWIG

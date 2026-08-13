@@ -238,10 +238,25 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     template <class T2, class U = void>
     struct property_t {
       typedef int ref_cnt_t;
+      static const int offset = (sizeof(T2) >= sizeof(ref_cnt_t)) ? 1 : ((sizeof(ref_cnt_t) + sizeof(T2) - 1) / sizeof(T2));
+      static void alloc(ref_cnt_t **ref_cnt, T2 **values, const unsigned int &size){
+        *(*ref_cnt = reinterpret_cast<ref_cnt_t *>(new T2[offset + size])) = 1;
+        *values = reinterpret_cast<T2 *>(*ref_cnt) + offset;
+      }
+      static void share(
+          ref_cnt_t **ref_cnt_dst, T2 **values_dst,
+          ref_cnt_t * const ref_cnt_src, T2 * const values_src){
+        ++(*(*ref_cnt_dst = ref_cnt_src));
+        *values_dst = values_src;
+      }
+      static void free(ref_cnt_t **ref_cnt, T2 **values){
+        if((--(**ref_cnt)) == 0){
+          delete [] reinterpret_cast<T2 *>(*ref_cnt);
+        }
+      }
     };
     typedef typename property_t<T>::ref_cnt_t ref_cnt_t;
 
-    static const int offset = (sizeof(T) >= sizeof(ref_cnt_t)) ? 1 : ((sizeof(ref_cnt_t) + sizeof(T) - 1) / sizeof(T));
     ref_cnt_t *ref_cnt;  ///< reference counter TODO alignment?
     T *values; ///< array for values
 
@@ -269,7 +284,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     };
 
   public:
-    Array2D_Dense() : super_t(0, 0), ref_cnt(NULL), values(NULL) {
+    Array2D_Dense() : super_t(0, 0) {
+      property_t<T>::alloc(&ref_cnt, &values, 0);
     }
 
     /**
@@ -281,10 +297,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
     Array2D_Dense(
         const unsigned int &rows,
         const unsigned int &columns)
-        : super_t(rows, columns),
-        ref_cnt(reinterpret_cast<ref_cnt_t *>(new T[offset + (rows * columns)])),
-        values(reinterpret_cast<T *>(ref_cnt) + offset) {
-      *ref_cnt = 1;
+        : super_t(rows, columns) {
+      property_t<T>::alloc(&ref_cnt, &values, rows * columns);
     }
     /**
      * Constructor with initializer
@@ -297,10 +311,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
         const unsigned int &rows,
         const unsigned int &columns,
         const T *serialized)
-        : super_t(rows, columns),
-        ref_cnt(reinterpret_cast<ref_cnt_t *>(new T[offset + (rows * columns)])),
-        values(reinterpret_cast<T *>(ref_cnt) + offset) {
-      *ref_cnt = 1;
+        : super_t(rows, columns) {
+      property_t<T>::alloc(&ref_cnt, &values, rows * columns);
       setup_t<T>::copy(*this, serialized);
     }
     /**
@@ -309,9 +321,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      * @param array another one
      */
     Array2D_Dense(const self_t &array)
-        : super_t(array.m_rows, array.m_columns),
-          ref_cnt(array.ref_cnt), values(array.values){
-      if(ref_cnt){++(*ref_cnt);}
+        : super_t(array.m_rows, array.m_columns) {
+      property_t<T>::share(&ref_cnt, &values, array.ref_cnt, array.values);
     }
     /**
      * Constructor based on another type array, which performs deep copy.
@@ -320,10 +331,8 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     template <class T2>
     Array2D_Dense(const Array2D_Frozen<T2> &array)
-        : super_t(array.rows(), array.columns()),
-        ref_cnt(reinterpret_cast<ref_cnt_t *>(new T[offset + (array.rows() * array.columns())])),
-        values(reinterpret_cast<T *>(ref_cnt) + offset) {
-      *ref_cnt = 1;
+        : super_t(array.rows(), array.columns()) {
+      property_t<T>::alloc(&ref_cnt, &values, array.rows() * array.columns());
       T *buf(values);
       const unsigned int i_end(array.rows()), j_end(array.columns());
       for(unsigned int i(0); i < i_end; ++i){
@@ -339,9 +348,7 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      * allocated memory for elements will be deleted.
      */
     ~Array2D_Dense(){
-      if(ref_cnt && ((--(*ref_cnt)) <= 0)){
-        delete [] reinterpret_cast<T *>(ref_cnt);
-      }
+      property_t<T>::free(&ref_cnt, &values);
     }
 
     /**
@@ -352,11 +359,10 @@ class Array2D_Dense : public Array2D<T, Array2D_Dense<T> > {
      */
     self_t &operator=(const self_t &array){
       if(this != &array){
-        if(ref_cnt && ((--(*ref_cnt)) <= 0)){delete [] reinterpret_cast<T *>(ref_cnt);}
+        property_t<T>::free(&ref_cnt, &values);
         super_t::m_rows = array.m_rows;
         super_t::m_columns = array.m_columns;
-        if((ref_cnt = array.ref_cnt)){++(*ref_cnt);}
-        values = array.values;
+        property_t<T>::share(&ref_cnt, &values, array.ref_cnt, array.values);
       }
       return *this;
     }
